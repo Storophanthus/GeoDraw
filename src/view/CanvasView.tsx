@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import katex from "katex";
 import type { Vec2 } from "../geo/vec2";
-import { add, distance, mul, projectPointToLine, projectPointToSegment, sub } from "../geo/geometry";
+import { add, mul, projectPointToLine, projectPointToSegment, sub } from "../geo/geometry";
 import { drawRectGrid, type RectGridSettings } from "../render/rectGrid";
 import {
   type GeometryObjectRef,
@@ -12,7 +12,7 @@ import {
   type ScenePoint,
 } from "../scene/points";
 import { geoStoreHelpers, useGeoStore } from "../state/geoStore";
-import type { ActiveTool } from "../state/geoStore";
+import type { ActiveTool, HoveredHit, PendingSelection } from "../state/geoStore";
 import type { Camera } from "./camera";
 import { camera as camMath, type Viewport } from "./camera";
 import { findBestSnap, type SnapCandidate } from "./snapEngine";
@@ -48,13 +48,6 @@ type PointerState = {
   moved: boolean;
 };
 
-type PendingToolState =
-  | { tool: "segment"; aPointId: string }
-  | { tool: "line2p"; aPointId: string }
-  | { tool: "circle"; aPointId: string }
-  | { tool: "midpoint"; aPointId: string }
-  | null;
-
 export function CanvasView() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const labelsLayerRef = useRef<HTMLDivElement | null>(null);
@@ -74,15 +67,17 @@ export function CanvasView() {
   const activeTool = useGeoStore((store) => store.activeTool);
   const scene = useGeoStore((store) => store.scene);
   const selectedObject = useGeoStore((store) => store.selectedObject);
+  const hoveredHit = useGeoStore((store) => store.hoveredHit);
   const cursorWorld = useGeoStore((store) => store.cursorWorld);
-  const pendingConstruction = useGeoStore((store) => store.pendingConstruction);
+  const pendingSelection = useGeoStore((store) => store.pendingSelection);
   const copyStyle = useGeoStore((store) => store.copyStyle);
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
 
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
+  const setHoveredHit = useGeoStore((store) => store.setHoveredHit);
   const setCursorWorld = useGeoStore((store) => store.setCursorWorld);
-  const setPendingConstruction = useGeoStore((store) => store.setPendingConstruction);
-  const clearPendingConstruction = useGeoStore((store) => store.clearPendingConstruction);
+  const setPendingSelection = useGeoStore((store) => store.setPendingSelection);
+  const clearPendingSelection = useGeoStore((store) => store.clearPendingSelection);
   const panByScreenDelta = useGeoStore((store) => store.panByScreenDelta);
   const zoomAtScreenPoint = useGeoStore((store) => store.zoomAtScreenPoint);
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
@@ -148,6 +143,8 @@ export function CanvasView() {
     return findBestSnap(hoverScreen, camera, vp, scene, POINT_HIT_TOLERANCE_PX);
   }, [camera, hoverScreen, scene, snapDisabled, vp]);
 
+  const hoveredTargetValid = isValidTarget(activeTool, pendingSelection, hoveredHit);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -164,15 +161,15 @@ export function CanvasView() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (pendingConstruction) {
+        if (pendingSelection) {
           e.preventDefault();
-          clearPendingConstruction();
+          clearPendingSelection();
         }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [clearPendingConstruction, pendingConstruction]);
+  }, [clearPendingSelection, pendingSelection]);
 
   const dpr = window.devicePixelRatio || 1;
 
@@ -196,8 +193,19 @@ export function CanvasView() {
       drawCircles(ctx, scene, camera, vp, selectedObject, copyStyle.source);
       drawLines(ctx, scene, camera, vp, selectedObject, copyStyle.source);
       drawSegments(ctx, scene, camera, vp, selectedObject, copyStyle.source);
-      drawPendingConstructionPreview(ctx, pendingConstruction, cursorWorld, scene, camera, vp);
+      drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, scene, camera, vp);
       drawPoints(ctx, resolvedPoints, selectedObject, camera, vp, copyStyle.source);
+      drawInteractionHighlights(
+        ctx,
+        activeTool,
+        pendingSelection,
+        hoveredHit,
+        hoveredTargetValid,
+        resolvedPoints,
+        scene,
+        camera,
+        vp
+      );
 
       if (hoverSnap && (activeTool === "point" || activeTool === "move")) {
         const s = camMath.worldToScreen(hoverSnap.world, camera, vp);
@@ -223,7 +231,10 @@ export function CanvasView() {
       cursorWorld,
       dpr,
       hoverSnap,
-      pendingConstruction,
+      hoverScreen,
+      hoveredHit,
+      hoveredTargetValid,
+      pendingSelection,
       resolvedPoints,
       scene,
       selectedObject,
@@ -244,11 +255,48 @@ export function CanvasView() {
       return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     };
 
+    const computeHoveredHit = (screen: Vec2): HoveredHit => {
+      const pointId = hitTestPoint(screen, resolvedPoints, camera, vp, POINT_HIT_TOLERANCE_PX);
+      if (pointId) return { type: "point", id: pointId };
+      const segmentId = hitTestSegment(screen, scene, camera, vp, SEGMENT_HIT_TOLERANCE_PX);
+      if (segmentId) return { type: "segment", id: segmentId };
+      const lineId = hitTestLine(screen, scene, camera, vp, LINE_HIT_TOLERANCE_PX);
+      if (lineId) return { type: "line2p", id: lineId };
+      const circleId = hitTestCircle(screen, scene, camera, vp, CIRCLE_HIT_TOLERANCE_PX);
+      if (circleId) return { type: "circle", id: circleId };
+      return null;
+    };
+
+    const applyCursor = (nextHovered: HoveredHit, modeOverride?: PointerMode) => {
+      const mode = modeOverride ?? pointerRef.current.mode;
+      let nextCursor = "default";
+
+      if (activeTool === "move") {
+        if (mode === "pan" || mode === "drag-point" || mode === "drag-label") {
+          nextCursor = "grabbing";
+        } else if (nextHovered?.type === "point") {
+          nextCursor = "pointer";
+        } else {
+          nextCursor = "grab";
+        }
+      } else if (nextHovered && isValidTarget(activeTool, pendingSelection, nextHovered)) {
+        nextCursor = "pointer";
+      } else if (toolAllowsEmptyPointCreation(activeTool)) {
+        nextCursor = "crosshair";
+      }
+
+      canvas.style.cursor = nextCursor;
+    };
+
+    applyCursor(hoveredHit);
+
     const onDown = (e: PointerEvent) => {
       const screen = readScreen(e);
       setHoverScreen(screen);
       setSnapDisabled(e.shiftKey);
       setCursorWorld(camMath.screenToWorld(screen, camera, vp));
+      const hovered = computeHoveredHit(screen);
+      setHoveredHit(hovered);
       const hitPointId = hitTestPoint(screen, resolvedPoints, camera, vp, POINT_HIT_TOLERANCE_PX);
       const hitLabelId =
         hitTestLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current) ??
@@ -301,6 +349,7 @@ export function CanvasView() {
         startY: e.clientY,
         moved: false,
       };
+      applyCursor(hovered, mode);
     };
 
     const onMove = (e: PointerEvent) => {
@@ -308,6 +357,9 @@ export function CanvasView() {
       setHoverScreen(screen);
       setSnapDisabled(e.shiftKey);
       setCursorWorld(camMath.screenToWorld(screen, camera, vp));
+      const hovered = computeHoveredHit(screen);
+      setHoveredHit(hovered);
+      applyCursor(hovered);
       const st = pointerRef.current;
       if (!st.active || st.pid !== e.pointerId) return;
 
@@ -346,10 +398,10 @@ export function CanvasView() {
         const screen = readScreen(e);
         const hitObject = hitTestTopObject(screen, resolvedPoints, scene, camera, vp);
         const snap =
-          activeTool === "point" && !e.shiftKey
+          !e.shiftKey && activeTool !== "move" && activeTool !== "copyStyle"
             ? findBestSnap(screen, camera, vp, scene, POINT_HIT_TOLERANCE_PX)
             : null;
-        handleToolClick(screen, activeTool, pendingConstruction, {
+        handleToolClick(screen, activeTool, pendingSelection, {
           hitPointId: hitTestPoint(screen, resolvedPoints, camera, vp, POINT_HIT_TOLERANCE_PX),
           hitSegmentId: hitTestSegment(screen, scene, camera, vp, SEGMENT_HIT_TOLERANCE_PX),
           hitObject,
@@ -357,8 +409,8 @@ export function CanvasView() {
           hasCopyStyleSource: Boolean(copyStyle.source),
           snap,
         }, {
-          setPendingTool: setPendingConstruction,
-          clearPendingTool: clearPendingConstruction,
+          setPendingSelection,
+          clearPendingSelection,
           createFreePoint,
           createSegment,
           createLine,
@@ -389,6 +441,10 @@ export function CanvasView() {
         moved: false,
       };
       setSnapDisabled(e.shiftKey);
+      const screen = readScreen(e);
+      const hovered = computeHoveredHit(screen);
+      setHoveredHit(hovered);
+      applyCursor(hovered);
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -401,6 +457,8 @@ export function CanvasView() {
     const onLeave = () => {
       setHoverScreen(null);
       setCursorWorld(null);
+      setHoveredHit(null);
+      canvas.style.cursor = "default";
     };
 
     canvas.addEventListener("pointerdown", onDown);
@@ -425,7 +483,7 @@ export function CanvasView() {
     createFreePoint,
     createLine,
     createCircle,
-    clearPendingConstruction,
+    clearPendingSelection,
     createMidpointFromPoints,
     createMidpointFromSegment,
     createPointOnLine,
@@ -437,13 +495,15 @@ export function CanvasView() {
     movePointLabelBy,
     movePointTo,
     panByScreenDelta,
-    pendingConstruction,
+    hoveredHit,
+    pendingSelection,
     pointDefaults.labelOffsetPx,
     resolvedPoints,
     scene,
     setCopyStyleSource,
+    setHoveredHit,
     setCursorWorld,
-    setPendingConstruction,
+    setPendingSelection,
     setSelectedObject,
     vp,
     zoomAtScreenPoint,
@@ -478,7 +538,7 @@ export function CanvasView() {
 function handleToolClick(
   screen: Vec2,
   activeTool: ActiveTool,
-  pendingTool: PendingToolState,
+  pendingSelection: PendingSelection,
   hits: {
     hitPointId: string | null;
     hitSegmentId: string | null;
@@ -488,12 +548,12 @@ function handleToolClick(
     snap: SnapCandidate | null;
   },
   io: {
-    setPendingTool: (next: PendingToolState) => void;
-    clearPendingTool: () => void;
+    setPendingSelection: (next: PendingSelection) => void;
+    clearPendingSelection: () => void;
     createFreePoint: (world: Vec2) => string;
     createSegment: (aId: string, bId: string) => string | null;
     createLine: (aId: string, bId: string) => string | null;
-    createCircle: (centerId: string, radiusPointId: string) => string | null;
+    createCircle: (centerId: string, throughId: string) => string | null;
     createMidpointFromPoints: (aId: string, bId: string) => string | null;
     createMidpointFromSegment: (segId: string) => string | null;
     createPointOnLine: (lineId: string, s: number) => string | null;
@@ -507,7 +567,25 @@ function handleToolClick(
     vp: Viewport;
   }
 ) {
-  const ensurePointId = (): string => {
+  const resolveOrCreatePointAtCursor = (): string => {
+    const snap = hits.shiftKey ? null : hits.snap;
+    if (snap?.kind === "point" && snap.pointId) return snap.pointId;
+    if (snap?.kind === "intersection" && snap.objA && snap.objB) {
+      const created = io.createIntersectionPoint(snap.objA, snap.objB, snap.world);
+      if (created) return created;
+    }
+    if (snap?.kind === "onLine" && snap.lineId && typeof snap.s === "number") {
+      const created = io.createPointOnLine(snap.lineId, snap.s);
+      if (created) return created;
+    }
+    if (snap?.kind === "onSegment" && snap.segId && typeof snap.u === "number") {
+      const created = io.createPointOnSegment(snap.segId, snap.u);
+      if (created) return created;
+    }
+    if (snap?.kind === "onCircle" && snap.circleId && typeof snap.t === "number") {
+      const created = io.createPointOnCircle(snap.circleId, snap.t);
+      if (created) return created;
+    }
     if (hits.hitPointId) return hits.hitPointId;
     const world = camMath.screenToWorld(screen, io.camera, io.vp);
     return io.createFreePoint(world);
@@ -556,59 +634,88 @@ function handleToolClick(
   }
 
   if (activeTool === "segment") {
-    if (!pendingTool || pendingTool.tool !== "segment") {
-      io.setPendingTool({ tool: "segment", aPointId: ensurePointId() });
+    if (!pendingSelection || pendingSelection.tool !== "segment") {
+      io.setPendingSelection({ tool: "segment", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
       return;
     }
-    const bId = ensurePointId();
-    io.createSegment(pendingTool.aPointId, bId);
-    io.clearPendingTool();
+    const bId = resolveOrCreatePointAtCursor();
+    io.createSegment(pendingSelection.first.id, bId);
+    io.clearPendingSelection();
     return;
   }
 
   if (activeTool === "line2p") {
-    if (!pendingTool || pendingTool.tool !== "line2p") {
-      io.setPendingTool({ tool: "line2p", aPointId: ensurePointId() });
+    if (!pendingSelection || pendingSelection.tool !== "line2p") {
+      io.setPendingSelection({ tool: "line2p", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
       return;
     }
-    const bId = ensurePointId();
-    io.createLine(pendingTool.aPointId, bId);
-    io.clearPendingTool();
+    const bId = resolveOrCreatePointAtCursor();
+    io.createLine(pendingSelection.first.id, bId);
+    io.clearPendingSelection();
     return;
   }
 
-  if (activeTool === "circle") {
-    if (!pendingTool || pendingTool.tool !== "circle") {
-      io.setPendingTool({ tool: "circle", aPointId: ensurePointId() });
+  if (activeTool === "circle_cp") {
+    if (!pendingSelection || pendingSelection.tool !== "circle_cp") {
+      io.setPendingSelection({ tool: "circle_cp", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
       return;
     }
-    const radiusId = ensurePointId();
-    io.createCircle(pendingTool.aPointId, radiusId);
-    io.clearPendingTool();
+    const throughId = resolveOrCreatePointAtCursor();
+    io.createCircle(pendingSelection.first.id, throughId);
+    io.clearPendingSelection();
     return;
   }
 
   if (activeTool === "midpoint") {
-    if (pendingTool && pendingTool.tool === "midpoint") {
-      const bId = ensurePointId();
-      io.createMidpointFromPoints(pendingTool.aPointId, bId);
-      io.clearPendingTool();
+    if (pendingSelection && pendingSelection.tool === "midpoint") {
+      const bId = resolveOrCreatePointAtCursor();
+      io.createMidpointFromPoints(pendingSelection.first.id, bId);
+      io.clearPendingSelection();
       return;
     }
 
     if (hits.hitPointId) {
-      io.setPendingTool({ tool: "midpoint", aPointId: hits.hitPointId });
+      io.setPendingSelection({ tool: "midpoint", step: 2, first: { type: "point", id: hits.hitPointId } });
       return;
     }
 
     if (hits.hitSegmentId) {
       io.createMidpointFromSegment(hits.hitSegmentId);
-      io.clearPendingTool();
+      io.clearPendingSelection();
       return;
     }
 
-    io.setPendingTool({ tool: "midpoint", aPointId: ensurePointId() });
+    io.setPendingSelection({ tool: "midpoint", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
   }
+}
+
+function toolAllowsEmptyPointCreation(activeTool: ActiveTool): boolean {
+  return (
+    activeTool === "point" ||
+    activeTool === "segment" ||
+    activeTool === "line2p" ||
+    activeTool === "circle_cp" ||
+    activeTool === "midpoint"
+  );
+}
+
+function isValidTarget(
+  activeTool: ActiveTool,
+  pendingSelection: PendingSelection,
+  hoveredHit: HoveredHit
+): boolean {
+  if (!hoveredHit) return false;
+
+  if (activeTool === "segment") return hoveredHit.type === "point";
+  if (activeTool === "line2p") return hoveredHit.type === "point";
+  if (activeTool === "circle_cp") return hoveredHit.type === "point";
+
+  if (activeTool === "midpoint") {
+    if (pendingSelection?.tool === "midpoint") return hoveredHit.type === "point";
+    return hoveredHit.type === "segment" || hoveredHit.type === "point";
+  }
+
+  return false;
 }
 
 function hitTestTopObject(
@@ -725,16 +832,17 @@ function hitTestCircle(
 ): string | null {
   let bestId: string | null = null;
   let best = tolerancePx;
-  const worldCursor = camMath.screenToWorld(screenPoint, camera, vp);
 
   for (let i = scene.circles.length - 1; i >= 0; i -= 1) {
     const circle = scene.circles[i];
     if (!circle.visible) continue;
     const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-    const radiusPoint = geoStoreHelpers.getPointWorldById(scene, circle.radiusPointId);
-    if (!center || !radiusPoint) continue;
-    const radius = distance(center, radiusPoint);
-    const d = Math.abs(distance(worldCursor, center) - radius) * camera.zoom;
+    const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
+    if (!center || !through) continue;
+    const centerScreen = camMath.worldToScreen(center, camera, vp);
+    const throughScreen = camMath.worldToScreen(through, camera, vp);
+    const radiusPx = Math.hypot(throughScreen.x - centerScreen.x, throughScreen.y - centerScreen.y);
+    const d = Math.abs(Math.hypot(screenPoint.x - centerScreen.x, screenPoint.y - centerScreen.y) - radiusPx);
     if (d <= best) {
       best = d;
       bestId = circle.id;
@@ -755,13 +863,21 @@ function drawCircles(
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
     const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-    const radiusPoint = geoStoreHelpers.getPointWorldById(scene, circle.radiusPointId);
-    if (!center || !radiusPoint) continue;
+    const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
+    if (!center || !through) continue;
     const c = camMath.worldToScreen(center, camera, vp);
-    const r = distance(center, radiusPoint) * camera.zoom;
-    ctx.setLineDash(circle.style.dash === "dashed" ? [8, 6] : []);
+    const t = camMath.worldToScreen(through, camera, vp);
+    const r = Math.hypot(t.x - c.x, t.y - c.y);
+    ctx.setLineDash(circle.style.strokeDash === "dashed" ? [8, 6] : []);
+    if ((circle.style.fillOpacity ?? 0) > 0 && circle.style.fillColor) {
+      ctx.globalAlpha = circle.style.fillOpacity ?? 0;
+      ctx.fillStyle = circle.style.fillColor;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.strokeStyle = circle.style.strokeColor;
-    ctx.globalAlpha = circle.style.opacity;
+    ctx.globalAlpha = circle.style.strokeOpacity;
     ctx.lineWidth = circle.style.strokeWidth;
     ctx.beginPath();
     ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
@@ -790,19 +906,19 @@ function drawCircles(
   ctx.restore();
 }
 
-function drawPendingConstructionPreview(
+function drawPendingPreview(
   ctx: CanvasRenderingContext2D,
-  pending: PendingToolState,
+  pendingSelection: PendingSelection,
   cursorWorld: Vec2 | null,
+  cursorScreen: Vec2 | null,
   scene: SceneModel,
   camera: Camera,
   vp: Viewport
 ) {
-  if (!pending || !cursorWorld) return;
-  const a = geoStoreHelpers.getPointWorldById(scene, pending.aPointId);
-  if (!a) return;
-  const p1 = camMath.worldToScreen(a, camera, vp);
-  const p2 = camMath.worldToScreen(cursorWorld, camera, vp);
+  if (!pendingSelection) return;
+  const firstWorld = geoStoreHelpers.getPointWorldById(scene, pendingSelection.first.id);
+  if (!firstWorld) return;
+  const p1 = camMath.worldToScreen(firstWorld, camera, vp);
 
   ctx.save();
   ctx.globalAlpha = 0.65;
@@ -810,7 +926,8 @@ function drawPendingConstructionPreview(
   ctx.strokeStyle = "#0ea5e9";
   ctx.lineWidth = 1.3;
 
-  if (pending.tool === "segment") {
+  if ((pendingSelection.tool === "segment" || pendingSelection.tool === "midpoint") && cursorWorld) {
+    const p2 = camMath.worldToScreen(cursorWorld, camera, vp);
     ctx.beginPath();
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
@@ -819,8 +936,8 @@ function drawPendingConstructionPreview(
     return;
   }
 
-  if (pending.tool === "line2p") {
-    const d = sub(cursorWorld, a);
+  if (pendingSelection.tool === "line2p" && cursorWorld) {
+    const d = sub(cursorWorld, firstWorld);
     const len = Math.hypot(d.x, d.y);
     if (len < 1e-9) {
       ctx.restore();
@@ -828,14 +945,148 @@ function drawPendingConstructionPreview(
     }
     const dir = { x: d.x / len, y: d.y / len };
     const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 2;
-    const q1 = camMath.worldToScreen(add(a, mul(dir, -span)), camera, vp);
-    const q2 = camMath.worldToScreen(add(a, mul(dir, span)), camera, vp);
+    const q1 = camMath.worldToScreen(add(firstWorld, mul(dir, -span)), camera, vp);
+    const q2 = camMath.worldToScreen(add(firstWorld, mul(dir, span)), camera, vp);
     ctx.beginPath();
     ctx.moveTo(q1.x, q1.y);
     ctx.lineTo(q2.x, q2.y);
     ctx.stroke();
+    ctx.restore();
+    return;
   }
 
+  if (pendingSelection.tool === "circle_cp" && cursorScreen) {
+    const radiusPx = Math.hypot(cursorScreen.x - p1.x, cursorScreen.y - p1.y);
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.arc(p1.x, p1.y, radiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawInteractionHighlights(
+  ctx: CanvasRenderingContext2D,
+  activeTool: ActiveTool,
+  pendingSelection: PendingSelection,
+  hoveredHit: HoveredHit,
+  hoveredTargetValid: boolean,
+  resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>,
+  scene: SceneModel,
+  camera: Camera,
+  vp: Viewport
+) {
+  if (pendingSelection) {
+    drawHitHighlight(
+      ctx,
+      { type: "point", id: pendingSelection.first.id },
+      resolvedPoints,
+      scene,
+      camera,
+      vp,
+      "#22c55e",
+      0.95
+    );
+  }
+
+  if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
+    drawHitHighlight(ctx, hoveredHit, resolvedPoints, scene, camera, vp, "#0ea5e9", 0.9);
+  }
+}
+
+function drawHitHighlight(
+  ctx: CanvasRenderingContext2D,
+  hit: Exclude<HoveredHit, null>,
+  resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>,
+  scene: SceneModel,
+  camera: Camera,
+  vp: Viewport,
+  color: string,
+  alpha: number
+) {
+  if (hit.type === "point") {
+    const point = resolvedPoints.find((item) => item.point.id === hit.id);
+    if (!point || !point.point.visible) return;
+    const p = camMath.worldToScreen(point.world, camera, vp);
+    const r = Math.max(point.point.style.sizePx + 4, 8);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = color;
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  if (hit.type === "segment") {
+    const seg = scene.segments.find((item) => item.id === hit.id);
+    if (!seg || !seg.visible) return;
+    const a = geoStoreHelpers.getPointWorldById(scene, seg.aId);
+    const b = geoStoreHelpers.getPointWorldById(scene, seg.bId);
+    if (!a || !b) return;
+    const p1 = camMath.worldToScreen(a, camera, vp);
+    const p2 = camMath.worldToScreen(b, camera, vp);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = seg.style.strokeWidth + 2.5;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  if (hit.type === "line2p") {
+    const line = scene.lines.find((item) => item.id === hit.id);
+    if (!line || !line.visible) return;
+    const a = geoStoreHelpers.getPointWorldById(scene, line.aId);
+    const b = geoStoreHelpers.getPointWorldById(scene, line.bId);
+    if (!a || !b) return;
+    const d = sub(b, a);
+    const len = Math.hypot(d.x, d.y);
+    if (len < 1e-9) return;
+    const dir = { x: d.x / len, y: d.y / len };
+    const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 2;
+    const p1 = camMath.worldToScreen(add(a, mul(dir, -span)), camera, vp);
+    const p2 = camMath.worldToScreen(add(a, mul(dir, span)), camera, vp);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = line.style.strokeWidth + 2.5;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  const circle = scene.circles.find((item) => item.id === hit.id);
+  if (!circle || !circle.visible) return;
+  const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
+  const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
+  if (!center || !through) return;
+  const c = camMath.worldToScreen(center, camera, vp);
+  const t = camMath.worldToScreen(through, camera, vp);
+  const r = Math.hypot(t.x - c.x, t.y - c.y);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.setLineDash([]);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = circle.style.strokeWidth + 2.5;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1127,13 +1378,14 @@ function highlightSnapObject(
     return;
   }
   const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-  const radiusPoint = geoStoreHelpers.getPointWorldById(scene, circle.radiusPointId);
-  if (!center || !radiusPoint) {
+  const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
+  if (!center || !through) {
     ctx.restore();
     return;
   }
   const c = camMath.worldToScreen(center, camera, vp);
-  const r = distance(center, radiusPoint) * camera.zoom;
+  const t = camMath.worldToScreen(through, camera, vp);
+  const r = Math.hypot(t.x - c.x, t.y - c.y);
   ctx.beginPath();
   ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
   ctx.stroke();

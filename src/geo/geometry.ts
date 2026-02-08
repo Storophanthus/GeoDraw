@@ -53,6 +53,20 @@ export function lineCircleIntersections(
   center: Vec2,
   radius: number
 ): Vec2[] {
+  return lineCircleIntersectionBranches(a, b, center, radius).map((branch) => branch.point);
+}
+
+export type LineCircleIntersectionBranch = {
+  t: number;
+  point: Vec2;
+};
+
+export function lineCircleIntersectionBranches(
+  a: Vec2,
+  b: Vec2,
+  center: Vec2,
+  radius: number
+): LineCircleIntersectionBranch[] {
   const d = sub(b, a);
   const f = sub(a, center);
 
@@ -67,14 +81,18 @@ export function lineCircleIntersections(
 
   if (Math.abs(disc) <= EPS) {
     const t = -B / (2 * A);
-    return [add(a, mul(d, t))];
+    return [{ t, point: add(a, mul(d, t)) }];
   }
 
   const sqrtDisc = Math.sqrt(Math.max(0, disc));
-  const t1 = (-B - sqrtDisc) / (2 * A);
-  const t2 = (-B + sqrtDisc) / (2 * A);
-
-  return [add(a, mul(d, t1)), add(a, mul(d, t2))];
+  const tA = (-B - sqrtDisc) / (2 * A);
+  const tB = (-B + sqrtDisc) / (2 * A);
+  const t1 = Math.min(tA, tB);
+  const t2 = Math.max(tA, tB);
+  return [
+    { t: t1, point: add(a, mul(d, t1)) },
+    { t: t2, point: add(a, mul(d, t2)) },
+  ];
 }
 
 export function circleCircleIntersections(c1: Vec2, r1: number, c2: Vec2, r2: number): Vec2[] {

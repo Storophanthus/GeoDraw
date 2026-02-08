@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { Vec2 } from "../geo/vec2";
 import {
+  type CircleStyle,
   getPointWorldPos,
   isNameUnique,
   isValidPointName,
@@ -12,7 +13,13 @@ import {
   type ScenePoint,
   type ShowLabelMode,
 } from "../scene/points";
-import { projectPointToCircle, projectPointToLine, projectPointToSegment } from "../geo/geometry";
+import {
+  distance,
+  lineCircleIntersectionBranches,
+  projectPointToCircle,
+  projectPointToLine,
+  projectPointToSegment,
+} from "../geo/geometry";
 import type { Camera, Viewport } from "../view/camera";
 import { camera as cameraMath } from "../view/camera";
 
@@ -23,7 +30,7 @@ export type ActiveTool =
   | "midpoint"
   | "segment"
   | "line2p"
-  | "circle";
+  | "circle_cp";
 
 export type SelectedObject =
   | { type: "point"; id: string }
@@ -32,18 +39,29 @@ export type SelectedObject =
   | { type: "circle"; id: string }
   | null;
 
+export type HoveredHit =
+  | { type: "point"; id: string }
+  | { type: "segment"; id: string }
+  | { type: "line2p"; id: string }
+  | { type: "circle"; id: string }
+  | null;
+
+export type PendingSelection =
+  | {
+      tool: "segment" | "line2p" | "circle_cp" | "midpoint";
+      step: 2;
+      first: { type: "point"; id: string };
+    }
+  | null;
+
 type GeoState = {
   camera: Camera;
   activeTool: ActiveTool;
   scene: SceneModel;
   selectedObject: SelectedObject;
+  hoveredHit: HoveredHit;
   cursorWorld: Vec2 | null;
-  pendingConstruction:
-    | { tool: "segment"; aPointId: string }
-    | { tool: "line2p"; aPointId: string }
-    | { tool: "circle"; aPointId: string }
-    | { tool: "midpoint"; aPointId: string }
-    | null;
+  pendingSelection: PendingSelection;
   nextPointId: number;
   nextSegmentId: number;
   nextLineId: number;
@@ -51,11 +69,12 @@ type GeoState = {
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
-  circleDefaults: LineStyle;
+  circleDefaults: CircleStyle;
   copyStyle: {
     source: SelectedObject;
     pointStyle: PointStyle | null;
     lineStyle: LineStyle | null;
+    circleStyle: CircleStyle | null;
     showLabel: ShowLabelMode | null;
   };
 };
@@ -65,9 +84,10 @@ type RenameResult = { ok: true; name: string } | { ok: false; error: string };
 type GeoActions = {
   setActiveTool: (tool: ActiveTool) => void;
   setSelectedObject: (selected: SelectedObject) => void;
+  setHoveredHit: (hit: HoveredHit) => void;
   setCursorWorld: (world: Vec2 | null) => void;
-  setPendingConstruction: (next: GeoState["pendingConstruction"]) => void;
-  clearPendingConstruction: () => void;
+  setPendingSelection: (next: PendingSelection) => void;
+  clearPendingSelection: () => void;
   panByScreenDelta: (delta: Vec2) => void;
   zoomAtScreenPoint: (vp: Viewport, pScreen: Vec2, zoomFactor: number) => void;
 
@@ -76,7 +96,7 @@ type GeoActions = {
   createMidpointFromSegment: (segId: string) => string | null;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
-  createCircle: (centerId: string, radiusPointId: string) => string | null;
+  createCircle: (centerId: string, throughId: string) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number) => string | null;
@@ -129,6 +149,14 @@ const defaultLineStyle: LineStyle = {
   opacity: 1,
 };
 
+const defaultCircleStyle: CircleStyle = {
+  strokeColor: "#334155",
+  strokeWidth: 1.6,
+  strokeDash: "solid",
+  strokeOpacity: 1,
+  fillOpacity: 0,
+};
+
 const initialState: GeoState = {
   camera: { pos: { x: 0, y: 0 }, zoom: 80 },
   activeTool: "move",
@@ -139,8 +167,9 @@ const initialState: GeoState = {
     circles: [],
   },
   selectedObject: null,
+  hoveredHit: null,
   cursorWorld: null,
-  pendingConstruction: null,
+  pendingSelection: null,
   nextPointId: 1,
   nextSegmentId: 1,
   nextLineId: 1,
@@ -148,11 +177,12 @@ const initialState: GeoState = {
   pointDefaults: defaultPointStyle,
   segmentDefaults: defaultSegStyle,
   lineDefaults: defaultLineStyle,
-  circleDefaults: defaultLineStyle,
+  circleDefaults: defaultCircleStyle,
   copyStyle: {
     source: null,
     pointStyle: null,
     lineStyle: null,
+    circleStyle: null,
     showLabel: null,
   },
 };
@@ -174,7 +204,7 @@ const actions: GeoActions = {
     setState((prev) => ({
       ...prev,
       activeTool: tool,
-      pendingConstruction: null,
+      pendingSelection: null,
       copyStyle:
         tool === "copyStyle"
           ? prev.copyStyle
@@ -182,6 +212,7 @@ const actions: GeoActions = {
               source: null,
               pointStyle: null,
               lineStyle: null,
+              circleStyle: null,
               showLabel: null,
             },
     }));
@@ -191,16 +222,20 @@ const actions: GeoActions = {
     setState((prev) => ({ ...prev, selectedObject: selected }));
   },
 
+  setHoveredHit(hit) {
+    setState((prev) => ({ ...prev, hoveredHit: hit }));
+  },
+
   setCursorWorld(world) {
     setState((prev) => ({ ...prev, cursorWorld: world }));
   },
 
-  setPendingConstruction(next) {
-    setState((prev) => ({ ...prev, pendingConstruction: next }));
+  setPendingSelection(next) {
+    setState((prev) => ({ ...prev, pendingSelection: next }));
   },
 
-  clearPendingConstruction() {
-    setState((prev) => ({ ...prev, pendingConstruction: null }));
+  clearPendingSelection() {
+    setState((prev) => ({ ...prev, pendingSelection: null }));
   },
 
   panByScreenDelta(delta) {
@@ -420,13 +455,13 @@ const actions: GeoActions = {
     return id;
   },
 
-  createCircle(centerId, radiusPointId) {
-    if (centerId === radiusPointId) return null;
+  createCircle(centerId, throughId) {
+    if (centerId === throughId) return null;
     let id: string | null = null;
     setState((prev) => {
       const c = prev.scene.points.find((p) => p.id === centerId);
-      const r = prev.scene.points.find((p) => p.id === radiusPointId);
-      if (!c || !r) return prev;
+      const t = prev.scene.points.find((p) => p.id === throughId);
+      if (!c || !t) return prev;
       id = `c_${prev.nextCircleId}`;
       return {
         ...prev,
@@ -437,7 +472,7 @@ const actions: GeoActions = {
             {
               id,
               centerId,
-              radiusPointId,
+              throughId,
               visible: true,
               style: { ...prev.circleDefaults },
             },
@@ -597,13 +632,17 @@ const actions: GeoActions = {
       }
       const id = `p_${prev.nextPointId}`;
       createdId = id;
+      const lineCircle = getLineCircleRefs(objA, objB);
+      const lineCirclePoint =
+        lineCircle &&
+        createStableLineCircleIntersectionPoint(id, lineCircle.lineId, lineCircle.circleId, preferredWorld, prev);
       return {
         ...prev,
         scene: {
           ...prev.scene,
           points: [
             ...prev.scene.points,
-            {
+            lineCirclePoint ?? {
               id,
               kind: "intersectionPoint",
               name,
@@ -660,9 +699,9 @@ const actions: GeoActions = {
           const circle = prev.scene.circles.find((item) => item.id === point.circleId);
           if (!circle) return point;
           const center = geoStoreHelpers.getPointWorldById(prev.scene, circle.centerId);
-          const radiusPoint = geoStoreHelpers.getPointWorldById(prev.scene, circle.radiusPointId);
-          if (!center || !radiusPoint) return point;
-          const r = Math.hypot(radiusPoint.x - center.x, radiusPoint.y - center.y);
+          const through = geoStoreHelpers.getPointWorldById(prev.scene, circle.throughId);
+          if (!center || !through) return point;
+          const r = Math.hypot(through.x - center.x, through.y - center.y);
           const pr = projectPointToCircle(world, center, r);
           return { ...point, t: pr.t };
         }
@@ -814,11 +853,11 @@ const actions: GeoActions = {
           (line) => line.aId !== deletedPointId && line.bId !== deletedPointId
         );
         const keptCircles = prev.scene.circles.filter(
-          (circle) => circle.centerId !== deletedPointId && circle.radiusPointId !== deletedPointId
+          (circle) => circle.centerId !== deletedPointId && circle.throughId !== deletedPointId
         );
         const deletedCircleIds = new Set(
           prev.scene.circles
-            .filter((circle) => circle.centerId === deletedPointId || circle.radiusPointId === deletedPointId)
+            .filter((circle) => circle.centerId === deletedPointId || circle.throughId === deletedPointId)
             .map((circle) => circle.id)
         );
         const deletedSegmentIds = new Set(
@@ -849,6 +888,12 @@ const actions: GeoActions = {
               objectRefAlive(point.objB, keptLines, keptSegments, keptCircles)
             );
           }
+          if (point.kind === "circleLineIntersectionPoint") {
+            return (
+              keptLines.some((line) => line.id === point.lineId) &&
+              keptCircles.some((circle) => circle.id === point.circleId)
+            );
+          }
           return true;
         });
 
@@ -864,7 +909,7 @@ const actions: GeoActions = {
           selectedObject: null,
           copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, keptSegments, keptLines, keptCircles)
             ? prev.copyStyle
-            : { source: null, pointStyle: null, lineStyle: null, showLabel: null },
+            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
         };
       }
 
@@ -890,7 +935,7 @@ const actions: GeoActions = {
           selectedObject: null,
           copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, keptSegments, keptLines, prev.scene.circles)
             ? prev.copyStyle
-            : { source: null, pointStyle: null, lineStyle: null, showLabel: null },
+            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
         };
       }
 
@@ -902,7 +947,8 @@ const actions: GeoActions = {
             (point.kind !== "pointOnCircle" || point.circleId !== circleId) &&
             (point.kind !== "intersectionPoint" ||
               (point.objA.type !== "circle" || point.objA.id !== circleId) &&
-                (point.objB.type !== "circle" || point.objB.id !== circleId))
+                (point.objB.type !== "circle" || point.objB.id !== circleId)) &&
+            (point.kind !== "circleLineIntersectionPoint" || point.circleId !== circleId)
         );
         return {
           ...prev,
@@ -914,7 +960,7 @@ const actions: GeoActions = {
           selectedObject: null,
           copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, prev.scene.segments, prev.scene.lines, nextCircles)
             ? prev.copyStyle
-            : { source: null, pointStyle: null, lineStyle: null, showLabel: null },
+            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
         };
       }
 
@@ -932,12 +978,15 @@ const actions: GeoActions = {
               point.kind !== "intersectionPoint" ||
               (point.objA.type !== "line" || point.objA.id !== prev.selectedObject!.id) &&
                 (point.objB.type !== "line" || point.objB.id !== prev.selectedObject!.id)
+          ).filter(
+            (point) =>
+              point.kind !== "circleLineIntersectionPoint" || point.lineId !== prev.selectedObject!.id
           ),
         },
         selectedObject: null,
         copyStyle:
           prev.copyStyle.source?.type === "line" && prev.copyStyle.source.id === prev.selectedObject.id
-            ? { source: null, pointStyle: null, lineStyle: null, showLabel: null }
+            ? { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null }
             : prev.copyStyle,
       };
     });
@@ -957,6 +1006,7 @@ const actions: GeoActions = {
               labelOffsetPx: { ...point.style.labelOffsetPx },
             },
             lineStyle: null,
+            circleStyle: null,
             showLabel: point.showLabel,
           },
         };
@@ -971,6 +1021,7 @@ const actions: GeoActions = {
             source: obj,
             pointStyle: null,
             lineStyle: { ...segment.style },
+            circleStyle: null,
             showLabel: null,
           },
         };
@@ -984,7 +1035,8 @@ const actions: GeoActions = {
           copyStyle: {
             source: obj,
             pointStyle: null,
-            lineStyle: { ...circle.style },
+            lineStyle: null,
+            circleStyle: { ...circle.style },
             showLabel: null,
           },
         };
@@ -998,6 +1050,7 @@ const actions: GeoActions = {
           source: obj,
           pointStyle: null,
           lineStyle: { ...line.style },
+          circleStyle: null,
           showLabel: null,
         },
       };
@@ -1042,13 +1095,13 @@ const actions: GeoActions = {
       }
 
       if (obj.type === "circle") {
-        if (!prev.copyStyle.lineStyle) return prev;
+        if (!prev.copyStyle.circleStyle) return prev;
         return {
           ...prev,
           scene: {
             ...prev.scene,
             circles: prev.scene.circles.map((circle) =>
-              circle.id === obj.id ? { ...circle, style: { ...prev.copyStyle.lineStyle! } } : circle
+              circle.id === obj.id ? { ...circle, style: { ...prev.copyStyle.circleStyle! } } : circle
             ),
           },
         };
@@ -1074,6 +1127,7 @@ const actions: GeoActions = {
         source: null,
         pointStyle: null,
         lineStyle: null,
+        circleStyle: null,
         showLabel: null,
       },
     }));
@@ -1124,4 +1178,72 @@ function objectRefAlive(
   if (obj.type === "line") return lines.some((line) => line.id === obj.id);
   if (obj.type === "segment") return segments.some((segment) => segment.id === obj.id);
   return circles.some((circle) => circle.id === obj.id);
+}
+
+function getLineCircleRefs(
+  objA: GeometryObjectRef,
+  objB: GeometryObjectRef
+): { lineId: string; circleId: string } | null {
+  if (objA.type === "line" && objB.type === "circle") {
+    return { lineId: objA.id, circleId: objB.id };
+  }
+  if (objA.type === "circle" && objB.type === "line") {
+    return { lineId: objB.id, circleId: objA.id };
+  }
+  return null;
+}
+
+function createStableLineCircleIntersectionPoint(
+  id: string,
+  lineId: string,
+  circleId: string,
+  preferredWorld: Vec2,
+  state: GeoState
+): ScenePoint | null {
+  const line = state.scene.lines.find((item) => item.id === lineId);
+  const circle = state.scene.circles.find((item) => item.id === circleId);
+  if (!line || !circle) return null;
+
+  const a = geoStoreHelpers.getPointWorldById(state.scene, line.aId);
+  const b = geoStoreHelpers.getPointWorldById(state.scene, line.bId);
+  const center = geoStoreHelpers.getPointWorldById(state.scene, circle.centerId);
+  const through = geoStoreHelpers.getPointWorldById(state.scene, circle.throughId);
+  if (!a || !b || !center || !through) return null;
+
+  const radius = distance(center, through);
+  const branches = lineCircleIntersectionBranches(a, b, center, radius);
+  if (branches.length === 0) return null;
+
+  let branchIndex: 0 | 1 = 0;
+  if (branches.length >= 2) {
+    const d0 = distance(branches[0].point, preferredWorld);
+    const d1 = distance(branches[1].point, preferredWorld);
+    branchIndex = d1 < d0 ? 1 : 0;
+  }
+
+  const used = new Set(state.scene.points.map((point) => point.name));
+  let idx = 0;
+  let name = nextLabelFromIndex(idx);
+  while (used.has(name)) {
+    idx += 1;
+    name = nextLabelFromIndex(idx);
+  }
+
+  return {
+    id,
+    kind: "circleLineIntersectionPoint",
+    name,
+    captionTex: name,
+    visible: true,
+    showLabel: "name" as ShowLabelMode,
+    locked: true,
+    auxiliary: true,
+    circleId,
+    lineId,
+    branchIndex,
+    style: {
+      ...state.pointDefaults,
+      labelOffsetPx: { ...state.pointDefaults.labelOffsetPx },
+    },
+  };
 }

@@ -115,9 +115,9 @@ export function findBestSnap(
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
     const center = getPointWorld(scene, circle.centerId);
-    const radiusPoint = getPointWorld(scene, circle.radiusPointId);
-    if (!center || !radiusPoint) continue;
-    const radius = distance(center, radiusPoint);
+    const through = getPointWorld(scene, circle.throughId);
+    if (!center || !through) continue;
+    const radius = distance(center, through);
     const cScreen = camMath.worldToScreen(center, camera, vp);
     const rScreen = radius * camera.zoom;
     const dToBoundary = Math.abs(Math.hypot(screen.x - cScreen.x, screen.y - cScreen.y) - rScreen);

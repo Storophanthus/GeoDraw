@@ -3,6 +3,7 @@ import {
   add,
   circleCircleIntersections,
   distance,
+  lineCircleIntersectionBranches,
   lineCircleIntersections,
   lineLineIntersection,
   mul,
@@ -40,6 +41,15 @@ export type LineStyle = {
   strokeWidth: number;
   dash: "solid" | "dashed";
   opacity: number;
+};
+
+export type CircleStyle = {
+  strokeColor: string;
+  strokeWidth: number;
+  strokeDash: "solid" | "dashed";
+  strokeOpacity: number;
+  fillColor?: string;
+  fillOpacity?: number;
 };
 
 export type ShowLabelMode = "none" | "name" | "caption";
@@ -146,6 +156,21 @@ export type IntersectionPoint = {
   style: PointStyle;
 };
 
+export type CircleLineIntersectionPoint = {
+  id: string;
+  kind: "circleLineIntersectionPoint";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  circleId: string;
+  lineId: string;
+  branchIndex: 0 | 1;
+  style: PointStyle;
+};
+
 export type ScenePoint =
   | FreePoint
   | MidpointFromPoints
@@ -153,7 +178,8 @@ export type ScenePoint =
   | PointOnLine
   | PointOnSegment
   | PointOnCircle
-  | IntersectionPoint;
+  | IntersectionPoint
+  | CircleLineIntersectionPoint;
 
 export type SceneSegment = {
   id: string;
@@ -175,9 +201,9 @@ export type SceneLine = {
 export type SceneCircle = {
   id: string;
   centerId: string;
-  radiusPointId: string;
+  throughId: string;
   visible: boolean;
-  style: LineStyle;
+  style: CircleStyle;
 };
 
 export type SceneModel = {
@@ -266,27 +292,34 @@ export function getPointWorldPos(
     const circle = scene.circles.find((item) => item.id === point.circleId);
     if (!circle) return null;
     const center = getPointWorldById(circle.centerId, scene, nextVisited);
-    const radiusPoint = getPointWorldById(circle.radiusPointId, scene, nextVisited);
-    if (!center || !radiusPoint) return null;
-    const radius = distance(center, radiusPoint);
+    const through = getPointWorldById(circle.throughId, scene, nextVisited);
+    if (!center || !through) return null;
+    const radius = distance(center, through);
     return {
       x: center.x + Math.cos(point.t) * radius,
       y: center.y + Math.sin(point.t) * radius,
     };
   }
 
+  if (point.kind === "circleLineIntersectionPoint") {
+    const circle = scene.circles.find((item) => item.id === point.circleId);
+    const line = scene.lines.find((item) => item.id === point.lineId);
+    if (!circle || !line) return null;
+    const center = getPointWorldById(circle.centerId, scene, nextVisited);
+    const through = getPointWorldById(circle.throughId, scene, nextVisited);
+    const la = getPointWorldById(line.aId, scene, nextVisited);
+    const lb = getPointWorldById(line.bId, scene, nextVisited);
+    if (!center || !through || !la || !lb) return null;
+    const r = distance(center, through);
+    const branches = lineCircleIntersectionBranches(la, lb, center, r);
+    if (branches.length === 0) return null;
+    if (branches.length === 1) return branches[0].point;
+    return branches[point.branchIndex]?.point ?? branches[0].point;
+  }
+
   const intersections = objectIntersections(point.objA, point.objB, scene);
   if (intersections.length === 0) return null;
-  let best = intersections[0];
-  let bestDist = distance(best, point.preferredWorld);
-  for (let i = 1; i < intersections.length; i += 1) {
-    const d = distance(intersections[i], point.preferredWorld);
-    if (d < bestDist) {
-      best = intersections[i];
-      bestDist = d;
-    }
-  }
-  return best;
+  return chooseClosestToPreferred(intersections, point.preferredWorld);
 }
 
 export function isPointDraggable(point: ScenePoint): boolean {
@@ -363,11 +396,24 @@ function asCircle(
   const circle = scene.circles.find((item) => item.id === ref.id);
   if (!circle) return null;
   const center = getPointWorldById(circle.centerId, scene, new Set());
-  const radiusPoint = getPointWorldById(circle.radiusPointId, scene, new Set());
-  if (!center || !radiusPoint) return null;
-  return { center, radius: distance(center, radiusPoint) };
+  const through = getPointWorldById(circle.throughId, scene, new Set());
+  if (!center || !through) return null;
+  return { center, radius: distance(center, through) };
 }
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
+}
+
+function chooseClosestToPreferred(points: Vec2[], preferredWorld: Vec2): Vec2 {
+  let best = points[0];
+  let bestDist = distance(best, preferredWorld);
+  for (let i = 1; i < points.length; i += 1) {
+    const d = distance(points[i], preferredWorld);
+    if (d < bestDist) {
+      best = points[i];
+      bestDist = d;
+    }
+  }
+  return best;
 }

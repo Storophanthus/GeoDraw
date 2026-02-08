@@ -33,7 +33,7 @@ type ToolDef = {
   ariaLabel: string;
 };
 
-type ToolGroupId = "move" | "points" | "lines" | "styles";
+type ToolGroupId = "move" | "points" | "lines" | "circles" | "styles";
 
 type ResizeState = {
   side: "left" | "right" | null;
@@ -49,13 +49,14 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   midpoint: { icon: GitMerge, tooltip: "Midpoint (M)", ariaLabel: "Midpoint tool" },
   segment: { icon: Minus, tooltip: "Segment (S)", ariaLabel: "Segment tool" },
   line2p: { icon: Slash, tooltip: "Line Through 2 Points (L)", ariaLabel: "Line tool" },
-  circle: { icon: Circle, tooltip: "Circle (O)", ariaLabel: "Circle tool" },
+  circle_cp: { icon: Circle, tooltip: "Circle Center + Point (O)", ariaLabel: "Circle center-through-point tool" },
 };
 
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
   { id: "move", label: "MOVE", tools: ["move"] },
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
-  { id: "lines", label: "LINES", tools: ["segment", "line2p", "circle"] },
+  { id: "lines", label: "LINES", tools: ["segment", "line2p"] },
+  { id: "circles", label: "CIRCLES", tools: ["circle_cp"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
 ];
 
@@ -120,6 +121,7 @@ export default function App() {
     move: "move",
     points: "point",
     lines: "segment",
+    circles: "circle_cp",
     styles: "copyStyle",
   });
 
