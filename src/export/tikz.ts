@@ -1,8 +1,11 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
 import { getPointWorldPos, type GeometryObjectRef, type SceneModel, type ScenePoint } from "../scene/points";
+import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
+import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
 
 export type TikzCommand =
   | { kind: "DefPoints"; items: { name: string; x: number; y: number }[] }
+  | { kind: "DefPoint"; name: string; x: number; y: number }
   | { kind: "DefPointOnLine"; name: string; a: string; b: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
   | { kind: "DefMidPoint"; name: string; a: string; b: string }
@@ -16,6 +19,7 @@ export type TikzCommand =
       circleX: string;
       branch: 0 | 1;
       common?: string;
+      selector?: { name: string; x: number; y: number };
     }
   | {
       kind: "InterCC";
@@ -26,6 +30,7 @@ export type TikzCommand =
       circleBX: string;
       branch: 0 | 1;
       common?: string;
+      selector?: { name: string; x: number; y: number };
     }
   | { kind: "DrawSegment"; a: string; b: string }
   | { kind: "DrawLine"; a: string; b: string; addLeft: number; addRight: number }
@@ -56,6 +61,12 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
 
   const visiting = new Set<string>();
   const visited = new Set<string>();
+  let selectorIndex = 0;
+
+  const newSelectorName = (kind: "LC" | "CC"): string => {
+    selectorIndex += 1;
+    return `tkzSel${kind}_${selectorIndex}`;
+  };
 
   const resolvePoint = (pointId: string) => {
     if (visited.has(pointId)) return;
@@ -174,6 +185,14 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
           if (definedPointIds.has(sibling.id)) commonName = mustName(pointName, sibling.id);
         }
       }
+      let selector: { name: string; x: number; y: number } | undefined;
+      if (!commonName) {
+        const other = inferOtherLineCircleBranchPoint(scene, line.aId, line.bId, circle.centerId, circle.throughId, branch);
+        if (other) {
+          selector = { name: newSelectorName("LC"), x: other.x, y: other.y };
+          commonName = selector.name;
+        }
+      }
       constructions.push({
         kind: "InterLC",
         name,
@@ -183,6 +202,7 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
         circleX: mustName(pointName, circle.throughId),
         branch,
         common: commonName,
+        selector,
       });
       definedPointIds.add(point.id);
     } else if (point.kind === "intersectionPoint") {
@@ -224,6 +244,14 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
             });
             if (sibling) commonName = mustName(pointName, sibling.id);
           }
+          let selector: { name: string; x: number; y: number } | undefined;
+          if (!commonName) {
+            const other = inferOtherCircleCircleBranchPoint(scene, cA.centerId, cA.throughId, cB.centerId, cB.throughId, branch);
+            if (other) {
+              selector = { name: newSelectorName("CC"), x: other.x, y: other.y };
+              commonName = selector.name;
+            }
+          }
           constructions.push({
             kind: "InterCC",
             name,
@@ -233,6 +261,7 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
             circleBX: mustName(pointName, cB.throughId),
             branch,
             common: commonName,
+            selector,
           });
           definedPointIds.add(point.id);
         } else {
@@ -268,6 +297,21 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
               pointName
             );
           }
+          let selector: { name: string; x: number; y: number } | undefined;
+          if (!commonName) {
+            const other = inferOtherLineCircleBranchPoint(
+              scene,
+              mixed.ll.aId,
+              mixed.ll.bId,
+              mixed.c.centerId,
+              mixed.c.throughId,
+              branch
+            );
+            if (other) {
+              selector = { name: newSelectorName("LC"), x: other.x, y: other.y };
+              commonName = selector.name;
+            }
+          }
           constructions.push({
             kind: "InterLC",
             name,
@@ -277,6 +321,7 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
             circleX: mustName(pointName, mixed.c.throughId),
             branch,
             common: commonName,
+            selector,
           });
           definedPointIds.add(point.id);
         }
@@ -358,6 +403,7 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
 
 export function renderTikz(cmds: TikzCommand[]): string {
   const pointsDefs = cmds.filter((c) => c.kind === "DefPoints");
+  const pointDefs = cmds.filter((c) => c.kind === "DefPoint");
   const constructions = cmds.filter(
     (c) =>
       c.kind !== "DefPoints" &&
@@ -383,18 +429,27 @@ export function renderTikz(cmds: TikzCommand[]): string {
 
   out.push("% Points");
   for (const cmd of pointsDefs) {
+    assertTkzMacro("tkzDefPoints");
     const items = cmd.items.map((it) => `${fmt(it.x)}/${fmt(it.y)}/${it.name}`).join(", ");
     out.push(`\\tkzDefPoints{${items}}`);
+  }
+  for (const cmd of pointDefs) {
+    assertTkzMacro("tkzDefPoint");
+    out.push(`\\tkzDefPoint(${fmt(cmd.x)},${fmt(cmd.y)}){${cmd.name}}`);
   }
 
   out.push("% Constructions");
   let interLCTmpIdx = 0;
   for (const cmd of constructions) {
     if (cmd.kind === "DefMidPoint") {
+      assertTkzMacro("tkzDefMidPoint");
+      assertTkzMacro("tkzGetPoint");
       out.push(`\\tkzDefMidPoint(${cmd.a},${cmd.b}) \\tkzGetPoint{${cmd.name}}`);
       continue;
     }
     if (cmd.kind === "DefPointOnLine") {
+      assertTkzMacro("tkzDefPointBy");
+      assertTkzMacro("tkzGetPoint");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tRaw = (cmd as any).t;
       const t = typeof tRaw === "number" && Number.isFinite(tRaw) ? tRaw : 0.5;
@@ -402,16 +457,26 @@ export function renderTikz(cmds: TikzCommand[]): string {
       continue;
     }
     if (cmd.kind === "DefPointOnCircle") {
+      assertTkzMacro("tkzDefPointOnCircle");
+      assertTkzMacro("tkzGetPoint");
       const deg = (cmd.theta * 180) / Math.PI;
       out.push(`\\tkzDefPointOnCircle[through = center ${cmd.center} angle ${fmt(deg)} point ${cmd.through}]`);
       out.push(`\\tkzGetPoint{${cmd.name}}`);
       continue;
     }
     if (cmd.kind === "InterLL") {
+      assertTkzMacro("tkzInterLL");
+      assertTkzMacro("tkzGetPoint");
       out.push(`\\tkzInterLL(${cmd.a1},${cmd.a2})(${cmd.b1},${cmd.b2}) \\tkzGetPoint{${cmd.name}}`);
       continue;
     }
     if (cmd.kind === "InterLC") {
+      if (cmd.selector) {
+        assertTkzMacro("tkzDefPoint");
+        out.push(`\\tkzDefPoint(${fmt(cmd.selector.x)},${fmt(cmd.selector.y)}){${cmd.selector.name}}`);
+      }
+      assertTkzMacro("tkzInterLC");
+      assertTkzMacro("tkzGetPoints");
       const canSwap = cmd.lineA !== cmd.lineB;
       const shouldSwap = !cmd.common && canSwap && cmd.branch === 1;
       const la = shouldSwap ? cmd.lineB : cmd.lineA;
@@ -423,6 +488,12 @@ export function renderTikz(cmds: TikzCommand[]): string {
       continue;
     }
     if (cmd.kind === "InterCC") {
+      if (cmd.selector) {
+        assertTkzMacro("tkzDefPoint");
+        out.push(`\\tkzDefPoint(${fmt(cmd.selector.x)},${fmt(cmd.selector.y)}){${cmd.selector.name}}`);
+      }
+      assertTkzMacro("tkzInterCC");
+      assertTkzMacro("tkzGetPoints");
       const canSwap = cmd.circleAO !== cmd.circleBO || cmd.circleAX !== cmd.circleBX;
       const shouldSwap = !cmd.common && canSwap && cmd.branch === 1;
       const ao = shouldSwap ? cmd.circleBO : cmd.circleAO;
@@ -439,10 +510,13 @@ export function renderTikz(cmds: TikzCommand[]): string {
   out.push("% Draw objects");
   for (const cmd of drawObjects) {
     if (cmd.kind === "DrawSegment") {
+      assertTkzMacro("tkzDrawSegment");
       out.push(`\\tkzDrawSegment(${cmd.a},${cmd.b})`);
     } else if (cmd.kind === "DrawLine") {
+      assertTkzMacro("tkzDrawLine");
       out.push(`\\tkzDrawLine[add=${fmt(cmd.addLeft)} and ${fmt(cmd.addRight)}](${cmd.a},${cmd.b})`);
     } else if (cmd.kind === "DrawCircle") {
+      assertTkzMacro("tkzDrawCircle");
       out.push(`\\tkzDrawCircle(${cmd.o},${cmd.x})`);
     }
   }
@@ -450,6 +524,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
   out.push("% Draw points");
   for (const cmd of drawPoints) {
     if (cmd.points.length === 0) continue;
+    assertTkzMacro("tkzDrawPoints");
     out.push(`\\tkzDrawPoints[${cmd.style}](${cmd.points.join(",")})`);
   }
 
@@ -457,9 +532,11 @@ export function renderTikz(cmds: TikzCommand[]): string {
   for (const cmd of drawLabels) {
     if (cmd.kind === "LabelPoints") {
       if (cmd.points.length === 0) continue;
+      assertTkzMacro("tkzLabelPoints");
       out.push(`\\tkzLabelPoints(${cmd.points.join(",")})`);
       continue;
     }
+    assertTkzMacro("tkzLabelPoint");
     out.push(`\\tkzLabelPoint(${cmd.name}){${escapeTikzText(cmd.text)}}`);
   }
 
@@ -468,8 +545,12 @@ export function renderTikz(cmds: TikzCommand[]): string {
 }
 
 export function exportTikz(scene: SceneModel): string {
-  return renderTikz(buildTikzIR(scene));
+  const tex = renderTikz(buildTikzIR(scene));
+  assertNoUnknownTkzMacro(tex);
+  return tex;
 }
+
+export const exportTikZ = (scene: unknown): string => exportTikz(scene as SceneModel);
 
 function buildPointNameMap(points: ScenePoint[]): Map<string, string> {
   const names = new Map<string, string>();
@@ -660,6 +741,61 @@ function inferLineCircleCommonFromEndpoints(
   return undefined;
 }
 
+function inferOtherLineCircleBranchPoint(
+  scene: SceneModel,
+  lineAId: string,
+  lineBId: string,
+  circleOId: string,
+  circleXId: string,
+  selectedBranch: 0 | 1
+): { x: number; y: number } | null {
+  const lineA = scene.points.find((p) => p.id === lineAId);
+  const lineB = scene.points.find((p) => p.id === lineBId);
+  const circleO = scene.points.find((p) => p.id === circleOId);
+  const circleX = scene.points.find((p) => p.id === circleXId);
+  if (!lineA || !lineB || !circleO || !circleX) return null;
+
+  const a = getPointWorldPos(lineA, scene);
+  const b = getPointWorldPos(lineB, scene);
+  const o = getPointWorldPos(circleO, scene);
+  const x = getPointWorldPos(circleX, scene);
+  if (!a || !b || !o || !x) return null;
+
+  const radius = distance(o, x);
+  const branches = lineCircleIntersectionBranches(a, b, o, radius);
+  if (branches.length < 2) return null;
+  const idx = selectedBranch === 0 ? 1 : 0;
+  return branches[idx].point;
+}
+
+function inferOtherCircleCircleBranchPoint(
+  scene: SceneModel,
+  aCenterId: string,
+  aThroughId: string,
+  bCenterId: string,
+  bThroughId: string,
+  selectedBranch: 0 | 1
+): { x: number; y: number } | null {
+  const aCenterPoint = scene.points.find((p) => p.id === aCenterId);
+  const aThroughPoint = scene.points.find((p) => p.id === aThroughId);
+  const bCenterPoint = scene.points.find((p) => p.id === bCenterId);
+  const bThroughPoint = scene.points.find((p) => p.id === bThroughId);
+  if (!aCenterPoint || !aThroughPoint || !bCenterPoint || !bThroughPoint) return null;
+
+  const aCenter = getPointWorldPos(aCenterPoint, scene);
+  const aThrough = getPointWorldPos(aThroughPoint, scene);
+  const bCenter = getPointWorldPos(bCenterPoint, scene);
+  const bThrough = getPointWorldPos(bThroughPoint, scene);
+  if (!aCenter || !aThrough || !bCenter || !bThrough) return null;
+
+  const ra = distance(aCenter, aThrough);
+  const rb = distance(bCenter, bThrough);
+  const intersections = circleCircleIntersections(aCenter, ra, bCenter, rb);
+  if (intersections.length < 2) return null;
+  const idx = selectedBranch === 0 ? 1 : 0;
+  return intersections[idx];
+}
+
 function computeLineDrawPlacement(
   scene: SceneModel,
   lineAId: string,
@@ -678,8 +814,8 @@ function computeLineDrawPlacement(
   if (dd <= 1e-12) return { drawAId: lineAId, drawBId: lineBId, addLeft: 1, addRight: 1 };
   const len = Math.sqrt(dd);
 
-  const distTol = Math.max(1e-8, len * 1e-8);
-  const candidates: Array<{ id: string; s: number; world: { x: number; y: number } }> = [];
+  const distTol = Math.max(1e-6, len * 1e-6);
+  const candidates: Array<{ s: number }> = [];
 
   for (const p of scene.points) {
     const w = getPointWorldPos(p, scene);
@@ -691,46 +827,24 @@ function computeLineDrawPlacement(
     const py = a.y + s * dy;
     const dist = Math.hypot(w.x - px, w.y - py);
     if (dist > distTol) continue;
-    candidates.push({ id: p.id, s, world: w });
+    candidates.push({ s });
   }
 
   if (candidates.length === 0) {
-    return { drawAId: lineAId, drawBId: lineBId, addLeft: 0.4, addRight: 0.4 };
+    return { drawAId: lineAId, drawBId: lineBId, addLeft: 0.15, addRight: 0.15 };
   }
 
-  candidates.sort((p1, p2) => p1.s - p2.s);
-  const minCand = candidates[0];
-  const maxCand = candidates[candidates.length - 1];
-  const drawAId = minCand.id;
-  const drawBId = maxCand.id;
-  if (drawAId === drawBId) {
-    return { drawAId: lineAId, drawBId: lineBId, addLeft: 0.4, addRight: 0.4 };
-  }
-
-  const drawA = minCand.world;
-  const drawB = maxCand.world;
-  const ddx = drawB.x - drawA.x;
-  const ddy = drawB.y - drawA.y;
-  const ddDraw = ddx * ddx + ddy * ddy;
-  if (ddDraw <= 1e-12) {
-    return { drawAId: lineAId, drawBId: lineBId, addLeft: 0.4, addRight: 0.4 };
-  }
-  const lenDraw = Math.sqrt(ddDraw);
-
-  let minT = 0;
-  let maxT = 1;
+  let minS = 0;
+  let maxS = 1;
   for (const c of candidates) {
-    const ux = c.world.x - drawA.x;
-    const uy = c.world.y - drawA.y;
-    const t = (ux * ddx + uy * ddy) / ddDraw;
-    if (t < minT) minT = t;
-    if (t > maxT) maxT = t;
+    if (c.s < minS) minS = c.s;
+    if (c.s > maxS) maxS = c.s;
   }
 
-  const margin = Math.max(0.08, 0.03 * lenDraw);
-  const addLeft = Math.max(0.15, -minT * lenDraw + margin);
-  const addRight = Math.max(0.15, (maxT - 1) * lenDraw + margin);
-  return { drawAId, drawBId, addLeft, addRight };
+  const margin = Math.max(0.08, 0.03 * len);
+  const addLeft = Math.max(0.15, -minS * len + margin);
+  const addRight = Math.max(0.15, (maxS - 1) * len + margin);
+  return { drawAId: lineAId, drawBId: lineBId, addLeft, addRight };
 }
 
 function buildPointStyleGroups(
@@ -861,4 +975,11 @@ function escapeTikzText(value: string): string {
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
+}
+
+const TKZ_MACRO_SET = new Set<string>((tkzMacroWhitelist as { macros: string[] }).macros ?? []);
+
+function assertTkzMacro(name: string): void {
+  if (TKZ_MACRO_SET.has(name)) return;
+  throw new Error(`Unsupported tkz-euclide macro emitted: \\\\${name}. Run npm run update:tkz-macros or fix exporter.`);
 }
