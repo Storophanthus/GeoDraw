@@ -1497,6 +1497,20 @@ function findExistingIntersectionPointId(
   const EPS = 1e-6;
   const lineCircle = getLineCircleRefs(objA, objB);
 
+  if (lineCircle) {
+    const target = resolveLineCircleTarget(state, lineCircle.lineId, lineCircle.circleId, preferredWorld);
+    if (target) {
+      const ROOT_EPS = 1e-5;
+      for (const point of state.scene.points) {
+        if (point.kind !== "circleLineIntersectionPoint") continue;
+        if (point.lineId !== lineCircle.lineId || point.circleId !== lineCircle.circleId) continue;
+        const world = getPointWorldPos(point, state.scene);
+        if (world && distance(world, target.world) <= ROOT_EPS) return point.id;
+        if (target.excludePointId && point.excludePointId === target.excludePointId) return point.id;
+      }
+    }
+  }
+
   for (const point of state.scene.points) {
     const world = getPointWorldPos(point, state.scene);
     if (!world) continue;
@@ -1514,6 +1528,52 @@ function findExistingIntersectionPointId(
     }
   }
   return null;
+}
+
+function resolveLineCircleTarget(
+  state: GeoState,
+  lineId: string,
+  circleId: string,
+  preferredWorld: Vec2
+): { world: Vec2; excludePointId?: string } | null {
+  const line = state.scene.lines.find((item) => item.id === lineId);
+  const circle = state.scene.circles.find((item) => item.id === circleId);
+  if (!line || !circle) return null;
+
+  const a = geoStoreHelpers.getPointWorldById(state.scene, line.aId);
+  const b = geoStoreHelpers.getPointWorldById(state.scene, line.bId);
+  const center = geoStoreHelpers.getPointWorldById(state.scene, circle.centerId);
+  const through = geoStoreHelpers.getPointWorldById(state.scene, circle.throughId);
+  if (!a || !b || !center || !through) return null;
+
+  const radius = distance(center, through);
+  const branches = lineCircleIntersectionBranches(a, b, center, radius);
+  if (branches.length === 0) return null;
+
+  if (branches.length === 1) return { world: branches[0].point };
+
+  const d0 = distance(branches[0].point, preferredWorld);
+  const d1 = distance(branches[1].point, preferredWorld);
+  const branchIndex: 0 | 1 = d1 < d0 ? 1 : 0;
+  const chosen = branches[branchIndex].point;
+  const other = branches[branchIndex === 0 ? 1 : 0].point;
+
+  const endpointCandidates: Array<{ id: string; world: Vec2 }> = [];
+  const aOnCircle = Math.abs(distance(a, center) - radius) <= 1e-6;
+  const bOnCircle = Math.abs(distance(b, center) - radius) <= 1e-6;
+  if (aOnCircle) endpointCandidates.push({ id: line.aId, world: a });
+  if (bOnCircle) endpointCandidates.push({ id: line.bId, world: b });
+
+  let excludePointId: string | undefined;
+  if (endpointCandidates.length === 1) {
+    const endpoint = endpointCandidates[0];
+    const ROOT_EPS = 1e-6;
+    if (distance(chosen, endpoint.world) > ROOT_EPS && distance(other, endpoint.world) <= ROOT_EPS) {
+      excludePointId = endpoint.id;
+    }
+  }
+
+  return { world: chosen, excludePointId };
 }
 
 function sameObjectPair(

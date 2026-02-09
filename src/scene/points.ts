@@ -499,16 +499,20 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
       rememberStableCircleLinePoint(point.id, stabilitySignature, branches[0].point);
       return branches[0].point;
     }
-    const ordered = orderTwoPointsDeterministic(branches[0].point, branches[1].point);
-    let chosen = ordered[point.branchIndex === 1 ? 1 : 0];
-    let other = ordered[point.branchIndex === 1 ? 0 : 1];
+    // IMPORTANT: branchIndex semantics must match creation-time semantics.
+    // lineCircleIntersectionBranches returns roots ordered by line parameter t (t1 <= t2),
+    // so we must use that exact ordering here too (not x/y ordering).
+    const root0 = branches[0].point;
+    const root1 = branches[1].point;
+    let chosen = point.branchIndex === 1 ? root1 : root0;
+    let other = point.branchIndex === 1 ? root0 : root1;
     const prevWorld = getPreviousStableCircleLinePoint(point.id, stabilitySignature);
     if (prevWorld) {
-      const d0 = distance(ordered[0], prevWorld);
-      const d1 = distance(ordered[1], prevWorld);
+      const d0 = distance(root0, prevWorld);
+      const d1 = distance(root1, prevWorld);
       if (Math.abs(d0 - d1) > 1e-9) {
-        chosen = d0 <= d1 ? ordered[0] : ordered[1];
-        other = chosen === ordered[0] ? ordered[1] : ordered[0];
+        chosen = d0 <= d1 ? root0 : root1;
+        other = chosen === root0 ? root1 : root0;
       }
     }
     const ROOT_EPS = 1e-6;
@@ -684,13 +688,6 @@ function chooseStableIntersection(
     }
   }
   return chooseClosestToPreferred(intersections, preferredWorld);
-}
-
-function orderTwoPointsDeterministic(a: Vec2, b: Vec2): [Vec2, Vec2] {
-  if (a.x < b.x) return [a, b];
-  if (a.x > b.x) return [b, a];
-  if (a.y <= b.y) return [a, b];
-  return [b, a];
 }
 
 function roundSig(value: number): string {
