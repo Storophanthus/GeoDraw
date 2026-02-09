@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test:export": "node scripts/test-export.mjs",
+    "test:perf": "tsx src/scene/__tests__/eval-perf.test.ts",
+    "diag:scene": "tsx scripts/scene-diagnostics.ts",
     "test:export:watch": "tsx --watch src/export/__tests__/line-extents.test.ts",
     "update:tkz-macros": "tsx scripts/extract-tkz-euclide-macros.ts"
   },

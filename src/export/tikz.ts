@@ -336,6 +336,23 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
     resolvePoint(point.id);
   }
 
+  const undefinedWorldVisible: string[] = [];
+  for (const point of scene.points) {
+    if (!point.visible) continue;
+    const world = getPointWorldPos(point, scene);
+    if (!world || !Number.isFinite(world.x) || !Number.isFinite(world.y)) {
+      undefinedWorldVisible.push(point.name);
+    }
+  }
+  if (undefinedWorldVisible.length > 0) {
+    undefinedWorldVisible.sort((a, b) => a.localeCompare(b));
+    throw new Error(
+      `Cannot export undefined points in current configuration: ${undefinedWorldVisible.join(
+        ", "
+      )}. Hide/delete them or adjust construction.`
+    );
+  }
+
   if (freeItems.length > 0) {
     freeItems.sort((a, b) => a.name.localeCompare(b.name));
     defs.push({ kind: "DefPoints", items: freeItems });
@@ -606,16 +623,10 @@ function inferLineCircleBranch(
   circleOId: string,
   circleXId: string
 ): 0 | 1 {
-  const lineA = scene.points.find((p) => p.id === lineAId);
-  const lineB = scene.points.find((p) => p.id === lineBId);
-  const circleO = scene.points.find((p) => p.id === circleOId);
-  const circleX = scene.points.find((p) => p.id === circleXId);
-  if (!lineA || !lineB || !circleO || !circleX) return 0;
-
-  const a = getPointWorldPos(lineA, scene);
-  const b = getPointWorldPos(lineB, scene);
-  const o = getPointWorldPos(circleO, scene);
-  const x = getPointWorldPos(circleX, scene);
+  const a = getPointWorldPosCached(scene, lineAId);
+  const b = getPointWorldPosCached(scene, lineBId);
+  const o = getPointWorldPosCached(scene, circleOId);
+  const x = getPointWorldPosCached(scene, circleXId);
   if (!a || !b || !o || !x) return 0;
 
   const radius = distance(o, x);
@@ -636,18 +647,11 @@ function inferLineCircleBranchFromExcluded(
   excludePointId: string,
   fallback: 0 | 1
 ): 0 | 1 {
-  const lineA = scene.points.find((p) => p.id === lineAId);
-  const lineB = scene.points.find((p) => p.id === lineBId);
-  const circleO = scene.points.find((p) => p.id === circleOId);
-  const circleX = scene.points.find((p) => p.id === circleXId);
-  const excluded = scene.points.find((p) => p.id === excludePointId);
-  if (!lineA || !lineB || !circleO || !circleX || !excluded) return fallback;
-
-  const a = getPointWorldPos(lineA, scene);
-  const b = getPointWorldPos(lineB, scene);
-  const o = getPointWorldPos(circleO, scene);
-  const x = getPointWorldPos(circleX, scene);
-  const ex = getPointWorldPos(excluded, scene);
+  const a = getPointWorldPosCached(scene, lineAId);
+  const b = getPointWorldPosCached(scene, lineBId);
+  const o = getPointWorldPosCached(scene, circleOId);
+  const x = getPointWorldPosCached(scene, circleXId);
+  const ex = getPointWorldPosCached(scene, excludePointId);
   if (!a || !b || !o || !x || !ex) return fallback;
 
   const radius = distance(o, x);
@@ -670,15 +674,10 @@ function inferCircleCircleBranch(
   bCenterId: string,
   bThroughId: string
 ): 0 | 1 {
-  const aCenterPoint = scene.points.find((p) => p.id === aCenterId);
-  const aThroughPoint = scene.points.find((p) => p.id === aThroughId);
-  const bCenterPoint = scene.points.find((p) => p.id === bCenterId);
-  const bThroughPoint = scene.points.find((p) => p.id === bThroughId);
-  if (!aCenterPoint || !aThroughPoint || !bCenterPoint || !bThroughPoint) return 0;
-  const aCenter = getPointWorldPos(aCenterPoint, scene);
-  const aThrough = getPointWorldPos(aThroughPoint, scene);
-  const bCenter = getPointWorldPos(bCenterPoint, scene);
-  const bThrough = getPointWorldPos(bThroughPoint, scene);
+  const aCenter = getPointWorldPosCached(scene, aCenterId);
+  const aThrough = getPointWorldPosCached(scene, aThroughId);
+  const bCenter = getPointWorldPosCached(scene, bCenterId);
+  const bThrough = getPointWorldPosCached(scene, bThroughId);
   if (!aCenter || !aThrough || !bCenter || !bThrough) return 0;
 
   const ra = distance(aCenter, aThrough);
@@ -712,16 +711,10 @@ function inferLineCircleCommonFromEndpoints(
   selectedBranch: 0 | 1,
   pointName: Map<string, string>
 ): string | undefined {
-  const lineA = scene.points.find((p) => p.id === lineAId);
-  const lineB = scene.points.find((p) => p.id === lineBId);
-  const circleO = scene.points.find((p) => p.id === circleOId);
-  const circleX = scene.points.find((p) => p.id === circleXId);
-  if (!lineA || !lineB || !circleO || !circleX) return undefined;
-
-  const a = getPointWorldPos(lineA, scene);
-  const b = getPointWorldPos(lineB, scene);
-  const o = getPointWorldPos(circleO, scene);
-  const x = getPointWorldPos(circleX, scene);
+  const a = getPointWorldPosCached(scene, lineAId);
+  const b = getPointWorldPosCached(scene, lineBId);
+  const o = getPointWorldPosCached(scene, circleOId);
+  const x = getPointWorldPosCached(scene, circleXId);
   if (!a || !b || !o || !x) return undefined;
 
   const radius = distance(o, x);
@@ -749,16 +742,10 @@ function inferOtherLineCircleBranchPoint(
   circleXId: string,
   selectedBranch: 0 | 1
 ): { x: number; y: number } | null {
-  const lineA = scene.points.find((p) => p.id === lineAId);
-  const lineB = scene.points.find((p) => p.id === lineBId);
-  const circleO = scene.points.find((p) => p.id === circleOId);
-  const circleX = scene.points.find((p) => p.id === circleXId);
-  if (!lineA || !lineB || !circleO || !circleX) return null;
-
-  const a = getPointWorldPos(lineA, scene);
-  const b = getPointWorldPos(lineB, scene);
-  const o = getPointWorldPos(circleO, scene);
-  const x = getPointWorldPos(circleX, scene);
+  const a = getPointWorldPosCached(scene, lineAId);
+  const b = getPointWorldPosCached(scene, lineBId);
+  const o = getPointWorldPosCached(scene, circleOId);
+  const x = getPointWorldPosCached(scene, circleXId);
   if (!a || !b || !o || !x) return null;
 
   const radius = distance(o, x);
@@ -776,16 +763,10 @@ function inferOtherCircleCircleBranchPoint(
   bThroughId: string,
   selectedBranch: 0 | 1
 ): { x: number; y: number } | null {
-  const aCenterPoint = scene.points.find((p) => p.id === aCenterId);
-  const aThroughPoint = scene.points.find((p) => p.id === aThroughId);
-  const bCenterPoint = scene.points.find((p) => p.id === bCenterId);
-  const bThroughPoint = scene.points.find((p) => p.id === bThroughId);
-  if (!aCenterPoint || !aThroughPoint || !bCenterPoint || !bThroughPoint) return null;
-
-  const aCenter = getPointWorldPos(aCenterPoint, scene);
-  const aThrough = getPointWorldPos(aThroughPoint, scene);
-  const bCenter = getPointWorldPos(bCenterPoint, scene);
-  const bThrough = getPointWorldPos(bThroughPoint, scene);
+  const aCenter = getPointWorldPosCached(scene, aCenterId);
+  const aThrough = getPointWorldPosCached(scene, aThroughId);
+  const bCenter = getPointWorldPosCached(scene, bCenterId);
+  const bThrough = getPointWorldPosCached(scene, bThroughId);
   if (!aCenter || !aThrough || !bCenter || !bThrough) return null;
 
   const ra = distance(aCenter, aThrough);
@@ -801,11 +782,8 @@ function computeLineDrawPlacement(
   lineAId: string,
   lineBId: string
 ): { drawAId: string; drawBId: string; addLeft: number; addRight: number } {
-  const aPoint = scene.points.find((p) => p.id === lineAId);
-  const bPoint = scene.points.find((p) => p.id === lineBId);
-  if (!aPoint || !bPoint) return { drawAId: lineAId, drawBId: lineBId, addLeft: 1, addRight: 1 };
-  const a = getPointWorldPos(aPoint, scene);
-  const b = getPointWorldPos(bPoint, scene);
+  const a = getPointWorldPosCached(scene, lineAId);
+  const b = getPointWorldPosCached(scene, lineBId);
   if (!a || !b) return { drawAId: lineAId, drawBId: lineBId, addLeft: 1, addRight: 1 };
 
   const dx = b.x - a.x;
@@ -815,10 +793,11 @@ function computeLineDrawPlacement(
   const len = Math.sqrt(dd);
 
   const distTol = Math.max(1e-6, len * 1e-6);
-  const candidates: Array<{ s: number }> = [];
+  const relevantPointIds = collectLineRelevantPointIds(scene, lineAId, lineBId);
+  const candidates: Array<{ id: string; s: number }> = [];
 
-  for (const p of scene.points) {
-    const w = getPointWorldPos(p, scene);
+  for (const pointId of relevantPointIds) {
+    const w = getPointWorldPosCached(scene, pointId);
     if (!w) continue;
     const ux = w.x - a.x;
     const uy = w.y - a.y;
@@ -827,10 +806,18 @@ function computeLineDrawPlacement(
     const py = a.y + s * dy;
     const dist = Math.hypot(w.x - px, w.y - py);
     if (dist > distTol) continue;
-    candidates.push({ s });
+    candidates.push({ id: pointId, s });
   }
 
-  if (candidates.length === 0) {
+  if (candidates.length < 2) {
+    return { drawAId: lineAId, drawBId: lineBId, addLeft: 0.15, addRight: 0.15 };
+  }
+
+  candidates.sort((p1, p2) => p1.s - p2.s);
+  const minCand = candidates[0];
+  const maxCand = candidates[candidates.length - 1];
+
+  if (minCand.id === maxCand.id) {
     return { drawAId: lineAId, drawBId: lineBId, addLeft: 0.15, addRight: 0.15 };
   }
 
@@ -841,10 +828,85 @@ function computeLineDrawPlacement(
     if (c.s > maxS) maxS = c.s;
   }
 
-  const margin = Math.max(0.08, 0.03 * len);
-  const addLeft = Math.max(0.15, -minS * len + margin);
-  const addRight = Math.max(0.15, (maxS - 1) * len + margin);
-  return { drawAId: lineAId, drawBId: lineBId, addLeft, addRight };
+  const drawAId = minCand.id;
+  const drawBId = maxCand.id;
+  const wa = getPointWorldPosCached(scene, drawAId);
+  const wb = getPointWorldPosCached(scene, drawBId);
+  if (!wa || !wb) return { drawAId: lineAId, drawBId: lineBId, addLeft: 0.15, addRight: 0.15 };
+
+  const ddx = wb.x - wa.x;
+  const ddy = wb.y - wa.y;
+  const ddDraw = ddx * ddx + ddy * ddy;
+  if (ddDraw <= 1e-12) return { drawAId: lineAId, drawBId: lineBId, addLeft: 0.15, addRight: 0.15 };
+  const lenDraw = Math.sqrt(ddDraw);
+
+  let minT = 0;
+  let maxT = 1;
+  for (const c of candidates) {
+    const w = getPointWorldPosCached(scene, c.id);
+    if (!w) continue;
+    const ux = w.x - wa.x;
+    const uy = w.y - wa.y;
+    const t = (ux * ddx + uy * ddy) / ddDraw;
+    if (t < minT) minT = t;
+    if (t > maxT) maxT = t;
+  }
+
+  const margin = Math.max(0.06, 0.02 * lenDraw);
+  const addLeft = Math.max(0.12, -minT * lenDraw + margin);
+  const addRight = Math.max(0.12, (maxT - 1) * lenDraw + margin);
+  return { drawAId, drawBId, addLeft, addRight };
+}
+
+function collectLineRelevantPointIds(scene: SceneModel, lineAId: string, lineBId: string): Set<string> {
+  const line = scene.lines.find(
+    (item) => (item.aId === lineAId && item.bId === lineBId) || (item.aId === lineBId && item.bId === lineAId)
+  );
+  const ids = new Set<string>([lineAId, lineBId]);
+  if (!line) return ids;
+
+  for (const point of scene.points) {
+    if (point.kind === "pointOnLine" && point.lineId === line.id) {
+      ids.add(point.id);
+      continue;
+    }
+    if (point.kind === "circleLineIntersectionPoint" && point.lineId === line.id) {
+      ids.add(point.id);
+      continue;
+    }
+    if (
+      point.kind === "intersectionPoint" &&
+      ((point.objA.type === "line" && point.objA.id === line.id) || (point.objB.type === "line" && point.objB.id === line.id))
+    ) {
+      ids.add(point.id);
+    }
+  }
+  return ids;
+}
+
+const pointByIdCache = new WeakMap<SceneModel, Map<string, ScenePoint>>();
+const pointWorldCache = new WeakMap<SceneModel, Map<string, ReturnType<typeof getPointWorldPos>>>();
+
+function getPointByIdCached(scene: SceneModel, pointId: string): ScenePoint | null {
+  let map = pointByIdCache.get(scene);
+  if (!map) {
+    map = new Map(scene.points.map((p) => [p.id, p]));
+    pointByIdCache.set(scene, map);
+  }
+  return map.get(pointId) ?? null;
+}
+
+function getPointWorldPosCached(scene: SceneModel, pointId: string) {
+  let map = pointWorldCache.get(scene);
+  if (!map) {
+    map = new Map();
+    pointWorldCache.set(scene, map);
+  }
+  if (map.has(pointId)) return map.get(pointId) ?? null;
+  const point = getPointByIdCached(scene, pointId);
+  const world = point ? getPointWorldPos(point, scene) : null;
+  map.set(pointId, world);
+  return world;
 }
 
 function buildPointStyleGroups(

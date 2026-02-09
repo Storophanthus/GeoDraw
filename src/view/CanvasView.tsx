@@ -4,6 +4,8 @@ import type { Vec2 } from "../geo/vec2";
 import { add, mul, projectPointToLine, projectPointToSegment, sub } from "../geo/geometry";
 import { drawRectGrid, type RectGridSettings } from "../render/rectGrid";
 import {
+  beginSceneEvalTick,
+  endSceneEvalTick,
   type GeometryObjectRef,
   getPointWorldPos,
   isPointDraggable,
@@ -62,6 +64,11 @@ export function CanvasView() {
     startY: 0,
     moved: false,
   });
+  const dragFrameRef = useRef<number | null>(null);
+  const dragPanDeltaRef = useRef<Vec2>({ x: 0, y: 0 });
+  const dragLabelDeltaRef = useRef<Vec2>({ x: 0, y: 0 });
+  const dragPointScreenRef = useRef<Vec2 | null>(null);
+  const dragPointIdRef = useRef<string | null>(null);
 
   const camera = useGeoStore((store) => store.camera);
   const activeTool = useGeoStore((store) => store.activeTool);
@@ -101,14 +108,20 @@ export function CanvasView() {
   const [snapDisabled, setSnapDisabled] = useState(false);
 
   const resolvedPoints = useMemo(
-    () =>
-      scene.points
-        .map((point) => {
-          const world = getPointWorldPos(point, scene);
-          if (!world) return null;
-          return { point, world };
-        })
-        .filter((item): item is { point: ScenePoint; world: Vec2 } => Boolean(item)),
+    () => {
+      beginSceneEvalTick(scene);
+      try {
+        return scene.points
+          .map((point) => {
+            const world = getPointWorldPos(point, scene);
+            if (!world) return null;
+            return { point, world };
+          })
+          .filter((item): item is { point: ScenePoint; world: Vec2 } => Boolean(item));
+      } finally {
+        endSceneEvalTick(scene);
+      }
+    },
     [scene]
   );
 
@@ -178,52 +191,55 @@ export function CanvasView() {
     () => () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
+      beginSceneEvalTick(scene);
+      try {
+        canvas.width = Math.max(1, Math.floor(vp.widthPx * dpr));
+        canvas.height = Math.max(1, Math.floor(vp.heightPx * dpr));
 
-      canvas.width = Math.max(1, Math.floor(vp.widthPx * dpr));
-      canvas.height = Math.max(1, Math.floor(vp.heightPx * dpr));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
 
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, vp.widthPx, vp.heightPx);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
 
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, vp.widthPx, vp.heightPx);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
+        drawRectGrid(ctx, camera, vp, GRID_SETTINGS);
+        drawCircles(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
+        drawLines(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
+        drawSegments(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
+        drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, scene, camera, vp);
+        drawPoints(ctx, resolvedPoints, selectedObject, camera, vp, copyStyle.source);
+        drawInteractionHighlights(
+          ctx,
+          activeTool,
+          pendingSelection,
+          hoveredHit,
+          hoveredTargetValid,
+          resolvedPoints,
+          scene,
+          camera,
+          vp
+        );
 
-      drawRectGrid(ctx, camera, vp, GRID_SETTINGS);
-      drawCircles(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
-      drawLines(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
-      drawSegments(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
-      drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, scene, camera, vp);
-      drawPoints(ctx, resolvedPoints, selectedObject, camera, vp, copyStyle.source);
-      drawInteractionHighlights(
-        ctx,
-        activeTool,
-        pendingSelection,
-        hoveredHit,
-        hoveredTargetValid,
-        resolvedPoints,
-        scene,
-        camera,
-        vp
-      );
-
-      if (hoverSnap && (activeTool === "point" || activeTool === "move")) {
-        const s = camMath.worldToScreen(hoverSnap.world, camera, vp);
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 6, 0, Math.PI * 2);
-        ctx.strokeStyle = "#f97316";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 3]);
-        ctx.stroke();
-        if (hoverSnap.kind === "intersection" && hoverSnap.objA && hoverSnap.objB) {
-          highlightSnapObject(ctx, hoverSnap.objA, scene, camera, vp);
-          highlightSnapObject(ctx, hoverSnap.objB, scene, camera, vp);
+        if (hoverSnap && (activeTool === "point" || activeTool === "move")) {
+          const s = camMath.worldToScreen(hoverSnap.world, camera, vp);
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 6, 0, Math.PI * 2);
+          ctx.strokeStyle = "#f97316";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 3]);
+          ctx.stroke();
+          if (hoverSnap.kind === "intersection" && hoverSnap.objA && hoverSnap.objB) {
+            highlightSnapObject(ctx, hoverSnap.objA, scene, camera, vp);
+            highlightSnapObject(ctx, hoverSnap.objB, scene, camera, vp);
+          }
+          ctx.restore();
         }
-        ctx.restore();
+      } finally {
+        endSceneEvalTick(scene);
       }
-
     },
     [
       activeTool,
@@ -288,6 +304,41 @@ export function CanvasView() {
       }
 
       canvas.style.cursor = nextCursor;
+    };
+
+    const flushDragUpdate = () => {
+      dragFrameRef.current = null;
+      const st = pointerRef.current;
+      if (!st.active) return;
+      if (st.mode === "pan") {
+        const delta = dragPanDeltaRef.current;
+        if (delta.x !== 0 || delta.y !== 0) {
+          panByScreenDelta(delta);
+          dragPanDeltaRef.current = { x: 0, y: 0 };
+        }
+        return;
+      }
+      if (st.mode === "drag-label" && st.pointId) {
+        const delta = dragLabelDeltaRef.current;
+        if (delta.x !== 0 || delta.y !== 0) {
+          movePointLabelBy(st.pointId, delta);
+          dragLabelDeltaRef.current = { x: 0, y: 0 };
+        }
+        return;
+      }
+      if (st.mode === "drag-point" && st.pointId) {
+        const screen = dragPointScreenRef.current;
+        const pointId = dragPointIdRef.current;
+        if (screen && pointId) {
+          const world = camMath.screenToWorld(screen, camera, vp);
+          movePointTo(pointId, world);
+        }
+      }
+    };
+
+    const scheduleDragUpdate = () => {
+      if (dragFrameRef.current !== null) return;
+      dragFrameRef.current = window.requestAnimationFrame(flushDragUpdate);
     };
 
     applyCursor(hoveredHit);
@@ -356,13 +407,53 @@ export function CanvasView() {
 
     const onMove = (e: PointerEvent) => {
       const screen = readScreen(e);
+      const st = pointerRef.current;
+      if (st.active && st.pid === e.pointerId && st.mode !== "tool-click") {
+        setSnapDisabled(e.shiftKey);
+        const dx = e.clientX - st.lastX;
+        const dy = e.clientY - st.lastY;
+        st.lastX = e.clientX;
+        st.lastY = e.clientY;
+
+        const travelX = e.clientX - st.startX;
+        const travelY = e.clientY - st.startY;
+        if (travelX * travelX + travelY * travelY > CLICK_EPSILON_PX * CLICK_EPSILON_PX) {
+          st.moved = true;
+        }
+
+        if (st.mode === "pan") {
+          dragPanDeltaRef.current = {
+            x: dragPanDeltaRef.current.x + dx,
+            y: dragPanDeltaRef.current.y + dy,
+          };
+          scheduleDragUpdate();
+          return;
+        }
+
+        if (st.mode === "drag-point" && st.pointId) {
+          dragPointIdRef.current = st.pointId;
+          dragPointScreenRef.current = screen;
+          scheduleDragUpdate();
+          return;
+        }
+
+        if (st.mode === "drag-label" && st.pointId) {
+          dragLabelDeltaRef.current = {
+            x: dragLabelDeltaRef.current.x + dx,
+            y: dragLabelDeltaRef.current.y + dy,
+          };
+          scheduleDragUpdate();
+        }
+        return;
+      }
+
       setHoverScreen(screen);
       setSnapDisabled(e.shiftKey);
       setCursorWorld(camMath.screenToWorld(screen, camera, vp));
       const hovered = computeHoveredHit(screen);
       setHoveredHit(hovered);
       applyCursor(hovered);
-      const st = pointerRef.current;
+
       if (!st.active || st.pid !== e.pointerId) return;
 
       const dx = e.clientX - st.lastX;
@@ -377,24 +468,38 @@ export function CanvasView() {
       }
 
       if (st.mode === "pan") {
-        panByScreenDelta({ x: dx, y: dy });
+        dragPanDeltaRef.current = {
+          x: dragPanDeltaRef.current.x + dx,
+          y: dragPanDeltaRef.current.y + dy,
+        };
+        scheduleDragUpdate();
         return;
       }
 
       if (st.mode === "drag-point" && st.pointId) {
-        const world = camMath.screenToWorld(screen, camera, vp);
-        movePointTo(st.pointId, world);
+        dragPointIdRef.current = st.pointId;
+        dragPointScreenRef.current = screen;
+        scheduleDragUpdate();
         return;
       }
 
       if (st.mode === "drag-label" && st.pointId) {
-        movePointLabelBy(st.pointId, { x: dx, y: dy });
+        dragLabelDeltaRef.current = {
+          x: dragLabelDeltaRef.current.x + dx,
+          y: dragLabelDeltaRef.current.y + dy,
+        };
+        scheduleDragUpdate();
       }
     };
 
     const finish = (e: PointerEvent) => {
       const st = pointerRef.current;
       if (!st.active || st.pid !== e.pointerId) return;
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+      flushDragUpdate();
 
       if (st.mode === "tool-click" && !st.moved) {
         const screen = readScreen(e);
@@ -442,6 +547,10 @@ export function CanvasView() {
         startY: 0,
         moved: false,
       };
+      dragPanDeltaRef.current = { x: 0, y: 0 };
+      dragLabelDeltaRef.current = { x: 0, y: 0 };
+      dragPointScreenRef.current = null;
+      dragPointIdRef.current = null;
       setSnapDisabled(e.shiftKey);
       const screen = readScreen(e);
       const hovered = computeHoveredHit(screen);
@@ -471,6 +580,10 @@ export function CanvasView() {
     canvas.addEventListener("wheel", onWheel, { passive: false });
 
     return () => {
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerup", finish);
@@ -1223,6 +1336,7 @@ function drawPoints(
   ctx.save();
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
+  const labelStack = new Map<string, number>();
 
   for (const { point, world } of resolvedPoints) {
     if (!point.visible) continue;
@@ -1260,8 +1374,14 @@ function drawPoints(
 
     if (point.showLabel === "name" && point.name) {
       const labelOffset = point.style.labelOffsetPx;
-      const lx = p.x + labelOffset.x;
-      const ly = p.y + labelOffset.y;
+      const stackKey = `${Math.round(p.x * 2) / 2}:${Math.round(p.y * 2) / 2}`;
+      const stackIndex = labelStack.get(stackKey) ?? 0;
+      labelStack.set(stackKey, stackIndex + 1);
+      const ring = Math.floor(stackIndex / 8) + 1;
+      const angle = (stackIndex % 8) * (Math.PI / 4);
+      const spread = stackIndex === 0 ? 0 : 10 * ring;
+      const lx = p.x + labelOffset.x + Math.cos(angle) * spread;
+      const ly = p.y + labelOffset.y + Math.sin(angle) * spread;
       ctx.font = `${point.style.labelFontPx}px system-ui`;
       ctx.lineJoin = "round";
       ctx.lineCap = "round";

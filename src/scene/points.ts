@@ -153,6 +153,7 @@ export type IntersectionPoint = {
   objA: GeometryObjectRef;
   objB: GeometryObjectRef;
   preferredWorld: Vec2;
+  excludePointId?: string;
   style: PointStyle;
 };
 
@@ -214,6 +215,112 @@ export type SceneModel = {
   circles: SceneCircle[];
 };
 
+export type SceneEvalStats = {
+  tick: number;
+  dirtyNodes: number;
+  totalNodeEvalCalls: number;
+  cacheHits: number;
+  circleCircleCalls: number;
+  circleLineCalls: number;
+  lineLineCalls: number;
+  allocationsEstimate: number;
+  ms: number;
+};
+
+type SceneEvalContext = {
+  tick: number;
+  startedAt: number;
+  pointCache: Map<string, Vec2 | null>;
+  inProgress: Set<string>;
+  pointById: Map<string, ScenePoint>;
+  lineById: Map<string, SceneLine>;
+  segmentById: Map<string, SceneSegment>;
+  circleById: Map<string, SceneCircle>;
+  stats: SceneEvalStats;
+  explicit: boolean;
+};
+
+const sceneEvalContexts = new WeakMap<SceneModel, SceneEvalContext>();
+const sceneLastEvalStats = new WeakMap<SceneModel, SceneEvalStats>();
+const lastResolvedPointWorld = new Map<string, { value: Vec2; signature: string }>();
+let sceneEvalTick = 0;
+
+function isEvalDebugEnabled(): boolean {
+  const globalFlag = (globalThis as { __GEODRAW_EVAL_DEBUG__?: unknown }).__GEODRAW_EVAL_DEBUG__;
+  if (globalFlag === true || globalFlag === "1") return true;
+  const maybeProcess = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  if (maybeProcess?.env?.GEODRAW_EVAL_DEBUG === "1") return true;
+  return false;
+}
+
+function formatEvalStats(stats: SceneEvalStats): string {
+  return `tick=${stats.tick} dirtyNodes=${stats.dirtyNodes} evalCalls=${stats.totalNodeEvalCalls} cacheHits=${stats.cacheHits} circleCircle=${stats.circleCircleCalls} circleLine=${stats.circleLineCalls} lineLine=${stats.lineLineCalls} alloc=${stats.allocationsEstimate} ms=${stats.ms.toFixed(
+    2
+  )}`;
+}
+
+function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalContext {
+  const pointById = new Map<string, ScenePoint>();
+  for (const point of scene.points) pointById.set(point.id, point);
+  const lineById = new Map<string, SceneLine>();
+  for (const line of scene.lines) lineById.set(line.id, line);
+  const segmentById = new Map<string, SceneSegment>();
+  for (const seg of scene.segments) segmentById.set(seg.id, seg);
+  const circleById = new Map<string, SceneCircle>();
+  for (const circle of scene.circles) circleById.set(circle.id, circle);
+  return {
+    tick: ++sceneEvalTick,
+    startedAt: performance.now(),
+    pointCache: new Map<string, Vec2 | null>(),
+    inProgress: new Set<string>(),
+    pointById,
+    lineById,
+    segmentById,
+    circleById,
+    stats: {
+      tick: sceneEvalTick,
+      dirtyNodes: scene.points.length,
+      totalNodeEvalCalls: 0,
+      cacheHits: 0,
+      circleCircleCalls: 0,
+      circleLineCalls: 0,
+      lineLineCalls: 0,
+      allocationsEstimate: 0,
+      ms: 0,
+    },
+    explicit,
+  };
+}
+
+function getOrCreateSceneEvalContext(scene: SceneModel): SceneEvalContext {
+  const existing = sceneEvalContexts.get(scene);
+  if (existing) return existing;
+  const next = buildSceneEvalContext(scene, false);
+  sceneEvalContexts.set(scene, next);
+  return next;
+}
+
+export function beginSceneEvalTick(scene: SceneModel): void {
+  sceneEvalContexts.set(scene, buildSceneEvalContext(scene, true));
+}
+
+export function endSceneEvalTick(scene: SceneModel): SceneEvalStats | null {
+  const ctx = sceneEvalContexts.get(scene);
+  if (!ctx) return null;
+  ctx.stats.ms = performance.now() - ctx.startedAt;
+  const snapshot = { ...ctx.stats };
+  sceneLastEvalStats.set(scene, snapshot);
+  sceneEvalContexts.delete(scene);
+  if (isEvalDebugEnabled()) {
+    console.log(formatEvalStats(snapshot));
+  }
+  return snapshot;
+}
+
+export function getLastSceneEvalStats(scene: SceneModel): SceneEvalStats | null {
+  return sceneLastEvalStats.get(scene) ?? null;
+}
+
 export function nextLabelFromIndex(index: number): string {
   const letterIndex = index % 26;
   const cycle = Math.floor(index / 26);
@@ -243,121 +350,14 @@ export function getPointWorldPos(
   scene: SceneModel,
   visited: Set<string> = new Set()
 ): Vec2 | null {
-  if (visited.has(point.id)) return null;
-  const nextVisited = new Set(visited);
-  nextVisited.add(point.id);
-
-  if (point.kind === "free") return point.position;
-
-  if (point.kind === "midpointPoints") {
-    const a = scene.points.find((item) => item.id === point.aId);
-    const b = scene.points.find((item) => item.id === point.bId);
-    if (!a || !b) return null;
-    const pa = getPointWorldPos(a, scene, nextVisited);
-    const pb = getPointWorldPos(b, scene, nextVisited);
-    if (!pa || !pb) return null;
-    return { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 };
+  void visited;
+  const ctx = getOrCreateSceneEvalContext(scene);
+  const value = evalPoint(point.id, scene, ctx);
+  if (!ctx.explicit) {
+    ctx.stats.ms = performance.now() - ctx.startedAt;
+    sceneLastEvalStats.set(scene, { ...ctx.stats });
   }
-
-  if (point.kind === "midpointSegment") {
-    const seg = scene.segments.find((item) => item.id === point.segId);
-    if (!seg) return null;
-    const a = scene.points.find((item) => item.id === seg.aId);
-    const b = scene.points.find((item) => item.id === seg.bId);
-    if (!a || !b) return null;
-    const pa = getPointWorldPos(a, scene, nextVisited);
-    const pb = getPointWorldPos(b, scene, nextVisited);
-    if (!pa || !pb) return null;
-    return { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 };
-  }
-
-  if (point.kind === "pointOnLine") {
-    const line = scene.lines.find((item) => item.id === point.lineId);
-    if (!line) return null;
-    const a = getPointWorldById(line.aId, scene, nextVisited);
-    const b = getPointWorldById(line.bId, scene, nextVisited);
-    if (!a || !b) return null;
-    return add(a, mul(sub(b, a), point.s));
-  }
-
-  if (point.kind === "pointOnSegment") {
-    const seg = scene.segments.find((item) => item.id === point.segId);
-    if (!seg) return null;
-    const a = getPointWorldById(seg.aId, scene, nextVisited);
-    const b = getPointWorldById(seg.bId, scene, nextVisited);
-    if (!a || !b) return null;
-    return add(a, mul(sub(b, a), clamp(point.u, 0, 1)));
-  }
-
-  if (point.kind === "pointOnCircle") {
-    const circle = scene.circles.find((item) => item.id === point.circleId);
-    if (!circle) return null;
-    const center = getPointWorldById(circle.centerId, scene, nextVisited);
-    const through = getPointWorldById(circle.throughId, scene, nextVisited);
-    if (!center || !through) return null;
-    const radius = distance(center, through);
-    return {
-      x: center.x + Math.cos(point.t) * radius,
-      y: center.y + Math.sin(point.t) * radius,
-    };
-  }
-
-  if (point.kind === "circleLineIntersectionPoint") {
-    const circle = scene.circles.find((item) => item.id === point.circleId);
-    const line = scene.lines.find((item) => item.id === point.lineId);
-    if (!circle || !line) return null;
-    const center = getPointWorldById(circle.centerId, scene, nextVisited);
-    const through = getPointWorldById(circle.throughId, scene, nextVisited);
-    const la = getPointWorldById(line.aId, scene, nextVisited);
-    const lb = getPointWorldById(line.bId, scene, nextVisited);
-    if (!center || !through || !la || !lb) return null;
-    const r = distance(center, through);
-    const branches = lineCircleIntersectionBranches(la, lb, center, r);
-    if (branches.length === 0) return null;
-
-    if (point.excludePointId) {
-      const excluded = getPointWorldById(point.excludePointId, scene, nextVisited);
-      if (excluded) {
-        const ROOT_EPS = 1e-6;
-        const candidates = branches.filter((branch) => distance(branch.point, excluded) > ROOT_EPS);
-        if (candidates.length >= 1) return candidates[0].point;
-        // Tangency / collapsed roots at excluded point -> undefined for \"other\" intersection.
-        if (branches.length === 1 || branches.every((branch) => distance(branch.point, excluded) <= ROOT_EPS)) {
-          return null;
-        }
-      }
-    }
-
-    if (branches.length === 1) return branches[0].point;
-    const chosenIndex: 0 | 1 = point.branchIndex === 1 ? 1 : 0;
-    const otherIndex: 0 | 1 = chosenIndex === 0 ? 1 : 0;
-    const chosen = branches[chosenIndex]?.point ?? branches[0].point;
-    const other = branches[otherIndex]?.point ?? branches[0].point;
-
-    const ROOT_EPS = 1e-6;
-    const siblings = scene.points.filter(
-      (item) =>
-        item.kind === "circleLineIntersectionPoint" &&
-        item.id !== point.id &&
-        item.circleId === point.circleId &&
-        item.lineId === point.lineId
-    );
-    for (const sibling of siblings) {
-      const siblingWorld = getPointWorldPos(sibling, scene, nextVisited);
-      if (!siblingWorld) continue;
-      const siblingNearChosen = distance(siblingWorld, chosen) <= ROOT_EPS;
-      const siblingNearOther = distance(siblingWorld, other) <= ROOT_EPS;
-      if (siblingNearChosen && !siblingNearOther) {
-        return other;
-      }
-    }
-
-    return chosen;
-  }
-
-  const intersections = objectIntersections(point.objA, point.objB, scene);
-  if (intersections.length === 0) return null;
-  return chooseClosestToPreferred(intersections, point.preferredWorld);
+  return value;
 }
 
 export function isPointDraggable(point: ScenePoint): boolean {
@@ -376,37 +376,222 @@ export function movePoint(point: ScenePoint, world: Vec2): ScenePoint {
   return { ...point, position: world };
 }
 
-function getPointWorldById(pointId: string, scene: SceneModel, visited: Set<string>): Vec2 | null {
-  const point = scene.points.find((item) => item.id === pointId);
-  if (!point) return null;
-  return getPointWorldPos(point, scene, visited);
+function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  const cached = ctx.pointCache.get(pointId);
+  if (cached !== undefined) {
+    ctx.stats.cacheHits += 1;
+    return cached;
+  }
+  if (ctx.inProgress.has(pointId)) {
+    // Cycle guard: return transient null without caching, otherwise we may
+    // incorrectly freeze a valid downstream point as null for this tick.
+    return null;
+  }
+  const point = ctx.pointById.get(pointId);
+  if (!point) {
+    ctx.pointCache.set(pointId, null);
+    return null;
+  }
+  ctx.inProgress.add(pointId);
+  ctx.stats.totalNodeEvalCalls += 1;
+  const computed = evalPointUnchecked(point, scene, ctx);
+  ctx.pointCache.set(pointId, computed);
+  ctx.inProgress.delete(pointId);
+  return computed;
 }
 
-function objectIntersections(a: GeometryObjectRef, b: GeometryObjectRef, scene: SceneModel): Vec2[] {
-  const la = asLineLike(a, scene);
-  const lb = asLineLike(b, scene);
+function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  if (point.kind === "free") return point.position;
+
+  if (point.kind === "midpointPoints") {
+    const pa = getPointWorldById(point.aId, scene, ctx);
+    const pb = getPointWorldById(point.bId, scene, ctx);
+    if (!pa || !pb) return null;
+    ctx.stats.allocationsEstimate += 1;
+    return { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 };
+  }
+
+  if (point.kind === "midpointSegment") {
+    const seg = ctx.segmentById.get(point.segId);
+    if (!seg) return null;
+    const pa = getPointWorldById(seg.aId, scene, ctx);
+    const pb = getPointWorldById(seg.bId, scene, ctx);
+    if (!pa || !pb) return null;
+    ctx.stats.allocationsEstimate += 1;
+    return { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 };
+  }
+
+  if (point.kind === "pointOnLine") {
+    const line = ctx.lineById.get(point.lineId);
+    if (!line) return null;
+    const a = getPointWorldById(line.aId, scene, ctx);
+    const b = getPointWorldById(line.bId, scene, ctx);
+    if (!a || !b) return null;
+    ctx.stats.allocationsEstimate += 1;
+    return add(a, mul(sub(b, a), point.s));
+  }
+
+  if (point.kind === "pointOnSegment") {
+    const seg = ctx.segmentById.get(point.segId);
+    if (!seg) return null;
+    const a = getPointWorldById(seg.aId, scene, ctx);
+    const b = getPointWorldById(seg.bId, scene, ctx);
+    if (!a || !b) return null;
+    ctx.stats.allocationsEstimate += 1;
+    return add(a, mul(sub(b, a), clamp(point.u, 0, 1)));
+  }
+
+  if (point.kind === "pointOnCircle") {
+    const circle = ctx.circleById.get(point.circleId);
+    if (!circle) return null;
+    const center = getPointWorldById(circle.centerId, scene, ctx);
+    const through = getPointWorldById(circle.throughId, scene, ctx);
+    if (!center || !through) return null;
+    const radius = distance(center, through);
+    ctx.stats.allocationsEstimate += 1;
+    return {
+      x: center.x + Math.cos(point.t) * radius,
+      y: center.y + Math.sin(point.t) * radius,
+    };
+  }
+
+  if (point.kind === "circleLineIntersectionPoint") {
+    const circle = ctx.circleById.get(point.circleId);
+    const line = ctx.lineById.get(point.lineId);
+    if (!circle || !line) return null;
+    const center = getPointWorldById(circle.centerId, scene, ctx);
+    const through = getPointWorldById(circle.throughId, scene, ctx);
+    const la = getPointWorldById(line.aId, scene, ctx);
+    const lb = getPointWorldById(line.bId, scene, ctx);
+    if (!center || !through || !la || !lb) return null;
+    const r = distance(center, through);
+    const stabilitySignature = circleLineStabilitySignature(point.circleId, point.lineId, la, lb, center, r);
+    ctx.stats.circleLineCalls += 1;
+    const branches = lineCircleIntersectionBranches(la, lb, center, r);
+    if (branches.length === 0) return null;
+
+    if (point.excludePointId) {
+      const excluded = getPointWorldById(point.excludePointId, scene, ctx);
+      if (excluded) {
+        const ROOT_EPS = 1e-6;
+        let chosenOther: Vec2 | null = null;
+        let excludedHits = 0;
+        for (let i = 0; i < branches.length; i += 1) {
+          const p = branches[i].point;
+          if (distance(p, excluded) <= ROOT_EPS) {
+            excludedHits += 1;
+            continue;
+          }
+          chosenOther = p;
+          break;
+        }
+        if (chosenOther) {
+          rememberStableCircleLinePoint(point.id, stabilitySignature, chosenOther);
+          return chosenOther;
+        }
+        if (branches.length === 1 || excludedHits === branches.length) return null;
+      }
+    }
+
+    if (branches.length === 1) {
+      rememberStableCircleLinePoint(point.id, stabilitySignature, branches[0].point);
+      return branches[0].point;
+    }
+    const ordered = orderTwoPointsDeterministic(branches[0].point, branches[1].point);
+    let chosen = ordered[point.branchIndex === 1 ? 1 : 0];
+    let other = ordered[point.branchIndex === 1 ? 0 : 1];
+    const prevWorld = getPreviousStableCircleLinePoint(point.id, stabilitySignature);
+    if (prevWorld) {
+      const d0 = distance(ordered[0], prevWorld);
+      const d1 = distance(ordered[1], prevWorld);
+      if (Math.abs(d0 - d1) > 1e-9) {
+        chosen = d0 <= d1 ? ordered[0] : ordered[1];
+        other = chosen === ordered[0] ? ordered[1] : ordered[0];
+      }
+    }
+    const ROOT_EPS = 1e-6;
+
+    for (const item of scene.points) {
+      if (item.id === point.id || item.kind !== "circleLineIntersectionPoint") continue;
+      if (item.circleId !== point.circleId || item.lineId !== point.lineId) continue;
+      const siblingWorld = evalPoint(item.id, scene, ctx);
+      if (!siblingWorld) continue;
+      const siblingNearChosen = distance(siblingWorld, chosen) <= ROOT_EPS;
+      const siblingNearOther = distance(siblingWorld, other) <= ROOT_EPS;
+      if (siblingNearChosen && !siblingNearOther) {
+        rememberStableCircleLinePoint(point.id, stabilitySignature, other);
+        return other;
+      }
+    }
+    rememberStableCircleLinePoint(point.id, stabilitySignature, chosen);
+    return chosen;
+  }
+
+  const intersections = objectIntersections(point.objA, point.objB, scene, ctx);
+  if (intersections.length === 0) return null;
+  if (point.excludePointId) {
+    const excluded = getPointWorldById(point.excludePointId, scene, ctx);
+    if (excluded) {
+      const ROOT_EPS = 1e-6;
+      let candidateCount = 0;
+      let candidateA: Vec2 | null = null;
+      let candidateB: Vec2 | null = null;
+      for (let i = 0; i < intersections.length; i += 1) {
+        const candidate = intersections[i];
+        if (distance(candidate, excluded) <= ROOT_EPS) continue;
+        if (candidateCount === 0) candidateA = candidate;
+        else if (candidateCount === 1) candidateB = candidate;
+        candidateCount += 1;
+      }
+      if (candidateCount === 1 && candidateA) return candidateA;
+      if (candidateCount >= 2 && candidateA && candidateB) {
+        return chooseClosestToPreferredPair(candidateA, candidateB, point.preferredWorld);
+      }
+      if (intersections.length === 1) return null;
+    }
+  }
+  return chooseStableIntersection(intersections, point.preferredWorld, scene, point.id, ctx);
+}
+
+function getPointWorldById(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  return evalPoint(pointId, scene, ctx);
+}
+
+function objectIntersections(
+  a: GeometryObjectRef,
+  b: GeometryObjectRef,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): Vec2[] {
+  const la = asLineLike(a, scene, ctx);
+  const lb = asLineLike(b, scene, ctx);
   if (la && lb) {
+    ctx.stats.lineLineCalls += 1;
     const p = lineLineIntersection(la.a, la.b, lb.a, lb.b);
     if (!p) return [];
     if (!lineLikeContainsPoint(la, p)) return [];
     if (!lineLikeContainsPoint(lb, p)) return [];
+    ctx.stats.allocationsEstimate += 1;
     return [p];
   }
 
-  const circleA = asCircle(a, scene);
-  const circleB = asCircle(b, scene);
+  const circleA = asCircle(a, scene, ctx);
+  const circleB = asCircle(b, scene, ctx);
 
   if (la && circleB) {
+    ctx.stats.circleLineCalls += 1;
     return lineCircleIntersections(la.a, la.b, circleB.center, circleB.radius).filter((p) =>
       lineLikeContainsPoint(la, p)
     );
   }
   if (lb && circleA) {
+    ctx.stats.circleLineCalls += 1;
     return lineCircleIntersections(lb.a, lb.b, circleA.center, circleA.radius).filter((p) =>
       lineLikeContainsPoint(lb, p)
     );
   }
   if (circleA && circleB) {
+    ctx.stats.circleCircleCalls += 1;
     return circleCircleIntersections(circleA.center, circleA.radius, circleB.center, circleB.radius);
   }
   return [];
@@ -414,22 +599,23 @@ function objectIntersections(a: GeometryObjectRef, b: GeometryObjectRef, scene: 
 
 function asLineLike(
   ref: GeometryObjectRef,
-  scene: SceneModel
+  scene: SceneModel,
+  ctx: SceneEvalContext
 ): { a: Vec2; b: Vec2; finite: boolean } | null {
   if (ref.type === "line") {
-    const line = scene.lines.find((item) => item.id === ref.id);
+    const line = ctx.lineById.get(ref.id);
     if (!line) return null;
-    const a = getPointWorldById(line.aId, scene, new Set());
-    const b = getPointWorldById(line.bId, scene, new Set());
+    const a = getPointWorldById(line.aId, scene, ctx);
+    const b = getPointWorldById(line.bId, scene, ctx);
     if (!a || !b) return null;
     return { a, b, finite: false };
   }
 
   if (ref.type === "segment") {
-    const seg = scene.segments.find((item) => item.id === ref.id);
+    const seg = ctx.segmentById.get(ref.id);
     if (!seg) return null;
-    const a = getPointWorldById(seg.aId, scene, new Set());
-    const b = getPointWorldById(seg.bId, scene, new Set());
+    const a = getPointWorldById(seg.aId, scene, ctx);
+    const b = getPointWorldById(seg.bId, scene, ctx);
     if (!a || !b) return null;
     return { a, b, finite: true };
   }
@@ -439,13 +625,14 @@ function asLineLike(
 
 function asCircle(
   ref: GeometryObjectRef,
-  scene: SceneModel
+  scene: SceneModel,
+  ctx: SceneEvalContext
 ): { center: Vec2; radius: number } | null {
   if (ref.type !== "circle") return null;
-  const circle = scene.circles.find((item) => item.id === ref.id);
+  const circle = ctx.circleById.get(ref.id);
   if (!circle) return null;
-  const center = getPointWorldById(circle.centerId, scene, new Set());
-  const through = getPointWorldById(circle.throughId, scene, new Set());
+  const center = getPointWorldById(circle.centerId, scene, ctx);
+  const through = getPointWorldById(circle.throughId, scene, ctx);
   if (!center || !through) return null;
   return { center, radius: distance(center, through) };
 }
@@ -465,6 +652,71 @@ function chooseClosestToPreferred(points: Vec2[], preferredWorld: Vec2): Vec2 {
     }
   }
   return best;
+}
+
+function chooseClosestToPreferredPair(a: Vec2, b: Vec2, preferredWorld: Vec2): Vec2 {
+  return distance(a, preferredWorld) <= distance(b, preferredWorld) ? a : b;
+}
+
+function chooseStableIntersection(
+  intersections: Vec2[],
+  preferredWorld: Vec2,
+  scene: SceneModel,
+  selfPointId: string,
+  ctx: SceneEvalContext
+): Vec2 {
+  if (intersections.length >= 2) {
+    const ROOT_EPS = 1e-6;
+    const occupied = [false, false];
+    for (const scenePoint of scene.points) {
+      if (scenePoint.id === selfPointId) continue;
+      if (scenePoint.kind !== "intersectionPoint" && scenePoint.kind !== "circleLineIntersectionPoint") continue;
+      const world = evalPoint(scenePoint.id, scene, ctx);
+      if (!world) continue;
+      if (!occupied[0] && distance(world, intersections[0]) <= ROOT_EPS) occupied[0] = true;
+      if (!occupied[1] && distance(world, intersections[1]) <= ROOT_EPS) occupied[1] = true;
+      if (occupied[0] && occupied[1]) break;
+    }
+    if (occupied[0] !== occupied[1]) {
+      return occupied[0] ? intersections[1] : intersections[0];
+    }
+  }
+  return chooseClosestToPreferred(intersections, preferredWorld);
+}
+
+function orderTwoPointsDeterministic(a: Vec2, b: Vec2): [Vec2, Vec2] {
+  if (a.x < b.x) return [a, b];
+  if (a.x > b.x) return [b, a];
+  if (a.y <= b.y) return [a, b];
+  return [b, a];
+}
+
+function roundSig(value: number): string {
+  return value.toFixed(6);
+}
+
+function circleLineStabilitySignature(
+  circleId: string,
+  lineId: string,
+  la: Vec2,
+  lb: Vec2,
+  center: Vec2,
+  radius: number
+): string {
+  return `cli:${circleId}:${lineId}:${roundSig(la.x)}:${roundSig(la.y)}:${roundSig(lb.x)}:${roundSig(
+    lb.y
+  )}:${roundSig(center.x)}:${roundSig(center.y)}:${roundSig(radius)}`;
+}
+
+function getPreviousStableCircleLinePoint(pointId: string, signature: string): Vec2 | null {
+  const prev = lastResolvedPointWorld.get(pointId);
+  if (!prev) return null;
+  if (prev.signature !== signature) return null;
+  return prev.value;
+}
+
+function rememberStableCircleLinePoint(pointId: string, signature: string, value: Vec2): void {
+  lastResolvedPointWorld.set(pointId, { value, signature });
 }
 
 function lineLikeContainsPoint(lineLike: { a: Vec2; b: Vec2; finite: boolean }, p: Vec2): boolean {

@@ -227,6 +227,7 @@ const actions: GeoActions = {
   },
 
   setSelectedObject(selected) {
+    if (isSameSelectedObject(state.selectedObject, selected)) return;
     setState((prev) => ({
       ...prev,
       selectedObject: selected,
@@ -241,10 +242,12 @@ const actions: GeoActions = {
   },
 
   setHoveredHit(hit) {
+    if (isSameHoveredHit(state.hoveredHit, hit)) return;
     setState((prev) => ({ ...prev, hoveredHit: hit }));
   },
 
   setCursorWorld(world) {
+    if (isSameWorld(state.cursorWorld, world)) return;
     setState((prev) => ({ ...prev, cursorWorld: world }));
   },
 
@@ -1469,4 +1472,22 @@ function createStableLineCircleIntersectionPoint(
       labelOffsetPx: { ...state.pointDefaults.labelOffsetPx },
     },
   };
+}
+
+function isSameSelectedObject(a: SelectedObject, b: SelectedObject): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.type === b.type && a.id === b.id;
+}
+
+function isSameHoveredHit(a: HoveredHit, b: HoveredHit): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.type === b.type && a.id === b.id;
+}
+
+function isSameWorld(a: Vec2 | null, b: Vec2 | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y;
 }
