@@ -647,6 +647,15 @@ const actions: GeoActions = {
   createIntersectionPoint(objA, objB, preferredWorld) {
     let createdId: string | null = null;
     setState((prev) => {
+      const existingId = findExistingIntersectionPointId(prev, objA, objB, preferredWorld);
+      if (existingId) {
+        createdId = existingId;
+        return {
+          ...prev,
+          selectedObject: { type: "point", id: existingId },
+        };
+      }
+
       const used = new Set(prev.scene.points.map((point) => point.name));
       let idx = 0;
       let name = nextLabelFromIndex(idx);
@@ -1412,21 +1421,8 @@ function createStableLineCircleIntersectionPoint(
     branchIndex = d1 < d0 ? 1 : 0;
   }
 
-  if (branches.length >= 2) {
-    const ROOT_EPS = 1e-6;
-    let occupied0 = false;
-    let occupied1 = false;
-    for (const point of state.scene.points) {
-      if (point.kind !== "circleLineIntersectionPoint") continue;
-      if (point.lineId !== lineId || point.circleId !== circleId) continue;
-      const world = getPointWorldPos(point, state.scene);
-      if (!world) continue;
-      if (distance(world, branches[0].point) <= ROOT_EPS) occupied0 = true;
-      if (distance(world, branches[1].point) <= ROOT_EPS) occupied1 = true;
-    }
-    if (branchIndex === 0 && occupied0 && !occupied1) branchIndex = 1;
-    if (branchIndex === 1 && occupied1 && !occupied0) branchIndex = 0;
-  }
+  // Keep user intent: choose the branch nearest to click location without
+  // auto-flipping to the other root based on existing points.
 
   let excludePointId: string | undefined;
   const endpointCandidates: Array<{ id: string; world: Vec2 }> = [];
@@ -1490,4 +1486,45 @@ function isSameWorld(a: Vec2 | null, b: Vec2 | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   return a.x === b.x && a.y === b.y;
+}
+
+function findExistingIntersectionPointId(
+  state: GeoState,
+  objA: GeometryObjectRef,
+  objB: GeometryObjectRef,
+  preferredWorld: Vec2
+): string | null {
+  const EPS = 1e-6;
+  const lineCircle = getLineCircleRefs(objA, objB);
+
+  for (const point of state.scene.points) {
+    const world = getPointWorldPos(point, state.scene);
+    if (!world) continue;
+    if (distance(world, preferredWorld) > EPS) continue;
+
+    if (lineCircle && point.kind === "circleLineIntersectionPoint") {
+      if (point.lineId === lineCircle.lineId && point.circleId === lineCircle.circleId) {
+        return point.id;
+      }
+      continue;
+    }
+
+    if (point.kind === "intersectionPoint" && sameObjectPair(point.objA, point.objB, objA, objB)) {
+      return point.id;
+    }
+  }
+  return null;
+}
+
+function sameObjectPair(
+  a1: GeometryObjectRef,
+  b1: GeometryObjectRef,
+  a2: GeometryObjectRef,
+  b2: GeometryObjectRef
+): boolean {
+  return (sameObjectRef(a1, a2) && sameObjectRef(b1, b2)) || (sameObjectRef(a1, b2) && sameObjectRef(b1, a2));
+}
+
+function sameObjectRef(a: GeometryObjectRef, b: GeometryObjectRef): boolean {
+  return a.type === b.type && a.id === b.id;
 }

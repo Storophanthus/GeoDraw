@@ -18,7 +18,9 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { getPointWorldPos, type PointShape } from "./scene/points";
+import { exportConstructionSnapshot } from "./export/constructionSnapshot";
+import { exportTikz } from "./export/tikz";
+import { getPointWorldPos, type GeometryObjectRef, type PointShape, type SceneModel, type ScenePoint } from "./scene/points";
 import { useGeoStore, type ActiveTool } from "./state/geoStore";
 import { CanvasView } from "./view/CanvasView";
 
@@ -41,6 +43,8 @@ type ResizeState = {
   leftWidth: number;
   rightWidth: number;
 };
+
+type RightTab = "algebra" | "export";
 
 const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   move: { icon: MousePointer2, tooltip: "Move / Select (V)", ariaLabel: "Move tool" },
@@ -122,10 +126,31 @@ export default function App() {
     if (!selectedPoint) return null;
     return getPointWorldPos(selectedPoint, scene);
   }, [scene, selectedPoint]);
+  const pointNameById = useMemo(() => new Map(scene.points.map((p) => [p.id, p.name])), [scene.points]);
+  const lineById = useMemo(() => new Map(scene.lines.map((l) => [l.id, l])), [scene.lines]);
+  const segmentById = useMemo(() => new Map(scene.segments.map((s) => [s.id, s])), [scene.segments]);
+  const circleById = useMemo(() => new Map(scene.circles.map((c) => [c.id, c])), [scene.circles]);
+  const selectedConstructionText = useMemo(
+    () =>
+      describeSelectedConstruction(
+        selectedObject,
+        scene,
+        pointNameById,
+        lineById,
+        segmentById,
+        circleById
+      ),
+    [circleById, lineById, pointNameById, scene, segmentById, selectedObject]
+  );
 
   const [nameInput, setNameInput] = useState("");
   const [renameError, setRenameError] = useState("");
   const [shapePickerOpen, setShapePickerOpen] = useState(false);
+  const [tikzText, setTikzText] = useState("");
+  const [jsonText, setJsonText] = useState("");
+  const [tikzCopied, setTikzCopied] = useState(false);
+  const [jsonCopied, setJsonCopied] = useState(false);
+  const [rightTab, setRightTab] = useState<RightTab>("algebra");
 
   const shapePickerRef = useRef<HTMLDivElement | null>(null);
   const [leftWidth, setLeftWidth] = useState(56);
@@ -259,6 +284,50 @@ export default function App() {
     setRenameError("");
   };
 
+  const generateTikz = () => {
+    try {
+      setTikzText(exportTikz(scene));
+      setTikzCopied(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown exporter error";
+      setTikzText(`% Export failed: ${message}`);
+      setTikzCopied(false);
+    }
+  };
+
+  const generateConstructionSnapshot = () => {
+    try {
+      setJsonText(exportConstructionSnapshot(scene));
+      setJsonCopied(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown snapshot exporter error";
+      setJsonText(`{ \"error\": ${JSON.stringify(message)} }`);
+      setJsonCopied(false);
+    }
+  };
+
+  const copyTikz = async () => {
+    if (!tikzText) return;
+    try {
+      await navigator.clipboard.writeText(tikzText);
+      setTikzCopied(true);
+      window.setTimeout(() => setTikzCopied(false), 1200);
+    } catch {
+      setTikzCopied(false);
+    }
+  };
+
+  const copyJson = async () => {
+    if (!jsonText) return;
+    try {
+      await navigator.clipboard.writeText(jsonText);
+      setJsonCopied(true);
+      window.setTimeout(() => setJsonCopied(false), 1200);
+    } catch {
+      setJsonCopied(false);
+    }
+  };
+
   return (
     <div className="appShell">
       <aside
@@ -335,6 +404,29 @@ export default function App() {
             </div>
 
             <section className="sidebarSection">
+              <div className="rightTabs" role="tablist" aria-label="Right panel tabs">
+                <button
+                  type="button"
+                  role="tab"
+                  className={rightTab === "algebra" ? "rightTabButton active" : "rightTabButton"}
+                  aria-selected={rightTab === "algebra"}
+                  onClick={() => setRightTab("algebra")}
+                >
+                  Algebra
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  className={rightTab === "export" ? "rightTabButton active" : "rightTabButton"}
+                  aria-selected={rightTab === "export"}
+                  onClick={() => setRightTab("export")}
+                >
+                  Export
+                </button>
+              </div>
+            </section>
+
+            {rightTab === "algebra" && <section className="sidebarSection">
               <h2 className="sectionTitle">Algebra</h2>
               <div className="objectList">
                 {scene.points.length === 0 &&
@@ -396,10 +488,54 @@ export default function App() {
                   </button>
                 ))}
               </div>
-            </section>
+            </section>}
 
-            <section className="sidebarSection">
+            {rightTab === "export" && <section className="sidebarSection">
+              <h2 className="sectionTitle">Export</h2>
+              <div className="exportButtons">
+                <button className="actionButton" onClick={generateTikz}>
+                  Generate TikZ
+                </button>
+                <button className="actionButton" onClick={copyTikz} disabled={!tikzText}>
+                  {tikzCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <textarea
+                className="exportTextarea"
+                value={tikzText}
+                onChange={(e) => setTikzText(e.target.value)}
+                placeholder="Click Generate TikZ to export"
+                spellCheck={false}
+              />
+            </section>}
+
+            {rightTab === "export" && <section className="sidebarSection">
+              <h2 className="sectionTitle">Model JSON</h2>
+              <div className="exportButtons">
+                <button className="actionButton" onClick={generateConstructionSnapshot}>
+                  Generate JSON
+                </button>
+                <button className="actionButton" onClick={copyJson} disabled={!jsonText}>
+                  {jsonCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <textarea
+                className="exportTextarea"
+                value={jsonText}
+                onChange={(e) => setJsonText(e.target.value)}
+                placeholder="Click Generate JSON to produce model export"
+                spellCheck={false}
+              />
+            </section>}
+
+            {rightTab === "algebra" && <section className="sidebarSection">
               <h2 className="sectionTitle">Properties</h2>
+              {selectedConstructionText && (
+                <div className="constructionInfo">
+                  <div className="constructionTitle">Construction</div>
+                  <div>{selectedConstructionText}</div>
+                </div>
+              )}
               {activeTool === "copyStyle" && (
                 <div className="toolInfo">
                   {copyStyle.source
@@ -814,12 +950,128 @@ export default function App() {
                   />
                 </div>
               </div>
-            </section>
+            </section>}
           </>
         )}
       </aside>
     </div>
   );
+}
+
+function describeSelectedConstruction(
+  selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
+  scene: SceneModel,
+  pointNameById: Map<string, string>,
+  lineById: Map<string, SceneModel["lines"][number]>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>
+): string | null {
+  if (!selectedObject) return null;
+  if (selectedObject.type === "line") {
+    const line = lineById.get(selectedObject.id);
+    if (!line) return `Line ${selectedObject.id}`;
+    return `Line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
+  }
+  if (selectedObject.type === "segment") {
+    const segment = segmentById.get(selectedObject.id);
+    if (!segment) return `Segment ${selectedObject.id}`;
+    return `Segment from ${pointLabel(segment.aId, pointNameById)} to ${pointLabel(segment.bId, pointNameById)}.`;
+  }
+  if (selectedObject.type === "circle") {
+    const circle = circleById.get(selectedObject.id);
+    if (!circle) return `Circle ${selectedObject.id}`;
+    return `Circle with center ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(circle.throughId, pointNameById)}.`;
+  }
+
+  const point = scene.points.find((item) => item.id === selectedObject.id);
+  if (!point) return null;
+  return describePointConstruction(point, pointNameById, lineById, segmentById, circleById);
+}
+
+function describePointConstruction(
+  point: ScenePoint,
+  pointNameById: Map<string, string>,
+  lineById: Map<string, SceneModel["lines"][number]>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>
+): string {
+  if (point.kind === "free") return `Free point ${point.name}.`;
+  if (point.kind === "midpointPoints") {
+    return `Midpoint of ${pointLabel(point.aId, pointNameById)} and ${pointLabel(point.bId, pointNameById)}.`;
+  }
+  if (point.kind === "midpointSegment") {
+    const seg = segmentById.get(point.segId);
+    if (!seg) return `Midpoint of segment ${point.segId}.`;
+    return `Midpoint of segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}.`;
+  }
+  if (point.kind === "pointOnLine") {
+    const line = lineById.get(point.lineId);
+    if (!line) return `Point on line ${point.lineId}.`;
+    return `Point on line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
+  }
+  if (point.kind === "pointOnSegment") {
+    const seg = segmentById.get(point.segId);
+    if (!seg) return `Point on segment ${point.segId}.`;
+    return `Point on segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}.`;
+  }
+  if (point.kind === "pointOnCircle") {
+    const circle = circleById.get(point.circleId);
+    if (!circle) return `Point on circle ${point.circleId}.`;
+    return `Point on circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(
+      circle.throughId,
+      pointNameById
+    )}.`;
+  }
+  if (point.kind === "circleLineIntersectionPoint") {
+    const circle = circleById.get(point.circleId);
+    const line = lineById.get(point.lineId);
+    const circleText = circle
+      ? `circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(
+          circle.throughId,
+          pointNameById
+        )}`
+      : `circle ${point.circleId}`;
+    const lineText = line
+      ? `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
+      : `line ${point.lineId}`;
+    return `Intersection of ${lineText} with ${circleText}.`;
+  }
+  return `Intersection of ${describeObjectRef(point.objA, pointNameById, lineById, segmentById, circleById)} and ${describeObjectRef(
+    point.objB,
+    pointNameById,
+    lineById,
+    segmentById,
+    circleById
+  )}.`;
+}
+
+function describeObjectRef(
+  ref: GeometryObjectRef,
+  pointNameById: Map<string, string>,
+  lineById: Map<string, SceneModel["lines"][number]>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>
+): string {
+  if (ref.type === "line") {
+    const line = lineById.get(ref.id);
+    return line
+      ? `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
+      : `line ${ref.id}`;
+  }
+  if (ref.type === "segment") {
+    const seg = segmentById.get(ref.id);
+    return seg
+      ? `segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}`
+      : `segment ${ref.id}`;
+  }
+  const circle = circleById.get(ref.id);
+  return circle
+    ? `circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(circle.throughId, pointNameById)}`
+    : `circle ${ref.id}`;
+}
+
+function pointLabel(pointId: string, pointNameById: Map<string, string>): string {
+  return pointNameById.get(pointId) ?? pointId;
 }
 
 function getGroupIdForTool(tool: ActiveTool): ToolGroupId | null {

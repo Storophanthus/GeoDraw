@@ -395,7 +395,9 @@ function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): V
   ctx.inProgress.add(pointId);
   ctx.stats.totalNodeEvalCalls += 1;
   const computed = evalPointUnchecked(point, scene, ctx);
-  ctx.pointCache.set(pointId, computed);
+  if (computed !== null) {
+    ctx.pointCache.set(pointId, computed);
+  }
   ctx.inProgress.delete(pointId);
   return computed;
 }

@@ -257,6 +257,52 @@ body {
   font-weight: 700;
 }
 
+.rightTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.rightTabButton {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 11px;
+  color: #334155;
+  cursor: pointer;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rightTabButton.active {
+  border-color: #1d4ed8;
+  background: #dbeafe;
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
+.constructionInfo {
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.constructionTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
 .objectList {
   display: flex;
   flex-direction: column;
@@ -362,6 +408,35 @@ body {
   padding: 7px 11px;
   cursor: pointer;
   font-size: 13px;
+}
+
+.actionButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.exportButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.exportTextarea {
+  width: 100%;
+  min-height: 160px;
+  margin-top: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  resize: vertical;
+  background: #fff;
+}
+
+.exportTextarea:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.2);
+  border-color: #3b82f6;
 }
 
 .deleteButton {
