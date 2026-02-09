@@ -39,14 +39,14 @@ export type PointStyle = {
 export type LineStyle = {
   strokeColor: string;
   strokeWidth: number;
-  dash: "solid" | "dashed";
+  dash: "solid" | "dashed" | "dotted";
   opacity: number;
 };
 
 export type CircleStyle = {
   strokeColor: string;
   strokeWidth: number;
-  strokeDash: "solid" | "dashed";
+  strokeDash: "solid" | "dashed" | "dotted";
   strokeOpacity: number;
   fillColor?: string;
   fillOpacity?: number;
@@ -329,7 +329,30 @@ export function getPointWorldPos(
     }
 
     if (branches.length === 1) return branches[0].point;
-    return branches[point.branchIndex]?.point ?? branches[0].point;
+    const chosenIndex: 0 | 1 = point.branchIndex === 1 ? 1 : 0;
+    const otherIndex: 0 | 1 = chosenIndex === 0 ? 1 : 0;
+    const chosen = branches[chosenIndex]?.point ?? branches[0].point;
+    const other = branches[otherIndex]?.point ?? branches[0].point;
+
+    const ROOT_EPS = 1e-6;
+    const siblings = scene.points.filter(
+      (item) =>
+        item.kind === "circleLineIntersectionPoint" &&
+        item.id !== point.id &&
+        item.circleId === point.circleId &&
+        item.lineId === point.lineId
+    );
+    for (const sibling of siblings) {
+      const siblingWorld = getPointWorldPos(sibling, scene, nextVisited);
+      if (!siblingWorld) continue;
+      const siblingNearChosen = distance(siblingWorld, chosen) <= ROOT_EPS;
+      const siblingNearOther = distance(siblingWorld, other) <= ROOT_EPS;
+      if (siblingNearChosen && !siblingNearOther) {
+        return other;
+      }
+    }
+
+    return chosen;
   }
 
   const intersections = objectIntersections(point.objA, point.objB, scene);

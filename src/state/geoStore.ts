@@ -59,6 +59,7 @@ type GeoState = {
   activeTool: ActiveTool;
   scene: SceneModel;
   selectedObject: SelectedObject;
+  recentCreatedObject: SelectedObject;
   hoveredHit: HoveredHit;
   cursorWorld: Vec2 | null;
   pendingSelection: PendingSelection;
@@ -110,6 +111,12 @@ type GeoActions = {
   updateSelectedPointFields: (
     next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>
   ) => void;
+  updateSelectedSegmentStyle: (next: Partial<LineStyle>) => void;
+  updateSelectedLineStyle: (next: Partial<LineStyle>) => void;
+  updateSelectedCircleStyle: (next: Partial<CircleStyle>) => void;
+  updateSelectedSegmentFields: (next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel">>) => void;
+  updateSelectedLineFields: (next: Partial<Pick<SceneModel["lines"][number], "visible">>) => void;
+  updateSelectedCircleFields: (next: Partial<Pick<SceneModel["circles"][number], "visible">>) => void;
 
   renameSelectedPoint: (nextNameRaw: string) => RenameResult;
   deleteSelectedObject: () => void;
@@ -167,6 +174,7 @@ const initialState: GeoState = {
     circles: [],
   },
   selectedObject: null,
+  recentCreatedObject: null,
   hoveredHit: null,
   cursorWorld: null,
   pendingSelection: null,
@@ -219,7 +227,17 @@ const actions: GeoActions = {
   },
 
   setSelectedObject(selected) {
-    setState((prev) => ({ ...prev, selectedObject: selected }));
+    setState((prev) => ({
+      ...prev,
+      selectedObject: selected,
+      recentCreatedObject:
+        prev.recentCreatedObject &&
+        selected &&
+        prev.recentCreatedObject.type === selected.type &&
+        prev.recentCreatedObject.id === selected.id
+          ? prev.recentCreatedObject
+          : null,
+    }));
   },
 
   setHoveredHit(hit) {
@@ -419,6 +437,7 @@ const actions: GeoActions = {
           ],
         },
         selectedObject: { type: "segment", id },
+        recentCreatedObject: { type: "segment", id },
         nextSegmentId: prev.nextSegmentId + 1,
       };
     });
@@ -449,6 +468,7 @@ const actions: GeoActions = {
           ],
         },
         selectedObject: { type: "line", id },
+        recentCreatedObject: { type: "line", id },
         nextLineId: prev.nextLineId + 1,
       };
     });
@@ -479,6 +499,7 @@ const actions: GeoActions = {
           ],
         },
         selectedObject: { type: "circle", id },
+        recentCreatedObject: { type: "circle", id },
         nextCircleId: prev.nextCircleId + 1,
       };
     });
@@ -794,6 +815,96 @@ const actions: GeoActions = {
     });
   },
 
+  updateSelectedSegmentStyle(next) {
+    setState((prev) => {
+      if (!prev.selectedObject || prev.selectedObject.type !== "segment") return prev;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          segments: prev.scene.segments.map((seg) =>
+            seg.id === prev.selectedObject!.id ? { ...seg, style: { ...seg.style, ...next } } : seg
+          ),
+        },
+      };
+    });
+  },
+
+  updateSelectedLineStyle(next) {
+    setState((prev) => {
+      if (!prev.selectedObject || prev.selectedObject.type !== "line") return prev;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          lines: prev.scene.lines.map((line) =>
+            line.id === prev.selectedObject!.id ? { ...line, style: { ...line.style, ...next } } : line
+          ),
+        },
+      };
+    });
+  },
+
+  updateSelectedCircleStyle(next) {
+    setState((prev) => {
+      if (!prev.selectedObject || prev.selectedObject.type !== "circle") return prev;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          circles: prev.scene.circles.map((circle) =>
+            circle.id === prev.selectedObject!.id ? { ...circle, style: { ...circle.style, ...next } } : circle
+          ),
+        },
+      };
+    });
+  },
+
+  updateSelectedSegmentFields(next) {
+    setState((prev) => {
+      if (!prev.selectedObject || prev.selectedObject.type !== "segment") return prev;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          segments: prev.scene.segments.map((seg) =>
+            seg.id === prev.selectedObject!.id ? { ...seg, ...next } : seg
+          ),
+        },
+      };
+    });
+  },
+
+  updateSelectedLineFields(next) {
+    setState((prev) => {
+      if (!prev.selectedObject || prev.selectedObject.type !== "line") return prev;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          lines: prev.scene.lines.map((line) =>
+            line.id === prev.selectedObject!.id ? { ...line, ...next } : line
+          ),
+        },
+      };
+    });
+  },
+
+  updateSelectedCircleFields(next) {
+    setState((prev) => {
+      if (!prev.selectedObject || prev.selectedObject.type !== "circle") return prev;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          circles: prev.scene.circles.map((circle) =>
+            circle.id === prev.selectedObject!.id ? { ...circle, ...next } : circle
+          ),
+        },
+      };
+    });
+  },
+
   renameSelectedPoint(nextNameRaw) {
     const nextName = nextNameRaw.trim();
     if (!nextName) return { ok: false, error: "Name cannot be empty." };
@@ -907,6 +1018,7 @@ const actions: GeoActions = {
             circles: keptCircles,
           },
           selectedObject: null,
+          recentCreatedObject: null,
           copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, keptSegments, keptLines, keptCircles)
             ? prev.copyStyle
             : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
@@ -933,6 +1045,7 @@ const actions: GeoActions = {
             points: nextPoints,
           },
           selectedObject: null,
+          recentCreatedObject: null,
           copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, keptSegments, keptLines, prev.scene.circles)
             ? prev.copyStyle
             : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
@@ -958,6 +1071,7 @@ const actions: GeoActions = {
             points: nextPoints,
           },
           selectedObject: null,
+          recentCreatedObject: null,
           copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, prev.scene.segments, prev.scene.lines, nextCircles)
             ? prev.copyStyle
             : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
@@ -984,6 +1098,7 @@ const actions: GeoActions = {
           ),
         },
         selectedObject: null,
+        recentCreatedObject: null,
         copyStyle:
           prev.copyStyle.source?.type === "line" && prev.copyStyle.source.id === prev.selectedObject.id
             ? { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null }
@@ -1021,7 +1136,7 @@ const actions: GeoActions = {
             source: obj,
             pointStyle: null,
             lineStyle: { ...segment.style },
-            circleStyle: null,
+            circleStyle: circleStyleFromLineStyle(segment.style),
             showLabel: null,
           },
         };
@@ -1035,7 +1150,7 @@ const actions: GeoActions = {
           copyStyle: {
             source: obj,
             pointStyle: null,
-            lineStyle: null,
+            lineStyle: lineStyleFromCircleStyle(circle.style),
             circleStyle: { ...circle.style },
             showLabel: null,
           },
@@ -1050,7 +1165,7 @@ const actions: GeoActions = {
           source: obj,
           pointStyle: null,
           lineStyle: { ...line.style },
-          circleStyle: null,
+          circleStyle: circleStyleFromLineStyle(line.style),
           showLabel: null,
         },
       };
@@ -1060,7 +1175,11 @@ const actions: GeoActions = {
   applyCopyStyleTo(obj) {
     setState((prev) => {
       if (obj.type === "point") {
-        if (!prev.copyStyle.pointStyle) return prev;
+        const sourcePointStyle =
+          prev.copyStyle.pointStyle ??
+          (prev.copyStyle.lineStyle ? pointStyleFromLineStyle(prev.copyStyle.lineStyle) : null) ??
+          (prev.copyStyle.circleStyle ? pointStyleFromCircleStyle(prev.copyStyle.circleStyle) : null);
+        if (!sourcePointStyle) return prev;
         return {
           ...prev,
           scene: {
@@ -1072,7 +1191,8 @@ const actions: GeoActions = {
                     ...point,
                     showLabel: prev.copyStyle.showLabel ?? point.showLabel,
                     style: {
-                      ...prev.copyStyle.pointStyle!,
+                      ...point.style,
+                      ...sourcePointStyle,
                       labelOffsetPx: { ...point.style.labelOffsetPx },
                     },
                   }
@@ -1082,38 +1202,50 @@ const actions: GeoActions = {
       }
 
       if (obj.type === "segment") {
-        if (!prev.copyStyle.lineStyle) return prev;
+        const sourceLineStyle =
+          prev.copyStyle.lineStyle ??
+          (prev.copyStyle.circleStyle ? lineStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
+          (prev.copyStyle.pointStyle ? lineStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
+        if (!sourceLineStyle) return prev;
         return {
           ...prev,
           scene: {
             ...prev.scene,
             segments: prev.scene.segments.map((segment) =>
-              segment.id === obj.id ? { ...segment, style: { ...prev.copyStyle.lineStyle! } } : segment
+              segment.id === obj.id ? { ...segment, style: { ...segment.style, ...sourceLineStyle } } : segment
             ),
           },
         };
       }
 
       if (obj.type === "circle") {
-        if (!prev.copyStyle.circleStyle) return prev;
+        const sourceCircleStyle =
+          prev.copyStyle.circleStyle ??
+          (prev.copyStyle.lineStyle ? circleStyleFromLineStyle(prev.copyStyle.lineStyle) : null) ??
+          (prev.copyStyle.pointStyle ? circleStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
+        if (!sourceCircleStyle) return prev;
         return {
           ...prev,
           scene: {
             ...prev.scene,
             circles: prev.scene.circles.map((circle) =>
-              circle.id === obj.id ? { ...circle, style: { ...prev.copyStyle.circleStyle! } } : circle
+              circle.id === obj.id ? { ...circle, style: { ...circle.style, ...sourceCircleStyle } } : circle
             ),
           },
         };
       }
 
-      if (!prev.copyStyle.lineStyle) return prev;
+      const sourceLineStyle =
+        prev.copyStyle.lineStyle ??
+        (prev.copyStyle.circleStyle ? lineStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
+        (prev.copyStyle.pointStyle ? lineStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
+      if (!sourceLineStyle) return prev;
       return {
         ...prev,
         scene: {
           ...prev.scene,
           lines: prev.scene.lines.map((line) =>
-            line.id === obj.id ? { ...line, style: { ...prev.copyStyle.lineStyle! } } : line
+            line.id === obj.id ? { ...line, style: { ...line.style, ...sourceLineStyle } } : line
           ),
         },
       };
@@ -1180,6 +1312,62 @@ function objectRefAlive(
   return circles.some((circle) => circle.id === obj.id);
 }
 
+function circleStyleFromLineStyle(style: LineStyle): CircleStyle {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    strokeDash: style.dash,
+    strokeOpacity: style.opacity,
+  };
+}
+
+function lineStyleFromCircleStyle(style: CircleStyle): LineStyle {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    dash: style.strokeDash,
+    opacity: style.strokeOpacity,
+  };
+}
+
+function lineStyleFromPointStyle(style: PointStyle): LineStyle {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    dash: "solid",
+    opacity: style.strokeOpacity,
+  };
+}
+
+function circleStyleFromPointStyle(style: PointStyle): CircleStyle {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    strokeDash: "solid",
+    strokeOpacity: style.strokeOpacity,
+  };
+}
+
+function pointStyleFromLineStyle(style: LineStyle): Partial<PointStyle> {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    strokeOpacity: style.opacity,
+    fillColor: style.strokeColor,
+    fillOpacity: style.opacity,
+  };
+}
+
+function pointStyleFromCircleStyle(style: CircleStyle): Partial<PointStyle> {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    strokeOpacity: style.strokeOpacity,
+    fillColor: style.fillColor ?? style.strokeColor,
+    fillOpacity: style.fillOpacity ?? style.strokeOpacity,
+  };
+}
+
 function getLineCircleRefs(
   objA: GeometryObjectRef,
   objB: GeometryObjectRef
@@ -1219,6 +1407,22 @@ function createStableLineCircleIntersectionPoint(
     const d0 = distance(branches[0].point, preferredWorld);
     const d1 = distance(branches[1].point, preferredWorld);
     branchIndex = d1 < d0 ? 1 : 0;
+  }
+
+  if (branches.length >= 2) {
+    const ROOT_EPS = 1e-6;
+    let occupied0 = false;
+    let occupied1 = false;
+    for (const point of state.scene.points) {
+      if (point.kind !== "circleLineIntersectionPoint") continue;
+      if (point.lineId !== lineId || point.circleId !== circleId) continue;
+      const world = getPointWorldPos(point, state.scene);
+      if (!world) continue;
+      if (distance(world, branches[0].point) <= ROOT_EPS) occupied0 = true;
+      if (distance(world, branches[1].point) <= ROOT_EPS) occupied1 = true;
+    }
+    if (branchIndex === 0 && occupied0 && !occupied1) branchIndex = 1;
+    if (branchIndex === 1 && occupied1 && !occupied0) branchIndex = 0;
   }
 
   let excludePointId: string | undefined;

@@ -28,8 +28,8 @@ const GRID_SETTINGS: RectGridSettings = {
   rotationRad: 0,
   targetSpacingPx: 40,
   majorEvery: 5,
-  minorOpacity: 0.1,
-  majorOpacity: 0.18,
+  minorOpacity: 0.06,
+  majorOpacity: 0.12,
   minorWidth: 1,
   majorWidth: 1.5,
 };
@@ -67,6 +67,7 @@ export function CanvasView() {
   const activeTool = useGeoStore((store) => store.activeTool);
   const scene = useGeoStore((store) => store.scene);
   const selectedObject = useGeoStore((store) => store.selectedObject);
+  const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
   const hoveredHit = useGeoStore((store) => store.hoveredHit);
   const cursorWorld = useGeoStore((store) => store.cursorWorld);
   const pendingSelection = useGeoStore((store) => store.pendingSelection);
@@ -190,9 +191,9 @@ export function CanvasView() {
       ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
 
       drawRectGrid(ctx, camera, vp, GRID_SETTINGS);
-      drawCircles(ctx, scene, camera, vp, selectedObject, copyStyle.source);
-      drawLines(ctx, scene, camera, vp, selectedObject, copyStyle.source);
-      drawSegments(ctx, scene, camera, vp, selectedObject, copyStyle.source);
+      drawCircles(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
+      drawLines(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
+      drawSegments(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
       drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, scene, camera, vp);
       drawPoints(ctx, resolvedPoints, selectedObject, camera, vp, copyStyle.source);
       drawInteractionHighlights(
@@ -235,6 +236,7 @@ export function CanvasView() {
       hoveredHit,
       hoveredTargetValid,
       pendingSelection,
+      recentCreatedObject,
       resolvedPoints,
       scene,
       selectedObject,
@@ -857,6 +859,7 @@ function drawCircles(
   camera: Camera,
   vp: Viewport,
   selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
+  recentCreatedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
   copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
 ) {
   ctx.save();
@@ -868,7 +871,7 @@ function drawCircles(
     const c = camMath.worldToScreen(center, camera, vp);
     const t = camMath.worldToScreen(through, camera, vp);
     const r = Math.hypot(t.x - c.x, t.y - c.y);
-    ctx.setLineDash(circle.style.strokeDash === "dashed" ? [8, 6] : []);
+    applyStrokeDash(ctx, circle.style.strokeDash, circle.style.strokeWidth);
     if ((circle.style.fillOpacity ?? 0) > 0 && circle.style.fillColor) {
       ctx.globalAlpha = circle.style.fillOpacity ?? 0;
       ctx.fillStyle = circle.style.fillColor;
@@ -886,8 +889,9 @@ function drawCircles(
     if (selectedObject?.type === "circle" && selectedObject.id === circle.id) {
       ctx.globalAlpha = 1;
       ctx.setLineDash([]);
-      ctx.strokeStyle = "#f59e0b";
-      ctx.lineWidth = circle.style.strokeWidth + 2;
+      const isNew = recentCreatedObject?.type === "circle" && recentCreatedObject.id === circle.id;
+      ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
+      ctx.lineWidth = circle.style.strokeWidth + (isNew ? 1.5 : 1.6);
       ctx.beginPath();
       ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
       ctx.stroke();
@@ -1096,6 +1100,7 @@ function drawLines(
   camera: Camera,
   vp: Viewport,
   selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
+  recentCreatedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
   copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
 ) {
   ctx.save();
@@ -1115,7 +1120,7 @@ function drawLines(
     const p1 = camMath.worldToScreen(add(a, mul(dir, -span)), camera, vp);
     const p2 = camMath.worldToScreen(add(a, mul(dir, span)), camera, vp);
 
-    ctx.setLineDash(line.style.dash === "dashed" ? [8, 6] : []);
+    applyStrokeDash(ctx, line.style.dash, line.style.strokeWidth);
     ctx.strokeStyle = line.style.strokeColor;
     ctx.globalAlpha = line.style.opacity;
     ctx.lineWidth = line.style.strokeWidth;
@@ -1127,8 +1132,9 @@ function drawLines(
     if (selectedObject?.type === "line" && selectedObject.id === line.id) {
       ctx.globalAlpha = 1;
       ctx.setLineDash([]);
-      ctx.strokeStyle = "#f59e0b";
-      ctx.lineWidth = line.style.strokeWidth + 2;
+      const isNew = recentCreatedObject?.type === "line" && recentCreatedObject.id === line.id;
+      ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
+      ctx.lineWidth = line.style.strokeWidth + (isNew ? 1.5 : 1.6);
       ctx.beginPath();
       ctx.moveTo(p1.x, p1.y);
       ctx.lineTo(p2.x, p2.y);
@@ -1156,6 +1162,7 @@ function drawSegments(
   camera: Camera,
   vp: Viewport,
   selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
+  recentCreatedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
   copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
 ) {
   ctx.save();
@@ -1169,7 +1176,7 @@ function drawSegments(
     const p1 = camMath.worldToScreen(a, camera, vp);
     const p2 = camMath.worldToScreen(b, camera, vp);
 
-    ctx.setLineDash(seg.style.dash === "dashed" ? [8, 6] : []);
+    applyStrokeDash(ctx, seg.style.dash, seg.style.strokeWidth);
     ctx.strokeStyle = seg.style.strokeColor;
     ctx.globalAlpha = seg.style.opacity;
     ctx.lineWidth = seg.style.strokeWidth;
@@ -1181,8 +1188,9 @@ function drawSegments(
     if (selectedObject?.type === "segment" && selectedObject.id === seg.id) {
       ctx.globalAlpha = 1;
       ctx.setLineDash([]);
-      ctx.strokeStyle = "#f59e0b";
-      ctx.lineWidth = seg.style.strokeWidth + 2;
+      const isNew = recentCreatedObject?.type === "segment" && recentCreatedObject.id === seg.id;
+      ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
+      ctx.lineWidth = seg.style.strokeWidth + (isNew ? 1.5 : 1.6);
       ctx.beginPath();
       ctx.moveTo(p1.x, p1.y);
       ctx.lineTo(p2.x, p2.y);
@@ -1471,4 +1479,26 @@ function drawPointSymbol(
   ctx.globalAlpha = strokeOpacity;
   ctx.stroke();
   ctx.restore();
+}
+
+function applyStrokeDash(
+  ctx: CanvasRenderingContext2D,
+  dash: "solid" | "dashed" | "dotted",
+  strokeWidth: number
+) {
+  if (dash === "dashed") {
+    ctx.setLineDash([8, 6]);
+    ctx.lineCap = "butt";
+    return;
+  }
+  if (dash === "dotted") {
+    // Near-zero dash length + round caps yields circular dots instead of mini dashes.
+    const dot = 0.001;
+    const gap = Math.max(4, strokeWidth * 2.4);
+    ctx.setLineDash([dot, gap]);
+    ctx.lineCap = "round";
+    return;
+  }
+  ctx.setLineDash([]);
+  ctx.lineCap = "butt";
 }

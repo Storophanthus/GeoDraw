@@ -94,13 +94,29 @@ export default function App() {
   const setPointDefaults = useGeoStore((store) => store.setPointDefaults);
   const updateSelectedPointStyle = useGeoStore((store) => store.updateSelectedPointStyle);
   const updateSelectedPointFields = useGeoStore((store) => store.updateSelectedPointFields);
+  const updateSelectedSegmentStyle = useGeoStore((store) => store.updateSelectedSegmentStyle);
+  const updateSelectedLineStyle = useGeoStore((store) => store.updateSelectedLineStyle);
+  const updateSelectedCircleStyle = useGeoStore((store) => store.updateSelectedCircleStyle);
+  const updateSelectedSegmentFields = useGeoStore((store) => store.updateSelectedSegmentFields);
+  const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
+  const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
 
   const selectedPointId = selectedObject?.type === "point" ? selectedObject.id : null;
-  const selectedNonPointType =
-    selectedObject && selectedObject.type !== "point" ? selectedObject.type : null;
   const selectedPoint = useMemo(
     () => scene.points.find((point) => point.id === selectedPointId) ?? null,
     [scene.points, selectedPointId]
+  );
+  const selectedSegment = useMemo(
+    () => (selectedObject?.type === "segment" ? scene.segments.find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.segments, selectedObject]
+  );
+  const selectedLine = useMemo(
+    () => (selectedObject?.type === "line" ? scene.lines.find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.lines, selectedObject]
+  );
+  const selectedCircle = useMemo(
+    () => (selectedObject?.type === "circle" ? scene.circles.find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.circles, selectedObject]
   );
   const selectedPointWorld = useMemo(() => {
     if (!selectedPoint) return null;
@@ -391,16 +407,202 @@ export default function App() {
                     : "Copy Style: click an object to pick source (Shift-click anytime to change source)"}
                 </div>
               )}
-              {!selectedPoint && !selectedNonPointType && (
+              {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && (
                 <div className="emptyState">Select a point to edit point properties</div>
               )}
-              {!selectedPoint && selectedNonPointType && (
-                <div className="emptyState">
-                  {selectedNonPointType === "segment"
-                    ? "Segment selected. Point properties are shown when a point is selected."
-                    : selectedNonPointType === "line"
-                      ? "Line selected. Point properties are shown when a point is selected."
-                      : "Circle selected. Point properties are shown when a point is selected."}
+              {!selectedPoint && selectedSegment && (
+                <div className="cosmeticsBlock">
+                  <div className="subSectionTitle">Segment Style</div>
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={selectedSegment.visible}
+                      onChange={(e) => updateSelectedSegmentFields({ visible: e.target.checked })}
+                    />
+                    Show Object
+                  </label>
+                  <div className="controlRow">
+                    <label className="controlLabel">Stroke Color</label>
+                    <input
+                      className="colorInput"
+                      type="color"
+                      value={selectedSegment.style.strokeColor}
+                      onChange={(e) => updateSelectedSegmentStyle({ strokeColor: e.target.value })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Stroke Width</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0.5}
+                      max={6}
+                      step={0.1}
+                      value={selectedSegment.style.strokeWidth}
+                      onChange={(e) => updateSelectedSegmentStyle({ strokeWidth: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Dash</label>
+                    <select
+                      className="selectInput"
+                      value={selectedSegment.style.dash}
+                      onChange={(e) => updateSelectedSegmentStyle({ dash: e.target.value as "solid" | "dashed" | "dotted" })}
+                    >
+                      <option value="solid">Solid</option>
+                      <option value="dashed">Dashed</option>
+                      <option value="dotted">Dotted</option>
+                    </select>
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Opacity</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={selectedSegment.style.opacity}
+                      onChange={(e) => updateSelectedSegmentStyle({ opacity: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+              )}
+              {!selectedPoint && selectedLine && (
+                <div className="cosmeticsBlock">
+                  <div className="subSectionTitle">Line Style</div>
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={selectedLine.visible}
+                      onChange={(e) => updateSelectedLineFields({ visible: e.target.checked })}
+                    />
+                    Show Object
+                  </label>
+                  <div className="controlRow">
+                    <label className="controlLabel">Stroke Color</label>
+                    <input
+                      className="colorInput"
+                      type="color"
+                      value={selectedLine.style.strokeColor}
+                      onChange={(e) => updateSelectedLineStyle({ strokeColor: e.target.value })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Stroke Width</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0.5}
+                      max={6}
+                      step={0.1}
+                      value={selectedLine.style.strokeWidth}
+                      onChange={(e) => updateSelectedLineStyle({ strokeWidth: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Dash</label>
+                    <select
+                      className="selectInput"
+                      value={selectedLine.style.dash}
+                      onChange={(e) => updateSelectedLineStyle({ dash: e.target.value as "solid" | "dashed" | "dotted" })}
+                    >
+                      <option value="solid">Solid</option>
+                      <option value="dashed">Dashed</option>
+                      <option value="dotted">Dotted</option>
+                    </select>
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Opacity</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={selectedLine.style.opacity}
+                      onChange={(e) => updateSelectedLineStyle({ opacity: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+              )}
+              {!selectedPoint && selectedCircle && (
+                <div className="cosmeticsBlock">
+                  <div className="subSectionTitle">Circle Style</div>
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={selectedCircle.visible}
+                      onChange={(e) => updateSelectedCircleFields({ visible: e.target.checked })}
+                    />
+                    Show Object
+                  </label>
+                  <div className="controlRow">
+                    <label className="controlLabel">Stroke Color</label>
+                    <input
+                      className="colorInput"
+                      type="color"
+                      value={selectedCircle.style.strokeColor}
+                      onChange={(e) => updateSelectedCircleStyle({ strokeColor: e.target.value })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Stroke Width</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0.5}
+                      max={6}
+                      step={0.1}
+                      value={selectedCircle.style.strokeWidth}
+                      onChange={(e) => updateSelectedCircleStyle({ strokeWidth: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Dash</label>
+                    <select
+                      className="selectInput"
+                      value={selectedCircle.style.strokeDash}
+                      onChange={(e) => updateSelectedCircleStyle({ strokeDash: e.target.value as "solid" | "dashed" | "dotted" })}
+                    >
+                      <option value="solid">Solid</option>
+                      <option value="dashed">Dashed</option>
+                      <option value="dotted">Dotted</option>
+                    </select>
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Stroke Opacity</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={selectedCircle.style.strokeOpacity}
+                      onChange={(e) => updateSelectedCircleStyle({ strokeOpacity: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Fill Color</label>
+                    <input
+                      className="colorInput"
+                      type="color"
+                      value={selectedCircle.style.fillColor ?? "#000000"}
+                      onChange={(e) => updateSelectedCircleStyle({ fillColor: e.target.value })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Fill Opacity</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={selectedCircle.style.fillOpacity ?? 0}
+                      onChange={(e) => updateSelectedCircleStyle({ fillOpacity: Number(e.target.value) })}
+                    />
+                  </div>
                 </div>
               )}
               {selectedPoint && (
