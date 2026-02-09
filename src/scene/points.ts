@@ -168,6 +168,7 @@ export type CircleLineIntersectionPoint = {
   circleId: string;
   lineId: string;
   branchIndex: 0 | 1;
+  excludePointId?: string;
   style: PointStyle;
 };
 
@@ -313,6 +314,20 @@ export function getPointWorldPos(
     const r = distance(center, through);
     const branches = lineCircleIntersectionBranches(la, lb, center, r);
     if (branches.length === 0) return null;
+
+    if (point.excludePointId) {
+      const excluded = getPointWorldById(point.excludePointId, scene, nextVisited);
+      if (excluded) {
+        const ROOT_EPS = 1e-6;
+        const candidates = branches.filter((branch) => distance(branch.point, excluded) > ROOT_EPS);
+        if (candidates.length >= 1) return candidates[0].point;
+        // Tangency / collapsed roots at excluded point -> undefined for \"other\" intersection.
+        if (branches.length === 1 || branches.every((branch) => distance(branch.point, excluded) <= ROOT_EPS)) {
+          return null;
+        }
+      }
+    }
+
     if (branches.length === 1) return branches[0].point;
     return branches[point.branchIndex]?.point ?? branches[0].point;
   }
@@ -345,35 +360,46 @@ function getPointWorldById(pointId: string, scene: SceneModel, visited: Set<stri
 }
 
 function objectIntersections(a: GeometryObjectRef, b: GeometryObjectRef, scene: SceneModel): Vec2[] {
-  const la = asLine(a, scene);
-  const lb = asLine(b, scene);
+  const la = asLineLike(a, scene);
+  const lb = asLineLike(b, scene);
   if (la && lb) {
     const p = lineLineIntersection(la.a, la.b, lb.a, lb.b);
-    return p ? [p] : [];
+    if (!p) return [];
+    if (!lineLikeContainsPoint(la, p)) return [];
+    if (!lineLikeContainsPoint(lb, p)) return [];
+    return [p];
   }
 
   const circleA = asCircle(a, scene);
   const circleB = asCircle(b, scene);
 
-  if (la && circleB) return lineCircleIntersections(la.a, la.b, circleB.center, circleB.radius);
-  if (lb && circleA) return lineCircleIntersections(lb.a, lb.b, circleA.center, circleA.radius);
+  if (la && circleB) {
+    return lineCircleIntersections(la.a, la.b, circleB.center, circleB.radius).filter((p) =>
+      lineLikeContainsPoint(la, p)
+    );
+  }
+  if (lb && circleA) {
+    return lineCircleIntersections(lb.a, lb.b, circleA.center, circleA.radius).filter((p) =>
+      lineLikeContainsPoint(lb, p)
+    );
+  }
   if (circleA && circleB) {
     return circleCircleIntersections(circleA.center, circleA.radius, circleB.center, circleB.radius);
   }
   return [];
 }
 
-function asLine(
+function asLineLike(
   ref: GeometryObjectRef,
   scene: SceneModel
-): { a: Vec2; b: Vec2 } | null {
+): { a: Vec2; b: Vec2; finite: boolean } | null {
   if (ref.type === "line") {
     const line = scene.lines.find((item) => item.id === ref.id);
     if (!line) return null;
     const a = getPointWorldById(line.aId, scene, new Set());
     const b = getPointWorldById(line.bId, scene, new Set());
     if (!a || !b) return null;
-    return { a, b };
+    return { a, b, finite: false };
   }
 
   if (ref.type === "segment") {
@@ -382,7 +408,7 @@ function asLine(
     const a = getPointWorldById(seg.aId, scene, new Set());
     const b = getPointWorldById(seg.bId, scene, new Set());
     if (!a || !b) return null;
-    return { a, b };
+    return { a, b, finite: true };
   }
 
   return null;
@@ -416,4 +442,21 @@ function chooseClosestToPreferred(points: Vec2[], preferredWorld: Vec2): Vec2 {
     }
   }
   return best;
+}
+
+function lineLikeContainsPoint(lineLike: { a: Vec2; b: Vec2; finite: boolean }, p: Vec2): boolean {
+  if (!lineLike.finite) return true;
+  return pointWithinSegmentDomain(p, lineLike.a, lineLike.b);
+}
+
+function pointWithinSegmentDomain(p: Vec2, a: Vec2, b: Vec2): boolean {
+  const EPS = 1e-6;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dd = dx * dx + dy * dy;
+  if (dd <= EPS * EPS) return distance(p, a) <= EPS;
+  const ux = p.x - a.x;
+  const uy = p.y - a.y;
+  const u = (ux * dx + uy * dy) / dd;
+  return u >= -EPS && u <= 1 + EPS;
 }

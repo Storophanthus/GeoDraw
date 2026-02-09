@@ -1221,6 +1221,24 @@ function createStableLineCircleIntersectionPoint(
     branchIndex = d1 < d0 ? 1 : 0;
   }
 
+  let excludePointId: string | undefined;
+  const endpointCandidates: Array<{ id: string; world: Vec2 }> = [];
+  const aOnCircle = Math.abs(distance(a, center) - radius) <= 1e-6;
+  const bOnCircle = Math.abs(distance(b, center) - radius) <= 1e-6;
+  if (aOnCircle) endpointCandidates.push({ id: line.aId, world: a });
+  if (bOnCircle) endpointCandidates.push({ id: line.bId, world: b });
+
+  if (branches.length >= 2 && endpointCandidates.length === 1) {
+    const endpoint = endpointCandidates[0];
+    const chosen = branches[branchIndex].point;
+    const other = branches[branchIndex === 0 ? 1 : 0].point;
+    const ROOT_EPS = 1e-6;
+    // If user picked the non-endpoint branch, stabilize by explicitly excluding endpoint intersection.
+    if (distance(chosen, endpoint.world) > ROOT_EPS && distance(other, endpoint.world) <= ROOT_EPS) {
+      excludePointId = endpoint.id;
+    }
+  }
+
   const used = new Set(state.scene.points.map((point) => point.name));
   let idx = 0;
   let name = nextLabelFromIndex(idx);
@@ -1241,6 +1259,7 @@ function createStableLineCircleIntersectionPoint(
     circleId,
     lineId,
     branchIndex,
+    excludePointId,
     style: {
       ...state.pointDefaults,
       labelOffsetPx: { ...state.pointDefaults.labelOffsetPx },
