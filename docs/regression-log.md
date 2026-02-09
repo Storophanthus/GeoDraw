@@ -37,9 +37,32 @@ Purpose: keep a durable record of high-risk bugs that must not reappear after re
 - Non-negotiable rule:
   - Creation branch must follow click-nearest root (`preferredWorld`) deterministically.
   - Do not auto-flip based on occupancy in creation path.
+  - `branchIndex` semantics must match evaluation semantics exactly:
+    - `branchIndex=0` means first root from `lineCircleIntersectionBranches(...)`
+    - `branchIndex=1` means second root from `lineCircleIntersectionBranches(...)`
+    - Never reinterpret branch order using x/y sorting or any alternative ordering.
 - Main code:
   - `src/state/geoStore.ts`
     - `createStableLineCircleIntersectionPoint(...)`
+  - `src/scene/points.ts`
+    - `evalPoint(...)` for `circleLineIntersectionPoint`
+
+### 2b) Duplicate line-circle root creation (`L then M` on same root)
+
+- Symptom:
+  - Clicking near one line-circle intersection creates a point on the opposite/same already-used root.
+  - Re-clicking nearby creates another point on same root (e.g., `L` then `M`), instead of selecting/reusing existing one.
+- Root cause:
+  - Existing-point reuse checked only proximity to click world, not resolved target root for that construction.
+  - Branch identity could drift when creation/evaluation ordering differed.
+- Non-negotiable rules:
+  - On creation, resolve intended target root first (using same branch semantics as runtime eval).
+  - Reuse existing `circleLineIntersectionPoint` on that target root (within epsilon) instead of creating duplicates.
+  - If an `excludePointId`-stabilized root is selected, reuse matching `excludePointId` branch when present.
+- Main code:
+  - `src/state/geoStore.ts`
+    - `findExistingIntersectionPointId(...)`
+    - `resolveLineCircleTarget(...)`
 
 ### 3) Drag slowdown / freeze in dense intersection scenes
 
@@ -108,6 +131,17 @@ This reports:
 - undefined points
 - coincident groups
 - duplicate construction signatures
+
+## Mandatory Intersection Checklist (before merge)
+
+- No branch-order drift:
+  - creation + evaluation both use `lineCircleIntersectionBranches` order.
+- No duplicate root creation:
+  - repeated click near same line-circle root must select existing point, not add a new one.
+- No wrong-root first creation:
+  - click-nearest root is the one created/selected on first try.
+
+If any of the above fails, treat as release-blocking regression.
 
 ## Related Files
 
