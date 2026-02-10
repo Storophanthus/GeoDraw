@@ -9,6 +9,15 @@ import {
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
 
+export type TikzExportViewport = { xmin: number; xmax: number; ymin: number; ymax: number };
+export type TikzExportOptions = {
+  viewport?: TikzExportViewport;
+  clipSpace?: number;
+  globalLineAdd?: number;
+  pointScale?: number;
+  lineScale?: number;
+};
+
 export type TikzCommand =
   | { kind: "SetupViewport"; xmin: number; xmax: number; ymin: number; ymax: number; space: number }
   | { kind: "SetupLine"; addLeft: number; addRight: number }
@@ -53,7 +62,7 @@ type PointStyleDef = {
   styleExpr: string;
 };
 
-export function buildTikzIR(scene: SceneModel): TikzCommand[] {
+export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}): TikzCommand[] {
   const pointById = new Map(scene.points.map((p) => [p.id, p]));
   const lineById = new Map(scene.lines.map((l) => [l.id, l]));
   const segById = new Map(scene.segments.map((s) => [s.id, s]));
@@ -67,9 +76,10 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
   const definedPointIds = new Set<string>();
 
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
-  const viewport = computeExportViewport(scene);
-  defs.push({ kind: "SetupViewport", ...viewport, space: 0 });
-  defs.push({ kind: "SetupLine", addLeft: 5, addRight: 5 });
+  const viewport = options.viewport ?? computeExportViewport(scene);
+  defs.push({ kind: "SetupViewport", ...viewport, space: options.clipSpace ?? 0 });
+  const globalAdd = options.globalLineAdd ?? 5;
+  defs.push({ kind: "SetupLine", addLeft: globalAdd, addRight: globalAdd });
 
   const visiting = new Set<string>();
   const visited = new Set<string>();
@@ -422,7 +432,7 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
       kind: "DrawSegment",
       a: mustName(pointName, seg.aId),
       b: mustName(pointName, seg.bId),
-      style: segmentStyleToTikz(seg.style),
+      style: segmentStyleToTikz(seg.style, options),
     });
   }
   for (const line of scene.lines) {
@@ -443,7 +453,7 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
       b: drawBName,
       addLeft: ext.addLeft,
       addRight: ext.addRight,
-      style: lineStyleToTikz(line.style),
+      style: lineStyleToTikz(line.style, options),
     });
   }
   for (const circle of scene.circles) {
@@ -452,11 +462,11 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
       kind: "DrawCircle",
       o: mustName(pointName, circle.centerId),
       x: mustName(pointName, circle.throughId),
-      style: circleStyleToTikz(circle.style),
+      style: circleStyleToTikz(circle.style, options),
     });
   }
 
-  const pointStyleGroups = buildPointStyleGroups(scene.points, pointName);
+  const pointStyleGroups = buildPointStyleGroups(scene.points, pointName, options);
   for (const group of pointStyleGroups) {
     draws.push({ kind: "DrawPoints", style: group.styleName, points: group.points } as TikzCommand);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -656,6 +666,12 @@ export function renderTikz(cmds: TikzCommand[]): string {
 
 export function exportTikz(scene: SceneModel): string {
   const tex = renderTikz(buildTikzIR(scene));
+  assertNoUnknownTkzMacro(tex);
+  return tex;
+}
+
+export function exportTikzWithOptions(scene: SceneModel, options: TikzExportOptions): string {
+  const tex = renderTikz(buildTikzIR(scene, options));
   assertNoUnknownTkzMacro(tex);
   return tex;
 }
@@ -1061,7 +1077,8 @@ function getPointWorldPosCached(scene: SceneModel, pointId: string) {
 
 function buildPointStyleGroups(
   points: ScenePoint[],
-  pointName: Map<string, string>
+  pointName: Map<string, string>,
+  options: TikzExportOptions
 ): Array<{ styleName: string; points: string[]; styleExpr: string }> {
   const groups = new Map<string, { styleName: string; points: string[]; styleExpr: string }>();
   let idx = 0;
@@ -1078,7 +1095,7 @@ function buildPointStyleGroups(
       groups.set(key, {
         styleName,
         points: [],
-        styleExpr: pointStyleToTikz(point),
+        styleExpr: pointStyleToTikz(point, options),
       });
     }
 
@@ -1124,13 +1141,15 @@ function styleKey(point: ScenePoint): string {
   });
 }
 
-function pointStyleToTikz(point: ScenePoint): string {
+function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string {
   const s = point.style;
   const shape = mapPointShape(s.shape);
   const draw = rgbColorExpr(s.strokeColor);
   const fill = rgbColorExpr(s.fillColor);
-  const lineWidthPt = Math.max(0.1, s.strokeWidth * 0.75);
-  const sizePt = Math.max(0.4, s.sizePx * 0.75);
+  const pointScale = clampPositive(options.pointScale ?? 0.75, 0.05, 10);
+  const lineScale = clampPositive(options.lineScale ?? 0.75, 0.05, 10);
+  const lineWidthPt = Math.max(0.1, s.strokeWidth * lineScale);
+  const sizePt = Math.max(0.4, s.sizePx * pointScale);
   const opts = [
     shape,
     `draw=${draw}`,
@@ -1143,16 +1162,16 @@ function pointStyleToTikz(point: ScenePoint): string {
   return opts.join(", ");
 }
 
-function segmentStyleToTikz(style: SceneModel["segments"][number]["style"]): string {
-  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.dash, style.opacity);
+function segmentStyleToTikz(style: SceneModel["segments"][number]["style"], options: TikzExportOptions): string {
+  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.dash, style.opacity, options);
 }
 
-function lineStyleToTikz(style: SceneModel["lines"][number]["style"]): string {
-  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.dash, style.opacity);
+function lineStyleToTikz(style: SceneModel["lines"][number]["style"], options: TikzExportOptions): string {
+  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.dash, style.opacity, options);
 }
 
-function circleStyleToTikz(style: SceneModel["circles"][number]["style"]): string {
-  const opts = lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash, style.strokeOpacity);
+function circleStyleToTikz(style: SceneModel["circles"][number]["style"], options: TikzExportOptions): string {
+  const opts = lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash, style.strokeOpacity, options);
   return opts;
 }
 
@@ -1160,11 +1179,13 @@ function lineLikeStyleToTikz(
   strokeColor: string,
   strokeWidth: number,
   dash: "solid" | "dashed" | "dotted",
-  opacity: number
+  opacity: number,
+  options: TikzExportOptions
 ): string {
+  const lineScale = clampPositive(options.lineScale ?? 0.75, 0.05, 10);
   const opts: string[] = [
     `color=${rgbColorExpr(strokeColor)}`,
-    `line width=${fmt(Math.max(0.1, strokeWidth * 0.75))}pt`,
+    `line width=${fmt(Math.max(0.1, strokeWidth * lineScale))}pt`,
   ];
   if (dash === "dashed") opts.push("dashed");
   if (dash === "dotted") opts.push("dotted");
@@ -1287,6 +1308,11 @@ function escapeTikzText(value: string): string {
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
+}
+
+function clampPositive(v: number, min: number, max: number): number {
+  if (!Number.isFinite(v)) return min;
+  return Math.max(min, Math.min(max, v));
 }
 
 const TKZ_MACRO_SET = new Set<string>((tkzMacroWhitelist as { macros: string[] }).macros ?? []);

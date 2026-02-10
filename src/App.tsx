@@ -19,9 +19,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { exportConstructionSnapshot } from "./export/constructionSnapshot";
-import { exportTikz } from "./export/tikz";
+import { exportTikzWithOptions } from "./export/tikz";
 import { getPointWorldPos, type GeometryObjectRef, type PointShape, type SceneModel, type ScenePoint } from "./scene/points";
 import { useGeoStore, type ActiveTool } from "./state/geoStore";
+import type { Camera } from "./view/camera";
 import { CanvasView } from "./view/CanvasView";
 
 type IconProps = {
@@ -89,6 +90,7 @@ export default function App() {
   const setActiveTool = useGeoStore((store) => store.setActiveTool);
 
   const scene = useGeoStore((store) => store.scene);
+  const camera = useGeoStore((store) => store.camera);
   const selectedObject = useGeoStore((store) => store.selectedObject);
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
   const renameSelectedPoint = useGeoStore((store) => store.renameSelectedPoint);
@@ -152,6 +154,9 @@ export default function App() {
   const [tikzCopied, setTikzCopied] = useState(false);
   const [jsonCopied, setJsonCopied] = useState(false);
   const [rightTab, setRightTab] = useState<RightTab>("algebra");
+  const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
+  const [exportPointScale, setExportPointScale] = useState("0.75");
+  const [exportLineScale, setExportLineScale] = useState("0.75");
 
   const shapePickerRef = useRef<HTMLDivElement | null>(null);
   const [leftWidth, setLeftWidth] = useState(56);
@@ -287,7 +292,22 @@ export default function App() {
 
   const generateTikz = () => {
     try {
-      setTikzText(exportTikz(scene));
+      const pointScale = Number(exportPointScale);
+      const lineScale = Number(exportLineScale);
+      const viewport = exportUseCurrentView
+        ? getViewportFromCamera(
+            camera,
+            leftCollapsed ? COLLAPSED_W : leftWidth,
+            rightCollapsed ? COLLAPSED_W : rightWidth
+          )
+        : undefined;
+      setTikzText(
+        exportTikzWithOptions(scene, {
+          viewport,
+          pointScale: Number.isFinite(pointScale) ? pointScale : 0.75,
+          lineScale: Number.isFinite(lineScale) ? lineScale : 0.75,
+        })
+      );
       setTikzCopied(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown exporter error";
@@ -493,6 +513,38 @@ export default function App() {
 
             {rightTab === "export" && <section className="sidebarSection">
               <h2 className="sectionTitle">Export</h2>
+              <div className="cosmeticsGrid">
+                <label className="checkboxRow">
+                  <input
+                    type="checkbox"
+                    checked={exportUseCurrentView}
+                    onChange={(e) => setExportUseCurrentView(e.target.checked)}
+                  />
+                  Use current camera viewport
+                </label>
+                <label className="controlRow">
+                  <span>Point Scale</span>
+                  <input
+                    type="number"
+                    min={0.1}
+                    max={4}
+                    step={0.05}
+                    value={exportPointScale}
+                    onChange={(e) => setExportPointScale(e.target.value)}
+                  />
+                </label>
+                <label className="controlRow">
+                  <span>Line Scale</span>
+                  <input
+                    type="number"
+                    min={0.1}
+                    max={4}
+                    step={0.05}
+                    value={exportLineScale}
+                    onChange={(e) => setExportLineScale(e.target.value)}
+                  />
+                </label>
+              </div>
               <div className="exportButtons">
                 <button className="actionButton" onClick={generateTikz}>
                   Generate TikZ
@@ -1251,6 +1303,24 @@ function ToolGroupButton({
 
 function formatNumber(value: number): string {
   return value.toFixed(3);
+}
+
+function getViewportFromCamera(
+  camera: Camera,
+  leftPanelPx: number,
+  rightPanelPx: number
+): { xmin: number; xmax: number; ymin: number; ymax: number } | undefined {
+  if (typeof window === "undefined") return undefined;
+  const widthPx = Math.max(240, window.innerWidth - leftPanelPx - rightPanelPx);
+  const heightPx = Math.max(180, window.innerHeight);
+  const halfWorldW = widthPx / (2 * Math.max(1e-6, camera.zoom));
+  const halfWorldH = heightPx / (2 * Math.max(1e-6, camera.zoom));
+  return {
+    xmin: camera.pos.x - halfWorldW,
+    xmax: camera.pos.x + halfWorldW,
+    ymin: camera.pos.y - halfWorldH,
+    ymax: camera.pos.y + halfWorldH,
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {
