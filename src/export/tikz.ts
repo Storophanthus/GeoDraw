@@ -537,8 +537,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       draws.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: markStyle });
     }
     if (angle.style.showLabel || angle.style.showValue) {
-      const labelText = angle.style.labelText.trim().length > 0 ? angle.style.labelText : `${theta.toFixed(3)} rad`;
-      if (labelText.length > 0) {
+      const labelText = buildAngleLabelTex(angle.style.labelText, angle.style.showLabel, angle.style.showValue, theta);
+      if (labelText) {
         const labelStyle = angleLabelStyleToTikz(angle.style, bWorld);
         draws.push({ kind: "LabelAngle", a: aName, b: bName, c: cName, text: labelText, style: labelStyle });
       }
@@ -1611,7 +1611,8 @@ function hoistNamedColors(lines: string[]): string[] {
 }
 
 function escapeTikzText(value: string): string {
-  return value.replace(/[{}]/g, (m) => (m === "{" ? "\\{" : "\\}"));
+  // Pass TeX label content through so commands like \alpha and ^{\circ} work.
+  return value;
 }
 
 function clamp01(v: number): number {
@@ -1643,4 +1644,14 @@ function assertParallelMacro(name: string): void {
 function assertAngleMacro(name: string, context: string): void {
   if (TKZ_MACRO_SET.has(name)) return;
   throw new Error(`Unsupported construction: ${context} (missing tkz macro: ${name})`);
+}
+
+function buildAngleLabelTex(labelTextRaw: string, showLabel: boolean, showValue: boolean, thetaRad: number): string | null {
+  const labelText = labelTextRaw.trim();
+  const deg = (thetaRad * 180) / Math.PI;
+  const valueTex = `${deg.toFixed(2)}^{\\circ}`;
+  if (showLabel && labelText.length > 0 && showValue) return `${labelText}=${valueTex}`;
+  if (showLabel && labelText.length > 0) return labelText;
+  if (showValue) return valueTex;
+  return null;
 }

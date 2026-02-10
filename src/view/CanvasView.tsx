@@ -179,6 +179,30 @@ export function CanvasView() {
       });
   }, [camera, resolvedPoints, vp]);
 
+  const angleLabelOverlays = useMemo(() => {
+    return resolvedAngles
+      .filter(({ angle }) => angle.visible)
+      .map(({ angle, theta }) => {
+        const tex = buildAngleLabelTex(angle.style.labelText, angle.style.showLabel, angle.style.showValue, theta);
+        if (!tex) return null;
+        const screen = camMath.worldToScreen(angle.style.labelPosWorld, camera, vp);
+        const html = katex.renderToString(tex, {
+          throwOnError: false,
+          displayMode: false,
+          strict: "ignore",
+        });
+        return {
+          id: angle.id,
+          x: screen.x,
+          y: screen.y,
+          html,
+          textSize: angle.style.textSize,
+          textColor: angle.style.textColor,
+        };
+      })
+      .filter((item): item is { id: string; x: number; y: number; html: string; textSize: number; textColor: string } => Boolean(item));
+  }, [camera, resolvedAngles, vp]);
+
   const hoverSnap: SnapCandidate | null = useMemo(() => {
     if (!hoverScreen) return null;
     if (snapDisabled) return null;
@@ -709,6 +733,19 @@ export function CanvasView() {
                 1,
                 label.labelHaloWidthPx * 0.6
               )}px`,
+            }}
+            dangerouslySetInnerHTML={{ __html: label.html }}
+          />
+        ))}
+        {angleLabelOverlays.map((label) => (
+          <div
+            key={label.id}
+            className="pointLabel tex"
+            data-angle-id={label.id}
+            style={{
+              transform: `translate(${label.x}px, ${label.y}px)`,
+              fontSize: `${Math.max(8, label.textSize)}px`,
+              color: label.textColor,
             }}
             dangerouslySetInnerHTML={{ __html: label.html }}
           />
@@ -1362,7 +1399,8 @@ function drawPendingPreview(
         ctx.setLineDash([]);
         ctx.fillStyle = "#0284c7";
         ctx.font = "12px system-ui";
-        ctx.fillText(`${theta.toFixed(3)} rad`, lx, ly);
+        const deg = (theta * 180) / Math.PI;
+        ctx.fillText(`${deg.toFixed(2)}°`, lx, ly);
         ctx.restore();
       }
     }
@@ -1693,7 +1731,7 @@ function drawAngles(
   recentCreatedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null
 ) {
   for (const entry of resolvedAngles) {
-    const { angle, a, b, c, theta } = entry;
+    const { angle, a, b, c } = entry;
     if (!angle.visible) continue;
     const as = camMath.worldToScreen(a, camera, vp);
     const bs = camMath.worldToScreen(b, camera, vp);
@@ -1735,15 +1773,6 @@ function drawAngles(
       ctx.fill();
     }
 
-    const labelText = angle.style.labelText.trim().length > 0 ? angle.style.labelText : `${theta.toFixed(3)} rad`;
-    if ((angle.style.showLabel || angle.style.showValue) && labelText.length > 0) {
-      const ls = camMath.worldToScreen(angle.style.labelPosWorld, camera, vp);
-      ctx.font = `${Math.max(8, angle.style.textSize)}px system-ui`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = angle.style.textColor;
-      ctx.fillText(labelText, ls.x, ls.y);
-    }
     ctx.restore();
   }
 }
@@ -1856,8 +1885,9 @@ function hitTestAngleLabel(
     const entry = resolvedAngles[i];
     if (!entry.angle.visible) continue;
     const labelScreen = camMath.worldToScreen(entry.angle.style.labelPosWorld, camera, vp);
+    const grabRadius = Math.max(16, entry.angle.style.textSize * 0.8);
     const d = Math.hypot(screenPoint.x - labelScreen.x, screenPoint.y - labelScreen.y);
-    if (d <= 10) return entry.angle.id;
+    if (d <= grabRadius) return entry.angle.id;
   }
   return null;
 }
@@ -2084,6 +2114,16 @@ function isAngleOnArc(theta: number, start: number, end: number, ccw: boolean): 
   // Counter-clockwise direction in canvas means traveling from start down to end.
   if (e <= s) return t <= s && t >= e;
   return t <= s || t >= e;
+}
+
+function buildAngleLabelTex(labelTextRaw: string, showLabel: boolean, showValue: boolean, thetaRad: number): string | null {
+  const labelText = labelTextRaw.trim();
+  const deg = (thetaRad * 180) / Math.PI;
+  const valueTex = `${deg.toFixed(2)}^{\\circ}`;
+  if (showLabel && labelText.length > 0 && showValue) return `${labelText}=${valueTex}`;
+  if (showLabel && labelText.length > 0) return labelText;
+  if (showValue) return valueTex;
+  return null;
 }
 
 function drawPointSymbol(

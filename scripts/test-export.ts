@@ -320,11 +320,17 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!/\\tkzLabelAngle\[[^\]]*(pos|dist)=/.test(tikz)) {
       throw new Error("Expected angle label export to include pos/dist options derived from labelPosWorld.");
     }
+    if (!tikz.includes("^{\\circ}")) {
+      throw new Error("Expected default angle value label in degrees.");
+    }
   }
 
   if (fileName === "angle-right-mark.json") {
     if (!tikz.includes("\\tkzMarkRightAngles")) {
       throw new Error("Expected right-angle fixture to emit \\tkzMarkRightAngles.");
+    }
+    if (!tikz.includes("\\pi/2")) {
+      throw new Error("Expected custom angle label text to be preserved as TeX.");
     }
   }
 }

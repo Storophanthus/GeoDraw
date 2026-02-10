@@ -65,7 +65,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   line2p: { icon: Slash, tooltip: "Line Through 2 Points (L)", ariaLabel: "Line tool" },
   perp_line: { icon: PerpendicularIcon, tooltip: "Perpendicular Line", ariaLabel: "Perpendicular line tool" },
   parallel_line: { icon: ParallelIcon, tooltip: "Parallel Line", ariaLabel: "Parallel line tool" },
-  angle: { icon: AngleIcon, tooltip: "Angle (rad)", ariaLabel: "Angle tool" },
+  angle: { icon: AngleIcon, tooltip: "Angle (deg)", ariaLabel: "Angle tool" },
   circle_cp: { icon: Circle, tooltip: "Circle Center + Point (O)", ariaLabel: "Circle center-through-point tool" },
 };
 
@@ -1148,7 +1148,7 @@ export default function App() {
                       checked={selectedAngle.style.showValue}
                       onChange={(e) => updateSelectedAngleStyle({ showValue: e.target.checked })}
                     />
-                    Show Value (rad)
+                    Show Value (deg)
                   </label>
                   <div className="controlRow">
                     <label className="controlLabel">Label Text</label>
@@ -1333,7 +1333,7 @@ function describeSelectedConstruction(
     return `Angle ${pointLabel(angle.aId, pointNameById)}${pointLabel(angle.bId, pointNameById)}${pointLabel(
       angle.cId,
       pointNameById
-    )} (radians).`;
+    )} (degrees).`;
   }
 
   const point = scene.points.find((item) => item.id === selectedObject.id);
