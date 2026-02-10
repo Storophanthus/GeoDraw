@@ -178,6 +178,7 @@ export default function App() {
   const [rightTab, setRightTab] = useState<RightTab>("algebra");
   const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
   const [exportMatchCanvas, setExportMatchCanvas] = useState(true);
+  const [exportLabelGlow, setExportLabelGlow] = useState(true);
   const [exportGlobalScale, setExportGlobalScale] = useState("1");
   const [exportPointScale, setExportPointScale] = useState("1");
   const [exportLineScale, setExportLineScale] = useState("1");
@@ -338,7 +339,7 @@ export default function App() {
       const pointScale = Number(exportPointScale);
       const lineScale = Number(exportLineScale);
       const globalScale = Number(exportGlobalScale);
-      const optionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
+      const optionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
       const viewport = exportUseCurrentView
         ? getViewportFromCamera(
             camera,
@@ -354,6 +355,7 @@ export default function App() {
           lineScale: Number.isFinite(lineScale) ? lineScale : 1,
           screenPxPerWorld: camera.zoom,
           matchCanvas: exportMatchCanvas,
+          labelGlow: exportLabelGlow,
         })
       );
       setLastTikzSceneRef(scene);
@@ -367,7 +369,7 @@ export default function App() {
     }
   };
 
-  const currentTikzOptionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
+  const currentTikzOptionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
   const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
   const tikzStatusText =
     !tikzText
@@ -605,6 +607,14 @@ export default function App() {
                     onChange={(e) => setExportMatchCanvas(e.target.checked)}
                   />
                   Match canvas size conversion
+                </label>
+                <label className="checkboxRow">
+                  <input
+                    type="checkbox"
+                    checked={exportLabelGlow}
+                    onChange={(e) => setExportLabelGlow(e.target.checked)}
+                  />
+                  Label glow
                 </label>
               </div>
               <div className="scaleBlock">

@@ -19,6 +19,7 @@ export type TikzExportOptions = {
   worldToTikzScale?: number;
   screenPxPerWorld?: number;
   matchCanvas?: boolean;
+  labelGlow?: boolean;
 };
 
 export type TikzCommand =
@@ -59,7 +60,7 @@ export type TikzCommand =
   | { kind: "DrawCircle"; o: string; x: string; style?: string }
   | { kind: "DrawPoints"; style: string; points: string[] }
   | { kind: "LabelPoints"; points: string[] }
-  | { kind: "LabelPoint"; name: string; text: string; options?: string };
+  | { kind: "LabelPoint"; name: string; text: string; options?: string; useGlow?: boolean };
 
 type PointStyleDef = {
   styleName: string;
@@ -495,7 +496,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   }
 
   const labelPlacementById = computeLabelPlacementMap(scene, options);
-  const labels: Array<{ name: string; text: string; options?: string }> = [];
+  const labels: Array<{ name: string; text: string; options?: string; useGlow?: boolean }> = [];
   for (const point of scene.points) {
     if (!point.visible) continue;
     if (point.showLabel === "none") continue;
@@ -503,22 +504,27 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (!name) continue;
     const labelOptions = pointLabelOptionsToTikz(point, labelPlacementById.get(point.id) ?? null, options);
     const matchCanvas = options.matchCanvas ?? false;
+    const labelGlowEnabled = options.labelGlow ?? true;
     if (point.showLabel === "name") {
       labels.push({
         name,
         text: point.name || name,
         options: matchCanvas ? [labelOptions, `text=${rgbColorExpr(point.style.labelColor)}`].join(", ") : labelOptions,
+        useGlow: labelGlowEnabled && matchCanvas && point.style.labelHaloWidthPx > 0,
       });
     } else {
       labels.push({
         name,
         text: point.captionTex || point.name || name,
         options: matchCanvas ? [labelOptions, `text=${rgbColorExpr(point.style.labelColor)}`].join(", ") : labelOptions,
+        useGlow: labelGlowEnabled && matchCanvas && point.style.labelHaloWidthPx > 0,
       });
     }
   }
   labels.sort((a, b) => a.name.localeCompare(b.name));
-  for (const item of labels) draws.push({ kind: "LabelPoint", name: item.name, text: item.text, options: item.options });
+  for (const item of labels) {
+    draws.push({ kind: "LabelPoint", name: item.name, text: item.text, options: item.options, useGlow: item.useGlow });
+  }
 
   return [...defs, ...constructions, ...draws];
 }
@@ -545,10 +551,17 @@ export function renderTikz(cmds: TikzCommand[]): string {
   const drawObjects = cmds.filter((c) => c.kind === "DrawSegment" || c.kind === "DrawLine" || c.kind === "DrawCircle");
   const drawPoints = cmds.filter((c) => c.kind === "DrawPoints");
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
+  const hasGlowLabels = drawLabels.some((c) => c.kind === "LabelPoint" && Boolean(c.useGlow));
 
   const out: string[] = [];
   const scale = setupUnits?.scale ?? 1;
   out.push(`\\begin{tikzpicture}[scale=${fmt(scale)},line cap=round,line join=round,>=triangle 45]`);
+  if (hasGlowLabels) {
+    // Reusable text halo macro using contour stroke (page-color aware).
+    out.push(
+      "\\newcommand{\\gdLabelGlow}[1]{\\begingroup\\contourlength{0.42pt}\\ifcsname thepagecolor\\endcsname\\contour{\\thepagecolor}{#1}\\else\\contour{white}{#1}\\fi\\endgroup}"
+    );
+  }
   if (setupViewport) {
     assertTkzMacro("tkzInit");
     assertTkzMacro("tkzClip");
@@ -690,7 +703,10 @@ export function renderTikz(cmds: TikzCommand[]): string {
     }
     assertTkzMacro("tkzLabelPoint");
     const opts = cmd.options ? `[${cmd.options}]` : "";
-    out.push(`\\tkzLabelPoint${opts}(${cmd.name}){$${escapeTikzText(cmd.text)}$}`);
+    const labelText = cmd.useGlow
+      ? `\\gdLabelGlow{$${escapeTikzText(cmd.text)}$}`
+      : `$${escapeTikzText(cmd.text)}$`;
+    out.push(`\\tkzLabelPoint${opts}(${cmd.name}){${labelText}}`);
   }
 
   out.push("\\end{tikzpicture}");
@@ -1218,7 +1234,13 @@ function lineStyleToTikz(style: SceneModel["lines"][number]["style"], options: T
 
 function circleStyleToTikz(style: SceneModel["circles"][number]["style"], options: TikzExportOptions): string {
   const opts = lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash, style.strokeOpacity, options);
-  return opts;
+  const parts = opts.split(", ").filter(Boolean);
+  const fillOpacity = clamp01(style.fillOpacity ?? 0);
+  if (fillOpacity > 0) {
+    parts.push(`fill=${rgbColorExpr(style.fillColor ?? style.strokeColor)}`);
+    parts.push(`fill opacity=${fmt(fillOpacity)}`);
+  }
+  return parts.join(", ");
 }
 
 function lineLikeStyleToTikz(
