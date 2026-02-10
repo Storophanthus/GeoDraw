@@ -122,6 +122,7 @@ function hydrateScene(raw: Record<string, unknown>): SceneModel {
     lines: ((raw.lines as Array<Record<string, unknown>> | undefined) ?? []).map(hydrateLine),
     segments: ((raw.segments as Array<Record<string, unknown>> | undefined) ?? []).map(hydrateSegment),
     circles: ((raw.circles as Array<Record<string, unknown>> | undefined) ?? []).map(hydrateCircle),
+    angles: [],
   };
 }
 

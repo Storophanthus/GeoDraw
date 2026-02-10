@@ -9,6 +9,22 @@ This project enforces a generated tkz-euclide macro whitelist derived from TeXLi
 Do not invent macro names or option keys.
 If exporter logic needs a macro, it must exist in the generated whitelist.
 
+## Angle snippets
+
+```tex
+% Mark convex angle ABC
+\tkzMarkAngle[size=1.2](A,B,C)
+
+% Fill convex angle ABC
+\tkzFillAngle[fill=blue!30,fill opacity=0.3,size=1.2](A,B,C)
+
+% Right-angle marker at B
+\tkzMarkRightAngles[size=0.35](A,B,C)
+
+% Label by distance + absolute direction from B
+\tkzLabelAngle[dist=1.4,angle=42](A,B,C){$1.571\ \mathrm{rad}$}
+```
+
 ## User Cheat-Sheet (verbatim)
 
 ```tex

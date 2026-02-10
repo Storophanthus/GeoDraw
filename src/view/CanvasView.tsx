@@ -5,6 +5,7 @@ import { add, mul, projectPointToLine, projectPointToSegment, sub } from "../geo
 import { drawRectGrid, type RectGridSettings } from "../render/rectGrid";
 import {
   beginSceneEvalTick,
+  computeConvexAngleRad,
   endSceneEvalTick,
   type GeometryObjectRef,
   type LineLikeObjectRef,
@@ -24,6 +25,7 @@ const POINT_HIT_TOLERANCE_PX = 12;
 const SEGMENT_HIT_TOLERANCE_PX = 10;
 const LINE_HIT_TOLERANCE_PX = 10;
 const CIRCLE_HIT_TOLERANCE_PX = 10;
+const ANGLE_HIT_TOLERANCE_PX = 10;
 const CLICK_EPSILON_PX = 3;
 
 const GRID_SETTINGS: RectGridSettings = {
@@ -37,7 +39,7 @@ const GRID_SETTINGS: RectGridSettings = {
   majorWidth: 1.5,
 };
 
-type PointerMode = "idle" | "pan" | "drag-point" | "drag-label" | "tool-click";
+type PointerMode = "idle" | "pan" | "drag-point" | "drag-label" | "drag-angle-label" | "tool-click";
 
 type PointerState = {
   active: boolean;
@@ -70,6 +72,7 @@ export function CanvasView() {
   const dragLabelDeltaRef = useRef<Vec2>({ x: 0, y: 0 });
   const dragPointScreenRef = useRef<Vec2 | null>(null);
   const dragPointIdRef = useRef<string | null>(null);
+  const dragAngleLabelScreenRef = useRef<Vec2 | null>(null);
 
   const camera = useGeoStore((store) => store.camera);
   const activeTool = useGeoStore((store) => store.activeTool);
@@ -95,6 +98,7 @@ export function CanvasView() {
   const createCircle = useGeoStore((store) => store.createCircle);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
+  const createAngle = useGeoStore((store) => store.createAngle);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
   const createPointOnLine = useGeoStore((store) => store.createPointOnLine);
@@ -103,6 +107,7 @@ export function CanvasView() {
   const createIntersectionPoint = useGeoStore((store) => store.createIntersectionPoint);
   const movePointTo = useGeoStore((store) => store.movePointTo);
   const movePointLabelBy = useGeoStore((store) => store.movePointLabelBy);
+  const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
 
@@ -125,6 +130,26 @@ export function CanvasView() {
         endSceneEvalTick(scene);
       }
     },
+    [scene]
+  );
+
+  const resolvedAngles = useMemo(
+    () =>
+      scene.angles
+        .map((angle) => {
+          const aPoint = scene.points.find((p) => p.id === angle.aId);
+          const bPoint = scene.points.find((p) => p.id === angle.bId);
+          const cPoint = scene.points.find((p) => p.id === angle.cId);
+          if (!aPoint || !bPoint || !cPoint) return null;
+          const a = getPointWorldPos(aPoint, scene);
+          const b = getPointWorldPos(bPoint, scene);
+          const c = getPointWorldPos(cPoint, scene);
+          if (!a || !b || !c) return null;
+          const theta = computeConvexAngleRad(a, b, c);
+          if (theta === null) return null;
+          return { angle, a, b, c, theta };
+        })
+        .filter((item): item is { angle: SceneModel["angles"][number]; a: Vec2; b: Vec2; c: Vec2; theta: number } => Boolean(item)),
     [scene]
   );
 
@@ -211,6 +236,7 @@ export function CanvasView() {
         drawCircles(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
         drawLines(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
         drawSegments(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
+        drawAngles(ctx, resolvedAngles, camera, vp, selectedObject, recentCreatedObject);
         drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, hoverSnap, hoveredHit, scene, camera, vp);
         drawPoints(ctx, resolvedPoints, selectedObject, camera, vp, copyStyle.source);
         drawInteractionHighlights(
@@ -257,6 +283,7 @@ export function CanvasView() {
       pendingSelection,
       recentCreatedObject,
       resolvedPoints,
+      resolvedAngles,
       scene,
       selectedObject,
       vp,
@@ -279,6 +306,8 @@ export function CanvasView() {
     const computeHoveredHit = (screen: Vec2): HoveredHit => {
       const pointId = hitTestPoint(screen, resolvedPoints, camera, vp, POINT_HIT_TOLERANCE_PX);
       if (pointId) return { type: "point", id: pointId };
+      const angleId = hitTestAngle(screen, resolvedAngles, camera, vp, ANGLE_HIT_TOLERANCE_PX);
+      if (angleId) return { type: "angle", id: angleId };
       const segmentId = hitTestSegment(screen, scene, camera, vp, SEGMENT_HIT_TOLERANCE_PX);
       if (segmentId) return { type: "segment", id: segmentId };
       const lineId = hitTestLine(screen, scene, camera, vp, LINE_HIT_TOLERANCE_PX);
@@ -293,9 +322,9 @@ export function CanvasView() {
       let nextCursor = "default";
 
       if (activeTool === "move") {
-        if (mode === "pan" || mode === "drag-point" || mode === "drag-label") {
+        if (mode === "pan" || mode === "drag-point" || mode === "drag-label" || mode === "drag-angle-label") {
           nextCursor = "grabbing";
-        } else if (nextHovered?.type === "point") {
+        } else if (nextHovered?.type === "point" || nextHovered?.type === "angle") {
           nextCursor = "pointer";
         } else {
           nextCursor = "grab";
@@ -329,6 +358,14 @@ export function CanvasView() {
         }
         return;
       }
+      if (st.mode === "drag-angle-label" && st.pointId) {
+        const angleLabelScreen = dragAngleLabelScreenRef.current;
+        if (angleLabelScreen) {
+          const world = camMath.screenToWorld(angleLabelScreen, camera, vp);
+          moveAngleLabelTo(st.pointId, world);
+        }
+        return;
+      }
       if (st.mode === "drag-point" && st.pointId) {
         const screen = dragPointScreenRef.current;
         const pointId = dragPointIdRef.current;
@@ -357,6 +394,8 @@ export function CanvasView() {
       const hitLabelId =
         hitTestLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current) ??
         hitTestLabel(screen, resolvedPoints, camera, vp, pointDefaults.labelOffsetPx);
+      const hitAngleLabelId = hitTestAngleLabel(screen, resolvedAngles, camera, vp);
+      const hitAngleId = hitTestAngle(screen, resolvedAngles, camera, vp, ANGLE_HIT_TOLERANCE_PX);
       const hitSegmentId = hitTestSegment(screen, scene, camera, vp, SEGMENT_HIT_TOLERANCE_PX);
       const hitLineId = hitTestLine(screen, scene, camera, vp, LINE_HIT_TOLERANCE_PX);
       const hitCircleId = hitTestCircle(screen, scene, camera, vp, CIRCLE_HIT_TOLERANCE_PX);
@@ -369,6 +408,10 @@ export function CanvasView() {
           mode = "drag-label";
           pointId = hitLabelId;
           setSelectedObject({ type: "point", id: hitLabelId });
+        } else if (hitAngleLabelId) {
+          mode = "drag-angle-label";
+          pointId = hitAngleLabelId;
+          setSelectedObject({ type: "angle", id: hitAngleLabelId });
         } else if (hitPointId) {
           const hitPoint = scene.points.find((item) => item.id === hitPointId) ?? null;
           setSelectedObject({ type: "point", id: hitPointId });
@@ -384,6 +427,9 @@ export function CanvasView() {
           mode = "idle";
         } else if (hitCircleId) {
           setSelectedObject({ type: "circle", id: hitCircleId });
+          mode = "idle";
+        } else if (hitAngleId) {
+          setSelectedObject({ type: "angle", id: hitAngleId });
           mode = "idle";
         } else {
           mode = "pan";
@@ -447,6 +493,11 @@ export function CanvasView() {
           };
           scheduleDragUpdate();
         }
+
+        if (st.mode === "drag-angle-label" && st.pointId) {
+          dragAngleLabelScreenRef.current = screen;
+          scheduleDragUpdate();
+        }
         return;
       }
 
@@ -493,6 +544,11 @@ export function CanvasView() {
         };
         scheduleDragUpdate();
       }
+
+      if (st.mode === "drag-angle-label" && st.pointId) {
+        dragAngleLabelScreenRef.current = screen;
+        scheduleDragUpdate();
+      }
     };
 
     const finish = (e: PointerEvent) => {
@@ -506,7 +562,7 @@ export function CanvasView() {
 
       if (st.mode === "tool-click" && !st.moved) {
         const screen = readScreen(e);
-        const hitObject = hitTestTopObject(screen, resolvedPoints, scene, camera, vp);
+        const hitObject = hitTestTopObject(screen, resolvedPoints, resolvedAngles, scene, camera, vp);
         const snap =
           !e.shiftKey && activeTool !== "move" && activeTool !== "copyStyle"
             ? findBestSnap(screen, camera, vp, scene, POINT_HIT_TOLERANCE_PX)
@@ -527,6 +583,7 @@ export function CanvasView() {
           createCircle,
           createPerpendicularLine,
           createParallelLine,
+          createAngle,
           createMidpointFromPoints,
           createMidpointFromSegment,
           createPointOnLine,
@@ -556,6 +613,7 @@ export function CanvasView() {
       dragLabelDeltaRef.current = { x: 0, y: 0 };
       dragPointScreenRef.current = null;
       dragPointIdRef.current = null;
+      dragAngleLabelScreenRef.current = null;
       setSnapDisabled(e.shiftKey);
       const screen = readScreen(e);
       const hovered = computeHoveredHit(screen);
@@ -605,6 +663,7 @@ export function CanvasView() {
     createCircle,
     createPerpendicularLine,
     createParallelLine,
+    createAngle,
     clearPendingSelection,
     createMidpointFromPoints,
     createMidpointFromSegment,
@@ -615,12 +674,14 @@ export function CanvasView() {
     applyCopyStyleTo,
     createSegment,
     movePointLabelBy,
+    moveAngleLabelTo,
     movePointTo,
     panByScreenDelta,
     hoveredHit,
     pendingSelection,
     pointDefaults.labelOffsetPx,
     resolvedPoints,
+    resolvedAngles,
     scene,
     setCopyStyleSource,
     setHoveredHit,
@@ -664,7 +725,7 @@ function handleToolClick(
   hits: {
     hitPointId: string | null;
     hitSegmentId: string | null;
-    hitObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null;
+    hitObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null;
     shiftKey: boolean;
     hasCopyStyleSource: boolean;
     snap: SnapCandidate | null;
@@ -678,15 +739,16 @@ function handleToolClick(
     createCircle: (centerId: string, throughId: string) => string | null;
     createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
     createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
+    createAngle: (aId: string, bId: string, cId: string) => string | null;
     createMidpointFromPoints: (aId: string, bId: string) => string | null;
     createMidpointFromSegment: (segId: string) => string | null;
     createPointOnLine: (lineId: string, s: number) => string | null;
     createPointOnSegment: (segId: string, u: number) => string | null;
     createPointOnCircle: (circleId: string, t: number) => string | null;
     createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
-    setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle"; id: string } | null) => void;
-    setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle"; id: string }) => void;
-    applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle"; id: string }) => void;
+    setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null) => void;
+    setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
+    applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
     camera: Camera;
     vp: Viewport;
   }
@@ -790,6 +852,22 @@ function handleToolClick(
     return;
   }
 
+  if (activeTool === "angle") {
+    if (!pendingSelection || pendingSelection.tool !== "angle") {
+      io.setPendingSelection({ tool: "angle", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+    if (pendingSelection.step === 2) {
+      const bId = resolveOrCreatePointAtCursor();
+      io.setPendingSelection({ tool: "angle", step: 3, first: pendingSelection.first, second: { type: "point", id: bId } });
+      return;
+    }
+    const cId = resolveOrCreatePointAtCursor();
+    io.createAngle(pendingSelection.first.id, pendingSelection.second.id, cId);
+    io.clearPendingSelection();
+    return;
+  }
+
   if (activeTool === "midpoint") {
     if (pendingSelection && pendingSelection.tool === "midpoint") {
       const bId = resolveOrCreatePointAtCursor();
@@ -889,7 +967,8 @@ function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSelection: 
     activeTool === "segment" ||
     activeTool === "line2p" ||
     activeTool === "circle_cp" ||
-    activeTool === "midpoint"
+    activeTool === "midpoint" ||
+    activeTool === "angle"
   );
 }
 
@@ -903,6 +982,7 @@ function isValidTarget(
   if (activeTool === "segment") return hoveredHit.type === "point";
   if (activeTool === "line2p") return hoveredHit.type === "point";
   if (activeTool === "circle_cp") return hoveredHit.type === "point";
+  if (activeTool === "angle") return hoveredHit.type === "point";
   if (activeTool === "perp_line") {
     if (!pendingSelection || pendingSelection.tool !== "perp_line") {
       return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
@@ -933,12 +1013,16 @@ function isValidTarget(
 function hitTestTopObject(
   screenPoint: Vec2,
   points: Array<{ point: ScenePoint; world: Vec2 }>,
+  angles: Array<{ angle: SceneModel["angles"][number]; a: Vec2; b: Vec2; c: Vec2; theta: number }>,
   scene: SceneModel,
   camera: Camera,
   vp: Viewport
-): { type: "point" | "segment" | "line" | "circle"; id: string } | null {
+): { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null {
   const pointId = hitTestPoint(screenPoint, points, camera, vp, POINT_HIT_TOLERANCE_PX);
   if (pointId) return { type: "point", id: pointId };
+
+  const angleId = hitTestAngle(screenPoint, angles, camera, vp, ANGLE_HIT_TOLERANCE_PX);
+  if (angleId) return { type: "angle", id: angleId };
 
   const segmentId = hitTestSegment(screenPoint, scene, camera, vp, SEGMENT_HIT_TOLERANCE_PX);
   if (segmentId) return { type: "segment", id: segmentId };
@@ -1069,9 +1153,9 @@ function drawCircles(
   scene: SceneModel,
   camera: Camera,
   vp: Viewport,
-  selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
-  recentCreatedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
-  copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null,
+  recentCreatedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null,
+  copySource: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null
 ) {
   ctx.save();
   for (const circle of scene.circles) {
@@ -1248,6 +1332,42 @@ function drawPendingPreview(
     ctx.stroke();
   }
 
+  if (pendingSelection.tool === "angle" && pendingSelection.step === 3) {
+    const a = geoStoreHelpers.getPointWorldById(scene, pendingSelection.first.id);
+    const b = geoStoreHelpers.getPointWorldById(scene, pendingSelection.second.id);
+    let c: Vec2 | null = null;
+    if (hoverSnap?.kind === "point" && hoverSnap.pointId) {
+      c = geoStoreHelpers.getPointWorldById(scene, hoverSnap.pointId);
+    }
+    if (!c && hoveredHit?.type === "point") {
+      c = geoStoreHelpers.getPointWorldById(scene, hoveredHit.id);
+    }
+    if (!c) c = cursorWorld;
+    if (a && b && c) {
+      const theta = computeConvexAngleRad(a, b, c);
+      if (theta !== null) {
+        const as = camMath.worldToScreen(a, camera, vp);
+        const bs = camMath.worldToScreen(b, camera, vp);
+        const cs = camMath.worldToScreen(c, camera, vp);
+        const radiusPx = Math.max(18, Math.min(72, Math.hypot(as.x - bs.x, as.y - bs.y) * 0.28));
+        drawAngleArcPreview(ctx, as, bs, cs, radiusPx);
+        const labelVec = normalizeScreenVec({
+          x: as.x + cs.x - 2 * bs.x,
+          y: as.y + cs.y - 2 * bs.y,
+        });
+        const lx = bs.x + labelVec.x * (radiusPx + 16);
+        const ly = bs.y + labelVec.y * (radiusPx + 16);
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#0284c7";
+        ctx.font = "12px system-ui";
+        ctx.fillText(`${theta.toFixed(3)} rad`, lx, ly);
+        ctx.restore();
+      }
+    }
+  }
+
   ctx.restore();
 }
 
@@ -1263,6 +1383,34 @@ function drawInteractionHighlights(
   vp: Viewport
 ) {
   if (pendingSelection) {
+    if (pendingSelection.tool === "angle") {
+      drawHitHighlight(
+        ctx,
+        { type: "point", id: pendingSelection.first.id },
+        resolvedPoints,
+        scene,
+        camera,
+        vp,
+        "#22c55e",
+        0.95
+      );
+      if (pendingSelection.step === 3) {
+        drawHitHighlight(
+          ctx,
+          { type: "point", id: pendingSelection.second.id },
+          resolvedPoints,
+          scene,
+          camera,
+          vp,
+          "#16a34a",
+          0.9
+        );
+      }
+      if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
+        drawHitHighlight(ctx, hoveredHit, resolvedPoints, scene, camera, vp, "#0ea5e9", 0.9);
+      }
+      return;
+    }
     if (
       (pendingSelection.tool === "perp_line" || pendingSelection.tool === "parallel_line") &&
       pendingSelection.first.type === "lineLike"
@@ -1377,6 +1525,27 @@ function drawHitHighlight(
     return;
   }
 
+  if (hit.type === "angle") {
+    const angle = scene.angles.find((item) => item.id === hit.id);
+    if (!angle || !angle.visible) return;
+    const a = geoStoreHelpers.getPointWorldById(scene, angle.aId);
+    const b = geoStoreHelpers.getPointWorldById(scene, angle.bId);
+    const c = geoStoreHelpers.getPointWorldById(scene, angle.cId);
+    if (!a || !b || !c) return;
+    const as = camMath.worldToScreen(a, camera, vp);
+    const bs = camMath.worldToScreen(b, camera, vp);
+    const cs = camMath.worldToScreen(c, camera, vp);
+    const radiusPx = Math.max(16, angle.style.arcRadius * camera.zoom);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(2, angle.style.strokeWidth + 2);
+    ctx.setLineDash([]);
+    drawAngleArcPreview(ctx, as, bs, cs, radiusPx);
+    ctx.restore();
+    return;
+  }
+
   const circle = scene.circles.find((item) => item.id === hit.id);
   if (!circle || !circle.visible) return;
   const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
@@ -1401,9 +1570,9 @@ function drawLines(
   scene: SceneModel,
   camera: Camera,
   vp: Viewport,
-  selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
-  recentCreatedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
-  copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null,
+  recentCreatedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null,
+  copySource: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null
 ) {
   ctx.save();
 
@@ -1464,9 +1633,9 @@ function drawSegments(
   scene: SceneModel,
   camera: Camera,
   vp: Viewport,
-  selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
-  recentCreatedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
-  copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null,
+  recentCreatedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null,
+  copySource: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null
 ) {
   ctx.save();
 
@@ -1515,13 +1684,77 @@ function drawSegments(
   ctx.restore();
 }
 
+function drawAngles(
+  ctx: CanvasRenderingContext2D,
+  resolvedAngles: Array<{ angle: SceneModel["angles"][number]; a: Vec2; b: Vec2; c: Vec2; theta: number }>,
+  camera: Camera,
+  vp: Viewport,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null,
+  recentCreatedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null
+) {
+  for (const entry of resolvedAngles) {
+    const { angle, a, b, c, theta } = entry;
+    if (!angle.visible) continue;
+    const as = camMath.worldToScreen(a, camera, vp);
+    const bs = camMath.worldToScreen(b, camera, vp);
+    const cs = camMath.worldToScreen(c, camera, vp);
+    const radiusPx = Math.max(12, angle.style.arcRadius * camera.zoom);
+
+    ctx.save();
+    if (angle.style.fillEnabled && angle.style.fillOpacity > 0) {
+      ctx.globalAlpha = angle.style.fillOpacity;
+      ctx.fillStyle = angle.style.fillColor;
+      drawAngleSector(ctx, as, bs, cs, radiusPx);
+      ctx.fill();
+    }
+    ctx.globalAlpha = angle.style.strokeOpacity;
+    ctx.strokeStyle = angle.style.strokeColor;
+    ctx.lineWidth = angle.style.strokeWidth;
+    if (angle.style.markStyle === "right") {
+      drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.55);
+      ctx.stroke();
+    } else if (angle.style.markStyle === "arc") {
+      drawAngleArcPreview(ctx, as, bs, cs, radiusPx);
+    }
+
+    if (selectedObject?.type === "angle" && selectedObject.id === angle.id) {
+      const isNew = recentCreatedObject?.type === "angle" && recentCreatedObject.id === angle.id;
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
+      ctx.lineWidth = angle.style.strokeWidth + (isNew ? 1.5 : 1.6);
+      if (angle.style.markStyle === "right") {
+        drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.63);
+        ctx.stroke();
+      } else if (angle.style.markStyle === "arc") {
+        drawAngleArcPreview(ctx, as, bs, cs, radiusPx + 2);
+      }
+      const lScreen = camMath.worldToScreen(angle.style.labelPosWorld, camera, vp);
+      ctx.beginPath();
+      ctx.arc(lScreen.x, lScreen.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(245,158,11,0.85)";
+      ctx.fill();
+    }
+
+    const labelText = angle.style.labelText.trim().length > 0 ? angle.style.labelText : `${theta.toFixed(3)} rad`;
+    if ((angle.style.showLabel || angle.style.showValue) && labelText.length > 0) {
+      const ls = camMath.worldToScreen(angle.style.labelPosWorld, camera, vp);
+      ctx.font = `${Math.max(8, angle.style.textSize)}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = angle.style.textColor;
+      ctx.fillText(labelText, ls.x, ls.y);
+    }
+    ctx.restore();
+  }
+}
+
 function drawPoints(
   ctx: CanvasRenderingContext2D,
   resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>,
-  selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null,
   camera: Camera,
   vp: Viewport,
-  copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
+  copySource: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null
 ) {
   ctx.save();
   ctx.textAlign = "left";
@@ -1611,6 +1844,47 @@ function hitTestLabel(
     }
   }
   return null;
+}
+
+function hitTestAngleLabel(
+  screenPoint: Vec2,
+  resolvedAngles: Array<{ angle: SceneModel["angles"][number]; a: Vec2; b: Vec2; c: Vec2; theta: number }>,
+  camera: Camera,
+  vp: Viewport
+): string | null {
+  for (let i = resolvedAngles.length - 1; i >= 0; i -= 1) {
+    const entry = resolvedAngles[i];
+    if (!entry.angle.visible) continue;
+    const labelScreen = camMath.worldToScreen(entry.angle.style.labelPosWorld, camera, vp);
+    const d = Math.hypot(screenPoint.x - labelScreen.x, screenPoint.y - labelScreen.y);
+    if (d <= 10) return entry.angle.id;
+  }
+  return null;
+}
+
+function hitTestAngle(
+  screenPoint: Vec2,
+  resolvedAngles: Array<{ angle: SceneModel["angles"][number]; a: Vec2; b: Vec2; c: Vec2; theta: number }>,
+  camera: Camera,
+  vp: Viewport,
+  tolerancePx: number
+): string | null {
+  let bestId: string | null = null;
+  let best = tolerancePx;
+  for (let i = resolvedAngles.length - 1; i >= 0; i -= 1) {
+    const entry = resolvedAngles[i];
+    if (!entry.angle.visible) continue;
+    const as = camMath.worldToScreen(entry.a, camera, vp);
+    const bs = camMath.worldToScreen(entry.b, camera, vp);
+    const cs = camMath.worldToScreen(entry.c, camera, vp);
+    const r = Math.max(12, entry.angle.style.arcRadius * camera.zoom);
+    const d = distanceToAngleArc(screenPoint, as, bs, cs, r);
+    if (d <= best) {
+      best = d;
+      bestId = entry.angle.id;
+    }
+  }
+  return bestId;
 }
 
 function hitTestLabelFromDom(clientX: number, clientY: number, labelsLayer: HTMLDivElement | null): string | null {
@@ -1709,6 +1983,107 @@ function highlightSnapObject(
   ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
+}
+
+function normalizeScreenVec(v: Vec2): Vec2 {
+  const d = Math.hypot(v.x, v.y);
+  if (d <= 1e-9) return { x: 1, y: 0 };
+  return { x: v.x / d, y: v.y / d };
+}
+
+function angleSweep(aScreen: Vec2, bScreen: Vec2, cScreen: Vec2): { start: number; end: number; ccw: boolean } {
+  const start = Math.atan2(aScreen.y - bScreen.y, aScreen.x - bScreen.x);
+  const end = Math.atan2(cScreen.y - bScreen.y, cScreen.x - bScreen.x);
+  let delta = end - start;
+  while (delta <= -Math.PI) delta += Math.PI * 2;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  const ccw = delta < 0;
+  return { start, end, ccw };
+}
+
+function drawAngleArcPreview(
+  ctx: CanvasRenderingContext2D,
+  aScreen: Vec2,
+  bScreen: Vec2,
+  cScreen: Vec2,
+  radiusPx: number
+): void {
+  const sweep = angleSweep(aScreen, bScreen, cScreen);
+  ctx.beginPath();
+  ctx.arc(bScreen.x, bScreen.y, radiusPx, sweep.start, sweep.end, sweep.ccw);
+  ctx.stroke();
+}
+
+function drawAngleSector(
+  ctx: CanvasRenderingContext2D,
+  aScreen: Vec2,
+  bScreen: Vec2,
+  cScreen: Vec2,
+  radiusPx: number
+): void {
+  const sweep = angleSweep(aScreen, bScreen, cScreen);
+  ctx.beginPath();
+  ctx.moveTo(bScreen.x, bScreen.y);
+  ctx.arc(bScreen.x, bScreen.y, radiusPx, sweep.start, sweep.end, sweep.ccw);
+  ctx.closePath();
+}
+
+function drawRightAngleMark(
+  ctx: CanvasRenderingContext2D,
+  aScreen: Vec2,
+  bScreen: Vec2,
+  cScreen: Vec2,
+  sizePx: number
+): void {
+  const u = normalizeScreenVec({ x: aScreen.x - bScreen.x, y: aScreen.y - bScreen.y });
+  const v = normalizeScreenVec({ x: cScreen.x - bScreen.x, y: cScreen.y - bScreen.y });
+  const p1 = { x: bScreen.x + u.x * sizePx, y: bScreen.y + u.y * sizePx };
+  const p3 = { x: bScreen.x + v.x * sizePx, y: bScreen.y + v.y * sizePx };
+  const p2 = { x: p1.x + v.x * sizePx, y: p1.y + v.y * sizePx };
+  ctx.beginPath();
+  ctx.moveTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.lineTo(p3.x, p3.y);
+}
+
+function distanceToAngleArc(
+  p: Vec2,
+  aScreen: Vec2,
+  bScreen: Vec2,
+  cScreen: Vec2,
+  radiusPx: number
+): number {
+  const sweep = angleSweep(aScreen, bScreen, cScreen);
+  const dx = p.x - bScreen.x;
+  const dy = p.y - bScreen.y;
+  const dist = Math.hypot(dx, dy);
+  const theta = Math.atan2(dy, dx);
+  const isWithin = isAngleOnArc(theta, sweep.start, sweep.end, sweep.ccw);
+  if (!isWithin) {
+    const pStart = { x: bScreen.x + Math.cos(sweep.start) * radiusPx, y: bScreen.y + Math.sin(sweep.start) * radiusPx };
+    const pEnd = { x: bScreen.x + Math.cos(sweep.end) * radiusPx, y: bScreen.y + Math.sin(sweep.end) * radiusPx };
+    return Math.min(Math.hypot(p.x - pStart.x, p.y - pStart.y), Math.hypot(p.x - pEnd.x, p.y - pEnd.y));
+  }
+  return Math.abs(dist - radiusPx);
+}
+
+function isAngleOnArc(theta: number, start: number, end: number, ccw: boolean): boolean {
+  const norm = (a: number): number => {
+    let out = a;
+    while (out < 0) out += Math.PI * 2;
+    while (out >= Math.PI * 2) out -= Math.PI * 2;
+    return out;
+  };
+  const t = norm(theta);
+  const s = norm(start);
+  const e = norm(end);
+  if (!ccw) {
+    if (s <= e) return t >= s && t <= e;
+    return t >= s || t <= e;
+  }
+  // Counter-clockwise direction in canvas means traveling from start down to end.
+  if (e <= s) return t <= s && t >= e;
+  return t <= s || t >= e;
 }
 
 function drawPointSymbol(

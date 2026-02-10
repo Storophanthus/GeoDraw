@@ -8,6 +8,7 @@ import type {
   LineStyle,
   PointStyle,
   SceneCircle,
+  SceneAngle,
   SceneLine,
   SceneModel,
   ScenePoint,
@@ -89,12 +90,14 @@ function hydrateScene(raw: {
   lines?: Array<Record<string, unknown>>;
   segments?: Array<Record<string, unknown>>;
   circles?: Array<Record<string, unknown>>;
+  angles?: Array<Record<string, unknown>>;
 }): SceneModel {
   const points = (raw.points ?? []).map(hydratePoint);
   const lines = (raw.lines ?? []).map(hydrateLine);
   const segments = (raw.segments ?? []).map(hydrateSegment);
   const circles = (raw.circles ?? []).map(hydrateCircle);
-  return { points, lines, segments, circles };
+  const angles = (raw.angles ?? []).map(hydrateAngle);
+  return { points, lines, segments, circles, angles };
 }
 
 function hydratePoint(raw: Record<string, unknown>): ScenePoint {
@@ -203,6 +206,33 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
   };
 }
 
+function hydrateAngle(raw: Record<string, unknown>): SceneAngle {
+  const style = (raw.style as SceneAngle["style"] | undefined) ?? {
+    strokeColor: "#334155",
+    strokeWidth: 1.8,
+    strokeOpacity: 1,
+    textColor: "#0f172a",
+    textSize: 16,
+    fillEnabled: false,
+    fillColor: "#93c5fd",
+    fillOpacity: 0.2,
+    markStyle: "arc",
+    arcRadius: 1.2,
+    labelText: "",
+    labelPosWorld: { x: 0, y: 0 },
+    showLabel: true,
+    showValue: true,
+  };
+  return {
+    id: String(raw.id),
+    aId: String(raw.aId),
+    bId: String(raw.bId),
+    cId: String(raw.cId),
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    style,
+  };
+}
+
 function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene: SceneModel, exportError: Error | null): void {
   if (fileName === "perpendicular-line-through-point.json") {
     if (exportError) {
@@ -277,6 +307,24 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   if (fileName === "regression-lines-whitespace.json") {
     if (!tikz.includes("\\tkzClip[")) {
       throw new Error("Regression: expected tkz clip in whitespace fixture.");
+    }
+  }
+
+  if (fileName === "angle-basic-radian-labelpos.json") {
+    if (!tikz.includes("\\tkzMarkAngle")) {
+      throw new Error("Expected angle fixture to emit \\tkzMarkAngle.");
+    }
+    if (!tikz.includes("\\tkzLabelAngle")) {
+      throw new Error("Expected angle fixture to emit \\tkzLabelAngle.");
+    }
+    if (!/\\tkzLabelAngle\[[^\]]*(pos|dist)=/.test(tikz)) {
+      throw new Error("Expected angle label export to include pos/dist options derived from labelPosWorld.");
+    }
+  }
+
+  if (fileName === "angle-right-mark.json") {
+    if (!tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected right-angle fixture to emit \\tkzMarkRightAngles.");
     }
   }
 }

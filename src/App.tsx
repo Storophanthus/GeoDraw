@@ -45,7 +45,7 @@ type ToolDef = {
   ariaLabel: string;
 };
 
-type ToolGroupId = "move" | "points" | "lines" | "circles" | "styles";
+type ToolGroupId = "move" | "points" | "lines" | "angle" | "circles" | "styles";
 
 type ResizeState = {
   side: "left" | "right" | null;
@@ -65,6 +65,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   line2p: { icon: Slash, tooltip: "Line Through 2 Points (L)", ariaLabel: "Line tool" },
   perp_line: { icon: PerpendicularIcon, tooltip: "Perpendicular Line", ariaLabel: "Perpendicular line tool" },
   parallel_line: { icon: ParallelIcon, tooltip: "Parallel Line", ariaLabel: "Parallel line tool" },
+  angle: { icon: AngleIcon, tooltip: "Angle (rad)", ariaLabel: "Angle tool" },
   circle_cp: { icon: Circle, tooltip: "Circle Center + Point (O)", ariaLabel: "Circle center-through-point tool" },
 };
 
@@ -72,6 +73,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "move", label: "MOVE", tools: ["move"] },
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line"] },
+  { id: "angle", label: "ANGLE", tools: ["angle"] },
   { id: "circles", label: "CIRCLES", tools: ["circle_cp"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
 ];
@@ -119,9 +121,11 @@ export default function App() {
   const updateSelectedSegmentStyle = useGeoStore((store) => store.updateSelectedSegmentStyle);
   const updateSelectedLineStyle = useGeoStore((store) => store.updateSelectedLineStyle);
   const updateSelectedCircleStyle = useGeoStore((store) => store.updateSelectedCircleStyle);
+  const updateSelectedAngleStyle = useGeoStore((store) => store.updateSelectedAngleStyle);
   const updateSelectedSegmentFields = useGeoStore((store) => store.updateSelectedSegmentFields);
   const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
   const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
+  const updateSelectedAngleFields = useGeoStore((store) => store.updateSelectedAngleFields);
 
   const selectedPointId = selectedObject?.type === "point" ? selectedObject.id : null;
   const selectedPoint = useMemo(
@@ -140,6 +144,10 @@ export default function App() {
     () => (selectedObject?.type === "circle" ? scene.circles.find((item) => item.id === selectedObject.id) ?? null : null),
     [scene.circles, selectedObject]
   );
+  const selectedAngle = useMemo(
+    () => (selectedObject?.type === "angle" ? scene.angles.find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.angles, selectedObject]
+  );
   const selectedPointWorld = useMemo(() => {
     if (!selectedPoint) return null;
     return getPointWorldPos(selectedPoint, scene);
@@ -156,6 +164,7 @@ export default function App() {
   const lineById = useMemo(() => new Map(scene.lines.map((l) => [l.id, l])), [scene.lines]);
   const segmentById = useMemo(() => new Map(scene.segments.map((s) => [s.id, s])), [scene.segments]);
   const circleById = useMemo(() => new Map(scene.circles.map((c) => [c.id, c])), [scene.circles]);
+  const angleById = useMemo(() => new Map(scene.angles.map((a) => [a.id, a])), [scene.angles]);
   const selectedConstructionText = useMemo(
     () =>
       describeSelectedConstruction(
@@ -164,9 +173,10 @@ export default function App() {
         pointNameById,
         lineById,
         segmentById,
-        circleById
+        circleById,
+        angleById
       ),
-    [circleById, lineById, pointNameById, scene, segmentById, selectedObject]
+    [angleById, circleById, lineById, pointNameById, scene, segmentById, selectedObject]
   );
 
   const [nameInput, setNameInput] = useState("");
@@ -197,6 +207,7 @@ export default function App() {
     move: "move",
     points: "point",
     lines: "segment",
+    angle: "angle",
     circles: "circle_cp",
     styles: "copyStyle",
   });
@@ -530,7 +541,8 @@ export default function App() {
                 {scene.points.length === 0 &&
                   scene.segments.length === 0 &&
                   scene.lines.length === 0 &&
-                  scene.circles.length === 0 && (
+                  scene.circles.length === 0 &&
+                  scene.angles.length === 0 && (
                   <div className="emptyState">No objects</div>
                 )}
                 {scene.points.map((point) => (
@@ -583,6 +595,19 @@ export default function App() {
                     onClick={() => setSelectedObject({ type: "circle", id: circle.id })}
                   >
                     Circle {circle.id}
+                  </button>
+                ))}
+                {scene.angles.map((angle) => (
+                  <button
+                    key={angle.id}
+                    className={
+                      selectedObject?.type === "angle" && selectedObject.id === angle.id
+                        ? "objectItem active"
+                        : "objectItem"
+                    }
+                    onClick={() => setSelectedObject({ type: "angle", id: angle.id })}
+                  >
+                    Angle {angle.id}
                   </button>
                 ))}
               </div>
@@ -705,10 +730,10 @@ export default function App() {
                     : "Copy Style: click an object to pick source (Shift-click anytime to change source)"}
                 </div>
               )}
-              {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && (
+              {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedAngle && (
                 <div className="emptyState">Select a point to edit point properties</div>
               )}
-              {!selectedPoint && selectedSegment && (
+              {!selectedPoint && !selectedAngle && selectedSegment && (
                 <div className="cosmeticsBlock">
                   <div className="subSectionTitle">Segment Style</div>
                   <label className="checkboxRow">
@@ -766,7 +791,7 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {!selectedPoint && selectedLine && (
+              {!selectedPoint && !selectedAngle && selectedLine && (
                 <div className="cosmeticsBlock">
                   <div className="subSectionTitle">Line Style</div>
                   <label className="checkboxRow">
@@ -824,7 +849,7 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {!selectedPoint && selectedCircle && (
+              {!selectedPoint && !selectedAngle && selectedCircle && (
                 <div className="cosmeticsBlock">
                   <div className="subSectionTitle">Circle Style</div>
                   <label className="checkboxRow">
@@ -1098,6 +1123,142 @@ export default function App() {
                 </>
               )}
 
+              {!selectedPoint && selectedAngle && (
+                <div className="cosmeticsBlock">
+                  <div className="subSectionTitle">Angle Style</div>
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={selectedAngle.visible}
+                      onChange={(e) => updateSelectedAngleFields({ visible: e.target.checked })}
+                    />
+                    Show Object
+                  </label>
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={selectedAngle.style.showLabel}
+                      onChange={(e) => updateSelectedAngleStyle({ showLabel: e.target.checked })}
+                    />
+                    Show Label
+                  </label>
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={selectedAngle.style.showValue}
+                      onChange={(e) => updateSelectedAngleStyle({ showValue: e.target.checked })}
+                    />
+                    Show Value (rad)
+                  </label>
+                  <div className="controlRow">
+                    <label className="controlLabel">Label Text</label>
+                    <input
+                      className="renameInput"
+                      value={selectedAngle.style.labelText}
+                      onChange={(e) => updateSelectedAngleStyle({ labelText: e.target.value })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Mark</label>
+                    <select
+                      className="selectInput"
+                      value={selectedAngle.style.markStyle}
+                      onChange={(e) => updateSelectedAngleStyle({ markStyle: e.target.value as "arc" | "right" | "none" })}
+                    >
+                      <option value="arc">Arc</option>
+                      <option value="right">Right</option>
+                      <option value="none">None</option>
+                    </select>
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Arc Radius</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0.2}
+                      max={4}
+                      step={0.05}
+                      value={selectedAngle.style.arcRadius}
+                      onChange={(e) => updateSelectedAngleStyle({ arcRadius: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Stroke Color</label>
+                    <input
+                      className="colorInput"
+                      type="color"
+                      value={selectedAngle.style.strokeColor}
+                      onChange={(e) => updateSelectedAngleStyle({ strokeColor: e.target.value })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Stroke Width</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0.5}
+                      max={6}
+                      step={0.1}
+                      value={selectedAngle.style.strokeWidth}
+                      onChange={(e) => updateSelectedAngleStyle({ strokeWidth: Number(e.target.value) })}
+                    />
+                  </div>
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={selectedAngle.style.fillEnabled}
+                      onChange={(e) => updateSelectedAngleStyle({ fillEnabled: e.target.checked })}
+                    />
+                    Fill Angle
+                  </label>
+                  <div className="controlRow">
+                    <label className="controlLabel">Fill Color</label>
+                    <input
+                      className="colorInput"
+                      type="color"
+                      value={selectedAngle.style.fillColor}
+                      onChange={(e) => updateSelectedAngleStyle({ fillColor: e.target.value })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Fill Opacity</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={selectedAngle.style.fillOpacity}
+                      onChange={(e) => updateSelectedAngleStyle({ fillOpacity: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Text Color</label>
+                    <input
+                      className="colorInput"
+                      type="color"
+                      value={selectedAngle.style.textColor}
+                      onChange={(e) => updateSelectedAngleStyle({ textColor: e.target.value })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Text Size</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={8}
+                      max={42}
+                      step={1}
+                      value={selectedAngle.style.textSize}
+                      onChange={(e) => updateSelectedAngleStyle({ textSize: Number(e.target.value) })}
+                    />
+                  </div>
+                  <button className="deleteButton" onClick={deleteSelectedObject}>
+                    Delete
+                  </button>
+                </div>
+              )}
+
               <div className="cosmeticsBlock">
                 <label className="checkboxRow">
                   <input
@@ -1124,12 +1285,13 @@ export default function App() {
 }
 
 function describeSelectedConstruction(
-  selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null,
   scene: SceneModel,
   pointNameById: Map<string, string>,
   lineById: Map<string, SceneModel["lines"][number]>,
   segmentById: Map<string, SceneModel["segments"][number]>,
-  circleById: Map<string, SceneModel["circles"][number]>
+  circleById: Map<string, SceneModel["circles"][number]>,
+  angleById: Map<string, SceneModel["angles"][number]>
 ): string | null {
   if (!selectedObject) return null;
   if (selectedObject.type === "line") {
@@ -1164,6 +1326,14 @@ function describeSelectedConstruction(
     const circle = circleById.get(selectedObject.id);
     if (!circle) return `Circle ${selectedObject.id}`;
     return `Circle with center ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(circle.throughId, pointNameById)}.`;
+  }
+  if (selectedObject.type === "angle") {
+    const angle = angleById.get(selectedObject.id);
+    if (!angle) return `Angle ${selectedObject.id}`;
+    return `Angle ${pointLabel(angle.aId, pointNameById)}${pointLabel(angle.bId, pointNameById)}${pointLabel(
+      angle.cId,
+      pointNameById
+    )} (radians).`;
   }
 
   const point = scene.points.find((item) => item.id === selectedObject.id);
@@ -1498,6 +1668,17 @@ function ParallelIcon({ size = 18, strokeWidth = 2 }: IconProps) {
     <svg viewBox="0 0 24 24" width={w} height={h} aria-hidden fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
       <path d="M4 8l14-4" strokeLinecap="round" />
       <path d="M6 16l14-4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function AngleIcon({ size = 18, strokeWidth = 2 }: IconProps) {
+  const w = size;
+  const h = size;
+  return (
+    <svg viewBox="0 0 24 24" width={w} height={h} aria-hidden fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
+      <path d="M4 18L12 6L20 18" strokeLinecap="round" />
+      <path d="M8.5 15.5a4.5 4.5 0 0 1 7 0" strokeLinecap="round" />
     </svg>
   );
 }

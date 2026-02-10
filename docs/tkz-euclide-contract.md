@@ -95,3 +95,19 @@ Notes:
 - `\tkzDefLine` returns a point on the constructed perpendicular via `\tkzGetPoint`.
 - The base must be represented by two points `(A,B)` from a line or segment.
 - Exporter must not invent option keys; only `perpendicular=through <Point>` is allowed.
+
+## Angle
+
+GeoDraw `Angle(A,B,C)` maps to tkz-euclide angle macros with vertex at `B`:
+
+```tex
+\tkzMarkAngle[<tikz opts>,size=<r>](A,B,C)
+\tkzFillAngle[fill=<color>,fill opacity=<o>,size=<r>](A,B,C)
+\tkzMarkRightAngles[<tikz opts>,size=<r>](A,B,C)
+\tkzLabelAngle[dist=<d>,angle=<deg>,<tikz text opts>](A,B,C){<label>}
+```
+
+Notes:
+- `\tkzMarkRightAngles` (plural) is the public macro in tkz-euclide 5.x.
+- Label placement uses `dist` + `angle`, derived from `labelPosWorld` relative to vertex `B`.
+- Exporter is fail-closed: if any required macro is missing from whitelist, export throws.

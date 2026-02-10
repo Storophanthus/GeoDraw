@@ -1,5 +1,6 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
 import {
+  computeConvexAngleRad,
   getLineWorldAnchors,
   getPointWorldPos,
   type GeometryObjectRef,
@@ -59,6 +60,10 @@ export type TikzCommand =
   | { kind: "DrawSegment"; a: string; b: string; style?: string }
   | { kind: "DrawLine"; a: string; b: string; addLeft: number; addRight: number; style?: string }
   | { kind: "DrawCircle"; o: string; x: string; style?: string }
+  | { kind: "FillAngle"; a: string; b: string; c: string; style?: string }
+  | { kind: "MarkAngle"; a: string; b: string; c: string; style?: string }
+  | { kind: "MarkRightAngle"; a: string; b: string; c: string; style?: string }
+  | { kind: "LabelAngle"; a: string; b: string; c: string; text: string; style?: string }
   | { kind: "DrawPoints"; style: string; points: string[] }
   | { kind: "LabelPoints"; points: string[] }
   | { kind: "LabelPoint"; name: string; text: string; options?: string; useGlow?: boolean };
@@ -502,6 +507,43 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       style: circleStyleToTikz(circle.style, options),
     });
   }
+  for (const angle of scene.angles) {
+    if (!angle.visible) continue;
+    resolvePoint(angle.aId);
+    resolvePoint(angle.bId);
+    resolvePoint(angle.cId);
+    const aWorld = getPointWorldPosCached(scene, angle.aId);
+    const bWorld = getPointWorldPosCached(scene, angle.bId);
+    const cWorld = getPointWorldPosCached(scene, angle.cId);
+    if (!aWorld || !bWorld || !cWorld) {
+      throw new Error(`Cannot export undefined angle geometry: ${angle.id}`);
+    }
+    const theta = computeConvexAngleRad(aWorld, bWorld, cWorld);
+    if (theta === null) {
+      throw new Error(`Cannot export undefined angle geometry: ${angle.id}`);
+    }
+    const aName = mustName(pointName, angle.aId);
+    const bName = mustName(pointName, angle.bId);
+    const cName = mustName(pointName, angle.cId);
+    if (angle.style.fillEnabled) {
+      const fillStyle = angleFillStyleToTikz(angle.style);
+      draws.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
+    }
+    if (angle.style.markStyle === "arc") {
+      const markStyle = angleMarkStyleToTikz(angle.style);
+      draws.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
+    } else if (angle.style.markStyle === "right") {
+      const markStyle = angleMarkStyleToTikz(angle.style);
+      draws.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: markStyle });
+    }
+    if (angle.style.showLabel || angle.style.showValue) {
+      const labelText = angle.style.labelText.trim().length > 0 ? angle.style.labelText : `${theta.toFixed(3)} rad`;
+      if (labelText.length > 0) {
+        const labelStyle = angleLabelStyleToTikz(angle.style, bWorld);
+        draws.push({ kind: "LabelAngle", a: aName, b: bName, c: cName, text: labelText, style: labelStyle });
+      }
+    }
+  }
 
   const pointStyleGroups = buildPointStyleGroups(scene.points, pointName, options);
   for (const group of pointStyleGroups) {
@@ -559,11 +601,24 @@ export function renderTikz(cmds: TikzCommand[]): string {
       c.kind !== "DrawSegment" &&
       c.kind !== "DrawLine" &&
       c.kind !== "DrawCircle" &&
+      c.kind !== "FillAngle" &&
+      c.kind !== "MarkAngle" &&
+      c.kind !== "MarkRightAngle" &&
+      c.kind !== "LabelAngle" &&
       c.kind !== "DrawPoints" &&
       c.kind !== "LabelPoints" &&
       c.kind !== "LabelPoint"
   );
-  const drawObjects = cmds.filter((c) => c.kind === "DrawSegment" || c.kind === "DrawLine" || c.kind === "DrawCircle");
+  const drawObjects = cmds.filter(
+    (c) =>
+      c.kind === "DrawSegment" ||
+      c.kind === "DrawLine" ||
+      c.kind === "DrawCircle" ||
+      c.kind === "FillAngle" ||
+      c.kind === "MarkAngle" ||
+      c.kind === "MarkRightAngle" ||
+      c.kind === "LabelAngle"
+  );
   const drawPoints = cmds.filter((c) => c.kind === "DrawPoints");
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
   const hasGlowLabels = drawLabels.some((c) => c.kind === "LabelPoint" && Boolean(c.useGlow));
@@ -704,6 +759,22 @@ export function renderTikz(cmds: TikzCommand[]): string {
       assertTkzMacro("tkzDrawCircle");
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzDrawCircle${opts}(${cmd.o},${cmd.x})`);
+    } else if (cmd.kind === "FillAngle") {
+      assertAngleMacro("tkzFillAngle", "Angle.fill");
+      const opts = cmd.style ? `[${cmd.style}]` : "";
+      out.push(`\\tkzFillAngle${opts}(${cmd.a},${cmd.b},${cmd.c})`);
+    } else if (cmd.kind === "MarkAngle") {
+      assertAngleMacro("tkzMarkAngle", "Angle.mark");
+      const opts = cmd.style ? `[${cmd.style}]` : "";
+      out.push(`\\tkzMarkAngle${opts}(${cmd.a},${cmd.b},${cmd.c})`);
+    } else if (cmd.kind === "MarkRightAngle") {
+      assertAngleMacro("tkzMarkRightAngles", "Angle.markRight");
+      const opts = cmd.style ? `[${cmd.style}]` : "";
+      out.push(`\\tkzMarkRightAngles${opts}(${cmd.a},${cmd.b},${cmd.c})`);
+    } else if (cmd.kind === "LabelAngle") {
+      assertAngleMacro("tkzLabelAngle", "Angle.label");
+      const opts = cmd.style ? `[${cmd.style}]` : "";
+      out.push(`\\tkzLabelAngle${opts}(${cmd.a},${cmd.b},${cmd.c}){$${escapeTikzText(cmd.text)}$}`);
     }
   }
 
@@ -950,6 +1021,17 @@ function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number;
     if (!Number.isFinite(r)) continue;
     add(center.x - r, center.y - r);
     add(center.x + r, center.y + r);
+  }
+
+  for (const angle of scene.angles) {
+    if (!angle.visible) continue;
+    const vertex = getPointWorldPosCached(scene, angle.bId);
+    if (!vertex) continue;
+    add(vertex.x, vertex.y);
+    const r = Math.max(0, angle.style.arcRadius);
+    add(vertex.x - r, vertex.y - r);
+    add(vertex.x + r, vertex.y + r);
+    add(angle.style.labelPosWorld.x, angle.style.labelPosWorld.y);
   }
 
   if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
@@ -1264,6 +1346,52 @@ function circleStyleToTikz(style: SceneModel["circles"][number]["style"], option
   return parts.join(", ");
 }
 
+function angleMarkStyleToTikz(style: SceneModel["angles"][number]["style"]): string {
+  if (!Number.isFinite(style.arcRadius) || style.arcRadius <= 0) {
+    throw new Error("Unsupported Angle style: arcRadius must be > 0.");
+  }
+  const opacity = clamp01(style.strokeOpacity);
+  const opts: string[] = [
+    `color=${rgbColorExpr(style.strokeColor)}`,
+    `line width=${fmt(Math.max(0.1, style.strokeWidth))}pt`,
+    `size=${fmt(style.arcRadius)}`,
+  ];
+  if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
+  return opts.join(", ");
+}
+
+function angleFillStyleToTikz(style: SceneModel["angles"][number]["style"]): string {
+  if (!Number.isFinite(style.fillOpacity)) {
+    throw new Error("Unsupported Angle style: fillOpacity is not finite.");
+  }
+  if (!Number.isFinite(style.arcRadius) || style.arcRadius <= 0) {
+    throw new Error("Unsupported Angle style: arcRadius must be > 0.");
+  }
+  const opts: string[] = [
+    `fill=${rgbColorExpr(style.fillColor)}`,
+    `fill opacity=${fmt(clamp01(style.fillOpacity))}`,
+    `size=${fmt(style.arcRadius)}`,
+  ];
+  return opts.join(", ");
+}
+
+function angleLabelStyleToTikz(style: SceneModel["angles"][number]["style"], vertexWorld: { x: number; y: number }): string {
+  const dx = style.labelPosWorld.x - vertexWorld.x;
+  const dy = style.labelPosWorld.y - vertexWorld.y;
+  const dist = Math.hypot(dx, dy);
+  if (!Number.isFinite(dist) || dist <= 1e-9) {
+    throw new Error("Unsupported Angle style: labelPosWorld is invalid.");
+  }
+  const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const fontPt = Math.max(6, Math.min(72, style.textSize));
+  return [
+    `dist=${fmt(dist)}`,
+    `angle=${fmt(angleDeg)}`,
+    `text=${rgbColorExpr(style.textColor)}`,
+    `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(fontPt * 1.2)}pt}\\selectfont`,
+  ].join(", ");
+}
+
 function lineLikeStyleToTikz(
   strokeColor: string,
   strokeWidth: number,
@@ -1510,4 +1638,9 @@ function assertPerpendicularMacro(name: string): void {
 function assertParallelMacro(name: string): void {
   if (TKZ_MACRO_SET.has(name)) return;
   throw new Error(`Unsupported construction: ParallelLine (missing tkz macro: ${name})`);
+}
+
+function assertAngleMacro(name: string, context: string): void {
+  if (TKZ_MACRO_SET.has(name)) return;
+  throw new Error(`Unsupported construction: ${context} (missing tkz macro: ${name})`);
 }

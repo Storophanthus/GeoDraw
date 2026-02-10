@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
 import type { Vec2 } from "../geo/vec2";
 import {
+  type AngleStyle,
+  computeConvexAngleRad,
   type CircleStyle,
   type LineLikeObjectRef,
   getLineWorldAnchors,
@@ -34,13 +36,15 @@ export type ActiveTool =
   | "line2p"
   | "circle_cp"
   | "perp_line"
-  | "parallel_line";
+  | "parallel_line"
+  | "angle";
 
 export type SelectedObject =
   | { type: "point"; id: string }
   | { type: "segment"; id: string }
   | { type: "line"; id: string }
   | { type: "circle"; id: string }
+  | { type: "angle"; id: string }
   | null;
 
 export type HoveredHit =
@@ -48,6 +52,7 @@ export type HoveredHit =
   | { type: "segment"; id: string }
   | { type: "line2p"; id: string }
   | { type: "circle"; id: string }
+  | { type: "angle"; id: string }
   | null;
 
 export type PendingSelection =
@@ -62,6 +67,17 @@ export type PendingSelection =
       tool: "segment" | "line2p" | "circle_cp" | "midpoint";
       step: 2;
       first: { type: "point"; id: string };
+    }
+  | {
+      tool: "angle";
+      step: 2;
+      first: { type: "point"; id: string };
+    }
+  | {
+      tool: "angle";
+      step: 3;
+      first: { type: "point"; id: string };
+      second: { type: "point"; id: string };
     }
   | null;
 
@@ -78,10 +94,12 @@ type GeoState = {
   nextSegmentId: number;
   nextLineId: number;
   nextCircleId: number;
+  nextAngleId: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
+  angleDefaults: AngleStyle;
   copyStyle: {
     source: SelectedObject;
     pointStyle: PointStyle | null;
@@ -112,6 +130,7 @@ type GeoActions = {
   createLine: (aId: string, bId: string) => string | null;
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
+  createAngle: (aId: string, bId: string, cId: string) => string | null;
   createCircle: (centerId: string, throughId: string) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
@@ -120,6 +139,7 @@ type GeoActions = {
 
   movePointTo: (id: string, world: Vec2) => void;
   movePointLabelBy: (id: string, deltaPx: Vec2) => void;
+  moveAngleLabelTo: (id: string, world: Vec2) => void;
 
   setPointDefaults: (next: Partial<PointStyle>) => void;
   updateSelectedPointStyle: (next: Partial<PointStyle>) => void;
@@ -129,9 +149,11 @@ type GeoActions = {
   updateSelectedSegmentStyle: (next: Partial<LineStyle>) => void;
   updateSelectedLineStyle: (next: Partial<LineStyle>) => void;
   updateSelectedCircleStyle: (next: Partial<CircleStyle>) => void;
+  updateSelectedAngleStyle: (next: Partial<AngleStyle>) => void;
   updateSelectedSegmentFields: (next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel">>) => void;
   updateSelectedLineFields: (next: Partial<Pick<SceneModel["lines"][number], "visible">>) => void;
   updateSelectedCircleFields: (next: Partial<Pick<SceneModel["circles"][number], "visible">>) => void;
+  updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;
 
   renameSelectedPoint: (nextNameRaw: string) => RenameResult;
   deleteSelectedObject: () => void;
@@ -181,6 +203,23 @@ const defaultCircleStyle: CircleStyle = {
   fillOpacity: 0,
 };
 
+const defaultAngleStyle: AngleStyle = {
+  strokeColor: "#334155",
+  strokeWidth: 1.8,
+  strokeOpacity: 1,
+  textColor: "#0f172a",
+  textSize: 16,
+  fillEnabled: false,
+  fillColor: "#93c5fd",
+  fillOpacity: 0.2,
+  markStyle: "arc",
+  arcRadius: 1.2,
+  labelText: "",
+  labelPosWorld: { x: 0, y: 0 },
+  showLabel: true,
+  showValue: true,
+};
+
 const initialState: GeoState = {
   camera: { pos: { x: 0, y: 0 }, zoom: 80 },
   activeTool: "move",
@@ -189,6 +228,7 @@ const initialState: GeoState = {
     segments: [],
     lines: [],
     circles: [],
+    angles: [],
   },
   selectedObject: null,
   recentCreatedObject: null,
@@ -199,10 +239,12 @@ const initialState: GeoState = {
   nextSegmentId: 1,
   nextLineId: 1,
   nextCircleId: 1,
+  nextAngleId: 1,
   pointDefaults: defaultPointStyle,
   segmentDefaults: defaultSegStyle,
   lineDefaults: defaultLineStyle,
   circleDefaults: defaultCircleStyle,
+  angleDefaults: defaultAngleStyle,
   copyStyle: {
     source: null,
     pointStyle: null,
@@ -227,10 +269,12 @@ type HistorySnapshot = {
   nextSegmentId: number;
   nextLineId: number;
   nextCircleId: number;
+  nextAngleId: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
+  angleDefaults: AngleStyle;
   copyStyle: GeoState["copyStyle"];
 };
 
@@ -643,6 +687,59 @@ const actions: GeoActions = {
     return id;
   },
 
+  createAngle(aId, bId, cId) {
+    if (aId === bId || bId === cId || aId === cId) return null;
+    let id: string | null = null;
+    setState((prev) => {
+      const pa = prev.scene.points.find((p) => p.id === aId);
+      const pb = prev.scene.points.find((p) => p.id === bId);
+      const pc = prev.scene.points.find((p) => p.id === cId);
+      if (!pa || !pb || !pc) return prev;
+      const wa = getPointWorldPos(pa, prev.scene);
+      const wb = getPointWorldPos(pb, prev.scene);
+      const wc = getPointWorldPos(pc, prev.scene);
+      if (!wa || !wb || !wc) return prev;
+      const theta = computeConvexAngleRad(wa, wb, wc);
+      if (theta === null) return prev;
+
+      const v1 = { x: wa.x - wb.x, y: wa.y - wb.y };
+      const v2 = { x: wc.x - wb.x, y: wc.y - wb.y };
+      const n1 = normalizeVec(v1);
+      const n2 = normalizeVec(v2);
+      const bis = normalizeVec({ x: n1.x + n2.x, y: n1.y + n2.y });
+      const fallback = normalizeVec({ x: n1.y, y: -n1.x });
+      const dir = Math.hypot(bis.x, bis.y) > 1e-9 ? bis : fallback;
+      const labelDist = Math.max(0.45, prev.angleDefaults.arcRadius * 1.25);
+      const labelPosWorld = { x: wb.x + dir.x * labelDist, y: wb.y + dir.y * labelDist };
+
+      id = `a_${prev.nextAngleId}`;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          angles: [
+            ...prev.scene.angles,
+            {
+              id,
+              aId,
+              bId,
+              cId,
+              visible: true,
+              style: {
+                ...prev.angleDefaults,
+                labelPosWorld,
+              },
+            },
+          ],
+        },
+        selectedObject: { type: "angle", id },
+        recentCreatedObject: { type: "angle", id },
+        nextAngleId: prev.nextAngleId + 1,
+      };
+    });
+    return id;
+  },
+
   createCircle(centerId, throughId) {
     if (centerId === throughId) return null;
     let id: string | null = null;
@@ -942,6 +1039,29 @@ const actions: GeoActions = {
     }), { history: "coalesce", actionKey: `movePointLabelBy:${id}` });
   },
 
+  moveAngleLabelTo(id, world) {
+    setState(
+      (prev) => ({
+        ...prev,
+        scene: {
+          ...prev.scene,
+          angles: prev.scene.angles.map((angle) =>
+            angle.id === id
+              ? {
+                  ...angle,
+                  style: {
+                    ...angle.style,
+                    labelPosWorld: { x: world.x, y: world.y },
+                  },
+                }
+              : angle
+          ),
+        },
+      }),
+      { history: "coalesce", actionKey: `moveAngleLabelTo:${id}` }
+    );
+  },
+
   setPointDefaults(next) {
     setState((prev) => ({
       ...prev,
@@ -1040,6 +1160,21 @@ const actions: GeoActions = {
     });
   },
 
+  updateSelectedAngleStyle(next) {
+    setState((prev) => {
+      if (!prev.selectedObject || prev.selectedObject.type !== "angle") return prev;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          angles: prev.scene.angles.map((angle) =>
+            angle.id === prev.selectedObject!.id ? { ...angle, style: { ...angle.style, ...next } } : angle
+          ),
+        },
+      };
+    });
+  },
+
   updateSelectedSegmentFields(next) {
     setState((prev) => {
       if (!prev.selectedObject || prev.selectedObject.type !== "segment") return prev;
@@ -1079,6 +1214,21 @@ const actions: GeoActions = {
           ...prev.scene,
           circles: prev.scene.circles.map((circle) =>
             circle.id === prev.selectedObject!.id ? { ...circle, ...next } : circle
+          ),
+        },
+      };
+    });
+  },
+
+  updateSelectedAngleFields(next) {
+    setState((prev) => {
+      if (!prev.selectedObject || prev.selectedObject.type !== "angle") return prev;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          angles: prev.scene.angles.map((angle) =>
+            angle.id === prev.selectedObject!.id ? { ...angle, ...next } : angle
           ),
         },
       };
@@ -1194,6 +1344,9 @@ const actions: GeoActions = {
           }
           return true;
         });
+        const nextAngles = prev.scene.angles.filter(
+          (angle) => angle.aId !== deletedPointId && angle.bId !== deletedPointId && angle.cId !== deletedPointId
+        );
 
         return {
           ...prev,
@@ -1203,10 +1356,11 @@ const actions: GeoActions = {
             segments: keptSegments,
             lines: keptLines,
             circles: keptCircles,
+            angles: nextAngles,
           },
           selectedObject: null,
           recentCreatedObject: null,
-          copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, keptSegments, keptLines, keptCircles)
+          copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, keptSegments, keptLines, keptCircles, nextAngles)
             ? prev.copyStyle
             : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
         };
@@ -1239,7 +1393,14 @@ const actions: GeoActions = {
           },
           selectedObject: null,
           recentCreatedObject: null,
-          copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, keptSegments, keptLines, prev.scene.circles)
+          copyStyle: isCopyStyleSourceAlive(
+            prev.copyStyle.source,
+            nextPoints,
+            keptSegments,
+            keptLines,
+            prev.scene.circles,
+            prev.scene.angles
+          )
             ? prev.copyStyle
             : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
         };
@@ -1265,9 +1426,33 @@ const actions: GeoActions = {
           },
           selectedObject: null,
           recentCreatedObject: null,
-          copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, prev.scene.segments, prev.scene.lines, nextCircles)
+          copyStyle: isCopyStyleSourceAlive(
+            prev.copyStyle.source,
+            nextPoints,
+            prev.scene.segments,
+            prev.scene.lines,
+            nextCircles,
+            prev.scene.angles
+          )
             ? prev.copyStyle
             : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
+        };
+      }
+
+      if (prev.selectedObject.type === "angle") {
+        const keptAngles = prev.scene.angles.filter((angle) => angle.id !== prev.selectedObject!.id);
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            angles: keptAngles,
+          },
+          selectedObject: null,
+          recentCreatedObject: null,
+          copyStyle:
+            prev.copyStyle.source?.type === "angle" && prev.copyStyle.source.id === prev.selectedObject.id
+              ? { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null }
+              : prev.copyStyle,
         };
       }
 
@@ -1536,12 +1721,14 @@ function isCopyStyleSourceAlive(
   points: SceneModel["points"],
   segments: SceneModel["segments"],
   lines: SceneModel["lines"],
-  circles: SceneModel["circles"]
+  circles: SceneModel["circles"],
+  angles: SceneModel["angles"]
 ): boolean {
   if (!source) return false;
   if (source.type === "point") return points.some((point) => point.id === source.id);
   if (source.type === "segment") return segments.some((segment) => segment.id === source.id);
   if (source.type === "circle") return circles.some((circle) => circle.id === source.id);
+  if (source.type === "angle") return angles.some((angle) => angle.id === source.id);
   return lines.some((line) => line.id === source.id);
 }
 
@@ -1722,6 +1909,12 @@ function isSameWorld(a: Vec2 | null, b: Vec2 | null): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
+function normalizeVec(v: Vec2): Vec2 {
+  const d = Math.hypot(v.x, v.y);
+  if (d <= 1e-12) return { x: 0, y: 0 };
+  return { x: v.x / d, y: v.y / d };
+}
+
 function findExistingIntersectionPointId(
   state: GeoState,
   objA: GeometryObjectRef,
@@ -1845,10 +2038,12 @@ function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     nextSegmentId: prev.nextSegmentId,
     nextLineId: prev.nextLineId,
     nextCircleId: prev.nextCircleId,
+    nextAngleId: prev.nextAngleId,
     pointDefaults: prev.pointDefaults,
     segmentDefaults: prev.segmentDefaults,
     lineDefaults: prev.lineDefaults,
     circleDefaults: prev.circleDefaults,
+    angleDefaults: prev.angleDefaults,
     copyStyle: prev.copyStyle,
   };
 }
@@ -1864,10 +2059,12 @@ function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.nextSegmentId !== next.nextSegmentId ||
     prev.nextLineId !== next.nextLineId ||
     prev.nextCircleId !== next.nextCircleId ||
+    prev.nextAngleId !== next.nextAngleId ||
     prev.pointDefaults !== next.pointDefaults ||
     prev.segmentDefaults !== next.segmentDefaults ||
     prev.lineDefaults !== next.lineDefaults ||
-    prev.circleDefaults !== next.circleDefaults
+    prev.circleDefaults !== next.circleDefaults ||
+    prev.angleDefaults !== next.angleDefaults
   );
 }
 
@@ -1885,10 +2082,12 @@ function restoreFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoStat
     nextSegmentId: snapshot.nextSegmentId,
     nextLineId: snapshot.nextLineId,
     nextCircleId: snapshot.nextCircleId,
+    nextAngleId: snapshot.nextAngleId,
     pointDefaults: snapshot.pointDefaults,
     segmentDefaults: snapshot.segmentDefaults,
     lineDefaults: snapshot.lineDefaults,
     circleDefaults: snapshot.circleDefaults,
+    angleDefaults: snapshot.angleDefaults,
     copyStyle: snapshot.copyStyle,
   };
 }

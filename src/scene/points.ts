@@ -52,6 +52,25 @@ export type CircleStyle = {
   fillOpacity?: number;
 };
 
+export type AngleMarkStyle = "arc" | "right" | "none";
+
+export type AngleStyle = {
+  strokeColor: string;
+  strokeWidth: number;
+  strokeOpacity: number;
+  textColor: string;
+  textSize: number;
+  fillEnabled: boolean;
+  fillColor: string;
+  fillOpacity: number;
+  markStyle: AngleMarkStyle;
+  arcRadius: number;
+  labelText: string;
+  labelPosWorld: Vec2;
+  showLabel: boolean;
+  showValue: boolean;
+};
+
 export type ShowLabelMode = "none" | "name" | "caption";
 
 export type FreePoint = {
@@ -231,11 +250,21 @@ export type SceneCircle = {
   style: CircleStyle;
 };
 
+export type SceneAngle = {
+  id: string;
+  aId: string;
+  bId: string;
+  cId: string;
+  visible: boolean;
+  style: AngleStyle;
+};
+
 export type SceneModel = {
   points: ScenePoint[];
   segments: SceneSegment[];
   lines: SceneLine[];
   circles: SceneCircle[];
+  angles: SceneAngle[];
 };
 
 export type SceneEvalStats = {
@@ -828,4 +857,17 @@ function pointWithinSegmentDomain(p: Vec2, a: Vec2, b: Vec2): boolean {
   const uy = p.y - a.y;
   const u = (ux * dx + uy * dy) / dd;
   return u >= -EPS && u <= 1 + EPS;
+}
+
+export function computeConvexAngleRad(a: Vec2, b: Vec2, c: Vec2): number | null {
+  const bax = a.x - b.x;
+  const bay = a.y - b.y;
+  const bcx = c.x - b.x;
+  const bcy = c.y - b.y;
+  const baLen = Math.hypot(bax, bay);
+  const bcLen = Math.hypot(bcx, bcy);
+  if (baLen <= 1e-12 || bcLen <= 1e-12) return null;
+  const dot = (bax * bcx + bay * bcy) / (baLen * bcLen);
+  const clamped = Math.max(-1, Math.min(1, dot));
+  return Math.acos(clamped);
 }

@@ -57,6 +57,13 @@ export type ConstructionSnapshot = {
   lines: SnapshotLine[];
   segments: SnapshotSegment[];
   circles: SnapshotCircle[];
+  angles: Array<{
+    id: string;
+    aId: string;
+    bId: string;
+    cId: string;
+    visible: boolean;
+  }>;
 };
 
 export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapshot {
@@ -109,12 +116,23 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
+  const angles = scene.angles
+    .map((angle) => ({
+      id: angle.id,
+      aId: angle.aId,
+      bId: angle.bId,
+      cId: angle.cId,
+      visible: angle.visible,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
   return {
     version: 1,
     points,
     lines,
     segments,
     circles,
+    angles,
   };
 }
 
