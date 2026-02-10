@@ -514,7 +514,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
 
   const out: string[] = [];
-  out.push("\\begin{tikzpicture}");
+  out.push("\\begin{tikzpicture}[scale=2,line cap=round,line join=round,>=triangle 45]");
   if (setupViewport) {
     assertTkzMacro("tkzInit");
     assertTkzMacro("tkzClip");
@@ -656,7 +656,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
     }
     assertTkzMacro("tkzLabelPoint");
     const opts = cmd.options ? `[${cmd.options}]` : "";
-    out.push(`\\tkzLabelPoint${opts}(${cmd.name}){${escapeTikzText(cmd.text)}}`);
+    out.push(`\\tkzLabelPoint${opts}(${cmd.name}){$${escapeTikzText(cmd.text)}$}`);
   }
 
   out.push("\\end{tikzpicture}");
@@ -1147,15 +1147,16 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   const draw = rgbColorExpr(s.strokeColor);
   const fill = rgbColorExpr(s.fillColor);
   const pointScale = clampPositive(options.pointScale ?? 0.75, 0.05, 10);
-  const lineScale = clampPositive(options.lineScale ?? 0.75, 0.05, 10);
-  const lineWidthPt = Math.max(0.1, s.strokeWidth * lineScale);
-  const sizePt = Math.max(0.4, s.sizePx * pointScale);
+  const basePointStroke = 1.4;
+  const basePointSizePx = 4;
+  const lineWidthPt = Math.max(0.1, 0.868 * pointScale * (s.strokeWidth / basePointStroke));
+  const innerSepPt = Math.max(0.4, 3 * pointScale * (s.sizePx / basePointSizePx));
   const opts = [
     shape,
     `draw=${draw}`,
     `fill=${fill}`,
     `line width=${fmt(lineWidthPt)}pt`,
-    `minimum size=${fmt(sizePt)}pt`,
+    `inner sep=${fmt(innerSepPt)}pt`,
   ];
   if (s.strokeOpacity < 0.999) opts.push(`draw opacity=${fmt(clamp01(s.strokeOpacity))}`);
   if (s.fillOpacity < 0.999) opts.push(`fill opacity=${fmt(clamp01(s.fillOpacity))}`);
@@ -1217,14 +1218,25 @@ function mapPointShape(shape: ScenePoint["style"]["shape"]): string {
 function pointLabelOptionsToTikz(point: ScenePoint): string {
   const opts: string[] = [];
   const offset = point.style.labelOffsetPx;
-  const dir = labelDirectionFromOffset(offset.x, offset.y);
-  if (dir) opts.push(dir);
-
-  const emPerPx = 1 / 16;
-  const xShiftEm = offset.x * emPerPx;
-  const yShiftEm = -offset.y * emPerPx;
-  if (Math.abs(xShiftEm) > 1e-9) opts.push(`xshift=${fmt(xShiftEm)}em`);
-  if (Math.abs(yShiftEm) > 1e-9) opts.push(`yshift=${fmt(yShiftEm)}em`);
+  // Keep labels legible: map canvas offset to pt and enforce a minimum radial distance.
+  const ptPerPx = 1.0;
+  let xShiftPt = offset.x * ptPerPx;
+  let yShiftPt = -offset.y * ptPerPx;
+  const minDistPt = 9;
+  const d = Math.hypot(xShiftPt, yShiftPt);
+  if (d < 1e-6) {
+    xShiftPt = minDistPt * 0.7071;
+    yShiftPt = minDistPt * 0.7071;
+  } else if (d < minDistPt) {
+    const s = minDistPt / d;
+    xShiftPt *= s;
+    yShiftPt *= s;
+  }
+  if (Math.abs(xShiftPt) > 1e-9) opts.push(`xshift=${fmt(xShiftPt)}pt`);
+  if (Math.abs(yShiftPt) > 1e-9) opts.push(`yshift=${fmt(yShiftPt)}pt`);
+  const fontPt = Math.max(6, Math.min(28, point.style.labelFontPx));
+  const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
+  opts.push(`font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`);
 
   // Reuse point halo style for label readability on dense diagrams.
   if (point.style.labelHaloWidthPx > 0) {
@@ -1237,14 +1249,6 @@ function pointLabelOptionsToTikz(point: ScenePoint): string {
     opts.push(`text=${rgbColorExpr(point.style.labelColor)}`);
   }
   return opts.join(", ");
-}
-
-function labelDirectionFromOffset(x: number, y: number): string {
-  const horiz = x > 0.5 ? "right" : x < -0.5 ? "left" : "";
-  // Canvas y is down-positive, TikZ vertical directions are up-positive.
-  const vert = y < -0.5 ? "above" : y > 0.5 ? "below" : "";
-  if (vert && horiz) return `${vert} ${horiz}`;
-  return vert || horiz;
 }
 
 function rgbColorExpr(hex: string): string {
@@ -1294,7 +1298,7 @@ function hoistNamedColors(lines: string[]): string[] {
 
   if (colorDefs.length === 0) return rewritten;
 
-  const beginIdx = rewritten.findIndex((line) => line.trim() === "\\begin{tikzpicture}");
+  const beginIdx = rewritten.findIndex((line) => line.trim().startsWith("\\begin{tikzpicture}"));
   if (beginIdx < 0) return rewritten;
 
   const out = [...rewritten];

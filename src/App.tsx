@@ -157,6 +157,9 @@ export default function App() {
   const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
   const [exportPointScale, setExportPointScale] = useState("0.75");
   const [exportLineScale, setExportLineScale] = useState("0.75");
+  const [lastTikzSceneRef, setLastTikzSceneRef] = useState<SceneModel | null>(null);
+  const [lastTikzOptionSig, setLastTikzOptionSig] = useState("");
+  const [lastTikzGeneratedAt, setLastTikzGeneratedAt] = useState<number | null>(null);
 
   const shapePickerRef = useRef<HTMLDivElement | null>(null);
   const [leftWidth, setLeftWidth] = useState(56);
@@ -294,6 +297,7 @@ export default function App() {
     try {
       const pointScale = Number(exportPointScale);
       const lineScale = Number(exportLineScale);
+      const optionSig = `${exportUseCurrentView}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
       const viewport = exportUseCurrentView
         ? getViewportFromCamera(
             camera,
@@ -308,6 +312,9 @@ export default function App() {
           lineScale: Number.isFinite(lineScale) ? lineScale : 0.75,
         })
       );
+      setLastTikzSceneRef(scene);
+      setLastTikzOptionSig(optionSig);
+      setLastTikzGeneratedAt(Date.now());
       setTikzCopied(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown exporter error";
@@ -315,6 +322,15 @@ export default function App() {
       setTikzCopied(false);
     }
   };
+
+  const currentTikzOptionSig = `${exportUseCurrentView}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
+  const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
+  const tikzStatusText =
+    !tikzText
+      ? "Not generated yet."
+      : tikzOutdated
+        ? "Outdated: scene/options changed. Regenerate TikZ."
+        : `Up to date${lastTikzGeneratedAt ? ` · Generated ${new Date(lastTikzGeneratedAt).toLocaleTimeString()}` : ""}`;
 
   const generateConstructionSnapshot = () => {
     try {
@@ -547,12 +563,13 @@ export default function App() {
               </div>
               <div className="exportButtons">
                 <button className="actionButton" onClick={generateTikz}>
-                  Generate TikZ
+                  {tikzOutdated ? "Regenerate TikZ" : "Generate TikZ"}
                 </button>
                 <button className="actionButton" onClick={copyTikz} disabled={!tikzText}>
                   {tikzCopied ? "Copied" : "Copy"}
                 </button>
               </div>
+              <div className="toolInfo">{tikzStatusText}</div>
               <textarea
                 className="exportTextarea"
                 value={tikzText}
