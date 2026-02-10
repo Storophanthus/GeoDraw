@@ -94,6 +94,7 @@ export function CanvasView() {
   const createLine = useGeoStore((store) => store.createLine);
   const createCircle = useGeoStore((store) => store.createCircle);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
+  const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
   const createPointOnLine = useGeoStore((store) => store.createPointOnLine);
@@ -525,6 +526,7 @@ export function CanvasView() {
           createLine,
           createCircle,
           createPerpendicularLine,
+          createParallelLine,
           createMidpointFromPoints,
           createMidpointFromSegment,
           createPointOnLine,
@@ -602,6 +604,7 @@ export function CanvasView() {
     createLine,
     createCircle,
     createPerpendicularLine,
+    createParallelLine,
     clearPendingSelection,
     createMidpointFromPoints,
     createMidpointFromSegment,
@@ -674,6 +677,7 @@ function handleToolClick(
     createLine: (aId: string, bId: string) => string | null;
     createCircle: (centerId: string, throughId: string) => string | null;
     createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
+    createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
     createMidpointFromPoints: (aId: string, bId: string) => string | null;
     createMidpointFromSegment: (segId: string) => string | null;
     createPointOnLine: (lineId: string, s: number) => string | null;
@@ -839,12 +843,45 @@ function handleToolClick(
     const throughId = resolveOrCreatePointAtCursor();
     io.createPerpendicularLine(throughId, pendingSelection.first.ref);
     io.clearPendingSelection();
+    return;
+  }
+
+  if (activeTool === "parallel_line") {
+    const hitLineLikeRef = hits.hitObject?.type === "line"
+      ? ({ type: "line", id: hits.hitObject.id } as const)
+      : hits.hitObject?.type === "segment"
+        ? ({ type: "segment", id: hits.hitObject.id } as const)
+        : null;
+
+    if (!pendingSelection || pendingSelection.tool !== "parallel_line") {
+      if (hits.hitPointId) {
+        io.setPendingSelection({ tool: "parallel_line", step: 2, first: { type: "point", id: hits.hitPointId } });
+        return;
+      }
+      if (hitLineLikeRef) {
+        io.setPendingSelection({ tool: "parallel_line", step: 2, first: { type: "lineLike", ref: hitLineLikeRef } });
+        return;
+      }
+      io.setPendingSelection({ tool: "parallel_line", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+
+    if (pendingSelection.first.type === "point") {
+      if (!hitLineLikeRef) return;
+      io.createParallelLine(pendingSelection.first.id, hitLineLikeRef);
+      io.clearPendingSelection();
+      return;
+    }
+
+    const throughId = resolveOrCreatePointAtCursor();
+    io.createParallelLine(throughId, pendingSelection.first.ref);
+    io.clearPendingSelection();
   }
 }
 
 function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSelection: PendingSelection): boolean {
-  if (activeTool === "perp_line") {
-    if (!pendingSelection || pendingSelection.tool !== "perp_line") return true;
+  if (activeTool === "perp_line" || activeTool === "parallel_line") {
+    if (!pendingSelection || (pendingSelection.tool !== "perp_line" && pendingSelection.tool !== "parallel_line")) return true;
     return pendingSelection.first.type === "lineLike";
   }
   return (
@@ -868,6 +905,15 @@ function isValidTarget(
   if (activeTool === "circle_cp") return hoveredHit.type === "point";
   if (activeTool === "perp_line") {
     if (!pendingSelection || pendingSelection.tool !== "perp_line") {
+      return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
+    }
+    if (pendingSelection.first.type === "point") {
+      return hoveredHit.type === "line2p" || hoveredHit.type === "segment";
+    }
+    return hoveredHit.type === "point";
+  }
+  if (activeTool === "parallel_line") {
+    if (!pendingSelection || pendingSelection.tool !== "parallel_line") {
       return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
     }
     if (pendingSelection.first.type === "point") {
@@ -1135,7 +1181,7 @@ function drawPendingPreview(
     ctx.stroke();
   }
 
-  if (pendingSelection.tool === "perp_line") {
+  if (pendingSelection.tool === "perp_line" || pendingSelection.tool === "parallel_line") {
     let through: Vec2 | null = null;
     let baseRef: LineLikeObjectRef | null = null;
 
@@ -1186,13 +1232,13 @@ function drawPendingPreview(
       ctx.restore();
       return;
     }
-    const perp = { x: -d.y, y: d.x };
-    const len = Math.hypot(perp.x, perp.y);
+    const dirVec = pendingSelection.tool === "perp_line" ? { x: -d.y, y: d.x } : d;
+    const len = Math.hypot(dirVec.x, dirVec.y);
     if (len <= 1e-12) {
       ctx.restore();
       return;
     }
-    const dir = { x: perp.x / len, y: perp.y / len };
+    const dir = { x: dirVec.x / len, y: dirVec.y / len };
     const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 2;
     const q1 = camMath.worldToScreen(add(through, mul(dir, -span)), camera, vp);
     const q2 = camMath.worldToScreen(add(through, mul(dir, span)), camera, vp);
@@ -1217,7 +1263,10 @@ function drawInteractionHighlights(
   vp: Viewport
 ) {
   if (pendingSelection) {
-    if (pendingSelection.tool === "perp_line" && pendingSelection.first.type === "lineLike") {
+    if (
+      (pendingSelection.tool === "perp_line" || pendingSelection.tool === "parallel_line") &&
+      pendingSelection.first.type === "lineLike"
+    ) {
       drawHitHighlight(
         ctx,
         pendingSelection.first.ref.type === "line"

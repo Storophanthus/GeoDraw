@@ -1,0 +1,23 @@
+{
+  "points": [
+    { "id": "p1", "kind": "free", "name": "A", "x": -2, "y": 1 },
+    { "id": "p2", "kind": "free", "name": "B", "x": 3, "y": 2 },
+    { "id": "p3", "kind": "free", "name": "P", "x": 1, "y": -1.5 },
+    { "id": "p4", "kind": "free", "name": "C", "x": -1, "y": -2 },
+    {
+      "id": "p5",
+      "kind": "intersectionPoint",
+      "name": "X",
+      "objA": { "type": "line", "id": "l_par" },
+      "objB": { "type": "line", "id": "l_aux" },
+      "preferredWorld": { "x": 0.6, "y": -1.8 }
+    }
+  ],
+  "lines": [
+    { "id": "l_base", "kind": "twoPoint", "aId": "p1", "bId": "p2", "visible": true },
+    { "id": "l_par", "kind": "parallel", "throughId": "p3", "base": { "type": "line", "id": "l_base" }, "visible": true },
+    { "id": "l_aux", "kind": "twoPoint", "aId": "p4", "bId": "p1", "visible": true }
+  ],
+  "segments": [],
+  "circles": []
+}

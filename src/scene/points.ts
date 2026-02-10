@@ -212,7 +212,16 @@ export type SceneLinePerpendicular = {
   style: LineStyle;
 };
 
-export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular;
+export type SceneLineParallel = {
+  id: string;
+  kind: "parallel";
+  throughId: string;
+  base: LineLikeObjectRef;
+  visible: boolean;
+  style: LineStyle;
+};
+
+export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular | SceneLineParallel;
 
 export type SceneCircle = {
   id: string;
@@ -652,7 +661,7 @@ function resolveLineAnchors(
   if (ctx.lineInProgress.has(line.id)) return null;
   ctx.lineInProgress.add(line.id);
   try {
-    if (line.kind !== "perpendicular") {
+    if (line.kind !== "perpendicular" && line.kind !== "parallel") {
       const a = getPointWorldById(line.aId, scene, ctx);
       const b = getPointWorldById(line.bId, scene, ctx);
       if (!a || !b) return null;
@@ -666,6 +675,15 @@ function resolveLineAnchors(
     const dx = base.b.x - base.a.x;
     const dy = base.b.y - base.a.y;
     if (dx * dx + dy * dy <= 1e-12) return null;
+    if (line.kind === "parallel") {
+      return {
+        a: through,
+        b: {
+          x: through.x + dx,
+          y: through.y + dy,
+        },
+      };
+    }
     return {
       a: through,
       b: {

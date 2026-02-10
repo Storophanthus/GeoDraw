@@ -33,7 +33,8 @@ export type ActiveTool =
   | "segment"
   | "line2p"
   | "circle_cp"
-  | "perp_line";
+  | "perp_line"
+  | "parallel_line";
 
 export type SelectedObject =
   | { type: "point"; id: string }
@@ -51,7 +52,7 @@ export type HoveredHit =
 
 export type PendingSelection =
   | {
-      tool: "perp_line";
+      tool: "perp_line" | "parallel_line";
       step: 2;
       first:
         | { type: "point"; id: string }
@@ -110,6 +111,7 @@ type GeoActions = {
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
+  createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createCircle: (centerId: string, throughId: string) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
@@ -581,6 +583,51 @@ const actions: GeoActions = {
             {
               id,
               kind: "perpendicular",
+              throughId,
+              base,
+              visible: true,
+              style: { ...prev.lineDefaults },
+            },
+          ],
+        },
+        selectedObject: { type: "line", id },
+        recentCreatedObject: { type: "line", id },
+        nextLineId: prev.nextLineId + 1,
+      };
+    });
+    return id;
+  },
+
+  createParallelLine(throughId, base) {
+    let id: string | null = null;
+    setState((prev) => {
+      const through = prev.scene.points.find((p) => p.id === throughId);
+      if (!through) return prev;
+      const baseValid =
+        base.type === "line"
+          ? prev.scene.lines.some((line) => line.id === base.id)
+          : prev.scene.segments.some((seg) => seg.id === base.id);
+      if (!baseValid) return prev;
+      const tempLine: SceneModel["lines"][number] = {
+        id: "__temp_parallel__",
+        kind: "parallel",
+        throughId,
+        base,
+        visible: true,
+        style: prev.lineDefaults,
+      };
+      const anchors = getLineWorldAnchors(tempLine, prev.scene);
+      if (!anchors) return prev;
+      id = `l_${prev.nextLineId}`;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          lines: [
+            ...prev.scene.lines,
+            {
+              id,
+              kind: "parallel",
               throughId,
               base,
               visible: true,
@@ -1098,7 +1145,7 @@ const actions: GeoActions = {
           prev.scene.lines.filter((line) => lineReferencesPoint(line, deletedPointId)).map((line) => line.id)
         );
         const keptLines = directKeptLines.filter((line) => {
-          if (line.kind !== "perpendicular") return true;
+          if (line.kind !== "perpendicular" && line.kind !== "parallel") return true;
           if (!line.base) return true;
           if (line.base.type === "line" && removedLineIds.has(line.base.id)) return false;
           return true;
@@ -1176,9 +1223,12 @@ const actions: GeoActions = {
                 (point.objB.type !== "segment" || point.objB.id !== segId))
         );
         const keptSegments = prev.scene.segments.filter((seg) => seg.id !== segId);
-        const keptLines = prev.scene.lines.filter(
-          (line) => !(line.kind === "perpendicular" && line.base.type === "segment" && line.base.id === segId)
-        );
+        const keptLines = prev.scene.lines.filter((line) => {
+          if ((line.kind === "perpendicular" || line.kind === "parallel") && line.base.type === "segment" && line.base.id === segId) {
+            return false;
+          }
+          return true;
+        });
         return {
           ...prev,
           scene: {
@@ -1227,7 +1277,11 @@ const actions: GeoActions = {
           ...prev.scene,
           lines: prev.scene.lines.filter((line) => {
             if (line.id === prev.selectedObject!.id) return false;
-            if (line.kind === "perpendicular" && line.base.type === "line" && line.base.id === prev.selectedObject!.id) {
+            if (
+              (line.kind === "perpendicular" || line.kind === "parallel") &&
+              line.base.type === "line" &&
+              line.base.id === prev.selectedObject!.id
+            ) {
               return false;
             }
             return true;
@@ -1772,12 +1826,12 @@ function sameObjectRef(a: GeometryObjectRef, b: GeometryObjectRef): boolean {
 }
 
 function getLineEndpointPointIds(line: SceneModel["lines"][number]): [string | null, string | null] {
-  if (line.kind === "perpendicular") return [line.throughId, null];
+  if (line.kind === "perpendicular" || line.kind === "parallel") return [line.throughId, null];
   return [line.aId, line.bId];
 }
 
 function lineReferencesPoint(line: SceneModel["lines"][number], pointId: string): boolean {
-  if (line.kind === "perpendicular") return line.throughId === pointId;
+  if (line.kind === "perpendicular" || line.kind === "parallel") return line.throughId === pointId;
   return line.aId === pointId || line.bId === pointId;
 }
 

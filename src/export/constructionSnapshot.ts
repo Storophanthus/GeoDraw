@@ -29,7 +29,7 @@ export type SnapshotPoint = {
 
 export type SnapshotLine = {
   id: string;
-  kind?: "twoPoint" | "perpendicular";
+  kind?: "twoPoint" | "perpendicular" | "parallel";
   aId?: string;
   bId?: string;
   throughId?: string;
@@ -73,10 +73,10 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
 
   const lines = scene.lines
     .map((line) =>
-      line.kind === "perpendicular"
+      line.kind === "perpendicular" || line.kind === "parallel"
         ? {
             id: line.id,
-            kind: "perpendicular" as const,
+            kind: line.kind,
             throughId: line.throughId,
             base: line.base,
             visible: line.visible,

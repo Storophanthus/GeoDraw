@@ -160,12 +160,12 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
 
 function hydrateLine(raw: Record<string, unknown>): SceneLine {
   const kind = String(raw.kind ?? "twoPoint");
-  if (kind === "perpendicular") {
+  if (kind === "perpendicular" || kind === "parallel") {
     const base = raw.base as { type: "line" | "segment"; id: string } | undefined;
-    if (!base) throw new Error("Invalid perpendicular line fixture: missing base");
+    if (!base) throw new Error(`Invalid ${kind} line fixture: missing base`);
     return {
       id: String(raw.id),
-      kind: "perpendicular",
+      kind,
       throughId: String(raw.throughId),
       base,
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
@@ -213,6 +213,18 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("\\tkzDefLine[perpendicular=through")) {
       throw new Error("Expected perpendicular fixture to emit \\tkzDefLine[perpendicular=through ...].");
+    }
+  }
+
+  if (fileName === "parallel-line-through-point.json") {
+    if (exportError) {
+      if (!exportError.message.includes("Unsupported construction: ParallelLine")) {
+        throw exportError;
+      }
+      return;
+    }
+    if (!tikz.includes("\\tkzDefLine[parallel=through")) {
+      throw new Error("Expected parallel fixture to emit \\tkzDefLine[parallel=through ...].");
     }
   }
 

@@ -30,6 +30,7 @@ export type TikzCommand =
   | { kind: "DefPoint"; name: string; x: number; y: number }
   | { kind: "DefPointOnLine"; name: string; a: string; b: string }
   | { kind: "DefPerpendicularLine"; auxName: string; through: string; baseA: string; baseB: string }
+  | { kind: "DefParallelLine"; auxName: string; through: string; baseA: string; baseB: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
   | { kind: "DefMidPoint"; name: string; a: string; b: string }
   | { kind: "InterLL"; name: string; a1: string; a2: string; b1: string; b2: string }
@@ -107,7 +108,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const visited = new Set<string>();
   const lineAnchorNames = new Map<string, { a: string; b: string }>();
   let selectorIndex = 0;
-  let perpAuxIndex = 0;
+  let derivedAuxIndex = 0;
 
   const newSelectorName = (kind: "LC" | "CC"): string => {
     selectorIndex += 1;
@@ -119,18 +120,28 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (cached) return cached;
     const line = lineById.get(lineId);
     if (!line) throw new Error(`Missing line ${lineId}`);
-    if (line.kind === "perpendicular") {
+    if (line.kind === "perpendicular" || line.kind === "parallel") {
       resolvePoint(line.throughId);
       const base = resolveLineLikeNames(line.base);
-      perpAuxIndex += 1;
-      const auxName = `tkzPerp_${perpAuxIndex}`;
-      constructions.push({
-        kind: "DefPerpendicularLine",
-        auxName,
-        through: mustName(pointName, line.throughId),
-        baseA: base.a,
-        baseB: base.b,
-      });
+      derivedAuxIndex += 1;
+      const auxName = `${line.kind === "perpendicular" ? "tkzPerp" : "tkzPar"}_${derivedAuxIndex}`;
+      constructions.push(
+        line.kind === "perpendicular"
+          ? {
+              kind: "DefPerpendicularLine",
+              auxName,
+              through: mustName(pointName, line.throughId),
+              baseA: base.a,
+              baseB: base.b,
+            }
+          : {
+              kind: "DefParallelLine",
+              auxName,
+              through: mustName(pointName, line.throughId),
+              baseA: base.a,
+              baseB: base.b,
+            }
+      );
       const anchors = { a: mustName(pointName, line.throughId), b: auxName };
       lineAnchorNames.set(lineId, anchors);
       return anchors;
@@ -462,11 +473,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const lineNames = resolveLineAnchorsById(line.id);
     const ext = computeLineDrawPlacement(scene, line);
     const drawAName =
-      ext.drawAId === line.id ? lineNames.b : ext.drawAId === (line.kind === "perpendicular" ? line.throughId : line.aId)
+      ext.drawAId === line.id
+        ? lineNames.b
+        : ext.drawAId === (line.kind === "perpendicular" || line.kind === "parallel" ? line.throughId : line.aId)
         ? lineNames.a
         : pointName.get(ext.drawAId) ?? ext.drawAId;
     const drawBName =
-      ext.drawBId === line.id ? lineNames.b : ext.drawBId === (line.kind === "perpendicular" ? line.throughId : line.aId)
+      ext.drawBId === line.id
+        ? lineNames.b
+        : ext.drawBId === (line.kind === "perpendicular" || line.kind === "parallel" ? line.throughId : line.aId)
         ? lineNames.a
         : pointName.get(ext.drawBId) ?? ext.drawBId;
     draws.push({
@@ -616,6 +631,12 @@ export function renderTikz(cmds: TikzCommand[]): string {
       assertPerpendicularMacro("tkzDefLine");
       assertTkzMacro("tkzGetPoint");
       out.push(`\\tkzDefLine[perpendicular=through ${cmd.through}](${cmd.baseA},${cmd.baseB}) \\tkzGetPoint{${cmd.auxName}}`);
+      continue;
+    }
+    if (cmd.kind === "DefParallelLine") {
+      assertParallelMacro("tkzDefLine");
+      assertTkzMacro("tkzGetPoint");
+      out.push(`\\tkzDefLine[parallel=through ${cmd.through}](${cmd.baseA},${cmd.baseB}) \\tkzGetPoint{${cmd.auxName}}`);
       continue;
     }
     if (cmd.kind === "DefPointOnCircle") {
@@ -769,7 +790,7 @@ function lineLikeNamesFromRef(
     const names = resolveLineAnchorsById(ref.id);
     const anchors = getLineWorldAnchors(line, scene);
     if (!anchors) return null;
-    if (line.kind === "perpendicular") {
+    if (line.kind === "perpendicular" || line.kind === "parallel") {
       return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId };
     }
     return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.aId, endpointBId: line.bId };
@@ -997,8 +1018,8 @@ function computeLineDrawPlacement(
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const dd = dx * dx + dy * dy;
-  const anchorAId = line.kind === "perpendicular" ? line.throughId : line.aId;
-  const anchorBId = line.kind === "perpendicular" ? line.id : line.bId;
+  const anchorAId = line.kind === "perpendicular" || line.kind === "parallel" ? line.throughId : line.aId;
+  const anchorBId = line.kind === "perpendicular" || line.kind === "parallel" ? line.id : line.bId;
   if (dd <= 1e-12) return { drawAId: anchorAId, drawBId: anchorBId, addLeft: 1, addRight: 1 };
   const len = Math.sqrt(dd);
 
@@ -1079,7 +1100,7 @@ function collectLineRelevantPointIds(
   };
 
   const anchors = getLineWorldAnchors(line, scene);
-  if (line.kind === "perpendicular") {
+  if (line.kind === "perpendicular" || line.kind === "parallel") {
     pushPoint(line.throughId, getPointWorldPosCached(scene, line.throughId));
     pushPoint(line.id, anchors?.b ?? null);
   } else {
@@ -1484,4 +1505,9 @@ function assertTkzMacro(name: string): void {
 function assertPerpendicularMacro(name: string): void {
   if (TKZ_MACRO_SET.has(name)) return;
   throw new Error(`Unsupported construction: PerpendicularLine (missing tkz macro: ${name})`);
+}
+
+function assertParallelMacro(name: string): void {
+  if (TKZ_MACRO_SET.has(name)) return;
+  throw new Error(`Unsupported construction: ParallelLine (missing tkz macro: ${name})`);
 }
