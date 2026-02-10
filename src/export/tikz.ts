@@ -16,9 +16,12 @@ export type TikzExportOptions = {
   globalLineAdd?: number;
   pointScale?: number;
   lineScale?: number;
+  worldToTikzScale?: number;
+  screenPxPerWorld?: number;
 };
 
 export type TikzCommand =
+  | { kind: "SetupUnits"; scale: number }
   | { kind: "SetupViewport"; xmin: number; xmax: number; ymin: number; ymax: number; space: number }
   | { kind: "SetupLine"; addLeft: number; addRight: number }
   | { kind: "DefPoints"; items: { name: string; x: number; y: number }[] }
@@ -62,6 +65,13 @@ type PointStyleDef = {
   styleExpr: string;
 };
 
+type LabelPlacement = {
+  xShiftPt: number;
+  yShiftPt: number;
+  scale: number;
+  bubbleRadiusPt: number;
+};
+
 export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}): TikzCommand[] {
   const pointById = new Map(scene.points.map((p) => [p.id, p]));
   const lineById = new Map(scene.lines.map((l) => [l.id, l]));
@@ -75,9 +85,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const draws: TikzCommand[] = [];
   const definedPointIds = new Set<string>();
 
+  const coordScale = clampPositive(options.worldToTikzScale ?? 2, 0.01, 100);
+
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
   const viewport = options.viewport ?? computeExportViewport(scene);
-  defs.push({ kind: "SetupViewport", ...viewport, space: options.clipSpace ?? 0 });
+  defs.push({ kind: "SetupUnits", scale: coordScale });
+  defs.push({
+    kind: "SetupViewport",
+    xmin: viewport.xmin,
+    xmax: viewport.xmax,
+    ymin: viewport.ymin,
+    ymax: viewport.ymax,
+    space: options.clipSpace ?? 0,
+  });
   const globalAdd = options.globalLineAdd ?? 5;
   defs.push({ kind: "SetupLine", addLeft: globalAdd, addRight: globalAdd });
 
@@ -473,13 +493,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     (draws[draws.length - 1] as any).styleExpr = group.styleExpr;
   }
 
+  const labelPlacementById = computeLabelPlacementMap(scene, options);
   const labels: Array<{ name: string; text: string; options?: string }> = [];
   for (const point of scene.points) {
     if (!point.visible) continue;
     if (point.showLabel === "none") continue;
     const name = pointName.get(point.id);
     if (!name) continue;
-    const options = pointLabelOptionsToTikz(point);
+    const options = pointLabelOptionsToTikz(point, labelPlacementById.get(point.id) ?? null);
     if (point.showLabel === "name") {
       labels.push({ name, text: point.name || name, options });
     } else {
@@ -493,6 +514,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 }
 
 export function renderTikz(cmds: TikzCommand[]): string {
+  const setupUnits = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupUnits" }> => c.kind === "SetupUnits");
   const setupViewport = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupViewport" }> => c.kind === "SetupViewport");
   const setupLine = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLine" }> => c.kind === "SetupLine");
   const pointsDefs = cmds.filter((c) => c.kind === "DefPoints");
@@ -500,6 +522,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
   const constructions = cmds.filter(
     (c) =>
       c.kind !== "DefPoints" &&
+      c.kind !== "SetupUnits" &&
       c.kind !== "SetupViewport" &&
       c.kind !== "SetupLine" &&
       c.kind !== "DrawSegment" &&
@@ -514,7 +537,8 @@ export function renderTikz(cmds: TikzCommand[]): string {
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
 
   const out: string[] = [];
-  out.push("\\begin{tikzpicture}[scale=2,line cap=round,line join=round,>=triangle 45]");
+  const scale = setupUnits?.scale ?? 1;
+  out.push(`\\begin{tikzpicture}[scale=${fmt(scale)},line cap=round,line join=round,>=triangle 45]`);
   if (setupViewport) {
     assertTkzMacro("tkzInit");
     assertTkzMacro("tkzClip");
@@ -665,12 +689,18 @@ export function renderTikz(cmds: TikzCommand[]): string {
 }
 
 export function exportTikz(scene: SceneModel): string {
+  // Scene can be updated frequently; reset per-scene memoized lookups before each export.
+  pointByIdCache.delete(scene);
+  pointWorldCache.delete(scene);
   const tex = renderTikz(buildTikzIR(scene));
   assertNoUnknownTkzMacro(tex);
   return tex;
 }
 
 export function exportTikzWithOptions(scene: SceneModel, options: TikzExportOptions): string {
+  // Scene can be updated frequently; reset per-scene memoized lookups before each export.
+  pointByIdCache.delete(scene);
+  pointWorldCache.delete(scene);
   const tex = renderTikz(buildTikzIR(scene, options));
   assertNoUnknownTkzMacro(tex);
   return tex;
@@ -1149,8 +1179,8 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   const pointScale = clampPositive(options.pointScale ?? 0.75, 0.05, 10);
   const basePointStroke = 1.4;
   const basePointSizePx = 4;
-  const lineWidthPt = Math.max(0.1, 0.868 * pointScale * (s.strokeWidth / basePointStroke));
-  const innerSepPt = Math.max(0.4, 3 * pointScale * (s.sizePx / basePointSizePx));
+  const lineWidthPt = Math.max(0.1, 1.05 * pointScale * (s.strokeWidth / basePointStroke));
+  const innerSepPt = Math.max(0.4, 3.75 * pointScale * (s.sizePx / basePointSizePx));
   const opts = [
     shape,
     `draw=${draw}`,
@@ -1215,40 +1245,104 @@ function mapPointShape(shape: ScenePoint["style"]["shape"]): string {
   }
 }
 
-function pointLabelOptionsToTikz(point: ScenePoint): string {
+function pointLabelOptionsToTikz(point: ScenePoint, placement: LabelPlacement | null): string {
   const opts: string[] = [];
-  const offset = point.style.labelOffsetPx;
-  // Keep labels legible: map canvas offset to pt and enforce a minimum radial distance.
-  const ptPerPx = 1.0;
-  let xShiftPt = offset.x * ptPerPx;
-  let yShiftPt = -offset.y * ptPerPx;
-  const minDistPt = 9;
-  const d = Math.hypot(xShiftPt, yShiftPt);
-  if (d < 1e-6) {
-    xShiftPt = minDistPt * 0.7071;
-    yShiftPt = minDistPt * 0.7071;
-  } else if (d < minDistPt) {
-    const s = minDistPt / d;
-    xShiftPt *= s;
-    yShiftPt *= s;
-  }
+  const xShiftPt = placement?.xShiftPt ?? 12;
+  const yShiftPt = placement?.yShiftPt ?? 12;
+  const scale = clampPositive(placement?.scale ?? 1, 0.01, 100);
+  const fontPt = Math.max(6, Math.min(72, point.style.labelFontPx * scale));
+  // Placement solver computes label center directly; keep node anchored at center.
+  opts.push("anchor=center");
   if (Math.abs(xShiftPt) > 1e-9) opts.push(`xshift=${fmt(xShiftPt)}pt`);
   if (Math.abs(yShiftPt) > 1e-9) opts.push(`yshift=${fmt(yShiftPt)}pt`);
-  const fontPt = Math.max(6, Math.min(28, point.style.labelFontPx));
   const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
   opts.push(`font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`);
 
   // Reuse point halo style for label readability on dense diagrams.
   if (point.style.labelHaloWidthPx > 0) {
+    opts.push("circle");
     opts.push(`fill=${rgbColorExpr(point.style.labelHaloColor)}`);
     opts.push("fill opacity=0.8");
     opts.push("text opacity=1");
-    opts.push(`inner sep=${fmt(Math.max(0.6, point.style.labelHaloWidthPx * 0.4))}pt`);
+    opts.push("outer sep=0pt");
+    opts.push("inner sep=0pt");
+    if (placement && placement.bubbleRadiusPt > 0) {
+      opts.push(`minimum size=${fmt(placement.bubbleRadiusPt * 1.62)}pt`);
+    }
   }
   if (point.style.labelColor) {
     opts.push(`text=${rgbColorExpr(point.style.labelColor)}`);
   }
   return opts.join(", ");
+}
+
+function normalize2(v: { x: number; y: number }): { x: number; y: number } {
+  const d = Math.hypot(v.x, v.y);
+  if (d < 1e-9) return { x: 0.7071, y: 0.7071 };
+  return { x: v.x / d, y: v.y / d };
+}
+
+function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions): Map<string, LabelPlacement> {
+  const result = new Map<string, LabelPlacement>();
+  const scale = clampPositive(options.worldToTikzScale ?? 2, 0.01, 100);
+  const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const ptPerPxForShift = 0.75 / scale;
+  const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
+  const labelStack = new Map<string, number>();
+  for (const point of scene.points) {
+    if (!point.visible || point.showLabel === "none") continue;
+    const world = getPointWorldPos(point, scene);
+    if (!world) continue;
+    const p = { x: world.x * pxPerWorld, y: world.y * pxPerWorld };
+    const stackKey = `${Math.round(p.x * 2) / 2}:${Math.round(p.y * 2) / 2}`;
+    const stackIndex = labelStack.get(stackKey) ?? 0;
+    labelStack.set(stackKey, stackIndex + 1);
+    const ring = Math.floor(stackIndex / 8) + 1;
+    const angle = (stackIndex % 8) * (Math.PI / 4);
+    const spread = stackIndex === 0 ? 0 : 10 * ring;
+
+    // Follow canvas semantics: stored offset plus deterministic stack spread.
+    let dxPx = point.style.labelOffsetPx.x + Math.cos(angle) * spread;
+    let dyPx = point.style.labelOffsetPx.y + Math.sin(angle) * spread;
+
+    // Keep label clear of marker even if user offset is tiny.
+    const metrics = pointStyleMetricsPx(point, pointScale);
+    const text = point.showLabel === "caption" ? point.captionTex || point.name : point.name;
+    const labelRpx = computeLabelBubbleRadiusPx(text, point.style.labelFontPx, point.style.labelHaloWidthPx, scale);
+    const minClearPx = metrics.markerRadiusPx + labelRpx + Math.max(2, point.style.labelHaloWidthPx * 0.35);
+    const dist = Math.hypot(dxPx, dyPx);
+    if (dist < minClearPx) {
+      const dir = dist > 1e-6 ? { x: dxPx / dist, y: dyPx / dist } : normalize2({ x: 1, y: -1 });
+      dxPx = dir.x * minClearPx;
+      dyPx = dir.y * minClearPx;
+    }
+
+    result.set(point.id, {
+      xShiftPt: dxPx * ptPerPxForShift,
+      yShiftPt: -dyPx * ptPerPxForShift,
+      scale,
+      bubbleRadiusPt: labelRpx * ptPerPxForShift,
+    });
+  }
+  return result;
+}
+
+function pointStyleMetricsPx(point: ScenePoint, pointScale: number): { markerRadiusPx: number } {
+  const strokePx = Math.max(0.2, point.style.strokeWidth * pointScale);
+  const sizePx = Math.max(0.4, point.style.sizePx * pointScale);
+  return { markerRadiusPx: sizePx + strokePx * 0.5 };
+}
+
+function computeLabelBubbleRadiusPx(text: string, labelFontPx: number, haloWidthPx: number, scale: number): number {
+  const fontPt = Math.max(6, Math.min(72, labelFontPx * scale));
+  const fontPx = (fontPt * scale) / 0.75;
+  const content = (text && text.length > 0 ? text : "X").replace(/\\[a-zA-Z]+|[{}$]/g, "");
+  const textLen = Math.max(1, content.length);
+  const widthPx = Math.max(fontPx * 0.62, textLen * fontPx * 0.5);
+  const heightPx = fontPx * 0.92;
+  const baseRadius = Math.max(widthPx, heightPx) * 0.5;
+  const haloPad = Math.max(0.8, haloWidthPx * 0.25);
+  return baseRadius + haloPad;
 }
 
 function rgbColorExpr(hex: string): string {

@@ -111,6 +111,25 @@ Purpose: keep a durable record of high-risk bugs that must not reappear after re
 - Main code:
   - `src/export/tikz.ts`
 
+### 6) TikZ label placement/halo stability (do not retune casually)
+
+- Symptom:
+  - Labels overlap/intersect vertices, or look drastically off after exporter tweaks.
+  - Halo circles become huge/tiny and break diagram readability.
+- Root cause:
+  - Mixing label geometry, font sizing, and halo rendering changes without preserving clearance invariants.
+- Non-negotiable rules:
+  - Treat `pointLabelOptionsToTikz(...)` + `computeLabelPlacementMap(...)` + `computeLabelBubbleRadiusPx(...)` as guarded.
+  - Do **not** retune these constants unless absolutely required and reviewed.
+  - Any change to these functions requires explicit warning + revalidation on real scenes.
+  - Keep placement deterministic per-point (no global `xshift=yshift` fallback).
+- Required validation before merge:
+  - `npm run build`
+  - `npm run test:export`
+  - Manual visual check on at least one dense scene with 10+ labels.
+- Main code:
+  - `src/export/tikz.ts`
+
 ## Verification Commands
 
 Run after geometry/export changes:
