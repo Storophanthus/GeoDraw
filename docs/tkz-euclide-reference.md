@@ -25,6 +25,18 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 \tkzLabelAngle[dist=1.4,angle=42](A,B,C){$1.571\ \mathrm{rad}$}
 ```
 
+## AngleFixed (deg) snippets
+
+```tex
+% Fixed angle point from base ray BA, CCW 30 deg
+\tkzDefPointBy[rotation=center B angle 30](A) \tkzGetPoint{C}
+\tkzDrawLine[add=5 and 5](B,C)
+
+% Fixed angle point from base ray BA, CW 30 deg
+\tkzDefPointBy[rotation=center B angle -30](A) \tkzGetPoint{Cw}
+\tkzDrawLine[add=5 and 5](B,Cw)
+```
+
 ## User Cheat-Sheet (verbatim)
 
 ```tex

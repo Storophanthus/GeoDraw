@@ -30,6 +30,7 @@ export type TikzCommand =
   | { kind: "DefPoints"; items: { name: string; x: number; y: number }[] }
   | { kind: "DefPoint"; name: string; x: number; y: number }
   | { kind: "DefPointOnLine"; name: string; a: string; b: string }
+  | { kind: "DefPointByRotation"; name: string; center: string; point: string; angleDeg: number; direction: "CCW" | "CW" }
   | { kind: "DefPerpendicularLine"; auxName: string; through: string; baseA: string; baseB: string }
   | { kind: "DefParallelLine"; auxName: string; through: string; baseA: string; baseB: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
@@ -244,6 +245,18 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         center: mustName(pointName, circle.centerId),
         through: mustName(pointName, circle.throughId),
         theta: point.t,
+      });
+      definedPointIds.add(point.id);
+    } else if (point.kind === "pointByRotation") {
+      resolvePoint(point.centerId);
+      resolvePoint(point.pointId);
+      constructions.push({
+        kind: "DefPointByRotation",
+        name,
+        center: mustName(pointName, point.centerId),
+        point: mustName(pointName, point.pointId),
+        angleDeg: point.angleDeg,
+        direction: point.direction,
       });
       definedPointIds.add(point.id);
     } else if (point.kind === "circleLineIntersectionPoint") {
@@ -680,6 +693,16 @@ export function renderTikz(cmds: TikzCommand[]): string {
       const tRaw = (cmd as any).t;
       const t = typeof tRaw === "number" && Number.isFinite(tRaw) ? tRaw : 0.5;
       out.push(`\\tkzDefPointBy[homothety=center ${cmd.a} ratio ${fmt(t)}](${cmd.b}) \\tkzGetPoint{${cmd.name}}`);
+      continue;
+    }
+    if (cmd.kind === "DefPointByRotation") {
+      assertAngleFixedMacro("tkzDefPointBy");
+      assertTkzMacro("tkzGetPoint");
+      if (cmd.direction !== "CCW" && cmd.direction !== "CW") {
+        throw new Error("Unsupported AngleFixed option: direction=CW (no tkz mapping)");
+      }
+      const signedAngle = cmd.direction === "CW" ? -Math.abs(cmd.angleDeg) : Math.abs(cmd.angleDeg);
+      out.push(`\\tkzDefPointBy[rotation=center ${cmd.center} angle ${fmt(signedAngle)}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
       continue;
     }
     if (cmd.kind === "DefPerpendicularLine") {
@@ -1644,6 +1667,11 @@ function assertParallelMacro(name: string): void {
 function assertAngleMacro(name: string, context: string): void {
   if (TKZ_MACRO_SET.has(name)) return;
   throw new Error(`Unsupported construction: ${context} (missing tkz macro: ${name})`);
+}
+
+function assertAngleFixedMacro(name: string): void {
+  if (TKZ_MACRO_SET.has(name)) return;
+  throw new Error(`Unsupported construction: AngleFixed (missing tkz macro: ${name})`);
 }
 
 function buildAngleLabelTex(labelTextRaw: string, showLabel: boolean, showValue: boolean, thetaRad: number): string | null {

@@ -37,7 +37,8 @@ export type ActiveTool =
   | "circle_cp"
   | "perp_line"
   | "parallel_line"
-  | "angle";
+  | "angle"
+  | "angle_fixed";
 
 export type SelectedObject =
   | { type: "point"; id: string }
@@ -79,7 +80,20 @@ export type PendingSelection =
       first: { type: "point"; id: string };
       second: { type: "point"; id: string };
     }
+  | {
+      tool: "angle_fixed";
+      step: 2;
+      first: { type: "point"; id: string };
+    }
+  | {
+      tool: "angle_fixed";
+      step: 3;
+      first: { type: "point"; id: string };
+      second: { type: "point"; id: string };
+    }
   | null;
+
+export type AngleFixedDirection = "CCW" | "CW";
 
 type GeoState = {
   camera: Camera;
@@ -100,6 +114,10 @@ type GeoState = {
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
   angleDefaults: AngleStyle;
+  angleFixedTool: {
+    angleDeg: number;
+    direction: AngleFixedDirection;
+  };
   copyStyle: {
     source: SelectedObject;
     pointStyle: PointStyle | null;
@@ -132,6 +150,12 @@ type GeoActions = {
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createAngle: (aId: string, bId: string, cId: string) => string | null;
+  createAngleFixed: (
+    vertexId: string,
+    basePointId: string,
+    angleDeg: number,
+    direction: AngleFixedDirection
+  ) => { pointId: string; lineId: string } | null;
   createCircle: (centerId: string, throughId: string) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
@@ -147,6 +171,7 @@ type GeoActions = {
   setLineDefaults: (next: Partial<LineStyle>) => void;
   setCircleDefaults: (next: Partial<CircleStyle>) => void;
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
+  setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
   updateSelectedPointStyle: (next: Partial<PointStyle>) => void;
   updateSelectedPointFields: (
     next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>
@@ -250,6 +275,10 @@ const initialState: GeoState = {
   lineDefaults: defaultLineStyle,
   circleDefaults: defaultCircleStyle,
   angleDefaults: defaultAngleStyle,
+  angleFixedTool: {
+    angleDeg: 30,
+    direction: "CCW",
+  },
   copyStyle: {
     source: null,
     pointStyle: null,
@@ -281,6 +310,7 @@ type HistorySnapshot = {
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
   angleDefaults: AngleStyle;
+  angleFixedTool: GeoState["angleFixedTool"];
   copyStyle: GeoState["copyStyle"];
 };
 
@@ -742,6 +772,77 @@ const actions: GeoActions = {
     return id;
   },
 
+  createAngleFixed(vertexId, basePointId, angleDeg, direction) {
+    if (vertexId === basePointId) return null;
+    if (!Number.isFinite(angleDeg) || angleDeg < 0 || angleDeg > 360) return null;
+    let result: { pointId: string; lineId: string } | null = null;
+    setState((prev) => {
+      const pv = prev.scene.points.find((p) => p.id === vertexId);
+      const pa = prev.scene.points.find((p) => p.id === basePointId);
+      if (!pv || !pa) return prev;
+      const wv = getPointWorldPos(pv, prev.scene);
+      const wa = getPointWorldPos(pa, prev.scene);
+      if (!wv || !wa) return prev;
+      if (distance(wv, wa) <= 1e-12) return prev;
+
+      const used = new Set(prev.scene.points.map((point) => point.name));
+      let idx = 0;
+      let name = nextLabelFromIndex(idx);
+      while (used.has(name)) {
+        idx += 1;
+        name = nextLabelFromIndex(idx);
+      }
+
+      const pointId = `p_${prev.nextPointId}`;
+      const lineId = `l_${prev.nextLineId}`;
+      result = { pointId, lineId };
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          points: [
+            ...prev.scene.points,
+            {
+              id: pointId,
+              kind: "pointByRotation",
+              name,
+              captionTex: name,
+              visible: true,
+              showLabel: "name",
+              locked: false,
+              auxiliary: false,
+              centerId: vertexId,
+              pointId: basePointId,
+              angleDeg,
+              direction,
+              radiusMode: "keep",
+              style: {
+                ...prev.pointDefaults,
+                labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+              },
+            },
+          ],
+          lines: [
+            ...prev.scene.lines,
+            {
+              id: lineId,
+              kind: "twoPoint",
+              aId: vertexId,
+              bId: pointId,
+              visible: true,
+              style: { ...prev.lineDefaults },
+            },
+          ],
+        },
+        selectedObject: { type: "line", id: lineId },
+        recentCreatedObject: { type: "line", id: lineId },
+        nextPointId: prev.nextPointId + 1,
+        nextLineId: prev.nextLineId + 1,
+      };
+    });
+    return result;
+  },
+
   createCircle(centerId, throughId) {
     if (centerId === throughId) return null;
     let id: string | null = null;
@@ -1114,6 +1215,16 @@ const actions: GeoActions = {
     }));
   },
 
+  setAngleFixedTool(next) {
+    setState((prev) => ({
+      ...prev,
+      angleFixedTool: {
+        ...prev.angleFixedTool,
+        ...next,
+      },
+    }));
+  },
+
   updateSelectedPointStyle(next) {
     setState((prev) => {
       if (!prev.selectedObject || prev.selectedObject.type !== "point") return prev;
@@ -1371,6 +1482,9 @@ const actions: GeoActions = {
           }
           if (point.kind === "pointOnCircle") {
             return !deletedCircleIds.has(point.circleId);
+          }
+          if (point.kind === "pointByRotation") {
+            return point.centerId !== deletedPointId && point.pointId !== deletedPointId;
           }
           if (point.kind === "intersectionPoint") {
             return (
@@ -2173,6 +2287,7 @@ function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     lineDefaults: prev.lineDefaults,
     circleDefaults: prev.circleDefaults,
     angleDefaults: prev.angleDefaults,
+    angleFixedTool: prev.angleFixedTool,
     copyStyle: prev.copyStyle,
   };
 }
@@ -2217,6 +2332,7 @@ function restoreFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoStat
     lineDefaults: snapshot.lineDefaults,
     circleDefaults: snapshot.circleDefaults,
     angleDefaults: snapshot.angleDefaults,
+    angleFixedTool: snapshot.angleFixedTool,
     copyStyle: snapshot.copyStyle,
   };
 }

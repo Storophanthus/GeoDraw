@@ -66,6 +66,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   perp_line: { icon: PerpendicularIcon, tooltip: "Perpendicular Line", ariaLabel: "Perpendicular line tool" },
   parallel_line: { icon: ParallelIcon, tooltip: "Parallel Line", ariaLabel: "Parallel line tool" },
   angle: { icon: AngleIcon, tooltip: "Angle (deg)", ariaLabel: "Angle tool" },
+  angle_fixed: { icon: AngleFixedIcon, tooltip: "Angle with Fixed Value (deg)", ariaLabel: "Fixed angle tool" },
   circle_cp: { icon: Circle, tooltip: "Circle Center + Point (O)", ariaLabel: "Circle center-through-point tool" },
 };
 
@@ -73,7 +74,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "move", label: "MOVE", tools: ["move"] },
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line"] },
-  { id: "angle", label: "ANGLE", tools: ["angle"] },
+  { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "CIRCLES", tools: ["circle_cp"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
 ];
@@ -118,11 +119,13 @@ export default function App() {
   const lineDefaults = useGeoStore((store) => store.lineDefaults);
   const circleDefaults = useGeoStore((store) => store.circleDefaults);
   const angleDefaults = useGeoStore((store) => store.angleDefaults);
+  const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const setPointDefaults = useGeoStore((store) => store.setPointDefaults);
   const setSegmentDefaults = useGeoStore((store) => store.setSegmentDefaults);
   const setLineDefaults = useGeoStore((store) => store.setLineDefaults);
   const setCircleDefaults = useGeoStore((store) => store.setCircleDefaults);
   const setAngleDefaults = useGeoStore((store) => store.setAngleDefaults);
+  const setAngleFixedTool = useGeoStore((store) => store.setAngleFixedTool);
   const updateSelectedPointStyle = useGeoStore((store) => store.updateSelectedPointStyle);
   const updateSelectedPointFields = useGeoStore((store) => store.updateSelectedPointFields);
   const updateSelectedSegmentStyle = useGeoStore((store) => store.updateSelectedSegmentStyle);
@@ -754,6 +757,35 @@ export default function App() {
                   {copyStyle.source
                     ? "Copy Style: click targets to apply (Shift-click to change source)"
                     : "Copy Style: click an object to pick source (Shift-click anytime to change source)"}
+                </div>
+              )}
+              {activeTool === "angle_fixed" && (
+                <div className="toolInfo">
+                  <div className="subSectionTitle">Fixed Angle Tool</div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Angle (deg)</label>
+                    <input
+                      className="renameInput"
+                      type="number"
+                      min={0}
+                      max={360}
+                      step={0.1}
+                      value={Number.isFinite(angleFixedTool.angleDeg) ? angleFixedTool.angleDeg : 30}
+                      onChange={(e) => setAngleFixedTool({ angleDeg: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Direction</label>
+                    <select
+                      className="selectInput"
+                      value={angleFixedTool.direction}
+                      onChange={(e) => setAngleFixedTool({ direction: e.target.value as "CCW" | "CW" })}
+                    >
+                      <option value="CCW">CCW</option>
+                      <option value="CW">CW</option>
+                    </select>
+                  </div>
+                  <div className="statusText">Click B (vertex), then A (base ray), then click to confirm.</div>
                 </div>
               )}
               {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedAngle && (
@@ -1432,6 +1464,13 @@ function describePointConstruction(
       pointNameById
     )}.`;
   }
+  if (point.kind === "pointByRotation") {
+    const sign = point.direction === "CCW" ? "" : "-";
+    return `Point from rotation of ${pointLabel(point.pointId, pointNameById)} around ${pointLabel(
+      point.centerId,
+      pointNameById
+    )} by ${sign}${point.angleDeg.toFixed(2)}° (${point.direction}).`;
+  }
   if (point.kind === "circleLineIntersectionPoint") {
     const circle = circleById.get(point.circleId);
     const line = lineById.get(point.lineId);
@@ -1759,6 +1798,21 @@ function AngleIcon({ size = 18, strokeWidth = 2 }: IconProps) {
     <svg viewBox="0 0 24 24" width={w} height={h} aria-hidden fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
       <path d="M4 18L12 6L20 18" strokeLinecap="round" />
       <path d="M8.5 15.5a4.5 4.5 0 0 1 7 0" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function AngleFixedIcon({ size = 18, strokeWidth = 2 }: IconProps) {
+  const w = size;
+  const h = size;
+  return (
+    <svg viewBox="0 0 24 24" width={w} height={h} aria-hidden fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
+      <path d="M4 19h16" />
+      <path d="M4 19L11.5 8" />
+      <path d="M4 19a8.5 8.5 0 0 1 8.5-8.5" />
+      <text x="15.6" y="9.6" fontSize="7.2" fill="currentColor" stroke="none">
+        θ
+      </text>
     </svg>
   );
 }

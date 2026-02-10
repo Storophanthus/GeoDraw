@@ -104,6 +104,7 @@ export function CanvasView() {
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createAngle = useGeoStore((store) => store.createAngle);
+  const createAngleFixed = useGeoStore((store) => store.createAngleFixed);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
   const createPointOnLine = useGeoStore((store) => store.createPointOnLine);
@@ -115,6 +116,7 @@ export function CanvasView() {
   const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
+  const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
 
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
@@ -266,7 +268,7 @@ export function CanvasView() {
         drawLines(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
         drawSegments(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
         drawAngles(ctx, resolvedAngles, camera, vp, selectedObject, recentCreatedObject);
-        drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, hoverSnap, hoveredHit, scene, camera, vp);
+        drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, hoverSnap, hoveredHit, scene, camera, vp, angleFixedTool);
         drawPoints(ctx, resolvedPoints, selectedObject, camera, vp, copyStyle.source);
         drawInteractionHighlights(
           ctx,
@@ -301,6 +303,7 @@ export function CanvasView() {
     },
     [
       activeTool,
+      angleFixedTool,
       camera,
       copyStyle.source,
       cursorWorld,
@@ -613,6 +616,7 @@ export function CanvasView() {
           createPerpendicularLine,
           createParallelLine,
           createAngle,
+          createAngleFixed,
           createMidpointFromPoints,
           createMidpointFromSegment,
           createPointOnLine,
@@ -622,6 +626,7 @@ export function CanvasView() {
           setSelectedObject,
           setCopyStyleSource,
           applyCopyStyleTo,
+          angleFixedTool,
           camera,
           vp,
         });
@@ -693,6 +698,7 @@ export function CanvasView() {
     createPerpendicularLine,
     createParallelLine,
     createAngle,
+    createAngleFixed,
     clearPendingSelection,
     createMidpointFromPoints,
     createMidpointFromSegment,
@@ -701,6 +707,7 @@ export function CanvasView() {
     createPointOnCircle,
     createIntersectionPoint,
     applyCopyStyleTo,
+    angleFixedTool,
     createSegment,
     movePointLabelBy,
     moveAngleLabelTo,
@@ -782,6 +789,12 @@ function handleToolClick(
     createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
     createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
     createAngle: (aId: string, bId: string, cId: string) => string | null;
+    createAngleFixed: (
+      vertexId: string,
+      basePointId: string,
+      angleDeg: number,
+      direction: "CCW" | "CW"
+    ) => { pointId: string; lineId: string } | null;
     createMidpointFromPoints: (aId: string, bId: string) => string | null;
     createMidpointFromSegment: (segId: string) => string | null;
     createPointOnLine: (lineId: string, s: number) => string | null;
@@ -791,6 +804,7 @@ function handleToolClick(
     setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null) => void;
     setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
     applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
+    angleFixedTool: { angleDeg: number; direction: "CCW" | "CW" };
     camera: Camera;
     vp: Viewport;
   }
@@ -910,6 +924,35 @@ function handleToolClick(
     return;
   }
 
+  if (activeTool === "angle_fixed") {
+    if (!pendingSelection || pendingSelection.tool !== "angle_fixed") {
+      io.setPendingSelection({ tool: "angle_fixed", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+    if (pendingSelection.step === 2) {
+      const aId = resolveOrCreatePointAtCursor();
+      if (aId === pendingSelection.first.id) return;
+      io.setPendingSelection({
+        tool: "angle_fixed",
+        step: 3,
+        first: pendingSelection.first,
+        second: { type: "point", id: aId },
+      });
+      return;
+    }
+    const deg = io.angleFixedTool.angleDeg;
+    if (!Number.isFinite(deg) || deg < 0 || deg > 360) return;
+    const created = io.createAngleFixed(
+      pendingSelection.first.id,
+      pendingSelection.second.id,
+      deg,
+      io.angleFixedTool.direction
+    );
+    if (!created) return;
+    io.clearPendingSelection();
+    return;
+  }
+
   if (activeTool === "midpoint") {
     if (pendingSelection && pendingSelection.tool === "midpoint") {
       const bId = resolveOrCreatePointAtCursor();
@@ -1010,7 +1053,8 @@ function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSelection: 
     activeTool === "line2p" ||
     activeTool === "circle_cp" ||
     activeTool === "midpoint" ||
-    activeTool === "angle"
+    activeTool === "angle" ||
+    activeTool === "angle_fixed"
   );
 }
 
@@ -1025,6 +1069,10 @@ function isValidTarget(
   if (activeTool === "line2p") return hoveredHit.type === "point";
   if (activeTool === "circle_cp") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";
+  if (activeTool === "angle_fixed") {
+    if (pendingSelection?.tool === "angle_fixed" && pendingSelection.step === 3) return false;
+    return hoveredHit.type === "point";
+  }
   if (activeTool === "perp_line") {
     if (!pendingSelection || pendingSelection.tool !== "perp_line") {
       return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
@@ -1256,7 +1304,8 @@ function drawPendingPreview(
   hoveredHit: HoveredHit,
   scene: SceneModel,
   camera: Camera,
-  vp: Viewport
+  vp: Viewport,
+  angleFixedTool: { angleDeg: number; direction: "CCW" | "CW" }
 ) {
   if (!pendingSelection) return;
   const firstPointId = pendingSelection.first.type === "point" ? pendingSelection.first.id : null;
@@ -1408,6 +1457,41 @@ function drawPendingPreview(
     }
   }
 
+  if (pendingSelection.tool === "angle_fixed" && pendingSelection.step === 3) {
+    const b = geoStoreHelpers.getPointWorldById(scene, pendingSelection.first.id);
+    const a = geoStoreHelpers.getPointWorldById(scene, pendingSelection.second.id);
+    if (!a || !b) {
+      ctx.restore();
+      return;
+    }
+    const base = sub(a, b);
+    const baseLen = Math.hypot(base.x, base.y);
+    const deg = angleFixedTool.angleDeg;
+    if (baseLen <= 1e-12 || !Number.isFinite(deg) || deg < 0 || deg > 360) {
+      ctx.restore();
+      return;
+    }
+    const sign = angleFixedTool.direction === "CCW" ? 1 : -1;
+    const theta = (deg * Math.PI) / 180;
+    const c = Math.cos(sign * theta);
+    const s = Math.sin(sign * theta);
+    const rot = { x: base.x * c - base.y * s, y: base.x * s + base.y * c };
+    const p = camMath.worldToScreen(b, camera, vp);
+    const q = camMath.worldToScreen(add(b, rot), camera, vp);
+    const dq = sub(q, p);
+    const len = Math.hypot(dq.x, dq.y);
+    if (len <= 1e-9) {
+      ctx.restore();
+      return;
+    }
+    const dir = { x: dq.x / len, y: dq.y / len };
+    const span = Math.max(vp.widthPx, vp.heightPx) * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + dir.x * span, p.y + dir.y * span);
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 
@@ -1423,7 +1507,7 @@ function drawInteractionHighlights(
   vp: Viewport
 ) {
   if (pendingSelection) {
-    if (pendingSelection.tool === "angle") {
+    if (pendingSelection.tool === "angle" || pendingSelection.tool === "angle_fixed") {
       drawHitHighlight(
         ctx,
         { type: "point", id: pendingSelection.first.id },

@@ -125,6 +125,17 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
   if (kind === "pointOnCircle") {
     return { ...base, kind: "pointOnCircle", circleId: String(def.circleId), t: Number(def.t) };
   }
+  if (kind === "pointByRotation") {
+    return {
+      ...base,
+      kind: "pointByRotation",
+      centerId: String(def.centerId),
+      pointId: String(def.pointId),
+      angleDeg: Number(def.angleDeg),
+      direction: String(def.direction) === "CW" ? "CW" : "CCW",
+      radiusMode: "keep",
+    };
+  }
   if (kind === "pointOnLine") {
     return { ...base, kind: "pointOnLine", lineId: String(def.lineId), s: Number(def.s) };
   }
@@ -255,6 +266,36 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("\\tkzDefLine[parallel=through")) {
       throw new Error("Expected parallel fixture to emit \\tkzDefLine[parallel=through ...].");
+    }
+  }
+
+  if (fileName === "angle-fixed-ccw-30.json") {
+    if (exportError) {
+      if (!exportError.message.includes("Unsupported construction: AngleFixed")) {
+        throw exportError;
+      }
+      return;
+    }
+    if (!tikz.includes("\\tkzDefPointBy[rotation=center")) {
+      throw new Error("Expected AngleFixed CCW fixture to emit tkz rotation construction.");
+    }
+    if (!/angle\s+30(?:[^\d]|$)/.test(tikz)) {
+      throw new Error("Expected AngleFixed CCW fixture to emit positive 30 degree rotation.");
+    }
+  }
+
+  if (fileName === "angle-fixed-cw-30.json") {
+    if (exportError) {
+      if (!exportError.message.includes("Unsupported construction: AngleFixed")) {
+        throw exportError;
+      }
+      return;
+    }
+    if (!tikz.includes("\\tkzDefPointBy[rotation=center")) {
+      throw new Error("Expected AngleFixed CW fixture to emit tkz rotation construction.");
+    }
+    if (!/angle\s+-30(?:[^\d]|$)/.test(tikz)) {
+      throw new Error("Expected AngleFixed CW fixture to emit negative 30 degree rotation.");
     }
   }
 

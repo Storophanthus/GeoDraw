@@ -111,3 +111,23 @@ Notes:
 - `\tkzMarkRightAngles` (plural) is the public macro in tkz-euclide 5.x.
 - Label placement uses `dist` + `angle`, derived from `labelPosWorld` relative to vertex `B`.
 - Exporter is fail-closed: if any required macro is missing from whitelist, export throws.
+
+## AngleFixed (deg)
+
+GeoDraw `AngleFixed(B, A, deg, direction)` creates a rotated point `C` from base ray `BA`:
+
+```tex
+% CCW
+\tkzDefPointBy[rotation=center B angle 30](A) \tkzGetPoint{C}
+
+% CW
+\tkzDefPointBy[rotation=center B angle -30](A) \tkzGetPoint{C}
+```
+
+Then draw the resulting direction using GeoDraw's line/ray strategy (currently line through `B,C`).
+
+Fail-closed rules:
+- Missing macro:
+  - `Unsupported construction: AngleFixed (missing tkz macro: <name>)`
+- If signed clockwise rotation is unsupported by backend:
+  - `Unsupported AngleFixed option: direction=CW (no tkz mapping)`

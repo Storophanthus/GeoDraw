@@ -9,6 +9,14 @@ export type SnapshotPointDefinition =
   | { kind: "pointOnLine"; lineId: string; s: number }
   | { kind: "pointOnSegment"; segId: string; u: number }
   | { kind: "pointOnCircle"; circleId: string; t: number }
+  | {
+      kind: "pointByRotation";
+      centerId: string;
+      pointId: string;
+      angleDeg: number;
+      direction: "CCW" | "CW";
+      radiusMode: "keep";
+    }
   | { kind: "intersectionPoint"; objA: SnapshotObjectRef; objB: SnapshotObjectRef; preferredWorld: { x: number; y: number } }
   | {
       kind: "circleLineIntersectionPoint";
@@ -159,6 +167,16 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
   if (point.kind === "pointOnCircle") {
     return { kind: "pointOnCircle", circleId: point.circleId, t: point.t };
   }
+  if (point.kind === "pointByRotation") {
+    return {
+      kind: "pointByRotation",
+      centerId: point.centerId,
+      pointId: point.pointId,
+      angleDeg: point.angleDeg,
+      direction: point.direction,
+      radiusMode: point.radiusMode,
+    };
+  }
   if (point.kind === "circleLineIntersectionPoint") {
     return {
       kind: "circleLineIntersectionPoint",
@@ -186,6 +204,7 @@ function pointDependsOn(point: ScenePoint): string[] {
   if (point.kind === "pointOnLine") return [point.lineId];
   if (point.kind === "pointOnSegment") return [point.segId];
   if (point.kind === "pointOnCircle") return [point.circleId];
+  if (point.kind === "pointByRotation") return [point.centerId, point.pointId];
   if (point.kind === "circleLineIntersectionPoint") {
     const refs = [point.circleId, point.lineId];
     if (point.excludePointId) refs.push(point.excludePointId);

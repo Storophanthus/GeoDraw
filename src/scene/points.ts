@@ -155,6 +155,23 @@ export type PointOnCircle = {
   style: PointStyle;
 };
 
+export type PointByRotation = {
+  id: string;
+  kind: "pointByRotation";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  centerId: string;
+  pointId: string;
+  angleDeg: number;
+  direction: "CCW" | "CW";
+  radiusMode: "keep";
+  style: PointStyle;
+};
+
 export type GeometryObjectRef =
   | { type: "line"; id: string }
   | { type: "segment"; id: string }
@@ -201,6 +218,7 @@ export type ScenePoint =
   | PointOnLine
   | PointOnSegment
   | PointOnCircle
+  | PointByRotation
   | IntersectionPoint
   | CircleLineIntersectionPoint;
 
@@ -507,6 +525,25 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
     return {
       x: center.x + Math.cos(point.t) * radius,
       y: center.y + Math.sin(point.t) * radius,
+    };
+  }
+
+  if (point.kind === "pointByRotation") {
+    const center = getPointWorldById(point.centerId, scene, ctx);
+    const base = getPointWorldById(point.pointId, scene, ctx);
+    if (!center || !base) return null;
+    const vx = base.x - center.x;
+    const vy = base.y - center.y;
+    const len = Math.hypot(vx, vy);
+    if (len <= 1e-12) return null;
+    const sign = point.direction === "CCW" ? 1 : -1;
+    const theta = (point.angleDeg * Math.PI) / 180;
+    const c = Math.cos(sign * theta);
+    const s = Math.sin(sign * theta);
+    ctx.stats.allocationsEstimate += 1;
+    return {
+      x: center.x + vx * c - vy * s,
+      y: center.y + vx * s + vy * c,
     };
   }
 
