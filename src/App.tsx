@@ -112,10 +112,17 @@ export default function App() {
   const redo = useGeoStore((store) => store.redo);
   const canUndo = useGeoStore((store) => store.canUndo);
   const canRedo = useGeoStore((store) => store.canRedo);
-  const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
   const copyStyle = useGeoStore((store) => store.copyStyle);
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
+  const segmentDefaults = useGeoStore((store) => store.segmentDefaults);
+  const lineDefaults = useGeoStore((store) => store.lineDefaults);
+  const circleDefaults = useGeoStore((store) => store.circleDefaults);
+  const angleDefaults = useGeoStore((store) => store.angleDefaults);
   const setPointDefaults = useGeoStore((store) => store.setPointDefaults);
+  const setSegmentDefaults = useGeoStore((store) => store.setSegmentDefaults);
+  const setLineDefaults = useGeoStore((store) => store.setLineDefaults);
+  const setCircleDefaults = useGeoStore((store) => store.setCircleDefaults);
+  const setAngleDefaults = useGeoStore((store) => store.setAngleDefaults);
   const updateSelectedPointStyle = useGeoStore((store) => store.updateSelectedPointStyle);
   const updateSelectedPointFields = useGeoStore((store) => store.updateSelectedPointFields);
   const updateSelectedSegmentStyle = useGeoStore((store) => store.updateSelectedSegmentStyle);
@@ -152,14 +159,33 @@ export default function App() {
     if (!selectedPoint) return null;
     return getPointWorldPos(selectedPoint, scene);
   }, [scene, selectedPoint]);
-  const latestCreatedPoint = useMemo(() => {
-    if (recentCreatedObject?.type !== "point") return null;
-    return scene.points.find((point) => point.id === recentCreatedObject.id) ?? null;
-  }, [recentCreatedObject, scene.points]);
-  const latestPointAsDefault = useMemo(() => {
-    if (!latestCreatedPoint) return false;
-    return pointStyleEqual(pointDefaults, latestCreatedPoint.style);
-  }, [latestCreatedPoint, pointDefaults]);
+  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "angle" | null>(() => {
+    if (selectedPoint) return "point";
+    if (selectedSegment) return "segment";
+    if (selectedLine) return "line";
+    if (selectedCircle) return "circle";
+    if (selectedAngle) return "angle";
+    return null;
+  }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedSegment]);
+  const selectedStyleAsDefault = useMemo(() => {
+    if (selectedPoint) return pointStyleEqual(pointDefaults, selectedPoint.style);
+    if (selectedSegment) return lineStyleEqual(segmentDefaults, selectedSegment.style);
+    if (selectedLine) return lineStyleEqual(lineDefaults, selectedLine.style);
+    if (selectedCircle) return circleStyleEqual(circleDefaults, selectedCircle.style);
+    if (selectedAngle) return angleStyleEqual(angleDefaults, selectedAngle.style);
+    return false;
+  }, [
+    angleDefaults,
+    circleDefaults,
+    lineDefaults,
+    pointDefaults,
+    segmentDefaults,
+    selectedAngle,
+    selectedCircle,
+    selectedLine,
+    selectedPoint,
+    selectedSegment,
+  ]);
   const pointNameById = useMemo(() => new Map(scene.points.map((p) => [p.id, p.name])), [scene.points]);
   const lineById = useMemo(() => new Map(scene.lines.map((l) => [l.id, l])), [scene.lines]);
   const segmentById = useMemo(() => new Map(scene.segments.map((s) => [s.id, s])), [scene.segments]);
@@ -1263,17 +1289,38 @@ export default function App() {
                 <label className="checkboxRow">
                   <input
                     type="checkbox"
-                    checked={latestPointAsDefault}
-                    disabled={!latestCreatedPoint}
+                    checked={selectedStyleAsDefault}
+                    disabled={!selectedStyleKind}
                     onChange={(e) => {
-                      if (!e.target.checked || !latestCreatedPoint) return;
-                      setPointDefaults({
-                        ...latestCreatedPoint.style,
-                        labelOffsetPx: { ...latestCreatedPoint.style.labelOffsetPx },
-                      });
+                      if (!e.target.checked || !selectedStyleKind) return;
+                      if (selectedStyleKind === "point" && selectedPoint) {
+                        setPointDefaults({
+                          ...selectedPoint.style,
+                          labelOffsetPx: { ...selectedPoint.style.labelOffsetPx },
+                        });
+                        return;
+                      }
+                      if (selectedStyleKind === "segment" && selectedSegment) {
+                        setSegmentDefaults({ ...selectedSegment.style });
+                        return;
+                      }
+                      if (selectedStyleKind === "line" && selectedLine) {
+                        setLineDefaults({ ...selectedLine.style });
+                        return;
+                      }
+                      if (selectedStyleKind === "circle" && selectedCircle) {
+                        setCircleDefaults({ ...selectedCircle.style });
+                        return;
+                      }
+                      if (selectedStyleKind === "angle" && selectedAngle) {
+                        setAngleDefaults({
+                          ...selectedAngle.style,
+                          labelPosWorld: { ...angleDefaults.labelPosWorld },
+                        });
+                      }
                     }}
                   />
-                  Make this default for new points
+                  Make this default for this object
                 </label>
               </div>
             </section>}
@@ -1608,6 +1655,39 @@ function pointStyleEqual(a: PointStyle, b: PointStyle): boolean {
     a.labelColor === b.labelColor &&
     a.labelOffsetPx.x === b.labelOffsetPx.x &&
     a.labelOffsetPx.y === b.labelOffsetPx.y
+  );
+}
+
+function lineStyleEqual(a: SceneModel["segments"][number]["style"], b: SceneModel["segments"][number]["style"]): boolean {
+  return a.strokeColor === b.strokeColor && a.strokeWidth === b.strokeWidth && a.dash === b.dash && a.opacity === b.opacity;
+}
+
+function circleStyleEqual(a: SceneModel["circles"][number]["style"], b: SceneModel["circles"][number]["style"]): boolean {
+  return (
+    a.strokeColor === b.strokeColor &&
+    a.strokeWidth === b.strokeWidth &&
+    a.strokeDash === b.strokeDash &&
+    a.strokeOpacity === b.strokeOpacity &&
+    (a.fillColor ?? "") === (b.fillColor ?? "") &&
+    (a.fillOpacity ?? 0) === (b.fillOpacity ?? 0)
+  );
+}
+
+function angleStyleEqual(a: SceneModel["angles"][number]["style"], b: SceneModel["angles"][number]["style"]): boolean {
+  return (
+    a.strokeColor === b.strokeColor &&
+    a.strokeWidth === b.strokeWidth &&
+    a.strokeOpacity === b.strokeOpacity &&
+    a.textColor === b.textColor &&
+    a.textSize === b.textSize &&
+    a.fillEnabled === b.fillEnabled &&
+    a.fillColor === b.fillColor &&
+    a.fillOpacity === b.fillOpacity &&
+    a.markStyle === b.markStyle &&
+    a.arcRadius === b.arcRadius &&
+    a.labelText === b.labelText &&
+    a.showLabel === b.showLabel &&
+    a.showValue === b.showValue
   );
 }
 

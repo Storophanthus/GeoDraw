@@ -5,7 +5,7 @@ import { add, mul, projectPointToLine, projectPointToSegment, sub } from "../geo
 import { drawRectGrid, type RectGridSettings } from "../render/rectGrid";
 import {
   beginSceneEvalTick,
-  computeConvexAngleRad,
+  computeOrientedAngleRad,
   endSceneEvalTick,
   type GeometryObjectRef,
   type LineLikeObjectRef,
@@ -38,6 +38,11 @@ const GRID_SETTINGS: RectGridSettings = {
   minorWidth: 1,
   majorWidth: 1.5,
 };
+
+// Angle sliders keep their existing numeric ranges, but canvas rendering applies
+// a visual remap so current defaults look like the old mid-slider appearance.
+const ANGLE_STROKE_RENDER_SCALE = 3.25 / 1.8;
+const ANGLE_TEXT_RENDER_SCALE = 25 / 16;
 
 type PointerMode = "idle" | "pan" | "drag-point" | "drag-label" | "drag-angle-label" | "tool-click";
 
@@ -145,7 +150,7 @@ export function CanvasView() {
           const b = getPointWorldPos(bPoint, scene);
           const c = getPointWorldPos(cPoint, scene);
           if (!a || !b || !c) return null;
-          const theta = computeConvexAngleRad(a, b, c);
+          const theta = computeOrientedAngleRad(a, b, c);
           if (theta === null) return null;
           return { angle, a, b, c, theta };
         })
@@ -196,7 +201,7 @@ export function CanvasView() {
           x: screen.x,
           y: screen.y,
           html,
-          textSize: angle.style.textSize,
+          textSize: getAngleTextRenderSize(angle.style.textSize),
           textColor: angle.style.textColor,
         };
       })
@@ -1381,19 +1386,16 @@ function drawPendingPreview(
     }
     if (!c) c = cursorWorld;
     if (a && b && c) {
-      const theta = computeConvexAngleRad(a, b, c);
+      const theta = computeOrientedAngleRad(a, b, c);
       if (theta !== null) {
         const as = camMath.worldToScreen(a, camera, vp);
         const bs = camMath.worldToScreen(b, camera, vp);
-        const cs = camMath.worldToScreen(c, camera, vp);
         const radiusPx = Math.max(18, Math.min(72, Math.hypot(as.x - bs.x, as.y - bs.y) * 0.28));
-        drawAngleArcPreview(ctx, as, bs, cs, radiusPx);
-        const labelVec = normalizeScreenVec({
-          x: as.x + cs.x - 2 * bs.x,
-          y: as.y + cs.y - 2 * bs.y,
-        });
-        const lx = bs.x + labelVec.x * (radiusPx + 16);
-        const ly = bs.y + labelVec.y * (radiusPx + 16);
+        drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
+        const start = Math.atan2(as.y - bs.y, as.x - bs.x);
+        const mid = start - theta * 0.5;
+        const lx = bs.x + Math.cos(mid) * (radiusPx + 16);
+        const ly = bs.y + Math.sin(mid) * (radiusPx + 16);
         ctx.save();
         ctx.globalAlpha = 0.9;
         ctx.setLineDash([]);
@@ -1572,14 +1574,18 @@ function drawHitHighlight(
     if (!a || !b || !c) return;
     const as = camMath.worldToScreen(a, camera, vp);
     const bs = camMath.worldToScreen(b, camera, vp);
-    const cs = camMath.worldToScreen(c, camera, vp);
     const radiusPx = Math.max(16, angle.style.arcRadius * camera.zoom);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(2, angle.style.strokeWidth + 2);
+    ctx.lineWidth = Math.max(2, getAngleStrokeRenderWidth(angle.style.strokeWidth) + 2);
     ctx.setLineDash([]);
-    drawAngleArcPreview(ctx, as, bs, cs, radiusPx);
+    const theta = computeOrientedAngleRad(a, b, c);
+    if (theta === null) {
+      ctx.restore();
+      return;
+    }
+    drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
     ctx.restore();
     return;
   }
@@ -1742,29 +1748,29 @@ function drawAngles(
     if (angle.style.fillEnabled && angle.style.fillOpacity > 0) {
       ctx.globalAlpha = angle.style.fillOpacity;
       ctx.fillStyle = angle.style.fillColor;
-      drawAngleSector(ctx, as, bs, cs, radiusPx);
+      drawAngleSector(ctx, as, bs, entry.theta, radiusPx);
       ctx.fill();
     }
     ctx.globalAlpha = angle.style.strokeOpacity;
     ctx.strokeStyle = angle.style.strokeColor;
-    ctx.lineWidth = angle.style.strokeWidth;
+    ctx.lineWidth = getAngleStrokeRenderWidth(angle.style.strokeWidth);
     if (angle.style.markStyle === "right") {
       drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.55);
       ctx.stroke();
     } else if (angle.style.markStyle === "arc") {
-      drawAngleArcPreview(ctx, as, bs, cs, radiusPx);
+      drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
     }
 
     if (selectedObject?.type === "angle" && selectedObject.id === angle.id) {
       const isNew = recentCreatedObject?.type === "angle" && recentCreatedObject.id === angle.id;
       ctx.globalAlpha = 1;
       ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
-      ctx.lineWidth = angle.style.strokeWidth + (isNew ? 1.5 : 1.6);
+      ctx.lineWidth = getAngleStrokeRenderWidth(angle.style.strokeWidth) + (isNew ? 1.5 : 1.6);
       if (angle.style.markStyle === "right") {
         drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.63);
         ctx.stroke();
       } else if (angle.style.markStyle === "arc") {
-        drawAngleArcPreview(ctx, as, bs, cs, radiusPx + 2);
+        drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);
       }
       const lScreen = camMath.worldToScreen(angle.style.labelPosWorld, camera, vp);
       ctx.beginPath();
@@ -1885,7 +1891,7 @@ function hitTestAngleLabel(
     const entry = resolvedAngles[i];
     if (!entry.angle.visible) continue;
     const labelScreen = camMath.worldToScreen(entry.angle.style.labelPosWorld, camera, vp);
-    const grabRadius = Math.max(16, entry.angle.style.textSize * 0.8);
+    const grabRadius = Math.max(16, getAngleTextRenderSize(entry.angle.style.textSize) * 0.8);
     const d = Math.hypot(screenPoint.x - labelScreen.x, screenPoint.y - labelScreen.y);
     if (d <= grabRadius) return entry.angle.id;
   }
@@ -1906,9 +1912,8 @@ function hitTestAngle(
     if (!entry.angle.visible) continue;
     const as = camMath.worldToScreen(entry.a, camera, vp);
     const bs = camMath.worldToScreen(entry.b, camera, vp);
-    const cs = camMath.worldToScreen(entry.c, camera, vp);
     const r = Math.max(12, entry.angle.style.arcRadius * camera.zoom);
-    const d = distanceToAngleArc(screenPoint, as, bs, cs, r);
+    const d = distanceToAngleArc(screenPoint, as, bs, entry.theta, r);
     if (d <= best) {
       best = d;
       bestId = entry.angle.id;
@@ -2021,26 +2026,26 @@ function normalizeScreenVec(v: Vec2): Vec2 {
   return { x: v.x / d, y: v.y / d };
 }
 
-function angleSweep(aScreen: Vec2, bScreen: Vec2, cScreen: Vec2): { start: number; end: number; ccw: boolean } {
+function angleSweep(aScreen: Vec2, bScreen: Vec2, thetaRad: number): { start: number; sweep: number } {
   const start = Math.atan2(aScreen.y - bScreen.y, aScreen.x - bScreen.x);
-  const end = Math.atan2(cScreen.y - bScreen.y, cScreen.x - bScreen.x);
-  let delta = end - start;
-  while (delta <= -Math.PI) delta += Math.PI * 2;
-  while (delta > Math.PI) delta -= Math.PI * 2;
-  const ccw = delta < 0;
-  return { start, end, ccw };
+  // World-oriented angle is CCW in math coordinates. In screen coordinates (Y down),
+  // this corresponds to decreasing screen angle by theta.
+  let sweep = thetaRad;
+  while (sweep < 0) sweep += Math.PI * 2;
+  while (sweep >= Math.PI * 2) sweep -= Math.PI * 2;
+  return { start, sweep };
 }
 
 function drawAngleArcPreview(
   ctx: CanvasRenderingContext2D,
   aScreen: Vec2,
   bScreen: Vec2,
-  cScreen: Vec2,
+  thetaRad: number,
   radiusPx: number
 ): void {
-  const sweep = angleSweep(aScreen, bScreen, cScreen);
+  const sweep = angleSweep(aScreen, bScreen, thetaRad);
   ctx.beginPath();
-  ctx.arc(bScreen.x, bScreen.y, radiusPx, sweep.start, sweep.end, sweep.ccw);
+  ctx.arc(bScreen.x, bScreen.y, radiusPx, sweep.start, sweep.start - sweep.sweep, true);
   ctx.stroke();
 }
 
@@ -2048,13 +2053,13 @@ function drawAngleSector(
   ctx: CanvasRenderingContext2D,
   aScreen: Vec2,
   bScreen: Vec2,
-  cScreen: Vec2,
+  thetaRad: number,
   radiusPx: number
 ): void {
-  const sweep = angleSweep(aScreen, bScreen, cScreen);
+  const sweep = angleSweep(aScreen, bScreen, thetaRad);
   ctx.beginPath();
   ctx.moveTo(bScreen.x, bScreen.y);
-  ctx.arc(bScreen.x, bScreen.y, radiusPx, sweep.start, sweep.end, sweep.ccw);
+  ctx.arc(bScreen.x, bScreen.y, radiusPx, sweep.start, sweep.start - sweep.sweep, true);
   ctx.closePath();
 }
 
@@ -2080,24 +2085,27 @@ function distanceToAngleArc(
   p: Vec2,
   aScreen: Vec2,
   bScreen: Vec2,
-  cScreen: Vec2,
+  thetaRad: number,
   radiusPx: number
 ): number {
-  const sweep = angleSweep(aScreen, bScreen, cScreen);
+  const sweep = angleSweep(aScreen, bScreen, thetaRad);
   const dx = p.x - bScreen.x;
   const dy = p.y - bScreen.y;
   const dist = Math.hypot(dx, dy);
   const theta = Math.atan2(dy, dx);
-  const isWithin = isAngleOnArc(theta, sweep.start, sweep.end, sweep.ccw);
+  const isWithin = isAngleOnArc(theta, sweep.start, sweep.sweep);
   if (!isWithin) {
     const pStart = { x: bScreen.x + Math.cos(sweep.start) * radiusPx, y: bScreen.y + Math.sin(sweep.start) * radiusPx };
-    const pEnd = { x: bScreen.x + Math.cos(sweep.end) * radiusPx, y: bScreen.y + Math.sin(sweep.end) * radiusPx };
+    const pEnd = {
+      x: bScreen.x + Math.cos(sweep.start - sweep.sweep) * radiusPx,
+      y: bScreen.y + Math.sin(sweep.start - sweep.sweep) * radiusPx,
+    };
     return Math.min(Math.hypot(p.x - pStart.x, p.y - pStart.y), Math.hypot(p.x - pEnd.x, p.y - pEnd.y));
   }
   return Math.abs(dist - radiusPx);
 }
 
-function isAngleOnArc(theta: number, start: number, end: number, ccw: boolean): boolean {
+function isAngleOnArc(theta: number, start: number, sweep: number): boolean {
   const norm = (a: number): number => {
     let out = a;
     while (out < 0) out += Math.PI * 2;
@@ -2106,14 +2114,8 @@ function isAngleOnArc(theta: number, start: number, end: number, ccw: boolean): 
   };
   const t = norm(theta);
   const s = norm(start);
-  const e = norm(end);
-  if (!ccw) {
-    if (s <= e) return t >= s && t <= e;
-    return t >= s || t <= e;
-  }
-  // Counter-clockwise direction in canvas means traveling from start down to end.
-  if (e <= s) return t <= s && t >= e;
-  return t <= s || t >= e;
+  const delta = norm(s - t);
+  return delta <= sweep + 1e-9;
 }
 
 function buildAngleLabelTex(labelTextRaw: string, showLabel: boolean, showValue: boolean, thetaRad: number): string | null {
@@ -2124,6 +2126,14 @@ function buildAngleLabelTex(labelTextRaw: string, showLabel: boolean, showValue:
   if (showLabel && labelText.length > 0) return labelText;
   if (showValue) return valueTex;
   return null;
+}
+
+function getAngleStrokeRenderWidth(rawStrokeWidth: number): number {
+  return rawStrokeWidth * ANGLE_STROKE_RENDER_SCALE;
+}
+
+function getAngleTextRenderSize(rawTextSize: number): number {
+  return rawTextSize * ANGLE_TEXT_RENDER_SCALE;
 }
 
 function drawPointSymbol(

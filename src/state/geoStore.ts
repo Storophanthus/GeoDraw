@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { Vec2 } from "../geo/vec2";
 import {
   type AngleStyle,
-  computeConvexAngleRad,
+  computeOrientedAngleRad,
   type CircleStyle,
   type LineLikeObjectRef,
   getLineWorldAnchors,
@@ -105,6 +105,7 @@ type GeoState = {
     pointStyle: PointStyle | null;
     lineStyle: LineStyle | null;
     circleStyle: CircleStyle | null;
+    angleStyle: Partial<AngleStyle> | null;
     showLabel: ShowLabelMode | null;
   };
   canUndo: boolean;
@@ -142,6 +143,10 @@ type GeoActions = {
   moveAngleLabelTo: (id: string, world: Vec2) => void;
 
   setPointDefaults: (next: Partial<PointStyle>) => void;
+  setSegmentDefaults: (next: Partial<LineStyle>) => void;
+  setLineDefaults: (next: Partial<LineStyle>) => void;
+  setCircleDefaults: (next: Partial<CircleStyle>) => void;
+  setAngleDefaults: (next: Partial<AngleStyle>) => void;
   updateSelectedPointStyle: (next: Partial<PointStyle>) => void;
   updateSelectedPointFields: (
     next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>
@@ -250,6 +255,7 @@ const initialState: GeoState = {
     pointStyle: null,
     lineStyle: null,
     circleStyle: null,
+    angleStyle: null,
     showLabel: null,
   },
   canUndo: false,
@@ -336,6 +342,7 @@ const actions: GeoActions = {
               pointStyle: null,
               lineStyle: null,
               circleStyle: null,
+              angleStyle: null,
               showLabel: null,
             },
     }));
@@ -699,16 +706,11 @@ const actions: GeoActions = {
       const wb = getPointWorldPos(pb, prev.scene);
       const wc = getPointWorldPos(pc, prev.scene);
       if (!wa || !wb || !wc) return prev;
-      const theta = computeConvexAngleRad(wa, wb, wc);
+      const theta = computeOrientedAngleRad(wa, wb, wc);
       if (theta === null) return prev;
-
-      const v1 = { x: wa.x - wb.x, y: wa.y - wb.y };
-      const v2 = { x: wc.x - wb.x, y: wc.y - wb.y };
-      const n1 = normalizeVec(v1);
-      const n2 = normalizeVec(v2);
-      const bis = normalizeVec({ x: n1.x + n2.x, y: n1.y + n2.y });
-      const fallback = normalizeVec({ x: n1.y, y: -n1.x });
-      const dir = Math.hypot(bis.x, bis.y) > 1e-9 ? bis : fallback;
+      const start = Math.atan2(wa.y - wb.y, wa.x - wb.x);
+      const mid = start + theta * 0.5;
+      const dir = { x: Math.cos(mid), y: Math.sin(mid) };
       const labelDist = Math.max(0.45, prev.angleDefaults.arcRadius * 1.25);
       const labelPosWorld = { x: wb.x + dir.x * labelDist, y: wb.y + dir.y * labelDist };
 
@@ -1072,6 +1074,46 @@ const actions: GeoActions = {
     }));
   },
 
+  setSegmentDefaults(next) {
+    setState((prev) => ({
+      ...prev,
+      segmentDefaults: {
+        ...prev.segmentDefaults,
+        ...next,
+      },
+    }));
+  },
+
+  setLineDefaults(next) {
+    setState((prev) => ({
+      ...prev,
+      lineDefaults: {
+        ...prev.lineDefaults,
+        ...next,
+      },
+    }));
+  },
+
+  setCircleDefaults(next) {
+    setState((prev) => ({
+      ...prev,
+      circleDefaults: {
+        ...prev.circleDefaults,
+        ...next,
+      },
+    }));
+  },
+
+  setAngleDefaults(next) {
+    setState((prev) => ({
+      ...prev,
+      angleDefaults: {
+        ...prev.angleDefaults,
+        ...next,
+      },
+    }));
+  },
+
   updateSelectedPointStyle(next) {
     setState((prev) => {
       if (!prev.selectedObject || prev.selectedObject.type !== "point") return prev;
@@ -1362,7 +1404,7 @@ const actions: GeoActions = {
           recentCreatedObject: null,
           copyStyle: isCopyStyleSourceAlive(prev.copyStyle.source, nextPoints, keptSegments, keptLines, keptCircles, nextAngles)
             ? prev.copyStyle
-            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
+            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, angleStyle: null, showLabel: null },
         };
       }
 
@@ -1402,7 +1444,7 @@ const actions: GeoActions = {
             prev.scene.angles
           )
             ? prev.copyStyle
-            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
+            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, angleStyle: null, showLabel: null },
         };
       }
 
@@ -1435,7 +1477,7 @@ const actions: GeoActions = {
             prev.scene.angles
           )
             ? prev.copyStyle
-            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null },
+            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, angleStyle: null, showLabel: null },
         };
       }
 
@@ -1451,7 +1493,7 @@ const actions: GeoActions = {
           recentCreatedObject: null,
           copyStyle:
             prev.copyStyle.source?.type === "angle" && prev.copyStyle.source.id === prev.selectedObject.id
-              ? { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null }
+              ? { source: null, pointStyle: null, lineStyle: null, circleStyle: null, angleStyle: null, showLabel: null }
               : prev.copyStyle,
         };
       }
@@ -1489,7 +1531,7 @@ const actions: GeoActions = {
         recentCreatedObject: null,
         copyStyle:
           prev.copyStyle.source?.type === "line" && prev.copyStyle.source.id === prev.selectedObject.id
-            ? { source: null, pointStyle: null, lineStyle: null, circleStyle: null, showLabel: null }
+            ? { source: null, pointStyle: null, lineStyle: null, circleStyle: null, angleStyle: null, showLabel: null }
             : prev.copyStyle,
       };
     });
@@ -1510,6 +1552,7 @@ const actions: GeoActions = {
             },
             lineStyle: null,
             circleStyle: null,
+            angleStyle: null,
             showLabel: point.showLabel,
           },
         };
@@ -1525,6 +1568,7 @@ const actions: GeoActions = {
             pointStyle: null,
             lineStyle: { ...segment.style },
             circleStyle: circleStyleFromLineStyle(segment.style),
+            angleStyle: angleStyleFromLineStyle(segment.style),
             showLabel: null,
           },
         };
@@ -1540,6 +1584,38 @@ const actions: GeoActions = {
             pointStyle: null,
             lineStyle: lineStyleFromCircleStyle(circle.style),
             circleStyle: { ...circle.style },
+            angleStyle: angleStyleFromCircleStyle(circle.style),
+            showLabel: null,
+          },
+        };
+      }
+
+      if (obj.type === "angle") {
+        const angle = prev.scene.angles.find((item) => item.id === obj.id);
+        if (!angle) return prev;
+        return {
+          ...prev,
+          copyStyle: {
+            source: obj,
+            pointStyle: null,
+            lineStyle: {
+              strokeColor: angle.style.strokeColor,
+              strokeWidth: angle.style.strokeWidth,
+              dash: "solid",
+              opacity: angle.style.strokeOpacity,
+            },
+            circleStyle: {
+              strokeColor: angle.style.strokeColor,
+              strokeWidth: angle.style.strokeWidth,
+              strokeDash: "solid",
+              strokeOpacity: angle.style.strokeOpacity,
+              fillColor: angle.style.fillColor,
+              fillOpacity: angle.style.fillOpacity,
+            },
+            angleStyle: {
+              ...angle.style,
+              labelPosWorld: { ...angle.style.labelPosWorld },
+            },
             showLabel: null,
           },
         };
@@ -1554,6 +1630,7 @@ const actions: GeoActions = {
           pointStyle: null,
           lineStyle: { ...line.style },
           circleStyle: circleStyleFromLineStyle(line.style),
+          angleStyle: angleStyleFromLineStyle(line.style),
           showLabel: null,
         },
       };
@@ -1623,6 +1700,33 @@ const actions: GeoActions = {
         };
       }
 
+      if (obj.type === "angle") {
+        const sourceAngleStyle =
+          prev.copyStyle.angleStyle ??
+          (prev.copyStyle.lineStyle ? angleStyleFromLineStyle(prev.copyStyle.lineStyle) : null) ??
+          (prev.copyStyle.circleStyle ? angleStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
+          (prev.copyStyle.pointStyle ? angleStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
+        if (!sourceAngleStyle) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            angles: prev.scene.angles.map((angle) =>
+              angle.id === obj.id
+                ? {
+                    ...angle,
+                    style: {
+                      ...angle.style,
+                      ...sourceAngleStyle,
+                      labelPosWorld: { ...angle.style.labelPosWorld },
+                    },
+                  }
+                : angle
+            ),
+          },
+        };
+      }
+
       const sourceLineStyle =
         prev.copyStyle.lineStyle ??
         (prev.copyStyle.circleStyle ? lineStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
@@ -1648,6 +1752,7 @@ const actions: GeoActions = {
         pointStyle: null,
         lineStyle: null,
         circleStyle: null,
+        angleStyle: null,
         showLabel: null,
       },
     }));
@@ -1799,6 +1904,36 @@ function pointStyleFromCircleStyle(style: CircleStyle): Partial<PointStyle> {
   };
 }
 
+function angleStyleFromLineStyle(style: LineStyle): Partial<AngleStyle> {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    strokeOpacity: style.opacity,
+  };
+}
+
+function angleStyleFromCircleStyle(style: CircleStyle): Partial<AngleStyle> {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    strokeOpacity: style.strokeOpacity,
+    fillColor: style.fillColor ?? style.strokeColor,
+    fillOpacity: style.fillOpacity ?? style.strokeOpacity,
+  };
+}
+
+function angleStyleFromPointStyle(style: PointStyle): Partial<AngleStyle> {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    strokeOpacity: style.strokeOpacity,
+    textColor: style.labelColor,
+    textSize: style.labelFontPx,
+    fillColor: style.fillColor,
+    fillOpacity: style.fillOpacity,
+  };
+}
+
 function getLineCircleRefs(
   objA: GeometryObjectRef,
   objB: GeometryObjectRef
@@ -1907,12 +2042,6 @@ function isSameWorld(a: Vec2 | null, b: Vec2 | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   return a.x === b.x && a.y === b.y;
-}
-
-function normalizeVec(v: Vec2): Vec2 {
-  const d = Math.hypot(v.x, v.y);
-  if (d <= 1e-12) return { x: 0, y: 0 };
-  return { x: v.x / d, y: v.y / d };
 }
 
 function findExistingIntersectionPointId(

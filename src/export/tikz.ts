@@ -1,6 +1,6 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
 import {
-  computeConvexAngleRad,
+  computeOrientedAngleRad,
   getLineWorldAnchors,
   getPointWorldPos,
   type GeometryObjectRef,
@@ -518,7 +518,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (!aWorld || !bWorld || !cWorld) {
       throw new Error(`Cannot export undefined angle geometry: ${angle.id}`);
     }
-    const theta = computeConvexAngleRad(aWorld, bWorld, cWorld);
+    const theta = computeOrientedAngleRad(aWorld, bWorld, cWorld);
     if (theta === null) {
       throw new Error(`Cannot export undefined angle geometry: ${angle.id}`);
     }
