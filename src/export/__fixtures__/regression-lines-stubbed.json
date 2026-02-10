@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p1", "name": "A", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 0, "y": 0 } },
+    { "id": "p2", "name": "B", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 0.02, "y": 0.01 } },
+    { "id": "p3", "name": "P", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 1.2, "y": 0.7 } },
+    { "id": "p4", "name": "Q", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": -2.5, "y": 1.1 } }
+  ],
+  "lines": [
+    { "id": "l1", "aId": "p1", "bId": "p2", "visible": true },
+    { "id": "l2", "kind": "perpendicular", "throughId": "p3", "base": { "type": "line", "id": "l1" }, "visible": true },
+    { "id": "l3", "aId": "p3", "bId": "p4", "visible": true }
+  ],
+  "segments": [
+    { "id": "s1", "aId": "p1", "bId": "p3", "visible": true }
+  ],
+  "circles": []
+}

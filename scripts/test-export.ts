@@ -226,6 +226,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
       throw new Error("Regression: expected O to be defined from InterLC(F,G)(K,J).");
     }
     const drawLines = parseDrawLines(tikz);
+    const globalAdd = parseGlobalLineAdd(tikz) ?? 5;
     const requiredNames = ["F", "G", "H", "I", "J", "O"];
     const pointsByName = new Map(scene.points.map((p) => [p.name, getPointWorldPos(p, scene)]));
 
@@ -235,29 +236,60 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
         const a = pointsByName.get(line.a);
         const b = pointsByName.get(line.b);
         if (!target || !a || !b) return false;
-        return lineCoversPoint(a, b, line.addLeft, line.addRight, target);
+        return lineCoversPoint(a, b, globalAdd, globalAdd, target);
       })
     );
     if (!covered) {
       throw new Error("Regression: expected one exported draw line to cover F,G,H,I,J,O on the same geometric line.");
     }
   }
+
+  if (fileName === "regression-lines-stubbed.json") {
+    if (!tikz.includes("\\tkzInit[")) {
+      throw new Error("Regression: expected tkz viewport init.");
+    }
+    if (!tikz.includes("\\tkzClip[")) {
+      throw new Error("Regression: expected tkz clip.");
+    }
+    if (!tikz.includes("\\tkzSetUpLine[add=5 and 5]")) {
+      throw new Error("Regression: expected global line setup with add=5 and 5.");
+    }
+    if (/\\tkzDrawLine\[add=\d*\.?\d+ and \d*\.?\d+/.test(tikz)) {
+      throw new Error("Regression: expected no per-line tiny add values.");
+    }
+    if (!tikz.includes("\\tkzDefLine[perpendicular=through")) {
+      throw new Error("Regression: expected perpendicular-line construction in fixture.");
+    }
+  }
+
+  if (fileName === "regression-lines-whitespace.json") {
+    if (!tikz.includes("\\tkzClip[")) {
+      throw new Error("Regression: expected tkz clip in whitespace fixture.");
+    }
+  }
 }
 
 function parseDrawLines(
   tikz: string
-): Array<{ addLeft: number; addRight: number; a: string; b: string }> {
-  const out: Array<{ addLeft: number; addRight: number; a: string; b: string }> = [];
-  const re = /\\tkzDrawLine\[add=([^ ]+) and ([^\]]+)\]\(([^,]+),([^)]+)\)/g;
+): Array<{ a: string; b: string }> {
+  const out: Array<{ a: string; b: string }> = [];
+  const re = /\\tkzDrawLine(?:\[[^\]]*\])?\(([^,]+),([^)]+)\)/g;
   for (let m = re.exec(tikz); m; m = re.exec(tikz)) {
     out.push({
-      addLeft: Number(m[1]),
-      addRight: Number(m[2]),
-      a: m[3],
-      b: m[4],
+      a: m[1],
+      b: m[2],
     });
   }
   return out;
+}
+
+function parseGlobalLineAdd(tikz: string): number | null {
+  const m = tikz.match(/\\tkzSetUpLine\[add=([^ ]+) and ([^\]]+)\]/);
+  if (!m) return null;
+  const left = Number(m[1]);
+  const right = Number(m[2]);
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
+  return Math.max(left, right);
 }
 
 function lineCoversPoint(

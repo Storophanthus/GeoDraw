@@ -10,6 +10,8 @@ import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
 
 export type TikzCommand =
+  | { kind: "SetupViewport"; xmin: number; xmax: number; ymin: number; ymax: number; space: number }
+  | { kind: "SetupLine"; addLeft: number; addRight: number }
   | { kind: "DefPoints"; items: { name: string; x: number; y: number }[] }
   | { kind: "DefPoint"; name: string; x: number; y: number }
   | { kind: "DefPointOnLine"; name: string; a: string; b: string }
@@ -65,6 +67,9 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
   const definedPointIds = new Set<string>();
 
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
+  const viewport = computeExportViewport(scene);
+  defs.push({ kind: "SetupViewport", ...viewport, space: 0 });
+  defs.push({ kind: "SetupLine", addLeft: 5, addRight: 5 });
 
   const visiting = new Set<string>();
   const visited = new Set<string>();
@@ -478,11 +483,15 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
 }
 
 export function renderTikz(cmds: TikzCommand[]): string {
+  const setupViewport = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupViewport" }> => c.kind === "SetupViewport");
+  const setupLine = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLine" }> => c.kind === "SetupLine");
   const pointsDefs = cmds.filter((c) => c.kind === "DefPoints");
   const pointDefs = cmds.filter((c) => c.kind === "DefPoint");
   const constructions = cmds.filter(
     (c) =>
       c.kind !== "DefPoints" &&
+      c.kind !== "SetupViewport" &&
+      c.kind !== "SetupLine" &&
       c.kind !== "DrawSegment" &&
       c.kind !== "DrawLine" &&
       c.kind !== "DrawCircle" &&
@@ -496,6 +505,20 @@ export function renderTikz(cmds: TikzCommand[]): string {
 
   const out: string[] = [];
   out.push("\\begin{tikzpicture}");
+  if (setupViewport) {
+    assertTkzMacro("tkzInit");
+    assertTkzMacro("tkzClip");
+    out.push(
+      `\\tkzInit[xmin=${fmt(setupViewport.xmin)},xmax=${fmt(setupViewport.xmax)},ymin=${fmt(
+        setupViewport.ymin
+      )},ymax=${fmt(setupViewport.ymax)}]`
+    );
+    out.push(`\\tkzClip[space=${fmt(setupViewport.space)}]`);
+  }
+  if (setupLine) {
+    assertTkzMacro("tkzSetUpLine");
+    out.push(`\\tkzSetUpLine[add=${fmt(setupLine.addLeft)} and ${fmt(setupLine.addRight)}]`);
+  }
 
   // Emit predefined styles used by tkzDrawPoints[...] commands.
   const pointStyles = extractPointStyles(cmds);
@@ -597,9 +620,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
       out.push(`\\tkzDrawSegment${opts}(${cmd.a},${cmd.b})`);
     } else if (cmd.kind === "DrawLine") {
       assertTkzMacro("tkzDrawLine");
-      const opts = cmd.style
-        ? `[add=${fmt(cmd.addLeft)} and ${fmt(cmd.addRight)}, ${cmd.style}]`
-        : `[add=${fmt(cmd.addLeft)} and ${fmt(cmd.addRight)}]`;
+      const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzDrawLine${opts}(${cmd.a},${cmd.b})`);
     } else if (cmd.kind === "DrawCircle") {
       assertTkzMacro("tkzDrawCircle");
@@ -806,6 +827,54 @@ function inferLineCircleCommonFromEndpointsWorld(
   if (lineAId && aMatch !== null && bMatch === null && selectedBranch !== aMatch) return pointName.get(lineAId);
   if (lineBId && bMatch !== null && aMatch === null && selectedBranch !== bMatch) return pointName.get(lineBId);
   return undefined;
+}
+
+function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number; ymin: number; ymax: number } {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  const add = (x: number, y: number): void => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  };
+
+  for (const point of scene.points) {
+    const world = getPointWorldPos(point, scene);
+    if (!world) continue;
+    add(world.x, world.y);
+  }
+
+  for (const circle of scene.circles) {
+    const center = getPointWorldPosCached(scene, circle.centerId);
+    const through = getPointWorldPosCached(scene, circle.throughId);
+    if (!center || !through) continue;
+    const r = distance(center, through);
+    if (!Number.isFinite(r)) continue;
+    add(center.x - r, center.y - r);
+    add(center.x + r, center.y + r);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+    return { xmin: -10, xmax: 10, ymin: -10, ymax: 10 };
+  }
+
+  let width = maxX - minX;
+  let height = maxY - minY;
+  if (width < 1e-6) width = 1;
+  if (height < 1e-6) height = 1;
+  const pad = Math.max(0.25, 0.1 * Math.max(width, height));
+
+  return {
+    xmin: minX - pad,
+    xmax: maxX + pad,
+    ymin: minY - pad,
+    ymax: maxY + pad,
+  };
 }
 
 function inferOtherLineCircleBranchPointFromWorld(

@@ -17,10 +17,10 @@ const pointStyle = {
 };
 
 const lineStyle = {
-  strokeColor: "#222222",
-  strokeWidth: 1.5,
-  dash: "solid" as const,
-  opacity: 1,
+  strokeColor: "#1d4ed8",
+  strokeWidth: 2.4,
+  dash: "dashed" as const,
+  opacity: 0.65,
 };
 
 const scene: SceneModel = {
@@ -73,20 +73,35 @@ const tikz = exportTikz(scene);
 
 const drawLine = tikz
   .split("\n")
-  .find((line) => line.startsWith("\\tkzDrawLine[add=") && line.includes("(A,C)"));
+  .find((line) => line.startsWith("\\tkzDrawLine[") && line.includes("(A,C)"));
 if (!drawLine) {
   throw new Error("Expected line to be drawn using extreme collinear anchors (A,C)");
 }
 
-const addMatch = drawLine.match(/add=([^ ]+) and ([^\]]+)/);
-if (!addMatch) {
-  throw new Error("Line export missing add=<left> and <right>");
+const setup = tikz.match(/\\tkzSetUpLine\[add=([^ ]+) and ([^\]]+)\]/);
+if (!setup) {
+  throw new Error("Expected global line setup with add extents");
+}
+const left = Number(setup[1]);
+const right = Number(setup[2]);
+if (!Number.isFinite(left) || !Number.isFinite(right) || left <= 0 || right <= 0) {
+  throw new Error(`Invalid global line add extents: left=${setup[1]} right=${setup[2]}`);
+}
+if (/\\tkzDrawLine\[add=/.test(drawLine)) {
+  throw new Error(`Expected no per-line add override: ${drawLine}`);
 }
 
-const left = Number(addMatch[1]);
-const right = Number(addMatch[2]);
-if (!Number.isFinite(left) || !Number.isFinite(right) || left <= 0 || right <= 0) {
-  throw new Error(`Invalid line add extents: left=${addMatch[1]} right=${addMatch[2]}`);
+if (!drawLine.includes("dashed")) {
+  throw new Error(`Expected dashed style in draw line: ${drawLine}`);
+}
+if (!drawLine.includes("opacity=0.65")) {
+  throw new Error(`Expected opacity style in draw line: ${drawLine}`);
+}
+if (!drawLine.includes("line width=1.8pt")) {
+  throw new Error(`Expected converted line width style in draw line: ${drawLine}`);
+}
+if (!drawLine.includes("color={rgb,255:red,29;green,78;blue,216}")) {
+  throw new Error(`Expected converted stroke color in draw line: ${drawLine}`);
 }
 
 console.log("✓ export line-extents test passed");

@@ -1,6 +1,9 @@
 const EMITTED_TKZ_MACROS = new Set<string>([
   "tkzDefPoints",
   "tkzDefPoint",
+  "tkzInit",
+  "tkzClip",
+  "tkzSetUpLine",
   "tkzDefMidPoint",
   "tkzGetPoint",
   "tkzDefPointBy",
