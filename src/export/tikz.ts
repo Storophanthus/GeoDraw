@@ -629,7 +629,8 @@ export function renderTikz(cmds: TikzCommand[]): string {
   }
 
   out.push("\\end{tikzpicture}");
-  return out.join("\n");
+  const withNamedColors = hoistNamedColors(out);
+  return withNamedColors.join("\n");
 }
 
 export function exportTikz(scene: SceneModel): string {
@@ -1171,6 +1172,44 @@ function rgbColorExpr(hex: string): string {
   const g = parseInt(full.slice(2, 4), 16);
   const b = parseInt(full.slice(4, 6), 16);
   return `{rgb,255:red,${r};green,${g};blue,${b}}`;
+}
+
+function hoistNamedColors(lines: string[]): string[] {
+  const rgbPattern = /\{rgb,255:red,(\d+);green,(\d+);blue,(\d+)\}/g;
+  const colorMap = new Map<string, string>();
+  const colorDefs: string[] = [];
+
+  const toName = (r: number, g: number, b: number): string => {
+    const hex = [r, g, b]
+      .map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0"))
+      .join("");
+    return `gdC_${hex}`;
+  };
+
+  const rewritten = lines.map((line) =>
+    line.replace(rgbPattern, (_m, rs: string, gs: string, bs: string) => {
+      const r = Number(rs);
+      const g = Number(gs);
+      const b = Number(bs);
+      const key = `${r},${g},${b}`;
+      let name = colorMap.get(key);
+      if (!name) {
+        name = toName(r, g, b);
+        colorMap.set(key, name);
+        colorDefs.push(`\\definecolor{${name}}{RGB}{${r},${g},${b}}`);
+      }
+      return name;
+    })
+  );
+
+  if (colorDefs.length === 0) return rewritten;
+
+  const beginIdx = rewritten.findIndex((line) => line.trim() === "\\begin{tikzpicture}");
+  if (beginIdx < 0) return rewritten;
+
+  const out = [...rewritten];
+  out.splice(beginIdx + 1, 0, ...colorDefs);
+  return out;
 }
 
 function escapeTikzText(value: string): string {
