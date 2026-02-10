@@ -29,8 +29,11 @@ export type SnapshotPoint = {
 
 export type SnapshotLine = {
   id: string;
-  aId: string;
-  bId: string;
+  kind?: "twoPoint" | "perpendicular";
+  aId?: string;
+  bId?: string;
+  throughId?: string;
+  base?: { type: "line" | "segment"; id: string };
   visible: boolean;
 };
 
@@ -69,12 +72,23 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
     .sort((a, b) => a.id.localeCompare(b.id));
 
   const lines = scene.lines
-    .map((line) => ({
-      id: line.id,
-      aId: line.aId,
-      bId: line.bId,
-      visible: line.visible,
-    }))
+    .map((line) =>
+      line.kind === "perpendicular"
+        ? {
+            id: line.id,
+            kind: "perpendicular" as const,
+            throughId: line.throughId,
+            base: line.base,
+            visible: line.visible,
+          }
+        : {
+            id: line.id,
+            kind: "twoPoint" as const,
+            aId: line.aId,
+            bId: line.bId,
+            visible: line.visible,
+          }
+    )
     .sort((a, b) => a.id.localeCompare(b.id));
 
   const segments = scene.segments

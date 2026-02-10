@@ -8,7 +8,7 @@ import {
   projectPointToLine,
   projectPointToSegment,
 } from "../geo/geometry";
-import { getPointWorldPos, type GeometryObjectRef, type SceneModel } from "../scene/points";
+import { getLineWorldAnchors, getPointWorldPos, type GeometryObjectRef, type SceneModel } from "../scene/points";
 import type { Camera, Viewport } from "./camera";
 import { camera as camMath } from "./camera";
 
@@ -68,8 +68,9 @@ export function findBestSnap(
 
   for (const line of scene.lines) {
     if (!line.visible) continue;
-    const a = getPointWorld(scene, line.aId);
-    const b = getPointWorld(scene, line.bId);
+    const anchors = getLineWorldAnchors(line, scene);
+    const a = anchors?.a ?? null;
+    const b = anchors?.b ?? null;
     if (!a || !b) continue;
     const ap = camMath.worldToScreen(a, camera, vp);
     const bp = camMath.worldToScreen(b, camera, vp);

@@ -4,6 +4,7 @@ const EMITTED_TKZ_MACROS = new Set<string>([
   "tkzDefMidPoint",
   "tkzGetPoint",
   "tkzDefPointBy",
+  "tkzDefLine",
   "tkzDefPointOnCircle",
   "tkzInterLL",
   "tkzInterLC",

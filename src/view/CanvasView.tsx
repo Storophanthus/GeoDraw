@@ -7,6 +7,7 @@ import {
   beginSceneEvalTick,
   endSceneEvalTick,
   type GeometryObjectRef,
+  type LineLikeObjectRef,
   getPointWorldPos,
   isPointDraggable,
   type PointShape,
@@ -92,6 +93,7 @@ export function CanvasView() {
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
   const createCircle = useGeoStore((store) => store.createCircle);
+  const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
   const createPointOnLine = useGeoStore((store) => store.createPointOnLine);
@@ -208,7 +210,7 @@ export function CanvasView() {
         drawCircles(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
         drawLines(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
         drawSegments(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
-        drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, scene, camera, vp);
+        drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, hoveredHit, resolvedPoints, scene, camera, vp);
         drawPoints(ctx, resolvedPoints, selectedObject, camera, vp, copyStyle.source);
         drawInteractionHighlights(
           ctx,
@@ -299,7 +301,7 @@ export function CanvasView() {
         }
       } else if (nextHovered && isValidTarget(activeTool, pendingSelection, nextHovered)) {
         nextCursor = "pointer";
-      } else if (toolAllowsEmptyPointCreation(activeTool)) {
+      } else if (toolAllowsEmptyPointCreation(activeTool, pendingSelection)) {
         nextCursor = "crosshair";
       }
 
@@ -522,6 +524,7 @@ export function CanvasView() {
           createSegment,
           createLine,
           createCircle,
+          createPerpendicularLine,
           createMidpointFromPoints,
           createMidpointFromSegment,
           createPointOnLine,
@@ -598,6 +601,7 @@ export function CanvasView() {
     createFreePoint,
     createLine,
     createCircle,
+    createPerpendicularLine,
     clearPendingSelection,
     createMidpointFromPoints,
     createMidpointFromSegment,
@@ -669,6 +673,7 @@ function handleToolClick(
     createSegment: (aId: string, bId: string) => string | null;
     createLine: (aId: string, bId: string) => string | null;
     createCircle: (centerId: string, throughId: string) => string | null;
+    createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
     createMidpointFromPoints: (aId: string, bId: string) => string | null;
     createMidpointFromSegment: (segId: string) => string | null;
     createPointOnLine: (lineId: string, s: number) => string | null;
@@ -801,10 +806,47 @@ function handleToolClick(
     }
 
     io.setPendingSelection({ tool: "midpoint", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+    return;
+  }
+
+  if (activeTool === "perp_line") {
+    const hitLineLikeRef = hits.hitObject?.type === "line"
+      ? ({ type: "line", id: hits.hitObject.id } as const)
+      : hits.hitObject?.type === "segment"
+        ? ({ type: "segment", id: hits.hitObject.id } as const)
+        : null;
+
+    if (!pendingSelection || pendingSelection.tool !== "perp_line") {
+      if (hits.hitPointId) {
+        io.setPendingSelection({ tool: "perp_line", step: 2, first: { type: "point", id: hits.hitPointId } });
+        return;
+      }
+      if (hitLineLikeRef) {
+        io.setPendingSelection({ tool: "perp_line", step: 2, first: { type: "lineLike", ref: hitLineLikeRef } });
+        return;
+      }
+      io.setPendingSelection({ tool: "perp_line", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+
+    if (pendingSelection.first.type === "point") {
+      if (!hitLineLikeRef) return;
+      io.createPerpendicularLine(pendingSelection.first.id, hitLineLikeRef);
+      io.clearPendingSelection();
+      return;
+    }
+
+    const throughId = resolveOrCreatePointAtCursor();
+    io.createPerpendicularLine(throughId, pendingSelection.first.ref);
+    io.clearPendingSelection();
   }
 }
 
-function toolAllowsEmptyPointCreation(activeTool: ActiveTool): boolean {
+function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSelection: PendingSelection): boolean {
+  if (activeTool === "perp_line") {
+    if (!pendingSelection || pendingSelection.tool !== "perp_line") return true;
+    return pendingSelection.first.type === "lineLike";
+  }
   return (
     activeTool === "point" ||
     activeTool === "segment" ||
@@ -824,6 +866,15 @@ function isValidTarget(
   if (activeTool === "segment") return hoveredHit.type === "point";
   if (activeTool === "line2p") return hoveredHit.type === "point";
   if (activeTool === "circle_cp") return hoveredHit.type === "point";
+  if (activeTool === "perp_line") {
+    if (!pendingSelection || pendingSelection.tool !== "perp_line") {
+      return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
+    }
+    if (pendingSelection.first.type === "point") {
+      return hoveredHit.type === "line2p" || hoveredHit.type === "segment";
+    }
+    return hoveredHit.type === "point";
+  }
 
   if (activeTool === "midpoint") {
     if (pendingSelection?.tool === "midpoint") return hoveredHit.type === "point";
@@ -923,8 +974,9 @@ function hitTestLine(
   for (let i = scene.lines.length - 1; i >= 0; i -= 1) {
     const line = scene.lines[i];
     if (!line.visible) continue;
-    const a = geoStoreHelpers.getPointWorldById(scene, line.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, line.bId);
+    const anchors = geoStoreHelpers.getLineWorldAnchorsById(scene, line.id);
+    const a = anchors?.a ?? null;
+    const b = anchors?.b ?? null;
     if (!a || !b) continue;
     const ap = camMath.worldToScreen(a, camera, vp);
     const bp = camMath.worldToScreen(b, camera, vp);
@@ -1028,14 +1080,16 @@ function drawPendingPreview(
   pendingSelection: PendingSelection,
   cursorWorld: Vec2 | null,
   cursorScreen: Vec2 | null,
+  hoveredHit: HoveredHit,
+  resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>,
   scene: SceneModel,
   camera: Camera,
   vp: Viewport
 ) {
   if (!pendingSelection) return;
-  const firstWorld = geoStoreHelpers.getPointWorldById(scene, pendingSelection.first.id);
-  if (!firstWorld) return;
-  const p1 = camMath.worldToScreen(firstWorld, camera, vp);
+  const firstPointId = pendingSelection.first.type === "point" ? pendingSelection.first.id : null;
+  const firstWorld = firstPointId ? geoStoreHelpers.getPointWorldById(scene, firstPointId) : null;
+  const p1 = firstWorld ? camMath.worldToScreen(firstWorld, camera, vp) : null;
 
   ctx.save();
   ctx.globalAlpha = 0.65;
@@ -1043,7 +1097,7 @@ function drawPendingPreview(
   ctx.strokeStyle = "#0ea5e9";
   ctx.lineWidth = 1.3;
 
-  if ((pendingSelection.tool === "segment" || pendingSelection.tool === "midpoint") && cursorWorld) {
+  if (p1 && (pendingSelection.tool === "segment" || pendingSelection.tool === "midpoint") && cursorWorld) {
     const p2 = camMath.worldToScreen(cursorWorld, camera, vp);
     ctx.beginPath();
     ctx.moveTo(p1.x, p1.y);
@@ -1053,7 +1107,7 @@ function drawPendingPreview(
     return;
   }
 
-  if (pendingSelection.tool === "line2p" && cursorWorld) {
+  if (p1 && pendingSelection.tool === "line2p" && cursorWorld && firstWorld) {
     const d = sub(cursorWorld, firstWorld);
     const len = Math.hypot(d.x, d.y);
     if (len < 1e-9) {
@@ -1072,12 +1126,75 @@ function drawPendingPreview(
     return;
   }
 
-  if (pendingSelection.tool === "circle_cp" && cursorScreen) {
+  if (p1 && pendingSelection.tool === "circle_cp" && cursorScreen) {
     const radiusPx = Math.hypot(cursorScreen.x - p1.x, cursorScreen.y - p1.y);
     ctx.globalAlpha = 0.45;
     ctx.lineWidth = 1.1;
     ctx.beginPath();
     ctx.arc(p1.x, p1.y, radiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  if (pendingSelection.tool === "perp_line") {
+    let through: Vec2 | null = null;
+    let baseRef: LineLikeObjectRef | null = null;
+
+    if (pendingSelection.first.type === "point") {
+      through = geoStoreHelpers.getPointWorldById(scene, pendingSelection.first.id);
+      if (hoveredHit?.type === "line2p") baseRef = { type: "line", id: hoveredHit.id };
+      else if (hoveredHit?.type === "segment") baseRef = { type: "segment", id: hoveredHit.id };
+      else if (cursorWorld && cursorScreen) {
+        const lineId = hitTestLine(cursorScreen, scene, camera, vp, LINE_HIT_TOLERANCE_PX);
+        const segId = hitTestSegment(cursorScreen, scene, camera, vp, SEGMENT_HIT_TOLERANCE_PX);
+        if (lineId) baseRef = { type: "line", id: lineId };
+        else if (segId) baseRef = { type: "segment", id: segId };
+      }
+    } else {
+      baseRef = pendingSelection.first.ref;
+      if (hoveredHit?.type === "point") {
+        through = geoStoreHelpers.getPointWorldById(scene, hoveredHit.id);
+      } else if (cursorWorld && cursorScreen) {
+        const hitPointId = hitTestPoint(cursorScreen, resolvedPoints, camera, vp, POINT_HIT_TOLERANCE_PX);
+        if (hitPointId) through = geoStoreHelpers.getPointWorldById(scene, hitPointId);
+      }
+    }
+
+    if (!through || !baseRef) {
+      ctx.restore();
+      return;
+    }
+    const baseAnchors = baseRef.type === "line"
+      ? geoStoreHelpers.getLineWorldAnchorsById(scene, baseRef.id)
+      : (() => {
+          const seg = scene.segments.find((item) => item.id === baseRef.id);
+          if (!seg) return null;
+          const a = geoStoreHelpers.getPointWorldById(scene, seg.aId);
+          const b = geoStoreHelpers.getPointWorldById(scene, seg.bId);
+          if (!a || !b) return null;
+          return { a, b };
+        })();
+    if (!baseAnchors) {
+      ctx.restore();
+      return;
+    }
+    const d = sub(baseAnchors.b, baseAnchors.a);
+    if (d.x * d.x + d.y * d.y <= 1e-12) {
+      ctx.restore();
+      return;
+    }
+    const perp = { x: -d.y, y: d.x };
+    const len = Math.hypot(perp.x, perp.y);
+    if (len <= 1e-12) {
+      ctx.restore();
+      return;
+    }
+    const dir = { x: perp.x / len, y: perp.y / len };
+    const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 2;
+    const q1 = camMath.worldToScreen(add(through, mul(dir, -span)), camera, vp);
+    const q2 = camMath.worldToScreen(add(through, mul(dir, span)), camera, vp);
+    ctx.beginPath();
+    ctx.moveTo(q1.x, q1.y);
+    ctx.lineTo(q2.x, q2.y);
     ctx.stroke();
   }
 
@@ -1096,16 +1213,34 @@ function drawInteractionHighlights(
   vp: Viewport
 ) {
   if (pendingSelection) {
-    drawHitHighlight(
-      ctx,
-      { type: "point", id: pendingSelection.first.id },
-      resolvedPoints,
-      scene,
-      camera,
-      vp,
-      "#22c55e",
-      0.95
-    );
+    if (pendingSelection.tool === "perp_line" && pendingSelection.first.type === "lineLike") {
+      drawHitHighlight(
+        ctx,
+        pendingSelection.first.ref.type === "line"
+          ? { type: "line2p", id: pendingSelection.first.ref.id }
+          : { type: "segment", id: pendingSelection.first.ref.id },
+        resolvedPoints,
+        scene,
+        camera,
+        vp,
+        "#22c55e",
+        0.95
+      );
+    } else {
+      if (pendingSelection.first.type !== "point") {
+        return;
+      }
+      drawHitHighlight(
+        ctx,
+        { type: "point", id: pendingSelection.first.id },
+        resolvedPoints,
+        scene,
+        camera,
+        vp,
+        "#22c55e",
+        0.95
+      );
+    }
   }
 
   if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
@@ -1165,8 +1300,9 @@ function drawHitHighlight(
   if (hit.type === "line2p") {
     const line = scene.lines.find((item) => item.id === hit.id);
     if (!line || !line.visible) return;
-    const a = geoStoreHelpers.getPointWorldById(scene, line.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, line.bId);
+    const anchors = geoStoreHelpers.getLineWorldAnchorsById(scene, line.id);
+    const a = anchors?.a ?? null;
+    const b = anchors?.b ?? null;
     if (!a || !b) return;
     const d = sub(b, a);
     const len = Math.hypot(d.x, d.y);
@@ -1220,8 +1356,9 @@ function drawLines(
 
   for (const line of scene.lines) {
     if (!line.visible) continue;
-    const a = geoStoreHelpers.getPointWorldById(scene, line.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, line.bId);
+    const anchors = geoStoreHelpers.getLineWorldAnchorsById(scene, line.id);
+    const a = anchors?.a ?? null;
+    const b = anchors?.b ?? null;
     if (!a || !b) continue;
 
     const d = sub(b, a);
@@ -1454,8 +1591,9 @@ function highlightSnapObject(
       ctx.restore();
       return;
     }
-    const a = geoStoreHelpers.getPointWorldById(scene, line.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, line.bId);
+    const anchors = geoStoreHelpers.getLineWorldAnchorsById(scene, line.id);
+    const a = anchors?.a ?? null;
+    const b = anchors?.b ?? null;
     if (!a || !b) {
       ctx.restore();
       return;

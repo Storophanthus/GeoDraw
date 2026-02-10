@@ -141,6 +141,8 @@ export type GeometryObjectRef =
   | { type: "segment"; id: string }
   | { type: "circle"; id: string };
 
+export type LineLikeObjectRef = { type: "line"; id: string } | { type: "segment"; id: string };
+
 export type IntersectionPoint = {
   id: string;
   kind: "intersectionPoint";
@@ -192,13 +194,25 @@ export type SceneSegment = {
   style: LineStyle;
 };
 
-export type SceneLine = {
+export type SceneLineTwoPoint = {
   id: string;
+  kind?: "twoPoint";
   aId: string;
   bId: string;
   visible: boolean;
   style: LineStyle;
 };
+
+export type SceneLinePerpendicular = {
+  id: string;
+  kind: "perpendicular";
+  throughId: string;
+  base: LineLikeObjectRef;
+  visible: boolean;
+  style: LineStyle;
+};
+
+export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular;
 
 export type SceneCircle = {
   id: string;
@@ -236,6 +250,7 @@ type SceneEvalContext = {
   lineById: Map<string, SceneLine>;
   segmentById: Map<string, SceneSegment>;
   circleById: Map<string, SceneCircle>;
+  lineInProgress: Set<string>;
   stats: SceneEvalStats;
   explicit: boolean;
 };
@@ -277,6 +292,7 @@ function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalC
     lineById,
     segmentById,
     circleById,
+    lineInProgress: new Set<string>(),
     stats: {
       tick: sceneEvalTick,
       dirtyNodes: scene.points.length,
@@ -426,11 +442,10 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
   if (point.kind === "pointOnLine") {
     const line = ctx.lineById.get(point.lineId);
     if (!line) return null;
-    const a = getPointWorldById(line.aId, scene, ctx);
-    const b = getPointWorldById(line.bId, scene, ctx);
-    if (!a || !b) return null;
+    const anchors = resolveLineAnchors(line, scene, ctx);
+    if (!anchors) return null;
     ctx.stats.allocationsEstimate += 1;
-    return add(a, mul(sub(b, a), point.s));
+    return add(anchors.a, mul(sub(anchors.b, anchors.a), point.s));
   }
 
   if (point.kind === "pointOnSegment") {
@@ -463,9 +478,10 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
     if (!circle || !line) return null;
     const center = getPointWorldById(circle.centerId, scene, ctx);
     const through = getPointWorldById(circle.throughId, scene, ctx);
-    const la = getPointWorldById(line.aId, scene, ctx);
-    const lb = getPointWorldById(line.bId, scene, ctx);
-    if (!center || !through || !la || !lb) return null;
+    const anchors = resolveLineAnchors(line, scene, ctx);
+    if (!center || !through || !anchors) return null;
+    const la = anchors.a;
+    const lb = anchors.b;
     const r = distance(center, through);
     const stabilitySignature = circleLineStabilitySignature(point.circleId, point.lineId, la, lb, center, r);
     ctx.stats.circleLineCalls += 1;
@@ -611,10 +627,9 @@ function asLineLike(
   if (ref.type === "line") {
     const line = ctx.lineById.get(ref.id);
     if (!line) return null;
-    const a = getPointWorldById(line.aId, scene, ctx);
-    const b = getPointWorldById(line.bId, scene, ctx);
-    if (!a || !b) return null;
-    return { a, b, finite: false };
+    const anchors = resolveLineAnchors(line, scene, ctx);
+    if (!anchors) return null;
+    return { a: anchors.a, b: anchors.b, finite: false };
   }
 
   if (ref.type === "segment") {
@@ -627,6 +642,68 @@ function asLineLike(
   }
 
   return null;
+}
+
+function resolveLineAnchors(
+  line: SceneLine,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): { a: Vec2; b: Vec2 } | null {
+  if (ctx.lineInProgress.has(line.id)) return null;
+  ctx.lineInProgress.add(line.id);
+  try {
+    if (line.kind !== "perpendicular") {
+      const a = getPointWorldById(line.aId, scene, ctx);
+      const b = getPointWorldById(line.bId, scene, ctx);
+      if (!a || !b) return null;
+      return { a, b };
+    }
+
+    const through = getPointWorldById(line.throughId, scene, ctx);
+    if (!through) return null;
+    const base = resolveLineLikeRefAnchors(line.base, scene, ctx);
+    if (!base) return null;
+    const dx = base.b.x - base.a.x;
+    const dy = base.b.y - base.a.y;
+    if (dx * dx + dy * dy <= 1e-12) return null;
+    return {
+      a: through,
+      b: {
+        x: through.x - dy,
+        y: through.y + dx,
+      },
+    };
+  } finally {
+    ctx.lineInProgress.delete(line.id);
+  }
+}
+
+function resolveLineLikeRefAnchors(
+  ref: LineLikeObjectRef,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): { a: Vec2; b: Vec2 } | null {
+  if (ref.type === "segment") {
+    const seg = ctx.segmentById.get(ref.id);
+    if (!seg) return null;
+    const a = getPointWorldById(seg.aId, scene, ctx);
+    const b = getPointWorldById(seg.bId, scene, ctx);
+    if (!a || !b) return null;
+    return { a, b };
+  }
+  const line = ctx.lineById.get(ref.id);
+  if (!line) return null;
+  return resolveLineAnchors(line, scene, ctx);
+}
+
+export function getLineWorldAnchors(line: SceneLine, scene: SceneModel): { a: Vec2; b: Vec2 } | null {
+  const ctx = getOrCreateSceneEvalContext(scene);
+  const value = resolveLineAnchors(line, scene, ctx);
+  if (!ctx.explicit) {
+    ctx.stats.ms = performance.now() - ctx.startedAt;
+    sceneLastEvalStats.set(scene, { ...ctx.stats });
+  }
+  return value;
 }
 
 function asCircle(

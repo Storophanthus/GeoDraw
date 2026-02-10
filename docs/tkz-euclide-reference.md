@@ -20,6 +20,10 @@ Defining multiple points
 Defining line perpendicular to AB and through C
 	\tkzDefLine[perpendicular=through C](A,B) \tkzGetPoint{c}
 
+Perpendicular line through P to AB (GeoDraw PerpendicularLine mapping)
+	\tkzDefLine[perpendicular=through P](A,B) \tkzGetPoint{q}
+	\tkzDrawLine[add=5 and 5](P,q)
+
 Taking a point on ray AB and name it D
 	\tkzDefPointBy[homothety=center A ratio 0.5](B) \tkzGetPoint{D}
 

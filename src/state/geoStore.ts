@@ -2,6 +2,8 @@ import { useSyncExternalStore } from "react";
 import type { Vec2 } from "../geo/vec2";
 import {
   type CircleStyle,
+  type LineLikeObjectRef,
+  getLineWorldAnchors,
   getPointWorldPos,
   isNameUnique,
   isValidPointName,
@@ -30,7 +32,8 @@ export type ActiveTool =
   | "midpoint"
   | "segment"
   | "line2p"
-  | "circle_cp";
+  | "circle_cp"
+  | "perp_line";
 
 export type SelectedObject =
   | { type: "point"; id: string }
@@ -47,6 +50,13 @@ export type HoveredHit =
   | null;
 
 export type PendingSelection =
+  | {
+      tool: "perp_line";
+      step: 2;
+      first:
+        | { type: "point"; id: string }
+        | { type: "lineLike"; ref: LineLikeObjectRef };
+    }
   | {
       tool: "segment" | "line2p" | "circle_cp" | "midpoint";
       step: 2;
@@ -97,6 +107,7 @@ type GeoActions = {
   createMidpointFromSegment: (segId: string) => string | null;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
+  createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createCircle: (centerId: string, throughId: string) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
@@ -463,8 +474,54 @@ const actions: GeoActions = {
             ...prev.scene.lines,
             {
               id,
+              kind: "twoPoint",
               aId,
               bId,
+              visible: true,
+              style: { ...prev.lineDefaults },
+            },
+          ],
+        },
+        selectedObject: { type: "line", id },
+        recentCreatedObject: { type: "line", id },
+        nextLineId: prev.nextLineId + 1,
+      };
+    });
+    return id;
+  },
+
+  createPerpendicularLine(throughId, base) {
+    let id: string | null = null;
+    setState((prev) => {
+      const through = prev.scene.points.find((p) => p.id === throughId);
+      if (!through) return prev;
+      const baseValid =
+        base.type === "line"
+          ? prev.scene.lines.some((line) => line.id === base.id)
+          : prev.scene.segments.some((seg) => seg.id === base.id);
+      if (!baseValid) return prev;
+      const tempLine: SceneModel["lines"][number] = {
+        id: "__temp_perp__",
+        kind: "perpendicular",
+        throughId,
+        base,
+        visible: true,
+        style: prev.lineDefaults,
+      };
+      const anchors = getLineWorldAnchors(tempLine, prev.scene);
+      if (!anchors) return prev;
+      id = `l_${prev.nextLineId}`;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          lines: [
+            ...prev.scene.lines,
+            {
+              id,
+              kind: "perpendicular",
+              throughId,
+              base,
               visible: true,
               style: { ...prev.lineDefaults },
             },
@@ -711,10 +768,9 @@ const actions: GeoActions = {
         if (point.kind === "pointOnLine") {
           const line = prev.scene.lines.find((item) => item.id === point.lineId);
           if (!line) return point;
-          const a = geoStoreHelpers.getPointWorldById(prev.scene, line.aId);
-          const b = geoStoreHelpers.getPointWorldById(prev.scene, line.bId);
-          if (!a || !b) return point;
-          const pr = projectPointToLine(world, a, b);
+          const anchors = getLineWorldAnchors(line, prev.scene);
+          if (!anchors) return point;
+          const pr = projectPointToLine(world, anchors.a, anchors.b);
           return { ...point, s: pr.s };
         }
 
@@ -972,9 +1028,16 @@ const actions: GeoActions = {
         const keptSegments = prev.scene.segments.filter(
           (seg) => seg.aId !== deletedPointId && seg.bId !== deletedPointId
         );
-        const keptLines = prev.scene.lines.filter(
-          (line) => line.aId !== deletedPointId && line.bId !== deletedPointId
+        const directKeptLines = prev.scene.lines.filter((line) => !lineReferencesPoint(line, deletedPointId));
+        const removedLineIds = new Set(
+          prev.scene.lines.filter((line) => lineReferencesPoint(line, deletedPointId)).map((line) => line.id)
         );
+        const keptLines = directKeptLines.filter((line) => {
+          if (line.kind !== "perpendicular") return true;
+          if (!line.base) return true;
+          if (line.base.type === "line" && removedLineIds.has(line.base.id)) return false;
+          return true;
+        });
         const keptCircles = prev.scene.circles.filter(
           (circle) => circle.centerId !== deletedPointId && circle.throughId !== deletedPointId
         );
@@ -1048,12 +1111,15 @@ const actions: GeoActions = {
                 (point.objB.type !== "segment" || point.objB.id !== segId))
         );
         const keptSegments = prev.scene.segments.filter((seg) => seg.id !== segId);
-        const keptLines = prev.scene.lines;
+        const keptLines = prev.scene.lines.filter(
+          (line) => !(line.kind === "perpendicular" && line.base.type === "segment" && line.base.id === segId)
+        );
         return {
           ...prev,
           scene: {
             ...prev.scene,
             segments: keptSegments,
+            lines: keptLines,
             points: nextPoints,
           },
           selectedObject: null,
@@ -1094,7 +1160,13 @@ const actions: GeoActions = {
         ...prev,
         scene: {
           ...prev.scene,
-          lines: prev.scene.lines.filter((line) => line.id !== prev.selectedObject!.id),
+          lines: prev.scene.lines.filter((line) => {
+            if (line.id === prev.selectedObject!.id) return false;
+            if (line.kind === "perpendicular" && line.base.type === "line" && line.base.id === prev.selectedObject!.id) {
+              return false;
+            }
+            return true;
+          }),
           points: prev.scene.points.filter(
             (point) =>
               point.kind !== "pointOnLine" ||
@@ -1297,6 +1369,11 @@ export const geoStoreHelpers = {
     if (!point) return null;
     return getPointWorldPos(point, scene);
   },
+  getLineWorldAnchorsById(scene: SceneModel, lineId: string): { a: Vec2; b: Vec2 } | null {
+    const line = scene.lines.find((item) => item.id === lineId);
+    if (!line) return null;
+    return getLineWorldAnchors(line, scene);
+  },
 };
 
 function isCopyStyleSourceAlive(
@@ -1404,8 +1481,9 @@ function createStableLineCircleIntersectionPoint(
   const circle = state.scene.circles.find((item) => item.id === circleId);
   if (!line || !circle) return null;
 
-  const a = geoStoreHelpers.getPointWorldById(state.scene, line.aId);
-  const b = geoStoreHelpers.getPointWorldById(state.scene, line.bId);
+  const anchors = getLineWorldAnchors(line, state.scene);
+  const a = anchors?.a ?? null;
+  const b = anchors?.b ?? null;
   const center = geoStoreHelpers.getPointWorldById(state.scene, circle.centerId);
   const through = geoStoreHelpers.getPointWorldById(state.scene, circle.throughId);
   if (!a || !b || !center || !through) return null;
@@ -1428,8 +1506,9 @@ function createStableLineCircleIntersectionPoint(
   const endpointCandidates: Array<{ id: string; world: Vec2 }> = [];
   const aOnCircle = Math.abs(distance(a, center) - radius) <= 1e-6;
   const bOnCircle = Math.abs(distance(b, center) - radius) <= 1e-6;
-  if (aOnCircle) endpointCandidates.push({ id: line.aId, world: a });
-  if (bOnCircle) endpointCandidates.push({ id: line.bId, world: b });
+  const endpointIds = getLineEndpointPointIds(line);
+  if (aOnCircle && endpointIds[0]) endpointCandidates.push({ id: endpointIds[0], world: a });
+  if (bOnCircle && endpointIds[1]) endpointCandidates.push({ id: endpointIds[1], world: b });
 
   if (branches.length >= 2 && endpointCandidates.length === 1) {
     const endpoint = endpointCandidates[0];
@@ -1540,8 +1619,9 @@ function resolveLineCircleTarget(
   const circle = state.scene.circles.find((item) => item.id === circleId);
   if (!line || !circle) return null;
 
-  const a = geoStoreHelpers.getPointWorldById(state.scene, line.aId);
-  const b = geoStoreHelpers.getPointWorldById(state.scene, line.bId);
+  const anchors = getLineWorldAnchors(line, state.scene);
+  const a = anchors?.a ?? null;
+  const b = anchors?.b ?? null;
   const center = geoStoreHelpers.getPointWorldById(state.scene, circle.centerId);
   const through = geoStoreHelpers.getPointWorldById(state.scene, circle.throughId);
   if (!a || !b || !center || !through) return null;
@@ -1561,8 +1641,9 @@ function resolveLineCircleTarget(
   const endpointCandidates: Array<{ id: string; world: Vec2 }> = [];
   const aOnCircle = Math.abs(distance(a, center) - radius) <= 1e-6;
   const bOnCircle = Math.abs(distance(b, center) - radius) <= 1e-6;
-  if (aOnCircle) endpointCandidates.push({ id: line.aId, world: a });
-  if (bOnCircle) endpointCandidates.push({ id: line.bId, world: b });
+  const endpointIds = getLineEndpointPointIds(line);
+  if (aOnCircle && endpointIds[0]) endpointCandidates.push({ id: endpointIds[0], world: a });
+  if (bOnCircle && endpointIds[1]) endpointCandidates.push({ id: endpointIds[1], world: b });
 
   let excludePointId: string | undefined;
   if (endpointCandidates.length === 1) {
@@ -1587,4 +1668,14 @@ function sameObjectPair(
 
 function sameObjectRef(a: GeometryObjectRef, b: GeometryObjectRef): boolean {
   return a.type === b.type && a.id === b.id;
+}
+
+function getLineEndpointPointIds(line: SceneModel["lines"][number]): [string | null, string | null] {
+  if (line.kind === "perpendicular") return [line.throughId, null];
+  return [line.aId, line.bId];
+}
+
+function lineReferencesPoint(line: SceneModel["lines"][number], pointId: string): boolean {
+  if (line.kind === "perpendicular") return line.throughId === pointId;
+  return line.aId === pointId || line.bId === pointId;
 }

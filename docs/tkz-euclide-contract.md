@@ -81,3 +81,17 @@ Drawing Arc with center A from C’ to C
 4. Only then add/update exporter logic.
 
 If verification fails, exporter must throw instead of guessing.
+
+## PerpendicularLine
+
+GeoDraw `PerpendicularLine(through=P, base=AB)` maps to:
+
+```tex
+\tkzDefLine[perpendicular=through P](A,B) \tkzGetPoint{Q}
+\tkzDrawLine[add=5 and 5](P,Q)
+```
+
+Notes:
+- `\tkzDefLine` returns a point on the constructed perpendicular via `\tkzGetPoint`.
+- The base must be represented by two points `(A,B)` from a line or segment.
+- Exporter must not invent option keys; only `perpendicular=through <Point>` is allowed.

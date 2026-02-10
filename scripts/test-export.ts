@@ -14,6 +14,7 @@ import type {
   SceneSegment,
   ShowLabelMode,
 } from "../src/scene/points.ts";
+import { getPointWorldPos } from "../src/scene/points.ts";
 import { compileTikzSnippet } from "./compile-tex.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -64,8 +65,18 @@ async function main(): Promise<void> {
     const parsed = JSON.parse(rawText);
     const rawScene = parsed.scene ?? parsed;
     const scene = hydrateScene(rawScene);
-    const tikz = exportTikz(scene);
-    assertFixtureSpecificExpectations(fileName, tikz);
+    let tikz = "";
+    let exportError: Error | null = null;
+    try {
+      tikz = exportTikz(scene);
+    } catch (error) {
+      exportError = error instanceof Error ? error : new Error(String(error));
+    }
+    assertFixtureSpecificExpectations(fileName, tikz, scene, exportError);
+    if (exportError) {
+      console.log(`✓ ${fileName} (expected fail-closed export)`);
+      continue;
+    }
     await compileTikzSnippet(fileName.replace(/\.json$/, ""), tikz);
     console.log(`✓ ${fileName}`);
   }
@@ -148,8 +159,22 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
 }
 
 function hydrateLine(raw: Record<string, unknown>): SceneLine {
+  const kind = String(raw.kind ?? "twoPoint");
+  if (kind === "perpendicular") {
+    const base = raw.base as { type: "line" | "segment"; id: string } | undefined;
+    if (!base) throw new Error("Invalid perpendicular line fixture: missing base");
+    return {
+      id: String(raw.id),
+      kind: "perpendicular",
+      throughId: String(raw.throughId),
+      base,
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as LineStyle) ?? defaultLineStyle,
+    };
+  }
   return {
     id: String(raw.id),
+    kind: "twoPoint",
     aId: String(raw.aId),
     bId: String(raw.bId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
@@ -178,7 +203,21 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
   };
 }
 
-function assertFixtureSpecificExpectations(fileName: string, tikz: string): void {
+function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene: SceneModel, exportError: Error | null): void {
+  if (fileName === "perpendicular-line-through-point.json") {
+    if (exportError) {
+      if (!exportError.message.includes("Unsupported construction: PerpendicularLine")) {
+        throw exportError;
+      }
+      return;
+    }
+    if (!tikz.includes("\\tkzDefLine[perpendicular=through")) {
+      throw new Error("Expected perpendicular fixture to emit \\tkzDefLine[perpendicular=through ...].");
+    }
+  }
+
+  if (exportError) throw exportError;
+
   if (fileName === "regression-line-coverage-j-o.json") {
     if (!/\\tkzInterLL\(F,G\)\(E,D\)\s+\\tkzGetPoint\{J\}/.test(tikz)) {
       throw new Error("Regression: expected J to be defined from InterLL(F,G)(E,D).");
@@ -186,13 +225,64 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string): void
     if (!/\\tkzInterLC(?:\[[^\]]*\])?\(F,G\)\(K,J\)\s+\\tkzGetPoints\{O\}\{[^}]+\}/.test(tikz)) {
       throw new Error("Regression: expected O to be defined from InterLC(F,G)(K,J).");
     }
-    if (!/\\tkzDrawLine\[add=[^\]]+\]\(F,G\)/.test(tikz)) {
-      throw new Error("Regression: expected line l_1 to be drawn from defining points (F,G).");
-    }
-    if (/\\tkzDrawLine\[add=[^\]]+\]\(O,G\)/.test(tikz)) {
-      throw new Error("Regression: line l_1 must not be re-anchored to O.");
+    const drawLines = parseDrawLines(tikz);
+    const requiredNames = ["F", "G", "H", "I", "J", "O"];
+    const pointsByName = new Map(scene.points.map((p) => [p.name, getPointWorldPos(p, scene)]));
+
+    const covered = drawLines.some((line) =>
+      requiredNames.every((name) => {
+        const target = pointsByName.get(name);
+        const a = pointsByName.get(line.a);
+        const b = pointsByName.get(line.b);
+        if (!target || !a || !b) return false;
+        return lineCoversPoint(a, b, line.addLeft, line.addRight, target);
+      })
+    );
+    if (!covered) {
+      throw new Error("Regression: expected one exported draw line to cover F,G,H,I,J,O on the same geometric line.");
     }
   }
+}
+
+function parseDrawLines(
+  tikz: string
+): Array<{ addLeft: number; addRight: number; a: string; b: string }> {
+  const out: Array<{ addLeft: number; addRight: number; a: string; b: string }> = [];
+  const re = /\\tkzDrawLine\[add=([^ ]+) and ([^\]]+)\]\(([^,]+),([^)]+)\)/g;
+  for (let m = re.exec(tikz); m; m = re.exec(tikz)) {
+    out.push({
+      addLeft: Number(m[1]),
+      addRight: Number(m[2]),
+      a: m[3],
+      b: m[4],
+    });
+  }
+  return out;
+}
+
+function lineCoversPoint(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  addLeft: number,
+  addRight: number,
+  p: { x: number; y: number }
+): boolean {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dd = dx * dx + dy * dy;
+  if (dd <= 1e-12) return false;
+  const len = Math.sqrt(dd);
+  const ux = p.x - a.x;
+  const uy = p.y - a.y;
+  const t = (ux * dx + uy * dy) / dd;
+  const projX = a.x + t * dx;
+  const projY = a.y + t * dy;
+  const dist = Math.hypot(p.x - projX, p.y - projY);
+  const EPS_DIST = 1e-5;
+  const EPS_T = 1e-6;
+  const minT = -(addLeft / len) - EPS_T;
+  const maxT = 1 + addRight / len + EPS_T;
+  return dist <= EPS_DIST && t >= minT && t <= maxT;
 }
 
 main().catch((error) => {

@@ -53,13 +53,14 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   midpoint: { icon: GitMerge, tooltip: "Midpoint (M)", ariaLabel: "Midpoint tool" },
   segment: { icon: Minus, tooltip: "Segment (S)", ariaLabel: "Segment tool" },
   line2p: { icon: Slash, tooltip: "Line Through 2 Points (L)", ariaLabel: "Line tool" },
+  perp_line: { icon: PerpendicularIcon, tooltip: "Perpendicular Line", ariaLabel: "Perpendicular line tool" },
   circle_cp: { icon: Circle, tooltip: "Circle Center + Point (O)", ariaLabel: "Circle center-through-point tool" },
 };
 
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
   { id: "move", label: "MOVE", tools: ["move"] },
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
-  { id: "lines", label: "LINES", tools: ["segment", "line2p"] },
+  { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line"] },
   { id: "circles", label: "CIRCLES", tools: ["circle_cp"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
 ];
@@ -970,6 +971,23 @@ function describeSelectedConstruction(
   if (selectedObject.type === "line") {
     const line = lineById.get(selectedObject.id);
     if (!line) return `Line ${selectedObject.id}`;
+    if (line.kind === "perpendicular") {
+      const baseText =
+        line.base.type === "line"
+          ? (() => {
+              const baseLine = lineById.get(line.base.id);
+              return baseLine && baseLine.kind !== "perpendicular"
+                ? `line through ${pointLabel(baseLine.aId, pointNameById)} and ${pointLabel(baseLine.bId, pointNameById)}`
+                : `line ${line.base.id}`;
+            })()
+          : (() => {
+              const baseSeg = segmentById.get(line.base.id);
+              return baseSeg
+                ? `segment ${pointLabel(baseSeg.aId, pointNameById)}${pointLabel(baseSeg.bId, pointNameById)}`
+                : `segment ${line.base.id}`;
+            })();
+      return `Perpendicular line through ${pointLabel(line.throughId, pointNameById)} to ${baseText}.`;
+    }
     return `Line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
   }
   if (selectedObject.type === "segment") {
@@ -1007,6 +1025,15 @@ function describePointConstruction(
   if (point.kind === "pointOnLine") {
     const line = lineById.get(point.lineId);
     if (!line) return `Point on line ${point.lineId}.`;
+    if (line.kind === "perpendicular") {
+      return `Point on line through ${pointLabel(line.throughId, pointNameById)} perpendicular to ${describeObjectRef(
+        line.base,
+        pointNameById,
+        lineById,
+        segmentById,
+        circleById
+      )}.`;
+    }
     return `Point on line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
   }
   if (point.kind === "pointOnSegment") {
@@ -1032,7 +1059,15 @@ function describePointConstruction(
         )}`
       : `circle ${point.circleId}`;
     const lineText = line
-      ? `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
+      ? line.kind === "perpendicular"
+        ? `line through ${pointLabel(line.throughId, pointNameById)} perpendicular to ${describeObjectRef(
+            line.base,
+            pointNameById,
+            lineById,
+            segmentById,
+            circleById
+          )}`
+        : `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
       : `line ${point.lineId}`;
     return `Intersection of ${lineText} with ${circleText}.`;
   }
@@ -1054,6 +1089,15 @@ function describeObjectRef(
 ): string {
   if (ref.type === "line") {
     const line = lineById.get(ref.id);
+    if (line?.kind === "perpendicular") {
+      return `line through ${pointLabel(line.throughId, pointNameById)} perpendicular to ${describeObjectRef(
+        line.base,
+        pointNameById,
+        lineById,
+        segmentById,
+        circleById
+      )}`;
+    }
     return line
       ? `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
       : `line ${ref.id}`;
@@ -1225,6 +1269,18 @@ function ShapeGlyph({ shape }: { shape: PointShape }) {
       {shape === "plus" && <path d="M10 4 L10 16 M4 10 L16 10" stroke="currentColor" strokeWidth="1.8" />}
       {shape === "x" && <path d="M5 5 L15 15 M15 5 L5 15" stroke="currentColor" strokeWidth="1.8" />}
       {shape === "cross" && <path d="M5 5 L15 15 M15 5 L5 15 M10 4 L10 16 M4 10 L16 10" stroke="currentColor" strokeWidth="1.4" />}
+    </svg>
+  );
+}
+
+function PerpendicularIcon({ size = 18, strokeWidth = 2 }: IconProps) {
+  const w = size;
+  const h = size;
+  return (
+    <svg viewBox="0 0 24 24" width={w} height={h} aria-hidden fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
+      <path d="M4 6h14" strokeLinecap="round" />
+      <path d="M10 6v12" strokeLinecap="round" />
+      <path d="M10 14h8" strokeLinecap="round" />
     </svg>
   );
 }
