@@ -11,9 +11,18 @@ body,
 }
 
 body {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Inter", "Segoe UI", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
   color: #1f2937;
   background: #f3f5f8;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 .appShell {
@@ -46,9 +55,9 @@ body {
 .rightSidebar {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 12px;
-  background: #f8fafc;
+  gap: 10px;
+  padding: 10px 10px 12px;
+  background: #f3f6fb;
   border-left: 1px solid #d7dfe8;
   overflow: auto;
   flex: 0 0 auto;
@@ -278,15 +287,16 @@ body {
 }
 
 .sidebarSection {
-  border: 1px solid #dce3ec;
-  border-radius: 12px;
+  border: 1px solid #d9e1ec;
+  border-radius: 16px;
   background: #ffffff;
-  padding: 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  padding: 16px;
+  margin-top: 0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .sectionTitle {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-size: 12px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -295,17 +305,22 @@ body {
 }
 
 .rightTabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  display: flex;
+  gap: 0;
+  padding: 4px;
+  border: 1px solid #d5dde8;
+  border-radius: 14px;
+  background: #edf2f8;
 }
 
 .rightTabButton {
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  border-radius: 8px;
-  padding: 7px 8px;
-  font-size: 11px;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
   color: #334155;
   cursor: pointer;
   min-width: 0;
@@ -315,10 +330,10 @@ body {
 }
 
 .rightTabButton.active {
-  border-color: #1d4ed8;
-  background: #dbeafe;
-  color: #1e3a8a;
+  background: #ffffff;
+  color: #1d4ed8;
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .constructionInfo {
@@ -432,48 +447,91 @@ body {
 .checkboxRow {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  font-size: 13px;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #334155;
 }
 
 .actionButton,
 .deleteButton {
   border: 1px solid #cbd5e1;
   background: #ffffff;
-  border-radius: 8px;
-  padding: 7px 11px;
+  border-radius: 12px;
+  padding: 0 14px;
+  height: 38px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .actionButton:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-.exportButtons {
+.actionsRow {
   display: flex;
   gap: 8px;
+  margin-top: 12px;
+}
+
+.actionButton.primary {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
+.actionButton.primary:hover:not(:disabled),
+.actionButton.primary:focus-visible:not(:disabled) {
+  background: #1e40af;
+  border-color: #1e40af;
+  outline: none;
+}
+
+.actionButton.secondary {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1f2937;
+}
+
+.actionButton.secondary:hover:not(:disabled),
+.actionButton.secondary:focus-visible:not(:disabled) {
+  background: #eef2f7;
+  outline: none;
+}
+
+.statusText {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .exportTextarea {
   width: 100%;
-  min-height: 160px;
+  min-height: 220px;
   margin-top: 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 9px;
-  font-size: 12px;
-  line-height: 1.35;
+  border: 1px solid #d6dee9;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12.5px;
+  line-height: 1.4;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  resize: vertical;
-  background: #fff;
+  resize: none;
+  overflow: auto;
+  background: #fbfbfc;
 }
 
 .exportTextarea:focus-visible {
   outline: 2px solid rgba(37, 99, 235, 0.2);
   border-color: #3b82f6;
+}
+
+.exportTextareaCompact {
+  min-height: 160px;
 }
 
 .deleteButton {
@@ -505,16 +563,32 @@ body {
 }
 
 .controlRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-top: 10px;
 }
 
 .controlLabel {
   color: #475569;
   font-size: 12px;
+}
+
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.optionsBlock {
+  margin-top: 4px;
+}
+
+.scaleBlock {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #eef2f7;
 }
 
 .shapeButton {

@@ -178,6 +178,7 @@ export default function App() {
   const [rightTab, setRightTab] = useState<RightTab>("algebra");
   const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
   const [exportMatchCanvas, setExportMatchCanvas] = useState(true);
+  const [exportGlobalScale, setExportGlobalScale] = useState("1");
   const [exportPointScale, setExportPointScale] = useState("1");
   const [exportLineScale, setExportLineScale] = useState("1");
   const [lastTikzSceneRef, setLastTikzSceneRef] = useState<SceneModel | null>(null);
@@ -336,7 +337,8 @@ export default function App() {
     try {
       const pointScale = Number(exportPointScale);
       const lineScale = Number(exportLineScale);
-      const optionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
+      const globalScale = Number(exportGlobalScale);
+      const optionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
       const viewport = exportUseCurrentView
         ? getViewportFromCamera(
             camera,
@@ -347,6 +349,7 @@ export default function App() {
       setTikzText(
         exportTikzWithOptions(scene, {
           viewport,
+          worldToTikzScale: Number.isFinite(globalScale) ? globalScale : 1,
           pointScale: Number.isFinite(pointScale) ? pointScale : 1,
           lineScale: Number.isFinite(lineScale) ? lineScale : 1,
           screenPxPerWorld: camera.zoom,
@@ -364,7 +367,7 @@ export default function App() {
     }
   };
 
-  const currentTikzOptionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
+  const currentTikzOptionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
   const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
   const tikzStatusText =
     !tikzText
@@ -583,8 +586,10 @@ export default function App() {
             </section>}
 
             {rightTab === "export" && <section className="sidebarSection">
-              <h2 className="sectionTitle">Export</h2>
-              <div className="cosmeticsGrid">
+              <div className="sectionHeaderRow">
+                <h2 className="sectionTitle">Export</h2>
+              </div>
+              <div className="optionsBlock">
                 <label className="checkboxRow">
                   <input
                     type="checkbox"
@@ -600,6 +605,19 @@ export default function App() {
                     onChange={(e) => setExportMatchCanvas(e.target.checked)}
                   />
                   Match canvas size conversion
+                </label>
+              </div>
+              <div className="scaleBlock">
+                <label className="controlRow">
+                  <span>Global Scale</span>
+                  <input
+                    type="number"
+                    min={0.1}
+                    max={6}
+                    step={0.05}
+                    value={exportGlobalScale}
+                    onChange={(e) => setExportGlobalScale(e.target.value)}
+                  />
                 </label>
                 <label className="controlRow">
                   <span>Point Scale</span>
@@ -624,15 +642,15 @@ export default function App() {
                   />
                 </label>
               </div>
-              <div className="exportButtons">
-                <button className="actionButton" onClick={generateTikz}>
+              <div className="actionsRow">
+                <button className="actionButton primary" onClick={generateTikz}>
                   {tikzOutdated ? "Regenerate TikZ" : "Generate TikZ"}
                 </button>
-                <button className="actionButton" onClick={copyTikz} disabled={!tikzText}>
+                <button className="actionButton secondary" onClick={copyTikz} disabled={!tikzText}>
                   {tikzCopied ? "Copied" : "Copy"}
                 </button>
               </div>
-              <div className="toolInfo">{tikzStatusText}</div>
+              <div className="statusText">{tikzStatusText}</div>
               <textarea
                 className="exportTextarea"
                 value={tikzText}
@@ -644,16 +662,16 @@ export default function App() {
 
             {rightTab === "export" && <section className="sidebarSection">
               <h2 className="sectionTitle">Model JSON</h2>
-              <div className="exportButtons">
-                <button className="actionButton" onClick={generateConstructionSnapshot}>
+              <div className="actionsRow">
+                <button className="actionButton primary" onClick={generateConstructionSnapshot}>
                   Generate JSON
                 </button>
-                <button className="actionButton" onClick={copyJson} disabled={!jsonText}>
+                <button className="actionButton secondary" onClick={copyJson} disabled={!jsonText}>
                   {jsonCopied ? "Copied" : "Copy"}
                 </button>
               </div>
               <textarea
-                className="exportTextarea"
+                className="exportTextarea exportTextareaCompact"
                 value={jsonText}
                 onChange={(e) => setJsonText(e.target.value)}
                 placeholder="Click Generate JSON to produce model export"

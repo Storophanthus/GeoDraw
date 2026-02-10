@@ -502,10 +502,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const name = pointName.get(point.id);
     if (!name) continue;
     const labelOptions = pointLabelOptionsToTikz(point, labelPlacementById.get(point.id) ?? null, options);
+    const matchCanvas = options.matchCanvas ?? false;
     if (point.showLabel === "name") {
-      labels.push({ name, text: point.name || name, options: labelOptions });
+      labels.push({
+        name,
+        text: point.name || name,
+        options: matchCanvas ? [labelOptions, `text=${rgbColorExpr(point.style.labelColor)}`].join(", ") : labelOptions,
+      });
     } else {
-      labels.push({ name, text: point.captionTex || point.name || name, options: labelOptions });
+      labels.push({
+        name,
+        text: point.captionTex || point.name || name,
+        options: matchCanvas ? [labelOptions, `text=${rgbColorExpr(point.style.labelColor)}`].join(", ") : labelOptions,
+      });
     }
   }
   labels.sort((a, b) => a.name.localeCompare(b.name));
@@ -1263,17 +1272,21 @@ function pointLabelOptionsToTikz(point: ScenePoint, placement: LabelPlacement | 
   const yShiftPt = placement?.yShiftPt ?? 12;
   const matchCanvas = exportOptions.matchCanvas ?? false;
   const fontPt = Math.max(6, Math.min(48, point.style.labelFontPx * (matchCanvas ? 0.75 : 1)));
-  // Placement solver computes label center directly; keep node anchored at center.
-  opts.push("anchor=center");
-  if (Math.abs(xShiftPt) > 1e-9) opts.push(`xshift=${fmt(xShiftPt)}pt`);
-  if (Math.abs(yShiftPt) > 1e-9) opts.push(`yshift=${fmt(yShiftPt)}pt`);
+  if (matchCanvas) {
+    opts.push(directionOptionFromShift(xShiftPt, yShiftPt));
+  } else {
+    // Placement solver computes label center directly; keep node anchored at center.
+    opts.push("anchor=center");
+    if (Math.abs(xShiftPt) > 1e-9) opts.push(`xshift=${fmt(xShiftPt)}pt`);
+    if (Math.abs(yShiftPt) > 1e-9) opts.push(`yshift=${fmt(yShiftPt)}pt`);
+  }
   if (!matchCanvas) {
     const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
     opts.push(`font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`);
   }
 
   // Reuse point halo style for label readability on dense diagrams.
-  if (point.style.labelHaloWidthPx > 0) {
+  if (!matchCanvas && point.style.labelHaloWidthPx > 0) {
     opts.push("circle");
     opts.push(`fill=${rgbColorExpr(point.style.labelHaloColor)}`);
     opts.push("fill opacity=0.8");
@@ -1284,10 +1297,23 @@ function pointLabelOptionsToTikz(point: ScenePoint, placement: LabelPlacement | 
       opts.push(`minimum size=${fmt(placement.bubbleRadiusPt * 1.62)}pt`);
     }
   }
-  if (point.style.labelColor) {
+  if (!matchCanvas && point.style.labelColor) {
     opts.push(`text=${rgbColorExpr(point.style.labelColor)}`);
   }
   return opts.join(", ");
+}
+
+function directionOptionFromShift(xShiftPt: number, yShiftPt: number): string {
+  const ax = Math.abs(xShiftPt);
+  const ay = Math.abs(yShiftPt);
+  const eps = 1e-4;
+  if (ax < eps && ay < eps) return "above right";
+  if (ax < ay * 0.35) return yShiftPt >= 0 ? "above" : "below";
+  if (ay < ax * 0.35) return xShiftPt >= 0 ? "right" : "left";
+  if (xShiftPt >= 0 && yShiftPt >= 0) return "above right";
+  if (xShiftPt < 0 && yShiftPt >= 0) return "above left";
+  if (xShiftPt >= 0 && yShiftPt < 0) return "below right";
+  return "below left";
 }
 
 function normalize2(v: { x: number; y: number }): { x: number; y: number } {
