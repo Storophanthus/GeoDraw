@@ -210,7 +210,7 @@ export function CanvasView() {
         drawCircles(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
         drawLines(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
         drawSegments(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
-        drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, hoveredHit, resolvedPoints, scene, camera, vp);
+        drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, hoverSnap, hoveredHit, scene, camera, vp);
         drawPoints(ctx, resolvedPoints, selectedObject, camera, vp, copyStyle.source);
         drawInteractionHighlights(
           ctx,
@@ -1080,8 +1080,8 @@ function drawPendingPreview(
   pendingSelection: PendingSelection,
   cursorWorld: Vec2 | null,
   cursorScreen: Vec2 | null,
+  hoverSnap: SnapCandidate | null,
   hoveredHit: HoveredHit,
-  resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>,
   scene: SceneModel,
   camera: Camera,
   vp: Viewport
@@ -1141,7 +1141,9 @@ function drawPendingPreview(
 
     if (pendingSelection.first.type === "point") {
       through = geoStoreHelpers.getPointWorldById(scene, pendingSelection.first.id);
-      if (hoveredHit?.type === "line2p") baseRef = { type: "line", id: hoveredHit.id };
+      if (hoverSnap?.kind === "onLine" && hoverSnap.lineId) baseRef = { type: "line", id: hoverSnap.lineId };
+      else if (hoverSnap?.kind === "onSegment" && hoverSnap.segId) baseRef = { type: "segment", id: hoverSnap.segId };
+      else if (hoveredHit?.type === "line2p") baseRef = { type: "line", id: hoveredHit.id };
       else if (hoveredHit?.type === "segment") baseRef = { type: "segment", id: hoveredHit.id };
       else if (cursorWorld && cursorScreen) {
         const lineId = hitTestLine(cursorScreen, scene, camera, vp, LINE_HIT_TOLERANCE_PX);
@@ -1151,11 +1153,13 @@ function drawPendingPreview(
       }
     } else {
       baseRef = pendingSelection.first.ref;
-      if (hoveredHit?.type === "point") {
+      if (hoverSnap?.kind === "point" && hoverSnap.pointId) {
+        through = geoStoreHelpers.getPointWorldById(scene, hoverSnap.pointId);
+      } else if (hoveredHit?.type === "point") {
         through = geoStoreHelpers.getPointWorldById(scene, hoveredHit.id);
-      } else if (cursorWorld && cursorScreen) {
-        const hitPointId = hitTestPoint(cursorScreen, resolvedPoints, camera, vp, POINT_HIT_TOLERANCE_PX);
-        if (hitPointId) through = geoStoreHelpers.getPointWorldById(scene, hitPointId);
+      } else if (cursorWorld) {
+        // GeoGebra-like behavior: with base selected first, preview line follows cursor.
+        through = cursorWorld;
       }
     }
 
