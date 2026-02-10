@@ -785,7 +785,7 @@ export default function App() {
                       <option value="CW">CW</option>
                     </select>
                   </div>
-                  <div className="statusText">Click B (vertex), then A (base ray), then click to confirm.</div>
+                  <div className="statusText">Click A (base point), then B (vertex), then click to confirm.</div>
                 </div>
               )}
               {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedAngle && (

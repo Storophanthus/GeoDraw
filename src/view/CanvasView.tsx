@@ -930,21 +930,21 @@ function handleToolClick(
       return;
     }
     if (pendingSelection.step === 2) {
-      const aId = resolveOrCreatePointAtCursor();
-      if (aId === pendingSelection.first.id) return;
+      const bId = resolveOrCreatePointAtCursor();
+      if (bId === pendingSelection.first.id) return;
       io.setPendingSelection({
         tool: "angle_fixed",
         step: 3,
         first: pendingSelection.first,
-        second: { type: "point", id: aId },
+        second: { type: "point", id: bId },
       });
       return;
     }
     const deg = io.angleFixedTool.angleDeg;
     if (!Number.isFinite(deg) || deg < 0 || deg > 360) return;
     const created = io.createAngleFixed(
-      pendingSelection.first.id,
       pendingSelection.second.id,
+      pendingSelection.first.id,
       deg,
       io.angleFixedTool.direction
     );
@@ -1458,8 +1458,8 @@ function drawPendingPreview(
   }
 
   if (pendingSelection.tool === "angle_fixed" && pendingSelection.step === 3) {
-    const b = geoStoreHelpers.getPointWorldById(scene, pendingSelection.first.id);
-    const a = geoStoreHelpers.getPointWorldById(scene, pendingSelection.second.id);
+    const b = geoStoreHelpers.getPointWorldById(scene, pendingSelection.second.id);
+    const a = geoStoreHelpers.getPointWorldById(scene, pendingSelection.first.id);
     if (!a || !b) {
       ctx.restore();
       return;
