@@ -88,6 +88,8 @@ type GeoState = {
     circleStyle: CircleStyle | null;
     showLabel: ShowLabelMode | null;
   };
+  canUndo: boolean;
+  canRedo: boolean;
 };
 
 type RenameResult = { ok: true; name: string } | { ok: false; error: string };
@@ -134,6 +136,8 @@ type GeoActions = {
   setCopyStyleSource: (obj: Exclude<SelectedObject, null>) => void;
   applyCopyStyleTo: (obj: Exclude<SelectedObject, null>) => void;
   clearCopyStyle: () => void;
+  undo: () => void;
+  redo: () => void;
 };
 
 export type GeoStore = GeoState & GeoActions;
@@ -204,17 +208,71 @@ const initialState: GeoState = {
     circleStyle: null,
     showLabel: null,
   },
+  canUndo: false,
+  canRedo: false,
 };
 
 let state: GeoState = initialState;
 const listeners = new Set<() => void>();
+const MAX_HISTORY = 200;
+
+type HistorySnapshot = {
+  activeTool: ActiveTool;
+  scene: SceneModel;
+  selectedObject: SelectedObject;
+  recentCreatedObject: SelectedObject;
+  nextPointId: number;
+  nextSegmentId: number;
+  nextLineId: number;
+  nextCircleId: number;
+  pointDefaults: PointStyle;
+  segmentDefaults: LineStyle;
+  lineDefaults: LineStyle;
+  circleDefaults: CircleStyle;
+  copyStyle: GeoState["copyStyle"];
+};
+
+type SetStateOptions = {
+  history?: "auto" | "push" | "coalesce" | "skip";
+  actionKey?: string;
+};
+
+const undoStack: HistorySnapshot[] = [];
+const redoStack: HistorySnapshot[] = [];
+let lastHistoryActionKey: string | null = null;
+let isRestoringHistory = false;
 
 function emit() {
   for (const listener of listeners) listener();
 }
 
-function setState(updater: (prev: GeoState) => GeoState) {
-  state = updater(state);
+function setState(updater: (prev: GeoState) => GeoState, options: SetStateOptions = { history: "auto" }) {
+  const prev = state;
+  let next = updater(prev);
+  if (next === prev) return;
+
+  const mode = options.history ?? "auto";
+  const changed = hasHistoryDiff(prev, next);
+  if (!isRestoringHistory && changed && mode !== "skip") {
+    const snapshot = cloneHistorySnapshot(takeHistorySnapshot(prev));
+    if (mode === "coalesce" && options.actionKey && lastHistoryActionKey === options.actionKey && undoStack.length > 0) {
+      undoStack[undoStack.length - 1] = snapshot;
+    } else {
+      undoStack.push(snapshot);
+      if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    }
+    redoStack.length = 0;
+    lastHistoryActionKey = options.actionKey ?? null;
+  } else if (mode !== "coalesce") {
+    lastHistoryActionKey = null;
+  }
+
+  next = {
+    ...next,
+    canUndo: undoStack.length > 0,
+    canRedo: redoStack.length > 0,
+  };
+  state = next;
   emit();
 }
 
@@ -320,6 +378,7 @@ const actions: GeoActions = {
           ],
         },
         selectedObject: { type: "point", id },
+        recentCreatedObject: { type: "point", id },
         nextPointId: prev.nextPointId + 1,
       };
     });
@@ -372,6 +431,7 @@ const actions: GeoActions = {
           ],
         },
         selectedObject: { type: "point", id },
+        recentCreatedObject: { type: "point", id },
         nextPointId: prev.nextPointId + 1,
       };
     });
@@ -420,6 +480,7 @@ const actions: GeoActions = {
           ],
         },
         selectedObject: { type: "point", id },
+        recentCreatedObject: { type: "point", id },
         nextPointId: prev.nextPointId + 1,
       };
     });
@@ -605,6 +666,7 @@ const actions: GeoActions = {
           ],
         },
         selectedObject: { type: "point", id },
+        recentCreatedObject: { type: "point", id },
         nextPointId: prev.nextPointId + 1,
       };
     });
@@ -650,6 +712,7 @@ const actions: GeoActions = {
           ],
         },
         selectedObject: { type: "point", id },
+        recentCreatedObject: { type: "point", id },
         nextPointId: prev.nextPointId + 1,
       };
     });
@@ -695,6 +758,7 @@ const actions: GeoActions = {
           ],
         },
         selectedObject: { type: "point", id },
+        recentCreatedObject: { type: "point", id },
         nextPointId: prev.nextPointId + 1,
       };
     });
@@ -752,6 +816,7 @@ const actions: GeoActions = {
           ],
         },
         selectedObject: { type: "point", id },
+        recentCreatedObject: { type: "point", id },
         nextPointId: prev.nextPointId + 1,
       };
     });
@@ -804,7 +869,7 @@ const actions: GeoActions = {
           points: nextPoints,
         },
       };
-    });
+    }, { history: "coalesce", actionKey: `movePointTo:${id}` });
   },
 
   movePointLabelBy(id, deltaPx) {
@@ -827,7 +892,7 @@ const actions: GeoActions = {
             : point
         ),
       },
-    }));
+    }), { history: "coalesce", actionKey: `movePointLabelBy:${id}` });
   },
 
   setPointDefaults(next) {
@@ -1348,6 +1413,42 @@ const actions: GeoActions = {
       },
     }));
   },
+
+  undo() {
+    if (undoStack.length === 0) return;
+    setState(
+      (prev) => {
+        const snapshot = undoStack.pop();
+        if (!snapshot) return prev;
+        redoStack.push(cloneHistorySnapshot(takeHistorySnapshot(prev)));
+        if (redoStack.length > MAX_HISTORY) redoStack.shift();
+        lastHistoryActionKey = null;
+        isRestoringHistory = true;
+        const restored = restoreFromSnapshot(prev, snapshot);
+        isRestoringHistory = false;
+        return restored;
+      },
+      { history: "skip" }
+    );
+  },
+
+  redo() {
+    if (redoStack.length === 0) return;
+    setState(
+      (prev) => {
+        const snapshot = redoStack.pop();
+        if (!snapshot) return prev;
+        undoStack.push(cloneHistorySnapshot(takeHistorySnapshot(prev)));
+        if (undoStack.length > MAX_HISTORY) undoStack.shift();
+        lastHistoryActionKey = null;
+        isRestoringHistory = true;
+        const restored = restoreFromSnapshot(prev, snapshot);
+        isRestoringHistory = false;
+        return restored;
+      },
+      { history: "skip" }
+    );
+  },
 };
 
 function getStore(): GeoStore {
@@ -1678,4 +1779,62 @@ function getLineEndpointPointIds(line: SceneModel["lines"][number]): [string | n
 function lineReferencesPoint(line: SceneModel["lines"][number], pointId: string): boolean {
   if (line.kind === "perpendicular") return line.throughId === pointId;
   return line.aId === pointId || line.bId === pointId;
+}
+
+function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
+  return {
+    activeTool: prev.activeTool,
+    scene: prev.scene,
+    selectedObject: prev.selectedObject,
+    recentCreatedObject: prev.recentCreatedObject,
+    nextPointId: prev.nextPointId,
+    nextSegmentId: prev.nextSegmentId,
+    nextLineId: prev.nextLineId,
+    nextCircleId: prev.nextCircleId,
+    pointDefaults: prev.pointDefaults,
+    segmentDefaults: prev.segmentDefaults,
+    lineDefaults: prev.lineDefaults,
+    circleDefaults: prev.circleDefaults,
+    copyStyle: prev.copyStyle,
+  };
+}
+
+function cloneHistorySnapshot(snapshot: HistorySnapshot): HistorySnapshot {
+  return structuredClone(snapshot);
+}
+
+function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
+  return (
+    prev.scene !== next.scene ||
+    prev.nextPointId !== next.nextPointId ||
+    prev.nextSegmentId !== next.nextSegmentId ||
+    prev.nextLineId !== next.nextLineId ||
+    prev.nextCircleId !== next.nextCircleId ||
+    prev.pointDefaults !== next.pointDefaults ||
+    prev.segmentDefaults !== next.segmentDefaults ||
+    prev.lineDefaults !== next.lineDefaults ||
+    prev.circleDefaults !== next.circleDefaults
+  );
+}
+
+function restoreFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoState {
+  return {
+    ...prev,
+    activeTool: snapshot.activeTool,
+    scene: snapshot.scene,
+    selectedObject: snapshot.selectedObject,
+    recentCreatedObject: snapshot.recentCreatedObject,
+    pendingSelection: null,
+    hoveredHit: null,
+    cursorWorld: null,
+    nextPointId: snapshot.nextPointId,
+    nextSegmentId: snapshot.nextSegmentId,
+    nextLineId: snapshot.nextLineId,
+    nextCircleId: snapshot.nextCircleId,
+    pointDefaults: snapshot.pointDefaults,
+    segmentDefaults: snapshot.segmentDefaults,
+    lineDefaults: snapshot.lineDefaults,
+    circleDefaults: snapshot.circleDefaults,
+    copyStyle: snapshot.copyStyle,
+  };
 }

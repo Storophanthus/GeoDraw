@@ -7,7 +7,9 @@ import {
   Minus,
   MousePointer2,
   Paintbrush2,
+  Redo2,
   Slash,
+  Undo2,
 } from "lucide-react";
 import {
   useEffect,
@@ -20,7 +22,14 @@ import {
 } from "react";
 import { exportConstructionSnapshot } from "./export/constructionSnapshot";
 import { exportTikzWithOptions } from "./export/tikz";
-import { getPointWorldPos, type GeometryObjectRef, type PointShape, type SceneModel, type ScenePoint } from "./scene/points";
+import {
+  getPointWorldPos,
+  type GeometryObjectRef,
+  type PointShape,
+  type PointStyle,
+  type SceneModel,
+  type ScenePoint,
+} from "./scene/points";
 import { useGeoStore, type ActiveTool } from "./state/geoStore";
 import type { Camera } from "./view/camera";
 import { CanvasView } from "./view/CanvasView";
@@ -96,6 +105,11 @@ export default function App() {
   const renameSelectedPoint = useGeoStore((store) => store.renameSelectedPoint);
   const deleteSelectedObject = useGeoStore((store) => store.deleteSelectedObject);
   const clearCopyStyle = useGeoStore((store) => store.clearCopyStyle);
+  const undo = useGeoStore((store) => store.undo);
+  const redo = useGeoStore((store) => store.redo);
+  const canUndo = useGeoStore((store) => store.canUndo);
+  const canRedo = useGeoStore((store) => store.canRedo);
+  const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
   const copyStyle = useGeoStore((store) => store.copyStyle);
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
   const setPointDefaults = useGeoStore((store) => store.setPointDefaults);
@@ -129,6 +143,14 @@ export default function App() {
     if (!selectedPoint) return null;
     return getPointWorldPos(selectedPoint, scene);
   }, [scene, selectedPoint]);
+  const latestCreatedPoint = useMemo(() => {
+    if (recentCreatedObject?.type !== "point") return null;
+    return scene.points.find((point) => point.id === recentCreatedObject.id) ?? null;
+  }, [recentCreatedObject, scene.points]);
+  const latestPointAsDefault = useMemo(() => {
+    if (!latestCreatedPoint) return false;
+    return pointStyleEqual(pointDefaults, latestCreatedPoint.style);
+  }, [latestCreatedPoint, pointDefaults]);
   const pointNameById = useMemo(() => new Map(scene.points.map((p) => [p.id, p.name])), [scene.points]);
   const lineById = useMemo(() => new Map(scene.lines.map((l) => [l.id, l])), [scene.lines]);
   const segmentById = useMemo(() => new Map(scene.segments.map((s) => [s.id, s])), [scene.segments]);
@@ -155,8 +177,9 @@ export default function App() {
   const [jsonCopied, setJsonCopied] = useState(false);
   const [rightTab, setRightTab] = useState<RightTab>("algebra");
   const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
-  const [exportPointScale, setExportPointScale] = useState("0.75");
-  const [exportLineScale, setExportLineScale] = useState("0.75");
+  const [exportMatchCanvas, setExportMatchCanvas] = useState(true);
+  const [exportPointScale, setExportPointScale] = useState("1");
+  const [exportLineScale, setExportLineScale] = useState("1");
   const [lastTikzSceneRef, setLastTikzSceneRef] = useState<SceneModel | null>(null);
   const [lastTikzOptionSig, setLastTikzOptionSig] = useState("");
   const [lastTikzGeneratedAt, setLastTikzGeneratedAt] = useState<number | null>(null);
@@ -222,6 +245,22 @@ export default function App() {
         return;
       }
 
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && !e.altKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        return;
+      }
+      if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         deleteSelectedObject();
@@ -230,7 +269,7 @@ export default function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTool, clearCopyStyle, deleteSelectedObject, openFlyoutGroup, setActiveTool]);
+  }, [activeTool, clearCopyStyle, deleteSelectedObject, openFlyoutGroup, redo, setActiveTool, undo]);
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
@@ -297,7 +336,7 @@ export default function App() {
     try {
       const pointScale = Number(exportPointScale);
       const lineScale = Number(exportLineScale);
-      const optionSig = `${exportUseCurrentView}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
+      const optionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
       const viewport = exportUseCurrentView
         ? getViewportFromCamera(
             camera,
@@ -308,8 +347,10 @@ export default function App() {
       setTikzText(
         exportTikzWithOptions(scene, {
           viewport,
-          pointScale: Number.isFinite(pointScale) ? pointScale : 0.75,
-          lineScale: Number.isFinite(lineScale) ? lineScale : 0.75,
+          pointScale: Number.isFinite(pointScale) ? pointScale : 1,
+          lineScale: Number.isFinite(lineScale) ? lineScale : 1,
+          screenPxPerWorld: camera.zoom,
+          matchCanvas: exportMatchCanvas,
         })
       );
       setLastTikzSceneRef(scene);
@@ -323,7 +364,7 @@ export default function App() {
     }
   };
 
-  const currentTikzOptionSig = `${exportUseCurrentView}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
+  const currentTikzOptionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
   const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
   const tikzStatusText =
     !tikzText
@@ -419,6 +460,20 @@ export default function App() {
       <div className="resizeHandle left" onPointerDown={startResize("left")} />
 
       <main className="canvasPane">
+        <div className="canvasTopActions" aria-label="History controls">
+          <button className="iconActionButton" onClick={undo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" aria-label="Undo">
+            <Undo2 size={16} />
+          </button>
+          <button
+            className="iconActionButton"
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (Shift+Ctrl/Cmd+Z or Ctrl/Cmd+Y)"
+            aria-label="Redo"
+          >
+            <Redo2 size={16} />
+          </button>
+        </div>
         <CanvasView />
       </main>
 
@@ -449,7 +504,7 @@ export default function App() {
                   aria-selected={rightTab === "algebra"}
                   onClick={() => setRightTab("algebra")}
                 >
-                  Algebra
+                  Objects
                 </button>
                 <button
                   type="button"
@@ -464,7 +519,7 @@ export default function App() {
             </section>
 
             {rightTab === "algebra" && <section className="sidebarSection">
-              <h2 className="sectionTitle">Algebra</h2>
+              <h2 className="sectionTitle">Objects</h2>
               <div className="objectList">
                 {scene.points.length === 0 &&
                   scene.segments.length === 0 &&
@@ -537,6 +592,14 @@ export default function App() {
                     onChange={(e) => setExportUseCurrentView(e.target.checked)}
                   />
                   Use current camera viewport
+                </label>
+                <label className="checkboxRow">
+                  <input
+                    type="checkbox"
+                    checked={exportMatchCanvas}
+                    onChange={(e) => setExportMatchCanvas(e.target.checked)}
+                  />
+                  Match canvas size conversion
                 </label>
                 <label className="controlRow">
                   <span>Point Scale</span>
@@ -1007,18 +1070,21 @@ export default function App() {
               )}
 
               <div className="cosmeticsBlock">
-                <div className="subSectionTitle">Defaults For New Points</div>
-                <div className="controlRow">
-                  <label className="controlLabel">Size</label>
+                <label className="checkboxRow">
                   <input
-                    className="sizeSlider"
-                    type="range"
-                    min={2}
-                    max={18}
-                    value={pointDefaults.sizePx}
-                    onChange={(e) => setPointDefaults({ sizePx: Number(e.target.value) })}
+                    type="checkbox"
+                    checked={latestPointAsDefault}
+                    disabled={!latestCreatedPoint}
+                    onChange={(e) => {
+                      if (!e.target.checked || !latestCreatedPoint) return;
+                      setPointDefaults({
+                        ...latestCreatedPoint.style,
+                        labelOffsetPx: { ...latestCreatedPoint.style.labelOffsetPx },
+                      });
+                    }}
                   />
-                </div>
+                  Make this default for new points
+                </label>
               </div>
             </section>}
           </>
@@ -1320,6 +1386,24 @@ function ToolGroupButton({
 
 function formatNumber(value: number): string {
   return value.toFixed(3);
+}
+
+function pointStyleEqual(a: PointStyle, b: PointStyle): boolean {
+  return (
+    a.shape === b.shape &&
+    a.sizePx === b.sizePx &&
+    a.strokeColor === b.strokeColor &&
+    a.strokeWidth === b.strokeWidth &&
+    a.strokeOpacity === b.strokeOpacity &&
+    a.fillColor === b.fillColor &&
+    a.fillOpacity === b.fillOpacity &&
+    a.labelFontPx === b.labelFontPx &&
+    a.labelHaloWidthPx === b.labelHaloWidthPx &&
+    a.labelHaloColor === b.labelHaloColor &&
+    a.labelColor === b.labelColor &&
+    a.labelOffsetPx.x === b.labelOffsetPx.x &&
+    a.labelOffsetPx.y === b.labelOffsetPx.y
+  );
 }
 
 function getViewportFromCamera(

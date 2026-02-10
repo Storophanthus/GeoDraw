@@ -88,6 +88,7 @@ body {
   min-height: 0;
   background: #ffffff;
   flex: 1 1 auto;
+  position: relative;
 }
 
 .drawingCanvas {
@@ -101,6 +102,42 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
+}
+
+.canvasTopActions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  z-index: 45;
+  pointer-events: auto;
+}
+
+.iconActionButton {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.iconActionButton:hover:not(:disabled),
+.iconActionButton:focus-visible:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+  outline: none;
+}
+
+.iconActionButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .labelsLayer {
