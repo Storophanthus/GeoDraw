@@ -44,7 +44,7 @@ export type TikzCommand =
   | { kind: "DrawCircle"; o: string; x: string; style?: string }
   | { kind: "DrawPoints"; style: string; points: string[] }
   | { kind: "LabelPoints"; points: string[] }
-  | { kind: "LabelPoint"; name: string; text: string };
+  | { kind: "LabelPoint"; name: string; text: string; options?: string };
 
 type PointStyleDef = {
   styleName: string;
@@ -458,23 +458,21 @@ export function buildTikzIR(scene: SceneModel): TikzCommand[] {
     (draws[draws.length - 1] as any).styleExpr = group.styleExpr;
   }
 
-  const nameLabels: string[] = [];
-  const captionLabels: Array<{ name: string; text: string }> = [];
+  const labels: Array<{ name: string; text: string; options?: string }> = [];
   for (const point of scene.points) {
     if (!point.visible) continue;
     if (point.showLabel === "none") continue;
     const name = pointName.get(point.id);
     if (!name) continue;
+    const options = pointLabelOptionsToTikz(point);
     if (point.showLabel === "name") {
-      nameLabels.push(name);
+      labels.push({ name, text: point.name || name, options });
     } else {
-      captionLabels.push({ name, text: point.captionTex || point.name || name });
+      labels.push({ name, text: point.captionTex || point.name || name, options });
     }
   }
-  nameLabels.sort((a, b) => a.localeCompare(b));
-  captionLabels.sort((a, b) => a.name.localeCompare(b.name));
-  if (nameLabels.length > 0) draws.push({ kind: "LabelPoints", points: nameLabels });
-  for (const item of captionLabels) draws.push({ kind: "LabelPoint", name: item.name, text: item.text });
+  labels.sort((a, b) => a.name.localeCompare(b.name));
+  for (const item of labels) draws.push({ kind: "LabelPoint", name: item.name, text: item.text, options: item.options });
 
   return [...defs, ...constructions, ...draws];
 }
@@ -626,7 +624,8 @@ export function renderTikz(cmds: TikzCommand[]): string {
       continue;
     }
     assertTkzMacro("tkzLabelPoint");
-    out.push(`\\tkzLabelPoint(${cmd.name}){${escapeTikzText(cmd.text)}}`);
+    const opts = cmd.options ? `[${cmd.options}]` : "";
+    out.push(`\\tkzLabelPoint${opts}(${cmd.name}){${escapeTikzText(cmd.text)}}`);
   }
 
   out.push("\\end{tikzpicture}");
@@ -1122,6 +1121,39 @@ function mapPointShape(shape: ScenePoint["style"]["shape"]): string {
     default:
       return "circle";
   }
+}
+
+function pointLabelOptionsToTikz(point: ScenePoint): string {
+  const opts: string[] = [];
+  const offset = point.style.labelOffsetPx;
+  const dir = labelDirectionFromOffset(offset.x, offset.y);
+  if (dir) opts.push(dir);
+
+  const emPerPx = 1 / 16;
+  const xShiftEm = offset.x * emPerPx;
+  const yShiftEm = -offset.y * emPerPx;
+  if (Math.abs(xShiftEm) > 1e-9) opts.push(`xshift=${fmt(xShiftEm)}em`);
+  if (Math.abs(yShiftEm) > 1e-9) opts.push(`yshift=${fmt(yShiftEm)}em`);
+
+  // Reuse point halo style for label readability on dense diagrams.
+  if (point.style.labelHaloWidthPx > 0) {
+    opts.push(`fill=${rgbColorExpr(point.style.labelHaloColor)}`);
+    opts.push("fill opacity=0.8");
+    opts.push("text opacity=1");
+    opts.push(`inner sep=${fmt(Math.max(0.6, point.style.labelHaloWidthPx * 0.4))}pt`);
+  }
+  if (point.style.labelColor) {
+    opts.push(`text=${rgbColorExpr(point.style.labelColor)}`);
+  }
+  return opts.join(", ");
+}
+
+function labelDirectionFromOffset(x: number, y: number): string {
+  const horiz = x > 0.5 ? "right" : x < -0.5 ? "left" : "";
+  // Canvas y is down-positive, TikZ vertical directions are up-positive.
+  const vert = y < -0.5 ? "above" : y > 0.5 ? "below" : "";
+  if (vert && horiz) return `${vert} ${horiz}`;
+  return vert || horiz;
 }
 
 function rgbColorExpr(hex: string): string {
