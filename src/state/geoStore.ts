@@ -223,6 +223,22 @@ const defaultSegStyle: LineStyle = {
   strokeWidth: 2,
   dash: "solid",
   opacity: 1,
+  segmentMark: {
+    enabled: false,
+    mark: "none",
+    pos: 0.5,
+    sizePt: 4,
+  },
+  segmentArrowMark: {
+    enabled: false,
+    mode: "end",
+    direction: "->",
+    distribution: "single",
+    pos: 0.5,
+    startPos: 0.45,
+    endPos: 0.55,
+    step: 0.05,
+  },
 };
 
 const defaultLineStyle: LineStyle = {

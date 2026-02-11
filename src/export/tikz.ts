@@ -60,6 +60,8 @@ export type TikzCommand =
       selector?: { name: string; x: number; y: number };
     }
   | { kind: "DrawSegment"; a: string; b: string; style?: string }
+  | { kind: "MarkSegment"; a: string; b: string; style: string }
+  | { kind: "DrawRaw"; tex: string }
   | { kind: "DrawLine"; a: string; b: string; addLeft: number; addRight: number; style?: string }
   | { kind: "DrawCircle"; o: string; x: string; style?: string }
   | { kind: "FillAngle"; a: string; b: string; c: string; style?: string }
@@ -488,12 +490,42 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (!definedPointIds.has(seg.aId) || !definedPointIds.has(seg.bId)) {
       throw new Error(`Cannot export undefined segment geometry: ${seg.id}`);
     }
+    const aName = mustName(pointName, seg.aId);
+    const bName = mustName(pointName, seg.bId);
     draws.push({
       kind: "DrawSegment",
-      a: mustName(pointName, seg.aId),
-      b: mustName(pointName, seg.bId),
+      a: aName,
+      b: bName,
       style: segmentStyleToTikz(seg.style, options),
     });
+    const markStyle = segmentMarkToTikz(seg.style.segmentMark);
+    if (markStyle) {
+      draws.push({
+        kind: "MarkSegment",
+        a: aName,
+        b: bName,
+        style: markStyle,
+      });
+    }
+    const arrowOverlay = segmentArrowOverlayToTikz(seg.style.segmentArrowMark, aName, bName, {
+      strokeColor: seg.style.strokeColor,
+      strokeWidth: seg.style.strokeWidth,
+    });
+    if (arrowOverlay) {
+      if (arrowOverlay.kind === "tkz") {
+        draws.push({
+          kind: "DrawSegment",
+          a: aName,
+          b: bName,
+          style: arrowOverlay.style,
+        });
+      } else {
+        draws.push({
+          kind: "DrawRaw",
+          tex: arrowOverlay.tex,
+        });
+      }
+    }
   }
   for (const line of scene.lines) {
     if (!line.visible) continue;
@@ -626,6 +658,8 @@ export function renderTikz(cmds: TikzCommand[]): string {
       c.kind !== "SetupViewport" &&
       c.kind !== "SetupLine" &&
       c.kind !== "DrawSegment" &&
+      c.kind !== "MarkSegment" &&
+      c.kind !== "DrawRaw" &&
       c.kind !== "DrawLine" &&
       c.kind !== "DrawCircle" &&
       c.kind !== "FillAngle" &&
@@ -639,6 +673,8 @@ export function renderTikz(cmds: TikzCommand[]): string {
   const drawObjects = cmds.filter(
     (c) =>
       c.kind === "DrawSegment" ||
+      c.kind === "MarkSegment" ||
+      c.kind === "DrawRaw" ||
       c.kind === "DrawLine" ||
       c.kind === "DrawCircle" ||
       c.kind === "FillAngle" ||
@@ -788,6 +824,11 @@ export function renderTikz(cmds: TikzCommand[]): string {
       assertTkzMacro("tkzDrawSegment");
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzDrawSegment${opts}(${cmd.a},${cmd.b})`);
+    } else if (cmd.kind === "MarkSegment") {
+      assertTkzMacro("tkzMarkSegment");
+      out.push(`\\tkzMarkSegment[${cmd.style}](${cmd.a},${cmd.b})`);
+    } else if (cmd.kind === "DrawRaw") {
+      out.push(cmd.tex);
     } else if (cmd.kind === "DrawLine") {
       assertTkzMacro("tkzDrawLine");
       const opts = cmd.style ? `[${cmd.style}]` : "";
@@ -1366,6 +1407,89 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
 
 function segmentStyleToTikz(style: SceneModel["segments"][number]["style"], options: TikzExportOptions): string {
   return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.dash, style.opacity, options);
+}
+
+function segmentMarkToTikz(mark: SceneModel["segments"][number]["style"]["segmentMark"]): string | null {
+  if (!mark?.enabled || mark.mark === "none") return null;
+  const allowedMarks = new Set(["|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"]);
+  if (!allowedMarks.has(mark.mark)) {
+    throw new Error(`Unsupported SegmentMark: mark=${String(mark.mark)}`);
+  }
+  if (!Number.isFinite(mark.pos) || mark.pos < 0 || mark.pos > 1) {
+    throw new Error("Unsupported SegmentMark: pos");
+  }
+  if (!Number.isFinite(mark.sizePt) || mark.sizePt <= 0) {
+    throw new Error("Unsupported SegmentMark: sizePt");
+  }
+  const opts: string[] = [
+    `mark=${mark.mark}`,
+    `pos=${fmt(mark.pos)}`,
+    `size=${fmt(mark.sizePt)}pt`,
+  ];
+  if (mark.color) opts.push(`color=${rgbColorExpr(mark.color)}`);
+  if (mark.lineWidthPt !== undefined) {
+    if (!Number.isFinite(mark.lineWidthPt) || mark.lineWidthPt <= 0) {
+      throw new Error("Unsupported SegmentMark: lineWidthPt");
+    }
+    opts.push(`line width=${fmt(mark.lineWidthPt)}pt`);
+  }
+  return opts.join(", ");
+}
+
+function segmentArrowOverlayToTikz(
+  arrow: SceneModel["segments"][number]["style"]["segmentArrowMark"],
+  aName: string,
+  bName: string,
+  base: { strokeColor: string; strokeWidth: number }
+): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
+  if (!arrow?.enabled) return null;
+  if (arrow.direction !== "->" && arrow.direction !== "<-" && arrow.direction !== "<->") {
+    throw new Error(`Unsupported SegmentArrowMark: direction=${String(arrow.direction)}`);
+  }
+  if (arrow.mode === "mid") {
+    const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
+    const arrowWidth = Math.max(0.1, arrow.lineWidthPt ?? base.strokeWidth);
+    const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt`;
+    const markCode =
+      arrow.direction === "->"
+        ? `{\\arrow[${arrowOpts}]{>}}`
+        : arrow.direction === "<-"
+        ? `{\\arrowreversed[${arrowOpts}]{>}}`
+        : `{\\arrow[${arrowOpts}]{>};\\arrowreversed[${arrowOpts}]{>}}`;
+    const distribution = arrow.distribution ?? "single";
+    let start = clamp01(arrow.startPos ?? 0.45);
+    let end = clamp01(arrow.endPos ?? 0.55);
+    if (end < start) {
+      const t = start;
+      start = end;
+      end = t;
+    }
+    const opts: string[] = [
+      "postaction=decorate",
+      distribution === "multi"
+        ? `decoration={markings,mark=between positions ${fmt(start)} and ${fmt(end)} step ${fmt(
+            Math.max(0.001, arrow.step ?? 0.05)
+          )} with ${markCode}}`
+        : `decoration={markings,mark=at position ${fmt(clamp01(arrow.pos ?? 0.5))} with ${markCode}}`,
+    ];
+    if (arrow.lineWidthPt !== undefined && (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0)) {
+      throw new Error("Unsupported SegmentArrowMark: lineWidthPt");
+    }
+    // Use \path so the segment itself is not re-drawn (avoids black/thick overlay artifacts).
+    return { kind: "raw", tex: `\\path[${opts.join(", ")}] (${aName}) -- (${bName});` };
+  }
+
+  const opts: string[] = [`arrows=${arrow.direction}`];
+  opts.push(`color=${rgbColorExpr(arrow.color ?? base.strokeColor)}`);
+  if (arrow.lineWidthPt !== undefined) {
+    if (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0) {
+      throw new Error("Unsupported SegmentArrowMark: lineWidthPt");
+    }
+    opts.push(`line width=${fmt(arrow.lineWidthPt)}pt`);
+  } else {
+    opts.push(`line width=${fmt(Math.max(0.1, base.strokeWidth))}pt`);
+  }
+  return { kind: "tkz", style: opts.join(", ") };
 }
 
 function lineStyleToTikz(style: SceneModel["lines"][number]["style"], options: TikzExportOptions): string {

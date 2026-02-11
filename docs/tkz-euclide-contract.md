@@ -131,3 +131,62 @@ Fail-closed rules:
   - `Unsupported construction: AngleFixed (missing tkz macro: <name>)`
 - If signed clockwise rotation is unsupported by backend:
   - `Unsupported AngleFixed option: direction=CW (no tkz mapping)`
+
+## SegmentMark
+
+GeoDraw segment cosmetic `segmentMark` maps to:
+
+```tex
+\tkzMarkSegment[mark=||,pos=0.3,size=5.5pt,color=<color>,line width=1pt](A,B)
+```
+
+Supported mark tokens:
+- `|`
+- `||`
+- `|||`
+- `s`
+- `s|`
+- `s||`
+- `x`
+- `o`
+- `oo`
+- `z`
+
+Fail-closed rules:
+- Unknown mark token:
+  - `Unsupported SegmentMark: mark=<value>`
+- Invalid `pos`:
+  - `Unsupported SegmentMark: pos`
+
+## SegmentArrowMark
+
+End-arrow overlay (supported):
+
+```tex
+\tkzDrawSegment[arrows=->,color=<color>,line width=<w>pt](A,B)
+```
+
+Mid-arrow policy:
+- Exported with TikZ decorations overlay:
+
+```tex
+\path[
+  postaction=decorate,
+  decoration={markings,mark=at position <pos> with {\arrow[color=<color>,line width=<w>pt]{>}}}
+] (A) -- (B);
+```
+
+Multi-arrow variant:
+
+```tex
+\path[
+  postaction=decorate,
+  decoration={markings,mark=between positions <start> and <end> step <step> with {\arrow[color=<color>,line width=<w>pt]{>}}}
+] (A) -- (B);
+```
+
+Notes:
+- `->` maps to `\arrow{>}`.
+- `<-` maps to `\arrowreversed{>}`.
+- `<->` is emitted as `\arrow{>}` + `\arrowreversed{>}` at the same mark position.
+- Requires `decorations.markings` library; tkz-euclide 5.x load path in this repo already includes it.

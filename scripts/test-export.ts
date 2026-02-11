@@ -413,6 +413,53 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
       throw new Error("Expected undefined circle-line points to be omitted from label drawing.");
     }
   }
+
+  if (fileName === "segment-mark-basic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkSegment")) {
+      throw new Error("Expected segment mark fixture to emit \\tkzMarkSegment.");
+    }
+    if (!tikz.includes("mark=||")) {
+      throw new Error("Expected segment mark fixture to emit mark=||.");
+    }
+    if (!tikz.includes("pos=0.3")) {
+      throw new Error("Expected segment mark fixture to emit pos=0.3.");
+    }
+    if (!tikz.includes("size=5.5pt")) {
+      throw new Error("Expected segment mark fixture to emit size=5.5pt.");
+    }
+    if (!tikz.includes("line width=1pt")) {
+      throw new Error("Expected segment mark fixture to emit line width=1pt.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-end.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDrawSegment[arrows=->")) {
+      throw new Error("Expected segment end-arrow fixture to emit tkzDrawSegment[arrows=->].");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-mid.json") {
+    if (!tikz.includes("postaction=decorate")) {
+      throw new Error("Expected segment mid-arrow fixture to emit decoration-based draw.");
+    }
+    if (!tikz.includes("mark=at position")) {
+      throw new Error("Expected segment mid-arrow fixture to emit mark=at position.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-mid-multi.json") {
+    if (!tikz.includes("postaction=decorate")) {
+      throw new Error("Expected segment multi mid-arrow fixture to emit decoration-based draw.");
+    }
+    if (!tikz.includes("mark=between positions")) {
+      throw new Error("Expected segment multi mid-arrow fixture to emit mark=between positions.");
+    }
+    if (!tikz.includes("step 0.05")) {
+      throw new Error("Expected segment multi mid-arrow fixture to emit step 0.05.");
+    }
+  }
 }
 
 function parseDrawLines(

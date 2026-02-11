@@ -93,6 +93,10 @@ const SHAPES: PointShape[] = [
   "cross",
 ];
 
+const SEGMENT_MARK_OPTIONS = ["none", "|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"] as const;
+const SEGMENT_ARROW_DIRECTIONS = ["->", "<-", "<->"] as const;
+const SEGMENT_ARROW_DISTRIBUTIONS = ["single", "multi"] as const;
+
 const LEFT_MIN = 48;
 const LEFT_MAX = 240;
 const RIGHT_MIN = 240;
@@ -1040,6 +1044,423 @@ export default function App() {
                       onChange={(e) => updateSelectedSegmentStyle({ opacity: Number(e.target.value) })}
                     />
                   </div>
+                  <details className="detailsSection">
+                    <summary className="subSectionTitle detailsSummary">Marking</summary>
+                    <label className="checkboxRow">
+                      <input
+                        type="checkbox"
+                        checked={selectedSegment.style.segmentMark?.enabled ?? false}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentMark: {
+                              ...(selectedSegment.style.segmentMark ?? {
+                                mark: "none",
+                                pos: 0.5,
+                                sizePt: 4,
+                              }),
+                              enabled: e.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      Enable segment mark
+                    </label>
+                    <div className="controlRow">
+                      <label className="controlLabel">Mark Type</label>
+                      <select
+                        className="selectInput"
+                        value={selectedSegment.style.segmentMark?.mark ?? "none"}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentMark: {
+                              ...(selectedSegment.style.segmentMark ?? {
+                                enabled: true,
+                                pos: 0.5,
+                                sizePt: 4,
+                              }),
+                              mark: e.target.value as (typeof SEGMENT_MARK_OPTIONS)[number],
+                            },
+                          })
+                        }
+                      >
+                        {SEGMENT_MARK_OPTIONS.map((mark) => (
+                          <option key={mark} value={mark}>
+                            {mark}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Mark Pos</label>
+                      <input
+                        className="sizeSlider"
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={selectedSegment.style.segmentMark?.pos ?? 0.5}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentMark: {
+                              ...(selectedSegment.style.segmentMark ?? {
+                                enabled: true,
+                                mark: "|",
+                                sizePt: 4,
+                              }),
+                              pos: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Mark Size (pt)</label>
+                      <input
+                        className="sizeSlider"
+                        type="number"
+                        min={0}
+                        max={24}
+                        step={0.1}
+                        value={selectedSegment.style.segmentMark?.sizePt ?? 4}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentMark: {
+                              ...(selectedSegment.style.segmentMark ?? {
+                                enabled: true,
+                                mark: "|",
+                                pos: 0.5,
+                              }),
+                              sizePt: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Mark Color</label>
+                      <input
+                        className="colorInput"
+                        type="color"
+                        value={selectedSegment.style.segmentMark?.color ?? selectedSegment.style.strokeColor}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentMark: {
+                              ...(selectedSegment.style.segmentMark ?? {
+                                enabled: true,
+                                mark: "|",
+                                pos: 0.5,
+                                sizePt: 4,
+                              }),
+                              color: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Mark Width (pt)</label>
+                      <input
+                        className="sizeSlider"
+                        type="number"
+                        min={0}
+                        max={12}
+                        step={0.1}
+                        value={selectedSegment.style.segmentMark?.lineWidthPt ?? 1}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentMark: {
+                              ...(selectedSegment.style.segmentMark ?? {
+                                enabled: true,
+                                mark: "|",
+                                pos: 0.5,
+                                sizePt: 4,
+                              }),
+                              lineWidthPt: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div className="subSectionTitle" style={{ marginTop: 10 }}>Arrow Mark</div>
+                    <label className="checkboxRow">
+                      <input
+                        type="checkbox"
+                        checked={selectedSegment.style.segmentArrowMark?.enabled ?? false}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentArrowMark: {
+                              ...(selectedSegment.style.segmentArrowMark ?? {
+                                mode: "end",
+                                direction: "->",
+                                distribution: "single",
+                                pos: 0.5,
+                                startPos: 0.45,
+                                endPos: 0.55,
+                                step: 0.05,
+                              }),
+                              enabled: e.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      Enable arrow mark
+                    </label>
+                    <div className="controlRow">
+                      <label className="controlLabel">Arrow Mode</label>
+                      <select
+                        className="selectInput"
+                        value={selectedSegment.style.segmentArrowMark?.mode ?? "end"}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentArrowMark: {
+                              ...(selectedSegment.style.segmentArrowMark ?? {
+                                enabled: true,
+                                direction: "->",
+                                distribution: "single",
+                                pos: 0.5,
+                                startPos: 0.45,
+                                endPos: 0.55,
+                                step: 0.05,
+                              }),
+                              mode: e.target.value as "end" | "mid",
+                            },
+                          })
+                        }
+                      >
+                        <option value="end">End arrow</option>
+                        <option value="mid">Mid arrow</option>
+                      </select>
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Direction</label>
+                      <select
+                        className="selectInput"
+                        value={selectedSegment.style.segmentArrowMark?.direction ?? "->"}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentArrowMark: {
+                              ...(selectedSegment.style.segmentArrowMark ?? {
+                                enabled: true,
+                                mode: "end",
+                                distribution: "single",
+                                pos: 0.5,
+                                startPos: 0.45,
+                                endPos: 0.55,
+                                step: 0.05,
+                              }),
+                              direction: e.target.value as (typeof SEGMENT_ARROW_DIRECTIONS)[number],
+                            },
+                          })
+                        }
+                      >
+                        {SEGMENT_ARROW_DIRECTIONS.map((direction) => (
+                          <option key={direction} value={direction}>
+                            {direction}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Arrow Pos</label>
+                      <input
+                        className="sizeSlider"
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={
+                          selectedSegment.style.segmentArrowMark?.pos ??
+                          selectedSegment.style.segmentMark?.pos ??
+                          0.5
+                        }
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentArrowMark: {
+                              ...(selectedSegment.style.segmentArrowMark ?? {
+                                enabled: true,
+                                mode: "mid",
+                                direction: "->",
+                                distribution: "single",
+                                startPos: 0.45,
+                                endPos: 0.55,
+                                step: 0.05,
+                              }),
+                              pos: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Arrow Color</label>
+                      <input
+                        className="colorInput"
+                        type="color"
+                        value={selectedSegment.style.segmentArrowMark?.color ?? selectedSegment.style.strokeColor}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentArrowMark: {
+                              ...(selectedSegment.style.segmentArrowMark ?? {
+                                enabled: true,
+                                mode: "end",
+                                direction: "->",
+                                distribution: "single",
+                                pos: 0.5,
+                                startPos: 0.45,
+                                endPos: 0.55,
+                                step: 0.05,
+                              }),
+                              color: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Arrow Width (pt)</label>
+                      <input
+                        className="sizeSlider"
+                        type="number"
+                        min={0}
+                        max={12}
+                        step={0.1}
+                        value={selectedSegment.style.segmentArrowMark?.lineWidthPt ?? 1}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentArrowMark: {
+                              ...(selectedSegment.style.segmentArrowMark ?? {
+                                enabled: true,
+                                mode: "end",
+                                direction: "->",
+                                distribution: "single",
+                                pos: 0.5,
+                                startPos: 0.45,
+                                endPos: 0.55,
+                                step: 0.05,
+                              }),
+                              lineWidthPt: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    {selectedSegment.style.segmentArrowMark?.mode === "mid" && (
+                      <>
+                        <div className="controlRow">
+                          <label className="controlLabel">Distribution</label>
+                          <select
+                            className="selectInput"
+                            value={selectedSegment.style.segmentArrowMark?.distribution ?? "single"}
+                            onChange={(e) =>
+                              updateSelectedSegmentStyle({
+                                segmentArrowMark: {
+                                  ...(selectedSegment.style.segmentArrowMark ?? {
+                                    enabled: true,
+                                    mode: "mid",
+                                    direction: "->",
+                                    pos: 0.5,
+                                    startPos: 0.45,
+                                    endPos: 0.55,
+                                    step: 0.05,
+                                  }),
+                                  distribution: e.target.value as (typeof SEGMENT_ARROW_DISTRIBUTIONS)[number],
+                                },
+                              })
+                            }
+                          >
+                            {SEGMENT_ARROW_DISTRIBUTIONS.map((distribution) => (
+                              <option key={distribution} value={distribution}>
+                                {distribution}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {((selectedSegment.style.segmentArrowMark?.distribution ?? "single") === "multi") && (
+                          <>
+                            <div className="controlRow">
+                              <label className="controlLabel">Start</label>
+                              <input
+                                className="sizeSlider"
+                                type="number"
+                                min={0}
+                                max={1}
+                                step={0.01}
+                                value={selectedSegment.style.segmentArrowMark?.startPos ?? 0.45}
+                                onChange={(e) =>
+                                  updateSelectedSegmentStyle({
+                                    segmentArrowMark: {
+                                      ...(selectedSegment.style.segmentArrowMark ?? {
+                                        enabled: true,
+                                        mode: "mid",
+                                        direction: "->",
+                                        distribution: "multi",
+                                        endPos: 0.55,
+                                        step: 0.05,
+                                      }),
+                                      startPos: Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="controlRow">
+                              <label className="controlLabel">End</label>
+                              <input
+                                className="sizeSlider"
+                                type="number"
+                                min={0}
+                                max={1}
+                                step={0.01}
+                                value={selectedSegment.style.segmentArrowMark?.endPos ?? 0.55}
+                                onChange={(e) =>
+                                  updateSelectedSegmentStyle({
+                                    segmentArrowMark: {
+                                      ...(selectedSegment.style.segmentArrowMark ?? {
+                                        enabled: true,
+                                        mode: "mid",
+                                        direction: "->",
+                                        distribution: "multi",
+                                        startPos: 0.45,
+                                        step: 0.05,
+                                      }),
+                                      endPos: Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="controlRow">
+                              <label className="controlLabel">Step</label>
+                              <input
+                                className="sizeSlider"
+                                type="number"
+                                min={0.01}
+                                max={1}
+                                step={0.01}
+                                value={selectedSegment.style.segmentArrowMark?.step ?? 0.05}
+                                onChange={(e) =>
+                                  updateSelectedSegmentStyle({
+                                    segmentArrowMark: {
+                                      ...(selectedSegment.style.segmentArrowMark ?? {
+                                        enabled: true,
+                                        mode: "mid",
+                                        direction: "->",
+                                        distribution: "multi",
+                                        startPos: 0.45,
+                                        endPos: 0.55,
+                                      }),
+                                      step: Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </details>
                 </div>
               )}
               {!selectedPoint && !selectedAngle && selectedLine && (
@@ -1956,7 +2377,14 @@ function pointStyleEqual(a: PointStyle, b: PointStyle): boolean {
 }
 
 function lineStyleEqual(a: SceneModel["segments"][number]["style"], b: SceneModel["segments"][number]["style"]): boolean {
-  return a.strokeColor === b.strokeColor && a.strokeWidth === b.strokeWidth && a.dash === b.dash && a.opacity === b.opacity;
+  return (
+    a.strokeColor === b.strokeColor &&
+    a.strokeWidth === b.strokeWidth &&
+    a.dash === b.dash &&
+    a.opacity === b.opacity &&
+    JSON.stringify(a.segmentMark ?? null) === JSON.stringify(b.segmentMark ?? null) &&
+    JSON.stringify(a.segmentArrowMark ?? null) === JSON.stringify(b.segmentArrowMark ?? null)
+  );
 }
 
 function circleStyleEqual(a: SceneModel["circles"][number]["style"], b: SceneModel["circles"][number]["style"]): boolean {

@@ -41,6 +41,26 @@ export type LineStyle = {
   strokeWidth: number;
   dash: "solid" | "dashed" | "dotted";
   opacity: number;
+  segmentMark?: {
+    enabled: boolean;
+    mark: "none" | "|" | "||" | "|||" | "s" | "s|" | "s||" | "x" | "o" | "oo" | "z";
+    pos: number;
+    sizePt: number;
+    color?: string;
+    lineWidthPt?: number;
+  };
+  segmentArrowMark?: {
+    enabled: boolean;
+    mode: "end" | "mid";
+    direction: "->" | "<-" | "<->";
+    pos?: number;
+    distribution?: "single" | "multi";
+    startPos?: number;
+    endPos?: number;
+    step?: number;
+    color?: string;
+    lineWidthPt?: number;
+  };
 };
 
 export type CircleStyle = {

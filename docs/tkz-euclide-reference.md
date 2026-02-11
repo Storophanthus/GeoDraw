@@ -37,6 +37,28 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 \tkzDrawLine[add=5 and 5](B,Cw)
 ```
 
+## Segment mark snippets
+
+```tex
+% Tick mark at 30% along segment
+\tkzMarkSegment[mark=||,pos=0.3,size=5.5pt,color=teal,line width=1pt](D,E)
+
+% End-arrow overlay on segment
+\tkzDrawSegment[arrows=->,color=teal,line width=1.2pt](D,E)
+
+% Mid-arrow overlay on segment (no segment redraw)
+\path[
+  postaction=decorate,
+  decoration={markings,mark=at position 0.4 with {\arrow[color=teal,line width=1.2pt]{>};\arrowreversed[color=teal,line width=1.2pt]{>}}}
+] (D) -- (E);
+
+% Multi-arrow overlay
+\path[
+  postaction=decorate,
+  decoration={markings,mark=between positions 0.45 and 0.55 step 0.05 with {\arrow[color=teal,line width=1.2pt]{>}}}
+] (D) -- (E);
+```
+
 ## User Cheat-Sheet (verbatim)
 
 ```tex
