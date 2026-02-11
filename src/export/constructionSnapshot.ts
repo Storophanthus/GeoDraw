@@ -63,6 +63,12 @@ export type SnapshotCircle = {
 export type ConstructionSnapshot = {
   version: 1;
   points: SnapshotPoint[];
+  numbers: Array<{
+    id: string;
+    name: string;
+    visible: boolean;
+    definition: SceneModel["numbers"][number]["definition"];
+  }>;
   lines: SnapshotLine[];
   segments: SnapshotSegment[];
   circles: SnapshotCircle[];
@@ -84,6 +90,15 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
       showLabel: point.showLabel,
       definition: pointDefinition(point),
       dependsOn: pointDependsOn(point),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  const numbers = scene.numbers
+    .map((num) => ({
+      id: num.id,
+      name: num.name,
+      visible: num.visible,
+      definition: num.definition,
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
@@ -138,6 +153,7 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
   return {
     version: 1,
     points,
+    numbers,
     lines,
     segments,
     circles,

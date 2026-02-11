@@ -24,6 +24,7 @@ import { exportConstructionSnapshot } from "./export/constructionSnapshot";
 import { exportTikzWithOptions } from "./export/tikz";
 import {
   evaluateAngleExpressionDegrees,
+  getNumberValue,
   getPointWorldPos,
   type GeometryObjectRef,
   type PointShape,
@@ -137,6 +138,7 @@ export default function App() {
   const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
   const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
   const updateSelectedAngleFields = useGeoStore((store) => store.updateSelectedAngleFields);
+  const createNumber = useGeoStore((store) => store.createNumber);
 
   const selectedPointId = selectedObject?.type === "point" ? selectedObject.id : null;
   const selectedPoint = useMemo(
@@ -158,6 +160,10 @@ export default function App() {
   const selectedAngle = useMemo(
     () => (selectedObject?.type === "angle" ? scene.angles.find((item) => item.id === selectedObject.id) ?? null : null),
     [scene.angles, selectedObject]
+  );
+  const selectedNumber = useMemo(
+    () => (selectedObject?.type === "number" ? scene.numbers.find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.numbers, selectedObject]
   );
   const selectedPointWorld = useMemo(() => {
     if (!selectedPoint) return null;
@@ -199,6 +205,11 @@ export default function App() {
   const segmentById = useMemo(() => new Map(scene.segments.map((s) => [s.id, s])), [scene.segments]);
   const circleById = useMemo(() => new Map(scene.circles.map((c) => [c.id, c])), [scene.circles]);
   const angleById = useMemo(() => new Map(scene.angles.map((a) => [a.id, a])), [scene.angles]);
+  const numberById = useMemo(() => new Map(scene.numbers.map((n) => [n.id, n])), [scene.numbers]);
+  const selectedNumberValue = useMemo(() => {
+    if (!selectedNumber) return null;
+    return getNumberValue(selectedNumber.id, scene);
+  }, [scene, selectedNumber]);
   const selectedConstructionText = useMemo(
     () =>
       describeSelectedConstruction(
@@ -208,9 +219,10 @@ export default function App() {
         lineById,
         segmentById,
         circleById,
-        angleById
+        angleById,
+        numberById
       ),
-    [angleById, circleById, lineById, pointNameById, scene, segmentById, selectedObject]
+    [angleById, circleById, lineById, numberById, pointNameById, scene, segmentById, selectedObject]
   );
 
   const [nameInput, setNameInput] = useState("");
@@ -220,6 +232,10 @@ export default function App() {
   const [jsonText, setJsonText] = useState("");
   const [tikzCopied, setTikzCopied] = useState(false);
   const [jsonCopied, setJsonCopied] = useState(false);
+  const [newNumberValue, setNewNumberValue] = useState("1");
+  const [newNumberExpr, setNewNumberExpr] = useState("n_1+n_2^2");
+  const [ratioNumeratorId, setRatioNumeratorId] = useState("");
+  const [ratioDenominatorId, setRatioDenominatorId] = useState("");
   const [rightTab, setRightTab] = useState<RightTab>("algebra");
   const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
   const [exportMatchCanvas, setExportMatchCanvas] = useState(true);
@@ -254,6 +270,20 @@ export default function App() {
     setRenameError("");
     setShapePickerOpen(false);
   }, [selectedPoint]);
+
+  useEffect(() => {
+    if (scene.numbers.length === 0) {
+      setRatioNumeratorId("");
+      setRatioDenominatorId("");
+      return;
+    }
+    if (!scene.numbers.some((n) => n.id === ratioNumeratorId)) {
+      setRatioNumeratorId(scene.numbers[0].id);
+    }
+    if (!scene.numbers.some((n) => n.id === ratioDenominatorId)) {
+      setRatioDenominatorId(scene.numbers[Math.min(1, scene.numbers.length - 1)].id);
+    }
+  }, [scene.numbers, ratioNumeratorId, ratioDenominatorId]);
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
@@ -576,7 +606,8 @@ export default function App() {
                   scene.segments.length === 0 &&
                   scene.lines.length === 0 &&
                   scene.circles.length === 0 &&
-                  scene.angles.length === 0 && (
+                  scene.angles.length === 0 &&
+                  scene.numbers.length === 0 && (
                   <div className="emptyState">No objects</div>
                 )}
                 {scene.points.map((point) => (
@@ -642,6 +673,23 @@ export default function App() {
                     onClick={() => setSelectedObject({ type: "angle", id: angle.id })}
                   >
                     Angle {angle.id}
+                  </button>
+                ))}
+                {scene.numbers.map((num) => (
+                  <button
+                    key={num.id}
+                    className={
+                      selectedObject?.type === "number" && selectedObject.id === num.id
+                        ? "objectItem active"
+                        : "objectItem"
+                    }
+                    onClick={() => setSelectedObject({ type: "number", id: num.id })}
+                  >
+                    Number {num.name}
+                    {(() => {
+                      const value = getNumberValue(num.id, scene);
+                      return value === null ? " = undefined" : ` = ${value.toFixed(6)}`;
+                    })()}
                   </button>
                 ))}
               </div>
@@ -796,8 +844,145 @@ export default function App() {
                   <div className="statusText">Click A (base point), then B (vertex), then click to confirm.</div>
                 </div>
               )}
-              {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedAngle && (
-                <div className="emptyState">Select a point to edit point properties</div>
+              <div className="toolInfo">
+                <div className="subSectionTitle">Numbers</div>
+                <div className="controlRow">
+                  <label className="controlLabel">Constant</label>
+                  <input
+                    className="renameInput"
+                    type="text"
+                    value={newNumberValue}
+                    onChange={(e) => setNewNumberValue(e.target.value)}
+                    placeholder="e.g. 2.5"
+                  />
+                </div>
+                <div className="actionsRow">
+                  <button
+                    className="actionButton secondary"
+                    onClick={() => {
+                      const v = Number(newNumberValue);
+                      if (!Number.isFinite(v)) return;
+                      createNumber({ kind: "constant", value: v });
+                    }}
+                  >
+                    Add Constant
+                  </button>
+                  {selectedSegment && (
+                    <button
+                      className="actionButton secondary"
+                      onClick={() => createNumber({ kind: "segmentLength", segId: selectedSegment.id })}
+                    >
+                      Store Length
+                    </button>
+                  )}
+                  {selectedCircle && (
+                    <button
+                      className="actionButton secondary"
+                      onClick={() => createNumber({ kind: "circleRadius", circleId: selectedCircle.id })}
+                    >
+                      Store Radius
+                    </button>
+                  )}
+                  {selectedCircle && (
+                    <button
+                      className="actionButton secondary"
+                      onClick={() => createNumber({ kind: "circleArea", circleId: selectedCircle.id })}
+                    >
+                      Store Area
+                    </button>
+                  )}
+                  {selectedAngle && (
+                    <button
+                      className="actionButton secondary"
+                      onClick={() => createNumber({ kind: "angleDegrees", angleId: selectedAngle.id })}
+                    >
+                      Store Angle
+                    </button>
+                  )}
+                </div>
+                <div className="controlRow">
+                  <label className="controlLabel">Formula</label>
+                  <input
+                    className="renameInput"
+                    type="text"
+                    value={newNumberExpr}
+                    onChange={(e) => setNewNumberExpr(e.target.value)}
+                    placeholder="e.g. n_1+n_2^2"
+                  />
+                </div>
+                <div className="actionsRow">
+                  <button
+                    className="actionButton secondary"
+                    onClick={() => {
+                      const expr = newNumberExpr.trim();
+                      if (!expr) return;
+                      createNumber({ kind: "expression", expr });
+                    }}
+                  >
+                    Add Formula
+                  </button>
+                </div>
+                {scene.numbers.length >= 2 && (
+                  <>
+                    <div className="controlRow">
+                      <label className="controlLabel">Ratio Num</label>
+                      <select
+                        className="selectInput"
+                        value={ratioNumeratorId}
+                        onChange={(e) => setRatioNumeratorId(e.target.value)}
+                      >
+                        {scene.numbers.map((num) => (
+                          <option key={num.id} value={num.id}>
+                            {num.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Ratio Den</label>
+                      <select
+                        className="selectInput"
+                        value={ratioDenominatorId}
+                        onChange={(e) => setRatioDenominatorId(e.target.value)}
+                      >
+                        {scene.numbers.map((num) => (
+                          <option key={num.id} value={num.id}>
+                            {num.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="actionsRow">
+                      <button
+                        className="actionButton secondary"
+                        onClick={() => {
+                          if (!ratioNumeratorId || !ratioDenominatorId || ratioNumeratorId === ratioDenominatorId) return;
+                          createNumber({
+                            kind: "ratio",
+                            numeratorId: ratioNumeratorId,
+                            denominatorId: ratioDenominatorId,
+                          });
+                        }}
+                      >
+                        Add Ratio
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+              {selectedNumber && (
+                <div className="toolInfo">
+                  <div className="subSectionTitle">Number</div>
+                  <div className="statusText">
+                    {selectedNumber.name} = {selectedNumberValue === null ? "undefined" : selectedNumberValue.toFixed(6)}
+                  </div>
+                  <button className="deleteButton" onClick={deleteSelectedObject}>
+                    Delete
+                  </button>
+                </div>
+              )}
+              {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedAngle && !selectedNumber && (
+                <div className="emptyState">Select an object to edit properties</div>
               )}
               {!selectedPoint && !selectedAngle && selectedSegment && (
                 <div className="cosmeticsBlock">
@@ -1372,13 +1557,14 @@ export default function App() {
 }
 
 function describeSelectedConstruction(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle" | "number"; id: string } | null,
   scene: SceneModel,
   pointNameById: Map<string, string>,
   lineById: Map<string, SceneModel["lines"][number]>,
   segmentById: Map<string, SceneModel["segments"][number]>,
   circleById: Map<string, SceneModel["circles"][number]>,
-  angleById: Map<string, SceneModel["angles"][number]>
+  angleById: Map<string, SceneModel["angles"][number]>,
+  numberById: Map<string, SceneModel["numbers"][number]>
 ): string | null {
   if (!selectedObject) return null;
   if (selectedObject.type === "line") {
@@ -1422,10 +1608,69 @@ function describeSelectedConstruction(
       pointNameById
     )} (degrees).`;
   }
+  if (selectedObject.type === "number") {
+    const num = numberById.get(selectedObject.id);
+    if (!num) return null;
+    return describeNumberConstruction(num, pointNameById, segmentById, circleById, angleById, numberById);
+  }
 
   const point = scene.points.find((item) => item.id === selectedObject.id);
   if (!point) return null;
   return describePointConstruction(point, pointNameById, lineById, segmentById, circleById);
+}
+
+function describeNumberConstruction(
+  num: SceneModel["numbers"][number],
+  pointNameById: Map<string, string>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>,
+  angleById: Map<string, SceneModel["angles"][number]>,
+  numberById: Map<string, SceneModel["numbers"][number]>
+): string {
+  const def = num.definition;
+  if (def.kind === "constant") return `Number ${num.name} = ${def.value}.`;
+  if (def.kind === "distancePoints") {
+    return `Distance ${pointLabel(def.aId, pointNameById)}${pointLabel(def.bId, pointNameById)}.`;
+  }
+  if (def.kind === "segmentLength") {
+    const seg = segmentById.get(def.segId);
+    return seg
+      ? `Length of segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}.`
+      : `Length of segment ${def.segId}.`;
+  }
+  if (def.kind === "circleRadius") {
+    const circle = circleById.get(def.circleId);
+    return circle
+      ? `Radius of circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(
+          circle.throughId,
+          pointNameById
+        )}.`
+      : `Radius of circle ${def.circleId}.`;
+  }
+  if (def.kind === "circleArea") {
+    const circle = circleById.get(def.circleId);
+    return circle
+      ? `Area of circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(
+          circle.throughId,
+          pointNameById
+        )}.`
+      : `Area of circle ${def.circleId}.`;
+  }
+  if (def.kind === "angleDegrees") {
+    const angle = angleById.get(def.angleId);
+    return angle
+      ? `Degree value of angle ${pointLabel(angle.aId, pointNameById)}${pointLabel(angle.bId, pointNameById)}${pointLabel(
+          angle.cId,
+          pointNameById
+        )}.`
+      : `Degree value of angle ${def.angleId}.`;
+  }
+  if (def.kind === "expression") {
+    return `Number formula: ${def.expr}.`;
+  }
+  const n = numberById.get(def.numeratorId)?.name ?? def.numeratorId;
+  const d = numberById.get(def.denominatorId)?.name ?? def.denominatorId;
+  return `Ratio ${n}/${d}.`;
 }
 
 function describePointConstruction(

@@ -11,6 +11,7 @@ import type {
   SceneAngle,
   SceneLine,
   SceneModel,
+  SceneNumber,
   ScenePoint,
   SceneSegment,
   ShowLabelMode,
@@ -87,17 +88,19 @@ async function main(): Promise<void> {
 
 function hydrateScene(raw: {
   points?: Array<Record<string, unknown>>;
+  numbers?: Array<Record<string, unknown>>;
   lines?: Array<Record<string, unknown>>;
   segments?: Array<Record<string, unknown>>;
   circles?: Array<Record<string, unknown>>;
   angles?: Array<Record<string, unknown>>;
 }): SceneModel {
   const points = (raw.points ?? []).map(hydratePoint);
+  const numbers = (raw.numbers ?? []).map(hydrateNumber);
   const lines = (raw.lines ?? []).map(hydrateLine);
   const segments = (raw.segments ?? []).map(hydrateSegment);
   const circles = (raw.circles ?? []).map(hydrateCircle);
   const angles = (raw.angles ?? []).map(hydrateAngle);
-  return { points, lines, segments, circles, angles };
+  return { points, numbers, lines, segments, circles, angles };
 }
 
 function hydratePoint(raw: Record<string, unknown>): ScenePoint {
@@ -243,6 +246,15 @@ function hydrateAngle(raw: Record<string, unknown>): SceneAngle {
     cId: String(raw.cId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
     style,
+  };
+}
+
+function hydrateNumber(raw: Record<string, unknown>): SceneNumber {
+  return {
+    id: String(raw.id),
+    name: String(raw.name ?? raw.id),
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    definition: raw.definition as SceneNumber["definition"],
   };
 }
 

@@ -145,6 +145,7 @@ function buildPerfScene(): SceneModel {
     circles,
     segments: [],
     angles: [],
+    numbers: [],
   };
 }
 

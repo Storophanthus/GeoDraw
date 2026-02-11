@@ -5,6 +5,8 @@ import {
   computeOrientedAngleRad,
   type CircleStyle,
   evaluateAngleExpressionDegrees,
+  evaluateNumberExpression,
+  getNumberValue,
   type LineLikeObjectRef,
   getLineWorldAnchors,
   getPointWorldPos,
@@ -13,6 +15,7 @@ import {
   nextLabelFromIndex,
   type GeometryObjectRef,
   type LineStyle,
+  type SceneNumberDefinition,
   type PointStyle,
   type SceneModel,
   type ScenePoint,
@@ -47,6 +50,7 @@ export type SelectedObject =
   | { type: "line"; id: string }
   | { type: "circle"; id: string }
   | { type: "angle"; id: string }
+  | { type: "number"; id: string }
   | null;
 
 export type HoveredHit =
@@ -110,6 +114,7 @@ type GeoState = {
   nextLineId: number;
   nextCircleId: number;
   nextAngleId: number;
+  nextNumberId: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
@@ -162,6 +167,7 @@ type GeoActions = {
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
+  createNumber: (definition: SceneNumberDefinition, preferredName?: string) => string | null;
 
   movePointTo: (id: string, world: Vec2) => void;
   movePointLabelBy: (id: string, deltaPx: Vec2) => void;
@@ -260,6 +266,7 @@ const initialState: GeoState = {
     lines: [],
     circles: [],
     angles: [],
+    numbers: [],
   },
   selectedObject: null,
   recentCreatedObject: null,
@@ -271,6 +278,7 @@ const initialState: GeoState = {
   nextLineId: 1,
   nextCircleId: 1,
   nextAngleId: 1,
+  nextNumberId: 1,
   pointDefaults: defaultPointStyle,
   segmentDefaults: defaultSegStyle,
   lineDefaults: defaultLineStyle,
@@ -306,6 +314,7 @@ type HistorySnapshot = {
   nextLineId: number;
   nextCircleId: number;
   nextAngleId: number;
+  nextNumberId: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
@@ -1112,6 +1121,42 @@ const actions: GeoActions = {
     return createdId;
   },
 
+  createNumber(definition, preferredName) {
+    let createdId: string | null = null;
+    setState((prev) => {
+      if (!isValidNumberDefinition(definition, prev.scene)) return prev;
+      const usedNames = new Set(prev.scene.numbers.map((n) => n.name));
+      let name = preferredName?.trim() || `n_${prev.nextNumberId}`;
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) name = `n_${prev.nextNumberId}`;
+      let suffix = 1;
+      while (usedNames.has(name)) {
+        name = `${name}_${suffix}`;
+        suffix += 1;
+      }
+      const id = `n_${prev.nextNumberId}`;
+      createdId = id;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          numbers: [
+            ...prev.scene.numbers,
+            {
+              id,
+              name,
+              visible: true,
+              definition,
+            },
+          ],
+        },
+        selectedObject: { type: "number", id },
+        recentCreatedObject: { type: "number", id },
+        nextNumberId: prev.nextNumberId + 1,
+      };
+    });
+    return createdId;
+  },
+
   movePointTo(id, world) {
     setState((prev) => {
       const nextPoints = prev.scene.points.map((point) => {
@@ -1654,6 +1699,29 @@ const actions: GeoActions = {
         };
       }
 
+      if (prev.selectedObject.type === "number") {
+        const deletedId = prev.selectedObject.id;
+        const keptNumbers = prev.scene.numbers.filter((num) => num.id !== deletedId);
+        const keptSet = new Set(keptNumbers.map((num) => num.id));
+        const filteredNumbers = keptNumbers.filter((num) => {
+          if (num.definition.kind !== "ratio") return true;
+          return keptSet.has(num.definition.numeratorId) && keptSet.has(num.definition.denominatorId);
+        });
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            numbers: filteredNumbers,
+          },
+          selectedObject: null,
+          recentCreatedObject: null,
+          copyStyle:
+            prev.copyStyle.source?.type === "number" && prev.copyStyle.source.id === prev.selectedObject.id
+              ? { source: null, pointStyle: null, lineStyle: null, circleStyle: null, angleStyle: null, showLabel: null }
+              : prev.copyStyle,
+        };
+      }
+
       return {
         ...prev,
         scene: {
@@ -1975,6 +2043,9 @@ export const geoStoreHelpers = {
     if (!line) return null;
     return getLineWorldAnchors(line, scene);
   },
+  getNumberValueById(scene: SceneModel, numberId: string): number | null {
+    return getNumberValue(numberId, scene);
+  },
 };
 
 function isCopyStyleSourceAlive(
@@ -1983,14 +2054,40 @@ function isCopyStyleSourceAlive(
   segments: SceneModel["segments"],
   lines: SceneModel["lines"],
   circles: SceneModel["circles"],
-  angles: SceneModel["angles"]
+  angles: SceneModel["angles"],
+  numbers: SceneModel["numbers"] = []
 ): boolean {
   if (!source) return false;
   if (source.type === "point") return points.some((point) => point.id === source.id);
   if (source.type === "segment") return segments.some((segment) => segment.id === source.id);
   if (source.type === "circle") return circles.some((circle) => circle.id === source.id);
   if (source.type === "angle") return angles.some((angle) => angle.id === source.id);
+  if (source.type === "number") return numbers.some((num) => num.id === source.id);
   return lines.some((line) => line.id === source.id);
+}
+
+function isValidNumberDefinition(def: SceneNumberDefinition, scene: SceneModel): boolean {
+  if (def.kind === "constant") return Number.isFinite(def.value);
+  if (def.kind === "distancePoints") {
+    return scene.points.some((p) => p.id === def.aId) && scene.points.some((p) => p.id === def.bId);
+  }
+  if (def.kind === "segmentLength") {
+    return scene.segments.some((s) => s.id === def.segId);
+  }
+  if (def.kind === "circleRadius" || def.kind === "circleArea") {
+    return scene.circles.some((c) => c.id === def.circleId);
+  }
+  if (def.kind === "angleDegrees") {
+    return scene.angles.some((a) => a.id === def.angleId);
+  }
+  if (def.kind === "expression") {
+    return evaluateNumberExpression(scene, def.expr).ok;
+  }
+  return (
+    scene.numbers.some((n) => n.id === def.numeratorId) &&
+    scene.numbers.some((n) => n.id === def.denominatorId) &&
+    def.numeratorId !== def.denominatorId
+  );
 }
 
 function objectRefAlive(
@@ -2324,6 +2421,7 @@ function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     nextLineId: prev.nextLineId,
     nextCircleId: prev.nextCircleId,
     nextAngleId: prev.nextAngleId,
+    nextNumberId: prev.nextNumberId,
     pointDefaults: prev.pointDefaults,
     segmentDefaults: prev.segmentDefaults,
     lineDefaults: prev.lineDefaults,
@@ -2346,6 +2444,7 @@ function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.nextLineId !== next.nextLineId ||
     prev.nextCircleId !== next.nextCircleId ||
     prev.nextAngleId !== next.nextAngleId ||
+    prev.nextNumberId !== next.nextNumberId ||
     prev.pointDefaults !== next.pointDefaults ||
     prev.segmentDefaults !== next.segmentDefaults ||
     prev.lineDefaults !== next.lineDefaults ||
@@ -2370,6 +2469,7 @@ function restoreFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoStat
     nextLineId: snapshot.nextLineId,
     nextCircleId: snapshot.nextCircleId,
     nextAngleId: snapshot.nextAngleId,
+    nextNumberId: snapshot.nextNumberId,
     pointDefaults: snapshot.pointDefaults,
     segmentDefaults: snapshot.segmentDefaults,
     lineDefaults: snapshot.lineDefaults,
@@ -2386,6 +2486,7 @@ function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   let lines = scene.lines;
   let circles = scene.circles;
   let angles = scene.angles;
+  let numbers = scene.numbers;
   let changed = false;
 
   const sameIds = (a: Array<{ id: string }>, b: Array<{ id: string }>) =>
@@ -2440,12 +2541,32 @@ function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         return true;
       });
 
+    const nextPointIds = new Set(nextPoints.map((p) => p.id));
+    const nextAngleIds = new Set(nextAngles.map((a) => a.id));
+    const nextCircleIdsAfter = new Set(nextCircles.map((c) => c.id));
+    const nextSegmentIdsAfter = new Set(nextSegments.map((s) => s.id));
+    const numbersPreFiltered = numbers.filter((num) => {
+      const def = num.definition;
+      if (def.kind === "constant") return Number.isFinite(def.value);
+      if (def.kind === "distancePoints") return nextPointIds.has(def.aId) && nextPointIds.has(def.bId);
+      if (def.kind === "segmentLength") return nextSegmentIdsAfter.has(def.segId);
+      if (def.kind === "circleRadius" || def.kind === "circleArea") return nextCircleIdsAfter.has(def.circleId);
+      if (def.kind === "angleDegrees") return nextAngleIds.has(def.angleId);
+      return true;
+    });
+    const numberIds = new Set(numbersPreFiltered.map((n) => n.id));
+    const nextNumbers = numbersPreFiltered.filter((num) => {
+      if (num.definition.kind !== "ratio") return true;
+      return numberIds.has(num.definition.numeratorId) && numberIds.has(num.definition.denominatorId);
+    });
+
     const anyChanged =
       !sameIds(nextPoints, points) ||
       !sameIds(nextSegments, segments) ||
       !sameIds(nextLines, lines) ||
       !sameIds(nextCircles, circles) ||
       !sameIds(nextAngles, angles) ||
+      !sameIds(nextNumbers, numbers) ||
       nextPoints.some((point, idx) => point !== points[idx]);
 
     points = nextPoints;
@@ -2453,10 +2574,11 @@ function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     lines = nextLines;
     circles = nextCircles;
     angles = nextAngles;
+    numbers = nextNumbers;
     changed = changed || anyChanged;
     if (!anyChanged) break;
   }
 
   if (!changed) return scene;
-  return { ...scene, points, segments, lines, circles, angles };
+  return { ...scene, points, segments, lines, circles, angles, numbers };
 }

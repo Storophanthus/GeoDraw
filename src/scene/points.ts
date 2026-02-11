@@ -278,12 +278,72 @@ export type SceneAngle = {
   style: AngleStyle;
 };
 
+export type SceneNumberConstant = {
+  kind: "constant";
+  value: number;
+};
+
+export type SceneNumberDistancePoints = {
+  kind: "distancePoints";
+  aId: string;
+  bId: string;
+};
+
+export type SceneNumberSegmentLength = {
+  kind: "segmentLength";
+  segId: string;
+};
+
+export type SceneNumberCircleRadius = {
+  kind: "circleRadius";
+  circleId: string;
+};
+
+export type SceneNumberCircleArea = {
+  kind: "circleArea";
+  circleId: string;
+};
+
+export type SceneNumberAngleDegrees = {
+  kind: "angleDegrees";
+  angleId: string;
+};
+
+export type SceneNumberRatio = {
+  kind: "ratio";
+  numeratorId: string;
+  denominatorId: string;
+};
+
+export type SceneNumberExpression = {
+  kind: "expression";
+  expr: string;
+};
+
+export type SceneNumberDefinition =
+  | SceneNumberConstant
+  | SceneNumberDistancePoints
+  | SceneNumberSegmentLength
+  | SceneNumberCircleRadius
+  | SceneNumberCircleArea
+  | SceneNumberAngleDegrees
+  | SceneNumberRatio
+  | SceneNumberExpression;
+
+export type SceneNumber = {
+  id: string;
+  name: string;
+  visible: boolean;
+  definition: SceneNumberDefinition;
+};
+
 export type SceneModel = {
   points: ScenePoint[];
   segments: SceneSegment[];
   lines: SceneLine[];
   circles: SceneCircle[];
   angles: SceneAngle[];
+  numbers: SceneNumber[];
 };
 
 export type SceneEvalStats = {
@@ -307,6 +367,10 @@ type SceneEvalContext = {
   lineById: Map<string, SceneLine>;
   segmentById: Map<string, SceneSegment>;
   circleById: Map<string, SceneCircle>;
+  angleById: Map<string, SceneAngle>;
+  numberById: Map<string, SceneNumber>;
+  numberCache: Map<string, number | null>;
+  numberInProgress: Set<string>;
   lineInProgress: Set<string>;
   stats: SceneEvalStats;
   explicit: boolean;
@@ -340,6 +404,10 @@ function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalC
   for (const seg of scene.segments) segmentById.set(seg.id, seg);
   const circleById = new Map<string, SceneCircle>();
   for (const circle of scene.circles) circleById.set(circle.id, circle);
+  const angleById = new Map<string, SceneAngle>();
+  for (const angle of scene.angles) angleById.set(angle.id, angle);
+  const numberById = new Map<string, SceneNumber>();
+  for (const num of scene.numbers) numberById.set(num.id, num);
   return {
     tick: ++sceneEvalTick,
     startedAt: performance.now(),
@@ -349,10 +417,14 @@ function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalC
     lineById,
     segmentById,
     circleById,
+    angleById,
+    numberById,
+    numberCache: new Map<string, number | null>(),
+    numberInProgress: new Set<string>(),
     lineInProgress: new Set<string>(),
     stats: {
       tick: sceneEvalTick,
-      dirtyNodes: scene.points.length,
+      dirtyNodes: scene.points.length + scene.numbers.length,
       totalNodeEvalCalls: 0,
       cacheHits: 0,
       circleCircleCalls: 0,
@@ -900,6 +972,87 @@ function pointWithinSegmentDomain(p: Vec2, a: Vec2, b: Vec2): boolean {
   return u >= -EPS && u <= 1 + EPS;
 }
 
+export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel): number | null {
+  const id = typeof numOrId === "string" ? numOrId : numOrId.id;
+  const ctx = getOrCreateSceneEvalContext(scene);
+  const value = evalNumberById(id, scene, ctx);
+  if (!ctx.explicit) {
+    ctx.stats.ms = performance.now() - ctx.startedAt;
+    sceneLastEvalStats.set(scene, { ...ctx.stats });
+  }
+  return value;
+}
+
+function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): number | null {
+  if (ctx.numberCache.has(id)) {
+    ctx.stats.cacheHits += 1;
+    return ctx.numberCache.get(id) ?? null;
+  }
+  if (ctx.numberInProgress.has(id)) return null;
+  const num = ctx.numberById.get(id);
+  if (!num) return null;
+  ctx.numberInProgress.add(id);
+  const value = evalNumberDefinition(num.definition, scene, ctx, id);
+  ctx.numberInProgress.delete(id);
+  ctx.numberCache.set(id, value);
+  return value;
+}
+
+function evalNumberDefinition(
+  def: SceneNumberDefinition,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  selfNumberId?: string
+): number | null {
+  if (def.kind === "constant") {
+    return Number.isFinite(def.value) ? def.value : null;
+  }
+  if (def.kind === "distancePoints") {
+    const a = getPointWorldById(def.aId, scene, ctx);
+    const b = getPointWorldById(def.bId, scene, ctx);
+    if (!a || !b) return null;
+    return distance(a, b);
+  }
+  if (def.kind === "segmentLength") {
+    const seg = ctx.segmentById.get(def.segId);
+    if (!seg) return null;
+    const a = getPointWorldById(seg.aId, scene, ctx);
+    const b = getPointWorldById(seg.bId, scene, ctx);
+    if (!a || !b) return null;
+    return distance(a, b);
+  }
+  if (def.kind === "circleRadius" || def.kind === "circleArea") {
+    const circle = ctx.circleById.get(def.circleId);
+    if (!circle) return null;
+    const center = getPointWorldById(circle.centerId, scene, ctx);
+    const through = getPointWorldById(circle.throughId, scene, ctx);
+    if (!center || !through) return null;
+    const r = distance(center, through);
+    if (def.kind === "circleRadius") return r;
+    return Math.PI * r * r;
+  }
+  if (def.kind === "angleDegrees") {
+    const angle = ctx.angleById.get(def.angleId);
+    if (!angle) return null;
+    const a = getPointWorldById(angle.aId, scene, ctx);
+    const b = getPointWorldById(angle.bId, scene, ctx);
+    const c = getPointWorldById(angle.cId, scene, ctx);
+    if (!a || !b || !c) return null;
+    const theta = computeOrientedAngleRad(a, b, c);
+    if (theta === null) return null;
+    return (theta * 180) / Math.PI;
+  }
+  if (def.kind === "expression") {
+    const result = evaluateNumberExpressionWithCtx(scene, def.expr, ctx, selfNumberId);
+    return result.ok ? result.value : null;
+  }
+  const num = evalNumberById(def.numeratorId, scene, ctx);
+  const den = evalNumberById(def.denominatorId, scene, ctx);
+  if (num === null || den === null) return null;
+  if (Math.abs(den) <= 1e-12) return null;
+  return num / den;
+}
+
 export function computeConvexAngleRad(a: Vec2, b: Vec2, c: Vec2): number | null {
   const bax = a.x - b.x;
   const bay = a.y - b.y;
@@ -930,12 +1083,20 @@ export function computeOrientedAngleRad(a: Vec2, b: Vec2, c: Vec2): number | nul
 }
 
 export type AngleExpressionEvalResult = { ok: true; valueDeg: number } | { ok: false; error: string };
+export type NumberExpressionEvalResult = { ok: true; value: number } | { ok: false; error: string };
 
 export function evaluateAngleExpressionDegrees(scene: SceneModel, exprRaw: string): AngleExpressionEvalResult {
   const expr = exprRaw.trim();
   if (!expr) return { ok: false, error: "Empty angle expression." };
   const ctx = getOrCreateSceneEvalContext(scene);
   return evaluateAngleExpressionDegreesWithCtx(scene, expr, ctx);
+}
+
+export function evaluateNumberExpression(scene: SceneModel, exprRaw: string): NumberExpressionEvalResult {
+  const expr = exprRaw.trim();
+  if (!expr) return { ok: false, error: "Empty number expression." };
+  const ctx = getOrCreateSceneEvalContext(scene);
+  return evaluateNumberExpressionWithCtx(scene, expr, ctx);
 }
 
 function evaluateAngleExpressionDegreesWithCtx(
@@ -946,13 +1107,28 @@ function evaluateAngleExpressionDegreesWithCtx(
   const expr = exprRaw.trim();
   if (!expr) return { ok: false, error: "Empty angle expression." };
   const symbols = buildAngleSymbolTable(scene, ctx);
-  const parsed = parseAngleExpression(expr, symbols);
+  const parsed = parseNumericExpression(expr, symbols);
   if (!parsed.ok) return parsed;
-  if (!Number.isFinite(parsed.valueDeg)) return { ok: false, error: "Angle expression is not finite." };
-  if (parsed.valueDeg < 0 || parsed.valueDeg > 360) {
+  if (!Number.isFinite(parsed.value)) return { ok: false, error: "Angle expression is not finite." };
+  if (parsed.value < 0 || parsed.value > 360) {
     return { ok: false, error: "Angle expression must evaluate to [0, 360] degrees." };
   }
-  return parsed;
+  return { ok: true, valueDeg: parsed.value };
+}
+
+function evaluateNumberExpressionWithCtx(
+  scene: SceneModel,
+  exprRaw: string,
+  ctx: SceneEvalContext,
+  excludeNumberId?: string
+): NumberExpressionEvalResult {
+  const expr = exprRaw.trim();
+  if (!expr) return { ok: false, error: "Empty number expression." };
+  const symbols = buildNumberSymbolTable(scene, ctx, excludeNumberId);
+  const parsed = parseNumericExpression(expr, symbols);
+  if (!parsed.ok) return parsed;
+  if (!Number.isFinite(parsed.value)) return { ok: false, error: "Number expression is not finite." };
+  return { ok: true, value: parsed.value };
 }
 
 function buildAngleSymbolTable(scene: SceneModel, ctx: SceneEvalContext): Map<string, number> {
@@ -990,6 +1166,32 @@ function buildAngleSymbolTable(scene: SceneModel, ctx: SceneEvalContext): Map<st
   // Optional convenience constants.
   registerAngleSymbol(map, "pi", 180);
   registerAngleSymbol(map, "tau", 360);
+  const numbers = [...scene.numbers].sort((a, b) => a.id.localeCompare(b.id));
+  for (const num of numbers) {
+    const value = evalNumberById(num.id, scene, ctx);
+    if (value === null || !Number.isFinite(value)) continue;
+    registerAngleSymbol(map, num.id, value);
+    registerAngleSymbol(map, `num_${num.id}`, value);
+    registerAngleSymbol(map, num.name, value);
+    registerAngleSymbol(map, num.name.toLowerCase(), value);
+  }
+  return map;
+}
+
+function buildNumberSymbolTable(scene: SceneModel, ctx: SceneEvalContext, excludeNumberId?: string): Map<string, number> {
+  const map = new Map<string, number>();
+  const numbers = [...scene.numbers].sort((a, b) => a.id.localeCompare(b.id));
+  for (const num of numbers) {
+    if (excludeNumberId && num.id === excludeNumberId) continue;
+    const value = evalNumberById(num.id, scene, ctx);
+    if (value === null || !Number.isFinite(value)) continue;
+    registerAngleSymbol(map, num.id, value);
+    registerAngleSymbol(map, `num_${num.id}`, value);
+    registerAngleSymbol(map, num.name, value);
+    registerAngleSymbol(map, num.name.toLowerCase(), value);
+  }
+  registerAngleSymbol(map, "pi", Math.PI);
+  registerAngleSymbol(map, "tau", Math.PI * 2);
   return map;
 }
 
@@ -1007,11 +1209,11 @@ function normalizeAngleLabelSymbol(labelRaw: string): string | null {
   return null;
 }
 
-function parseAngleExpression(expr: string, symbols: Map<string, number>): AngleExpressionEvalResult {
+function parseNumericExpression(expr: string, symbols: Map<string, number>): NumberExpressionEvalResult {
   type Token =
     | { kind: "num"; v: number }
     | { kind: "id"; v: string }
-    | { kind: "op"; v: "+" | "-" | "*" | "/" | "(" | ")" };
+    | { kind: "op"; v: "+" | "-" | "*" | "/" | "^" | "(" | ")" };
   const tokens: Token[] = [];
   let i = 0;
   while (i < expr.length) {
@@ -1037,7 +1239,7 @@ function parseAngleExpression(expr: string, symbols: Map<string, number>): Angle
       i = j;
       continue;
     }
-    if (ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "(" || ch === ")") {
+    if (ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "^" || ch === "(" || ch === ")") {
       tokens.push({ kind: "op", v: ch });
       i += 1;
       continue;
@@ -1049,14 +1251,14 @@ function parseAngleExpression(expr: string, symbols: Map<string, number>): Angle
   const peek = (): Token | null => (p < tokens.length ? tokens[p] : null);
   const take = (): Token | null => (p < tokens.length ? tokens[p++] : null);
 
-  const parsePrimary = (): AngleExpressionEvalResult => {
+  const parsePrimary = (): NumberExpressionEvalResult => {
     const t = take();
     if (!t) return { ok: false, error: "Unexpected end of expression." };
-    if (t.kind === "num") return { ok: true, valueDeg: t.v };
+    if (t.kind === "num") return { ok: true, value: t.v };
     if (t.kind === "id") {
       const v = symbols.get(t.v) ?? symbols.get(t.v.toLowerCase());
-      if (v === undefined) return { ok: false, error: `Unknown angle symbol: ${t.v}` };
-      return { ok: true, valueDeg: v };
+      if (v === undefined) return { ok: false, error: `Unknown symbol: ${t.v}` };
+      return { ok: true, value: v };
     }
     if (t.kind === "op" && t.v === "(") {
       const inner = parseExpr();
@@ -1068,31 +1270,44 @@ function parseAngleExpression(expr: string, symbols: Map<string, number>): Angle
     if (t.kind === "op" && (t.v === "+" || t.v === "-")) {
       const inner = parsePrimary();
       if (!inner.ok) return inner;
-      return { ok: true, valueDeg: t.v === "-" ? -inner.valueDeg : inner.valueDeg };
+      return { ok: true, value: t.v === "-" ? -inner.value : inner.value };
     }
     return { ok: false, error: "Expected number, symbol, or parenthesized expression." };
   };
 
-  const parseTerm = (): AngleExpressionEvalResult => {
+  const parsePower = (): NumberExpressionEvalResult => {
     let left = parsePrimary();
+    if (!left.ok) return left;
+    const t = peek();
+    if (t && t.kind === "op" && t.v === "^") {
+      take();
+      const right = parsePower();
+      if (!right.ok) return right;
+      left = { ok: true, value: Math.pow(left.value, right.value) };
+    }
+    return left;
+  };
+
+  const parseTerm = (): NumberExpressionEvalResult => {
+    let left = parsePower();
     if (!left.ok) return left;
     while (true) {
       const t = peek();
       if (!t || t.kind !== "op" || (t.v !== "*" && t.v !== "/")) break;
       take();
-      const right = parsePrimary();
+      const right = parsePower();
       if (!right.ok) return right;
       if (t.v === "*") {
-        left = { ok: true, valueDeg: left.valueDeg * right.valueDeg };
+        left = { ok: true, value: left.value * right.value };
       } else {
-        if (Math.abs(right.valueDeg) <= 1e-12) return { ok: false, error: "Division by zero." };
-        left = { ok: true, valueDeg: left.valueDeg / right.valueDeg };
+        if (Math.abs(right.value) <= 1e-12) return { ok: false, error: "Division by zero." };
+        left = { ok: true, value: left.value / right.value };
       }
     }
     return left;
   };
 
-  const parseExpr = (): AngleExpressionEvalResult => {
+  const parseExpr = (): NumberExpressionEvalResult => {
     let left = parseTerm();
     if (!left.ok) return left;
     while (true) {
@@ -1101,7 +1316,7 @@ function parseAngleExpression(expr: string, symbols: Map<string, number>): Angle
       take();
       const right = parseTerm();
       if (!right.ok) return right;
-      left = { ok: true, valueDeg: t.v === "+" ? left.valueDeg + right.valueDeg : left.valueDeg - right.valueDeg };
+      left = { ok: true, value: t.v === "+" ? left.value + right.value : left.value - right.value };
     }
     return left;
   };

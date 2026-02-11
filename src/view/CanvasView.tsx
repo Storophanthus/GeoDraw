@@ -264,13 +264,17 @@ export function CanvasView() {
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
 
+        const selectedDrawableObject = selectedObject?.type === "number" ? null : selectedObject;
+        const recentDrawableObject = recentCreatedObject?.type === "number" ? null : recentCreatedObject;
+        const copySourceDrawable = copyStyle.source?.type === "number" ? null : copyStyle.source;
+
         drawRectGrid(ctx, camera, vp, GRID_SETTINGS);
-        drawCircles(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
-        drawLines(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
-        drawSegments(ctx, scene, camera, vp, selectedObject, recentCreatedObject, copyStyle.source);
-        drawAngles(ctx, resolvedAngles, camera, vp, selectedObject, recentCreatedObject);
+        drawCircles(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
+        drawLines(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
+        drawSegments(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
+        drawAngles(ctx, resolvedAngles, camera, vp, selectedDrawableObject, recentDrawableObject);
         drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, hoverSnap, hoveredHit, scene, camera, vp, angleFixedTool);
-        drawPoints(ctx, resolvedPoints, selectedObject, camera, vp, copyStyle.source);
+        drawPoints(ctx, resolvedPoints, selectedDrawableObject, camera, vp, copySourceDrawable);
         drawInteractionHighlights(
           ctx,
           activeTool,
