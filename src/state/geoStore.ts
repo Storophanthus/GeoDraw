@@ -1126,12 +1126,13 @@ const actions: GeoActions = {
     setState((prev) => {
       if (!isValidNumberDefinition(definition, prev.scene)) return prev;
       const usedNames = new Set(prev.scene.numbers.map((n) => n.name));
-      let name = preferredName?.trim() || `n_${prev.nextNumberId}`;
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) name = `n_${prev.nextNumberId}`;
-      let suffix = 1;
-      while (usedNames.has(name)) {
-        name = `${name}_${suffix}`;
-        suffix += 1;
+      let name: string;
+      const preferred = preferredName?.trim();
+      if (preferred && /^[A-Za-z_][A-Za-z0-9_]*$/.test(preferred) && !usedNames.has(preferred)) {
+        name = preferred;
+      } else {
+        const prefix = numberPrefixForDefinition(definition);
+        name = nextAvailableNumberName(usedNames, prefix);
       }
       const id = `n_${prev.nextNumberId}`;
       createdId = id;
@@ -2088,6 +2089,29 @@ function isValidNumberDefinition(def: SceneNumberDefinition, scene: SceneModel):
     scene.numbers.some((n) => n.id === def.denominatorId) &&
     def.numeratorId !== def.denominatorId
   );
+}
+
+function numberPrefixForDefinition(def: SceneNumberDefinition): string {
+  if (def.kind === "distancePoints" || def.kind === "segmentLength") return "l";
+  if (def.kind === "circleRadius") return "r";
+  if (def.kind === "circleArea") return "Area";
+  if (def.kind === "angleDegrees") return "ang";
+  return "n";
+}
+
+function nextAvailableNumberName(usedNames: Set<string>, prefix: string): string {
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`^${escaped}_(\\d+)$`);
+  const usedIndices = new Set<number>();
+  for (const name of usedNames) {
+    const m = name.match(re);
+    if (!m) continue;
+    const idx = Number(m[1]);
+    if (Number.isInteger(idx) && idx > 0) usedIndices.add(idx);
+  }
+  let i = 1;
+  while (usedIndices.has(i)) i += 1;
+  return `${prefix}_${i}`;
 }
 
 function objectRefAlive(
