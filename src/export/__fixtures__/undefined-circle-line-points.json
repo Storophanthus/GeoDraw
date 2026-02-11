@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p_1", "name": "A", "definition": { "kind": "free", "x": 0, "y": 0 }, "visible": true, "showLabel": "name" },
+    { "id": "p_2", "name": "B", "definition": { "kind": "free", "x": 1, "y": 0 }, "visible": true, "showLabel": "name" },
+    { "id": "p_3", "name": "C", "definition": { "kind": "free", "x": 0, "y": 5 }, "visible": true, "showLabel": "name" },
+    { "id": "p_4", "name": "D", "definition": { "kind": "free", "x": 4, "y": 5 }, "visible": true, "showLabel": "name" },
+    {
+      "id": "p_5",
+      "name": "E",
+      "definition": { "kind": "circleLineIntersectionPoint", "circleId": "c_1", "lineId": "l_1", "branchIndex": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_6",
+      "name": "F",
+      "definition": { "kind": "circleLineIntersectionPoint", "circleId": "c_1", "lineId": "l_1", "branchIndex": 1 },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "lines": [
+    { "id": "l_1", "kind": "twoPoint", "aId": "p_3", "bId": "p_4", "visible": true }
+  ],
+  "segments": [],
+  "circles": [
+    { "id": "c_1", "centerId": "p_1", "throughId": "p_2", "visible": true }
+  ],
+  "angles": []
+}

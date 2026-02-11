@@ -126,12 +126,14 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
     return { ...base, kind: "pointOnCircle", circleId: String(def.circleId), t: Number(def.t) };
   }
   if (kind === "pointByRotation") {
+    const rawAngleDeg = Number(def.angleDeg);
     return {
       ...base,
       kind: "pointByRotation",
       centerId: String(def.centerId),
       pointId: String(def.pointId),
-      angleDeg: Number(def.angleDeg),
+      angleDeg: Number.isFinite(rawAngleDeg) ? rawAngleDeg : undefined,
+      angleExpr: typeof def.angleExpr === "string" ? def.angleExpr : undefined,
       direction: String(def.direction) === "CW" ? "CW" : "CCW",
       radiusMode: "keep",
     };
@@ -299,6 +301,21 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "angle-fixed-expression-2gamma.json") {
+    if (exportError) {
+      if (!exportError.message.includes("Unsupported construction: AngleFixed")) {
+        throw exportError;
+      }
+      return;
+    }
+    if (!tikz.includes("\\tkzDefPointBy[rotation=center")) {
+      throw new Error("Expected AngleFixed expression fixture to emit tkz rotation construction.");
+    }
+    if (!/angle\s+120(?:[^\d]|$)/.test(tikz)) {
+      throw new Error("Expected AngleFixed expression fixture to resolve 2*gamma = 120 degrees.");
+    }
+  }
+
   if (exportError) throw exportError;
 
   if (fileName === "regression-line-coverage-j-o.json") {
@@ -372,6 +389,16 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("\\pi/2")) {
       throw new Error("Expected custom angle label text to be preserved as TeX.");
+    }
+  }
+
+  if (fileName === "undefined-circle-line-points.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDrawPoints[tkzVertex](E") || tikz.includes(",E,") || tikz.includes(",F,")) {
+      throw new Error("Expected undefined circle-line points to be omitted from point drawing.");
+    }
+    if (tikz.includes("\\tkzLabelPoint") && (tikz.includes("(E){") || tikz.includes("(F){"))) {
+      throw new Error("Expected undefined circle-line points to be omitted from label drawing.");
     }
   }
 }

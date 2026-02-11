@@ -13,7 +13,8 @@ export type SnapshotPointDefinition =
       kind: "pointByRotation";
       centerId: string;
       pointId: string;
-      angleDeg: number;
+      angleDeg?: number;
+      angleExpr?: string;
       direction: "CCW" | "CW";
       radiusMode: "keep";
     }
@@ -173,6 +174,7 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
       centerId: point.centerId,
       pointId: point.pointId,
       angleDeg: point.angleDeg,
+      angleExpr: point.angleExpr,
       direction: point.direction,
       radiusMode: point.radiusMode,
     };

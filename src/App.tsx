@@ -23,6 +23,7 @@ import {
 import { exportConstructionSnapshot } from "./export/constructionSnapshot";
 import { exportTikzWithOptions } from "./export/tikz";
 import {
+  evaluateAngleExpressionDegrees,
   getPointWorldPos,
   type GeometryObjectRef,
   type PointShape,
@@ -162,6 +163,10 @@ export default function App() {
     if (!selectedPoint) return null;
     return getPointWorldPos(selectedPoint, scene);
   }, [scene, selectedPoint]);
+  const angleFixedPreview = useMemo(
+    () => evaluateAngleExpressionDegrees(scene, angleFixedTool.angleExpr),
+    [scene, angleFixedTool.angleExpr]
+  );
   const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "angle" | null>(() => {
     if (selectedPoint) return "point";
     if (selectedSegment) return "segment";
@@ -763,15 +768,13 @@ export default function App() {
                 <div className="toolInfo">
                   <div className="subSectionTitle">Fixed Angle Tool</div>
                   <div className="controlRow">
-                    <label className="controlLabel">Angle (deg)</label>
+                    <label className="controlLabel">Angle Expr (deg)</label>
                     <input
                       className="renameInput"
-                      type="number"
-                      min={0}
-                      max={360}
-                      step={0.1}
-                      value={Number.isFinite(angleFixedTool.angleDeg) ? angleFixedTool.angleDeg : 30}
-                      onChange={(e) => setAngleFixedTool({ angleDeg: Number(e.target.value) })}
+                      type="text"
+                      value={angleFixedTool.angleExpr}
+                      onChange={(e) => setAngleFixedTool({ angleExpr: e.target.value })}
+                      placeholder="e.g. 30, 2*gamma, (ABC+15)/2"
                     />
                   </div>
                   <div className="controlRow">
@@ -784,6 +787,11 @@ export default function App() {
                       <option value="CCW">CCW</option>
                       <option value="CW">CW</option>
                     </select>
+                  </div>
+                  <div className="statusText">
+                    {angleFixedPreview.ok
+                      ? `Resolved: ${angleFixedPreview.valueDeg.toFixed(3)}°`
+                      : angleFixedPreview.error}
                   </div>
                   <div className="statusText">Click A (base point), then B (vertex), then click to confirm.</div>
                 </div>
@@ -1465,11 +1473,16 @@ function describePointConstruction(
     )}.`;
   }
   if (point.kind === "pointByRotation") {
+    const angleText = point.angleExpr?.trim()
+      ? point.angleExpr.trim()
+      : typeof point.angleDeg === "number" && Number.isFinite(point.angleDeg)
+        ? point.angleDeg.toFixed(2)
+        : "0";
     const sign = point.direction === "CCW" ? "" : "-";
     return `Point from rotation of ${pointLabel(point.pointId, pointNameById)} around ${pointLabel(
       point.centerId,
       pointNameById
-    )} by ${sign}${point.angleDeg.toFixed(2)}° (${point.direction}).`;
+    )} by ${sign}${angleText}° (${point.direction}).`;
   }
   if (point.kind === "circleLineIntersectionPoint") {
     const circle = circleById.get(point.circleId);

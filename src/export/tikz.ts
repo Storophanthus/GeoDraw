@@ -1,6 +1,7 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
 import {
   computeOrientedAngleRad,
+  evaluateAngleExpressionDegrees,
   getLineWorldAnchors,
   getPointWorldPos,
   type GeometryObjectRef,
@@ -154,6 +155,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     }
     resolvePoint(line.aId);
     resolvePoint(line.bId);
+    if (!definedPointIds.has(line.aId) || !definedPointIds.has(line.bId)) {
+      throw new Error(`Cannot export undefined line geometry: ${line.id}`);
+    }
     const anchors = { a: mustName(pointName, line.aId), b: mustName(pointName, line.bId) };
     lineAnchorNames.set(lineId, anchors);
     return anchors;
@@ -165,6 +169,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       if (!seg) throw new Error(`Missing segment ${ref.id}`);
       resolvePoint(seg.aId);
       resolvePoint(seg.bId);
+      if (!definedPointIds.has(seg.aId) || !definedPointIds.has(seg.bId)) {
+        throw new Error(`Cannot export undefined segment geometry: ${seg.id}`);
+      }
       return { a: mustName(pointName, seg.aId), b: mustName(pointName, seg.bId) };
     }
     return resolveLineAnchorsById(ref.id);
@@ -250,12 +257,17 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     } else if (point.kind === "pointByRotation") {
       resolvePoint(point.centerId);
       resolvePoint(point.pointId);
+      const expr = point.angleExpr?.trim() || (Number.isFinite(point.angleDeg) ? String(point.angleDeg) : "");
+      const evaluated = evaluateAngleExpressionDegrees(scene, expr);
+      if (!evaluated.ok) {
+        throw new Error(`Unsupported construction: AngleFixed expression for ${name}: ${evaluated.error}`);
+      }
       constructions.push({
         kind: "DefPointByRotation",
         name,
         center: mustName(pointName, point.centerId),
         point: mustName(pointName, point.pointId),
-        angleDeg: point.angleDeg,
+        angleDeg: evaluated.valueDeg,
         direction: point.direction,
       });
       definedPointIds.add(point.id);
@@ -270,6 +282,17 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const center = getPointWorldPosCached(scene, circle.centerId);
       const through = getPointWorldPosCached(scene, circle.throughId);
       if (!lineWorld || !center || !through) throw new Error(`Undefined line/circle geometry for ${point.name}`);
+      const roots = lineCircleIntersectionBranches(lineWorld.a, lineWorld.b, center, distance(center, through));
+      if (roots.length === 0) {
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
+      if (!point.excludePointId && point.branchIndex === 1 && roots.length < 2) {
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
       let branch: 0 | 1 = point.branchIndex;
       if (point.excludePointId) {
         const excluded = getPointWorldPosCached(scene, point.excludePointId);
@@ -299,6 +322,18 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         if (sibling) {
           resolvePoint(sibling.id);
           if (definedPointIds.has(sibling.id)) commonName = mustName(pointName, sibling.id);
+        }
+      }
+      if (point.excludePointId) {
+        const excluded = getPointWorldPosCached(scene, point.excludePointId);
+        if (excluded) {
+          const ROOT_EPS = 1e-6;
+          const hasOther = roots.some((r) => distance(r.point, excluded) > ROOT_EPS);
+          if (!hasOther) {
+            visiting.delete(pointId);
+            visited.add(pointId);
+            return;
+          }
         }
       }
       let selector: { name: string; x: number; y: number } | undefined;
@@ -443,42 +478,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     resolvePoint(point.id);
   }
 
-  const undefinedWorldVisible: string[] = [];
-  for (const point of scene.points) {
-    if (!point.visible) continue;
-    const world = getPointWorldPos(point, scene);
-    if (!world || !Number.isFinite(world.x) || !Number.isFinite(world.y)) {
-      undefinedWorldVisible.push(point.name);
-    }
-  }
-  if (undefinedWorldVisible.length > 0) {
-    undefinedWorldVisible.sort((a, b) => a.localeCompare(b));
-    throw new Error(
-      `Cannot export undefined points in current configuration: ${undefinedWorldVisible.join(
-        ", "
-      )}. Hide/delete them or adjust construction.`
-    );
-  }
-
   if (freeItems.length > 0) {
     freeItems.sort((a, b) => a.name.localeCompare(b.name));
     defs.push({ kind: "DefPoints", items: freeItems });
   }
 
-  // Strictness: every visible point must be defined by supported constructions.
-  const undefinedVisible: string[] = [];
-  for (const point of scene.points) {
-    if (!point.visible) continue;
-    if (definedPointIds.has(point.id)) continue;
-    undefinedVisible.push(point.name);
-  }
-  if (undefinedVisible.length > 0) {
-    undefinedVisible.sort((a, b) => a.localeCompare(b));
-    throw new Error(`Unsupported point constructions in exporter: ${undefinedVisible.join(", ")}`);
-  }
-
   for (const seg of scene.segments) {
     if (!seg.visible) continue;
+    if (!definedPointIds.has(seg.aId) || !definedPointIds.has(seg.bId)) {
+      throw new Error(`Cannot export undefined segment geometry: ${seg.id}`);
+    }
     draws.push({
       kind: "DrawSegment",
       a: mustName(pointName, seg.aId),
@@ -513,6 +522,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   }
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
+    if (!definedPointIds.has(circle.centerId) || !definedPointIds.has(circle.throughId)) {
+      throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
+    }
     draws.push({
       kind: "DrawCircle",
       o: mustName(pointName, circle.centerId),
@@ -558,7 +570,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     }
   }
 
-  const pointStyleGroups = buildPointStyleGroups(scene.points, pointName, options);
+  const drawablePoints = scene.points.filter((point) => point.visible && definedPointIds.has(point.id));
+  const pointStyleGroups = buildPointStyleGroups(drawablePoints, pointName, options);
   for (const group of pointStyleGroups) {
     draws.push({ kind: "DrawPoints", style: group.styleName, points: group.points } as TikzCommand);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -569,6 +582,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const labels: Array<{ name: string; text: string; options?: string; useGlow?: boolean }> = [];
   for (const point of scene.points) {
     if (!point.visible) continue;
+    if (!definedPointIds.has(point.id)) continue;
     if (point.showLabel === "none") continue;
     const name = pointName.get(point.id);
     if (!name) continue;

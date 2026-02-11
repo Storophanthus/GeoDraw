@@ -166,7 +166,8 @@ export type PointByRotation = {
   auxiliary?: boolean;
   centerId: string;
   pointId: string;
-  angleDeg: number;
+  angleDeg?: number;
+  angleExpr?: string;
   direction: "CCW" | "CW";
   radiusMode: "keep";
   style: PointStyle;
@@ -536,8 +537,11 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
     const vy = base.y - center.y;
     const len = Math.hypot(vx, vy);
     if (len <= 1e-12) return null;
+    const expr = point.angleExpr ?? String(point.angleDeg ?? "");
+    const exprEval = evaluateAngleExpressionDegreesWithCtx(scene, expr, ctx);
+    if (!exprEval.ok) return null;
     const sign = point.direction === "CCW" ? 1 : -1;
-    const theta = (point.angleDeg * Math.PI) / 180;
+    const theta = (exprEval.valueDeg * Math.PI) / 180;
     const c = Math.cos(sign * theta);
     const s = Math.sin(sign * theta);
     ctx.stats.allocationsEstimate += 1;
@@ -923,4 +927,187 @@ export function computeOrientedAngleRad(a: Vec2, b: Vec2, c: Vec2): number | nul
   while (delta < 0) delta += Math.PI * 2;
   while (delta >= Math.PI * 2) delta -= Math.PI * 2;
   return delta;
+}
+
+export type AngleExpressionEvalResult = { ok: true; valueDeg: number } | { ok: false; error: string };
+
+export function evaluateAngleExpressionDegrees(scene: SceneModel, exprRaw: string): AngleExpressionEvalResult {
+  const expr = exprRaw.trim();
+  if (!expr) return { ok: false, error: "Empty angle expression." };
+  const ctx = getOrCreateSceneEvalContext(scene);
+  return evaluateAngleExpressionDegreesWithCtx(scene, expr, ctx);
+}
+
+function evaluateAngleExpressionDegreesWithCtx(
+  scene: SceneModel,
+  exprRaw: string,
+  ctx: SceneEvalContext
+): AngleExpressionEvalResult {
+  const expr = exprRaw.trim();
+  if (!expr) return { ok: false, error: "Empty angle expression." };
+  const symbols = buildAngleSymbolTable(scene, ctx);
+  const parsed = parseAngleExpression(expr, symbols);
+  if (!parsed.ok) return parsed;
+  if (!Number.isFinite(parsed.valueDeg)) return { ok: false, error: "Angle expression is not finite." };
+  if (parsed.valueDeg < 0 || parsed.valueDeg > 360) {
+    return { ok: false, error: "Angle expression must evaluate to [0, 360] degrees." };
+  }
+  return parsed;
+}
+
+function buildAngleSymbolTable(scene: SceneModel, ctx: SceneEvalContext): Map<string, number> {
+  const map = new Map<string, number>();
+  const angles = [...scene.angles].sort((a, b) => a.id.localeCompare(b.id));
+  for (const angle of angles) {
+    const a = getPointWorldById(angle.aId, scene, ctx);
+    const b = getPointWorldById(angle.bId, scene, ctx);
+    const c = getPointWorldById(angle.cId, scene, ctx);
+    if (!a || !b || !c) continue;
+    const theta = computeOrientedAngleRad(a, b, c);
+    if (theta === null) continue;
+    const deg = (theta * 180) / Math.PI;
+
+    registerAngleSymbol(map, angle.id, deg);
+    registerAngleSymbol(map, `angle_${angle.id}`, deg);
+
+    const pa = ctx.pointById.get(angle.aId);
+    const pb = ctx.pointById.get(angle.bId);
+    const pc = ctx.pointById.get(angle.cId);
+    if (pa && pb && pc) {
+      registerAngleSymbol(map, `${pa.name}${pb.name}${pc.name}`, deg);
+    }
+
+    const label = angle.style.labelText.trim();
+    if (label) {
+      const normalized = normalizeAngleLabelSymbol(label);
+      if (normalized) {
+        registerAngleSymbol(map, normalized, deg);
+        registerAngleSymbol(map, normalized.toLowerCase(), deg);
+      }
+    }
+  }
+
+  // Optional convenience constants.
+  registerAngleSymbol(map, "pi", 180);
+  registerAngleSymbol(map, "tau", 360);
+  return map;
+}
+
+function registerAngleSymbol(map: Map<string, number>, key: string, valueDeg: number): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return;
+  if (map.has(key)) return;
+  map.set(key, valueDeg);
+}
+
+function normalizeAngleLabelSymbol(labelRaw: string): string | null {
+  let s = labelRaw.trim();
+  if (s.startsWith("$") && s.endsWith("$") && s.length >= 2) s = s.slice(1, -1).trim();
+  if (/^\\[A-Za-z_][A-Za-z0-9_]*$/.test(s)) return s.slice(1);
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(s)) return s;
+  return null;
+}
+
+function parseAngleExpression(expr: string, symbols: Map<string, number>): AngleExpressionEvalResult {
+  type Token =
+    | { kind: "num"; v: number }
+    | { kind: "id"; v: string }
+    | { kind: "op"; v: "+" | "-" | "*" | "/" | "(" | ")" };
+  const tokens: Token[] = [];
+  let i = 0;
+  while (i < expr.length) {
+    const ch = expr[i];
+    if (/\s/.test(ch)) {
+      i += 1;
+      continue;
+    }
+    if (/[0-9.]/.test(ch)) {
+      let j = i + 1;
+      while (j < expr.length && /[0-9._]/.test(expr[j])) j += 1;
+      const raw = expr.slice(i, j).replace(/_/g, "");
+      const v = Number(raw);
+      if (!Number.isFinite(v)) return { ok: false, error: `Invalid number: ${raw}` };
+      tokens.push({ kind: "num", v });
+      i = j;
+      continue;
+    }
+    if (/[A-Za-z_]/.test(ch)) {
+      let j = i + 1;
+      while (j < expr.length && /[A-Za-z0-9_]/.test(expr[j])) j += 1;
+      tokens.push({ kind: "id", v: expr.slice(i, j) });
+      i = j;
+      continue;
+    }
+    if (ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "(" || ch === ")") {
+      tokens.push({ kind: "op", v: ch });
+      i += 1;
+      continue;
+    }
+    return { ok: false, error: `Unexpected token: ${ch}` };
+  }
+
+  let p = 0;
+  const peek = (): Token | null => (p < tokens.length ? tokens[p] : null);
+  const take = (): Token | null => (p < tokens.length ? tokens[p++] : null);
+
+  const parsePrimary = (): AngleExpressionEvalResult => {
+    const t = take();
+    if (!t) return { ok: false, error: "Unexpected end of expression." };
+    if (t.kind === "num") return { ok: true, valueDeg: t.v };
+    if (t.kind === "id") {
+      const v = symbols.get(t.v) ?? symbols.get(t.v.toLowerCase());
+      if (v === undefined) return { ok: false, error: `Unknown angle symbol: ${t.v}` };
+      return { ok: true, valueDeg: v };
+    }
+    if (t.kind === "op" && t.v === "(") {
+      const inner = parseExpr();
+      if (!inner.ok) return inner;
+      const close = take();
+      if (!close || close.kind !== "op" || close.v !== ")") return { ok: false, error: "Missing closing ')'." };
+      return inner;
+    }
+    if (t.kind === "op" && (t.v === "+" || t.v === "-")) {
+      const inner = parsePrimary();
+      if (!inner.ok) return inner;
+      return { ok: true, valueDeg: t.v === "-" ? -inner.valueDeg : inner.valueDeg };
+    }
+    return { ok: false, error: "Expected number, symbol, or parenthesized expression." };
+  };
+
+  const parseTerm = (): AngleExpressionEvalResult => {
+    let left = parsePrimary();
+    if (!left.ok) return left;
+    while (true) {
+      const t = peek();
+      if (!t || t.kind !== "op" || (t.v !== "*" && t.v !== "/")) break;
+      take();
+      const right = parsePrimary();
+      if (!right.ok) return right;
+      if (t.v === "*") {
+        left = { ok: true, valueDeg: left.valueDeg * right.valueDeg };
+      } else {
+        if (Math.abs(right.valueDeg) <= 1e-12) return { ok: false, error: "Division by zero." };
+        left = { ok: true, valueDeg: left.valueDeg / right.valueDeg };
+      }
+    }
+    return left;
+  };
+
+  const parseExpr = (): AngleExpressionEvalResult => {
+    let left = parseTerm();
+    if (!left.ok) return left;
+    while (true) {
+      const t = peek();
+      if (!t || t.kind !== "op" || (t.v !== "+" && t.v !== "-")) break;
+      take();
+      const right = parseTerm();
+      if (!right.ok) return right;
+      left = { ok: true, valueDeg: t.v === "+" ? left.valueDeg + right.valueDeg : left.valueDeg - right.valueDeg };
+    }
+    return left;
+  };
+
+  const out = parseExpr();
+  if (!out.ok) return out;
+  if (p !== tokens.length) return { ok: false, error: "Unexpected trailing tokens." };
+  return out;
 }

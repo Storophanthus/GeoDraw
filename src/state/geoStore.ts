@@ -4,6 +4,7 @@ import {
   type AngleStyle,
   computeOrientedAngleRad,
   type CircleStyle,
+  evaluateAngleExpressionDegrees,
   type LineLikeObjectRef,
   getLineWorldAnchors,
   getPointWorldPos,
@@ -115,7 +116,7 @@ type GeoState = {
   circleDefaults: CircleStyle;
   angleDefaults: AngleStyle;
   angleFixedTool: {
-    angleDeg: number;
+    angleExpr: string;
     direction: AngleFixedDirection;
   };
   copyStyle: {
@@ -153,9 +154,9 @@ type GeoActions = {
   createAngleFixed: (
     vertexId: string,
     basePointId: string,
-    angleDeg: number,
+    angleExpr: string,
     direction: AngleFixedDirection
-  ) => { pointId: string; lineId: string } | null;
+  ) => { pointId: string; lineId: string; angleId: string } | null;
   createCircle: (centerId: string, throughId: string) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
@@ -276,7 +277,7 @@ const initialState: GeoState = {
   circleDefaults: defaultCircleStyle,
   angleDefaults: defaultAngleStyle,
   angleFixedTool: {
-    angleDeg: 30,
+    angleExpr: "30",
     direction: "CCW",
   },
   copyStyle: {
@@ -332,6 +333,12 @@ function setState(updater: (prev: GeoState) => GeoState, options: SetStateOption
   const prev = state;
   let next = updater(prev);
   if (next === prev) return;
+  if (next.scene !== prev.scene) {
+    const normalizedScene = normalizeSceneIntegrity(next.scene);
+    if (normalizedScene !== next.scene) {
+      next = { ...next, scene: normalizedScene };
+    }
+  }
 
   const mode = options.history ?? "auto";
   const changed = hasHistoryDiff(prev, next);
@@ -772,10 +779,11 @@ const actions: GeoActions = {
     return id;
   },
 
-  createAngleFixed(vertexId, basePointId, angleDeg, direction) {
+  createAngleFixed(vertexId, basePointId, angleExpr, direction) {
     if (vertexId === basePointId) return null;
-    if (!Number.isFinite(angleDeg) || angleDeg < 0 || angleDeg > 360) return null;
-    let result: { pointId: string; lineId: string } | null = null;
+    const expr = angleExpr.trim();
+    if (!expr) return null;
+    let result: { pointId: string; lineId: string; angleId: string } | null = null;
     setState((prev) => {
       const pv = prev.scene.points.find((p) => p.id === vertexId);
       const pa = prev.scene.points.find((p) => p.id === basePointId);
@@ -784,6 +792,8 @@ const actions: GeoActions = {
       const wa = getPointWorldPos(pa, prev.scene);
       if (!wv || !wa) return prev;
       if (distance(wv, wa) <= 1e-12) return prev;
+      const evalResult = evaluateAngleExpressionDegrees(prev.scene, expr);
+      if (!evalResult.ok) return prev;
 
       const used = new Set(prev.scene.points.map((point) => point.name));
       let idx = 0;
@@ -795,7 +805,23 @@ const actions: GeoActions = {
 
       const pointId = `p_${prev.nextPointId}`;
       const lineId = `l_${prev.nextLineId}`;
-      result = { pointId, lineId };
+      const angleId = `a_${prev.nextAngleId}`;
+
+      const base = { x: wa.x - wv.x, y: wa.y - wv.y };
+      const sign = direction === "CCW" ? 1 : -1;
+      const theta = (evalResult.valueDeg * Math.PI) / 180;
+      const c = Math.cos(sign * theta);
+      const s = Math.sin(sign * theta);
+      const rot = { x: base.x * c - base.y * s, y: base.x * s + base.y * c };
+      const wc = { x: wv.x + rot.x, y: wv.y + rot.y };
+      const oriented = computeOrientedAngleRad(wa, wv, wc);
+      if (oriented === null) return prev;
+      const start = Math.atan2(wa.y - wv.y, wa.x - wv.x);
+      const mid = start + oriented * 0.5;
+      const labelDist = Math.max(0.45, prev.angleDefaults.arcRadius * 1.25);
+      const labelPosWorld = { x: wv.x + Math.cos(mid) * labelDist, y: wv.y + Math.sin(mid) * labelDist };
+
+      result = { pointId, lineId, angleId };
       return {
         ...prev,
         scene: {
@@ -813,7 +839,8 @@ const actions: GeoActions = {
               auxiliary: false,
               centerId: vertexId,
               pointId: basePointId,
-              angleDeg,
+              angleDeg: evalResult.valueDeg,
+              angleExpr: expr,
               direction,
               radiusMode: "keep",
               style: {
@@ -833,11 +860,26 @@ const actions: GeoActions = {
               style: { ...prev.lineDefaults },
             },
           ],
+          angles: [
+            ...prev.scene.angles,
+            {
+              id: angleId,
+              aId: basePointId,
+              bId: vertexId,
+              cId: pointId,
+              visible: true,
+              style: {
+                ...prev.angleDefaults,
+                labelPosWorld,
+              },
+            },
+          ],
         },
-        selectedObject: { type: "line", id: lineId },
-        recentCreatedObject: { type: "line", id: lineId },
+        selectedObject: { type: "angle", id: angleId },
+        recentCreatedObject: { type: "angle", id: angleId },
         nextPointId: prev.nextPointId + 1,
         nextLineId: prev.nextLineId + 1,
+        nextAngleId: prev.nextAngleId + 1,
       };
     });
     return result;
@@ -2313,10 +2355,11 @@ function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
 }
 
 function restoreFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoState {
+  const normalizedScene = normalizeSceneIntegrity(snapshot.scene);
   return {
     ...prev,
     activeTool: snapshot.activeTool,
-    scene: snapshot.scene,
+    scene: normalizedScene,
     selectedObject: snapshot.selectedObject,
     recentCreatedObject: snapshot.recentCreatedObject,
     pendingSelection: null,
@@ -2335,4 +2378,85 @@ function restoreFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoStat
     angleFixedTool: snapshot.angleFixedTool,
     copyStyle: snapshot.copyStyle,
   };
+}
+
+function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
+  let points = scene.points;
+  let segments = scene.segments;
+  let lines = scene.lines;
+  let circles = scene.circles;
+  let angles = scene.angles;
+  let changed = false;
+
+  const sameIds = (a: Array<{ id: string }>, b: Array<{ id: string }>) =>
+    a.length === b.length && a.every((item, idx) => item.id === b[idx].id);
+
+  for (let pass = 0; pass < 6; pass += 1) {
+    const pointIds = new Set(points.map((p) => p.id));
+
+    const nextSegments = segments.filter((seg) => pointIds.has(seg.aId) && pointIds.has(seg.bId));
+    const nextCircles = circles.filter((circle) => pointIds.has(circle.centerId) && pointIds.has(circle.throughId));
+    const nextAngles = angles.filter((angle) => pointIds.has(angle.aId) && pointIds.has(angle.bId) && pointIds.has(angle.cId));
+
+    const nextSegmentIds = new Set(nextSegments.map((s) => s.id));
+    const nextLineIds = new Set(lines.map((l) => l.id));
+    const nextCircleIds = new Set(nextCircles.map((c) => c.id));
+
+    const nextLines = lines.filter((line) => {
+      if (line.kind === "perpendicular" || line.kind === "parallel") {
+        if (!pointIds.has(line.throughId)) return false;
+        if (line.base.type === "segment") return nextSegmentIds.has(line.base.id);
+        return nextLineIds.has(line.base.id);
+      }
+      return pointIds.has(line.aId) && pointIds.has(line.bId);
+    });
+
+    const nextLineIdsAfter = new Set(nextLines.map((l) => l.id));
+
+    const nextPoints = points
+      .map((point) => {
+        if (point.kind === "circleLineIntersectionPoint" && point.excludePointId && !pointIds.has(point.excludePointId)) {
+          return { ...point, excludePointId: undefined };
+        }
+        if (point.kind === "intersectionPoint" && point.excludePointId && !pointIds.has(point.excludePointId)) {
+          return { ...point, excludePointId: undefined };
+        }
+        return point;
+      })
+      .filter((point) => {
+        if (point.kind === "free") return true;
+        if (point.kind === "midpointPoints") return pointIds.has(point.aId) && pointIds.has(point.bId);
+        if (point.kind === "midpointSegment") return nextSegmentIds.has(point.segId);
+        if (point.kind === "pointOnLine") return nextLineIdsAfter.has(point.lineId);
+        if (point.kind === "pointOnSegment") return nextSegmentIds.has(point.segId);
+        if (point.kind === "pointOnCircle") return nextCircleIds.has(point.circleId);
+        if (point.kind === "pointByRotation") return pointIds.has(point.centerId) && pointIds.has(point.pointId);
+        if (point.kind === "circleLineIntersectionPoint") {
+          return nextCircleIds.has(point.circleId) && nextLineIdsAfter.has(point.lineId);
+        }
+        if (point.kind === "intersectionPoint") {
+          return objectRefAlive(point.objA, nextLines, nextSegments, nextCircles) && objectRefAlive(point.objB, nextLines, nextSegments, nextCircles);
+        }
+        return true;
+      });
+
+    const anyChanged =
+      !sameIds(nextPoints, points) ||
+      !sameIds(nextSegments, segments) ||
+      !sameIds(nextLines, lines) ||
+      !sameIds(nextCircles, circles) ||
+      !sameIds(nextAngles, angles) ||
+      nextPoints.some((point, idx) => point !== points[idx]);
+
+    points = nextPoints;
+    segments = nextSegments;
+    lines = nextLines;
+    circles = nextCircles;
+    angles = nextAngles;
+    changed = changed || anyChanged;
+    if (!anyChanged) break;
+  }
+
+  if (!changed) return scene;
+  return { ...scene, points, segments, lines, circles, angles };
 }

@@ -6,6 +6,7 @@ import { drawRectGrid, type RectGridSettings } from "../render/rectGrid";
 import {
   beginSceneEvalTick,
   computeOrientedAngleRad,
+  evaluateAngleExpressionDegrees,
   endSceneEvalTick,
   type GeometryObjectRef,
   type LineLikeObjectRef,
@@ -792,9 +793,9 @@ function handleToolClick(
     createAngleFixed: (
       vertexId: string,
       basePointId: string,
-      angleDeg: number,
+      angleExpr: string,
       direction: "CCW" | "CW"
-    ) => { pointId: string; lineId: string } | null;
+    ) => { pointId: string; lineId: string; angleId: string } | null;
     createMidpointFromPoints: (aId: string, bId: string) => string | null;
     createMidpointFromSegment: (segId: string) => string | null;
     createPointOnLine: (lineId: string, s: number) => string | null;
@@ -804,7 +805,7 @@ function handleToolClick(
     setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null) => void;
     setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
     applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
-    angleFixedTool: { angleDeg: number; direction: "CCW" | "CW" };
+    angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
     camera: Camera;
     vp: Viewport;
   }
@@ -940,12 +941,10 @@ function handleToolClick(
       });
       return;
     }
-    const deg = io.angleFixedTool.angleDeg;
-    if (!Number.isFinite(deg) || deg < 0 || deg > 360) return;
     const created = io.createAngleFixed(
       pendingSelection.second.id,
       pendingSelection.first.id,
-      deg,
+      io.angleFixedTool.angleExpr,
       io.angleFixedTool.direction
     );
     if (!created) return;
@@ -1305,7 +1304,7 @@ function drawPendingPreview(
   scene: SceneModel,
   camera: Camera,
   vp: Viewport,
-  angleFixedTool: { angleDeg: number; direction: "CCW" | "CW" }
+  angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" }
 ) {
   if (!pendingSelection) return;
   const firstPointId = pendingSelection.first.type === "point" ? pendingSelection.first.id : null;
@@ -1466,11 +1465,12 @@ function drawPendingPreview(
     }
     const base = sub(a, b);
     const baseLen = Math.hypot(base.x, base.y);
-    const deg = angleFixedTool.angleDeg;
-    if (baseLen <= 1e-12 || !Number.isFinite(deg) || deg < 0 || deg > 360) {
+    const evalResult = evaluateAngleExpressionDegrees(scene, angleFixedTool.angleExpr);
+    if (baseLen <= 1e-12 || !evalResult.ok) {
       ctx.restore();
       return;
     }
+    const deg = evalResult.valueDeg;
     const sign = angleFixedTool.direction === "CCW" ? 1 : -1;
     const theta = (deg * Math.PI) / 180;
     const c = Math.cos(sign * theta);
