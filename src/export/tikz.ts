@@ -22,6 +22,16 @@ export type TikzExportOptions = {
   screenPxPerWorld?: number;
   matchCanvas?: boolean;
   labelGlow?: boolean;
+  segmentStrokeScale?: number;
+  pointStrokeScale?: number;
+  pointInnerSepFixedPt?: number;
+  segmentMarkSizeScale?: number;
+  segmentMarkLineWidthScale?: number;
+  angleLabelFontScale?: number;
+  angleArcStrokeScale?: number;
+  angleArcSizeScale?: number;
+  rightAngleStrokeScale?: number;
+  rightAngleSizeScale?: number;
 };
 
 export type TikzCommand =
@@ -83,6 +93,11 @@ type LabelPlacement = {
   scale: number;
   bubbleRadiusPt: number;
 };
+
+// Canvas arrow-width slider values are visually calibrated in canvas pixels.
+// Export them to TikZ pt using this empirically matched conversion:
+// 7.6 (canvas) -> 0.6pt (TikZ).
+const SEGMENT_ARROW_WIDTH_EXPORT_SCALE = 0.6 / 7.6;
 
 export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}): TikzCommand[] {
   const pointById = new Map(scene.points.map((p) => [p.id, p]));
@@ -498,7 +513,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       b: bName,
       style: segmentStyleToTikz(seg.style, options),
     });
-    const markStyle = segmentMarkToTikz(seg.style.segmentMark);
+    const markStyle = segmentMarkToTikz(seg.style.segmentMark, options);
     if (markStyle) {
       draws.push({
         kind: "MarkSegment",
@@ -587,16 +602,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       draws.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
     }
     if (angle.style.markStyle === "arc") {
-      const markStyle = angleMarkStyleToTikz(angle.style);
+      const markStyle = angleMarkStyleToTikz(angle.style, false, options);
       draws.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
     } else if (angle.style.markStyle === "right") {
-      const markStyle = angleMarkStyleToTikz(angle.style);
+      const markStyle = angleMarkStyleToTikz(angle.style, true, options);
       draws.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: markStyle });
     }
     if (angle.style.showLabel || angle.style.showValue) {
       const labelText = buildAngleLabelTex(angle.style.labelText, angle.style.showLabel, angle.style.showValue, theta);
       if (labelText) {
-        const labelStyle = angleLabelStyleToTikz(angle.style, bWorld);
+      const labelStyle = angleLabelStyleToTikz(angle.style, bWorld, options);
         draws.push({ kind: "LabelAngle", a: aName, b: bName, c: cName, text: labelText, style: labelStyle });
       }
     }
@@ -1384,13 +1399,18 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   const draw = rgbColorExpr(s.strokeColor);
   const fill = rgbColorExpr(s.fillColor);
   const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
   const matchCanvas = options.matchCanvas ?? false;
   const basePointStroke = 1.4;
   const basePointSizePx = 4;
-  const lineWidthPt = matchCanvas
-    ? Math.max(0.1, s.strokeWidth * pointScale * 0.75)
-    : Math.max(0.1, 1.05 * pointScale * (s.strokeWidth / basePointStroke));
-  const innerSepPt = matchCanvas
+  const pointStrokeScale = clampPositive(options.pointStrokeScale ?? 1, 0.01, 100);
+  const lineWidthPt = (matchCanvas
+    ? Math.max(0.1, s.strokeWidth * lineScale * 0.75)
+    : Math.max(0.1, 1.05 * lineScale * (s.strokeWidth / basePointStroke))) * pointStrokeScale;
+  const fixedInnerSep = options.pointInnerSepFixedPt;
+  const innerSepPt = fixedInnerSep !== undefined
+    ? Math.max(0.4, fixedInnerSep * pointScale)
+    : matchCanvas
     ? Math.max(0.4, s.sizePx * pointScale * 0.75)
     : Math.max(0.4, 3.75 * pointScale * (s.sizePx / basePointSizePx));
   const opts = [
@@ -1406,10 +1426,11 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
 }
 
 function segmentStyleToTikz(style: SceneModel["segments"][number]["style"], options: TikzExportOptions): string {
-  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.dash, style.opacity, options);
+  const segmentStrokeScale = clampPositive(options.segmentStrokeScale ?? 1, 0.01, 100);
+  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth * segmentStrokeScale, style.dash, style.opacity, options);
 }
 
-function segmentMarkToTikz(mark: SceneModel["segments"][number]["style"]["segmentMark"]): string | null {
+function segmentMarkToTikz(mark: SceneModel["segments"][number]["style"]["segmentMark"], options: TikzExportOptions): string | null {
   if (!mark?.enabled || mark.mark === "none") return null;
   const allowedMarks = new Set(["|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"]);
   if (!allowedMarks.has(mark.mark)) {
@@ -1421,17 +1442,19 @@ function segmentMarkToTikz(mark: SceneModel["segments"][number]["style"]["segmen
   if (!Number.isFinite(mark.sizePt) || mark.sizePt <= 0) {
     throw new Error("Unsupported SegmentMark: sizePt");
   }
+  const sizeScale = clampPositive(options.segmentMarkSizeScale ?? 1, 0.01, 100);
+  const widthScale = clampPositive(options.segmentMarkLineWidthScale ?? 1, 0.01, 100);
   const opts: string[] = [
     `mark=${mark.mark}`,
     `pos=${fmt(mark.pos)}`,
-    `size=${fmt(mark.sizePt)}pt`,
+    `size=${fmt(mark.sizePt * sizeScale)}pt`,
   ];
   if (mark.color) opts.push(`color=${rgbColorExpr(mark.color)}`);
   if (mark.lineWidthPt !== undefined) {
     if (!Number.isFinite(mark.lineWidthPt) || mark.lineWidthPt <= 0) {
       throw new Error("Unsupported SegmentMark: lineWidthPt");
     }
-    opts.push(`line width=${fmt(mark.lineWidthPt)}pt`);
+    opts.push(`line width=${fmt(mark.lineWidthPt * widthScale)}pt`);
   }
   return opts.join(", ");
 }
@@ -1448,14 +1471,16 @@ function segmentArrowOverlayToTikz(
   }
   if (arrow.mode === "mid") {
     const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
-    const arrowWidth = Math.max(0.1, arrow.lineWidthPt ?? base.strokeWidth);
-    const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt`;
+    const sourceWidth = arrow.lineWidthPt ?? base.strokeWidth;
+    const arrowWidth = Math.max(0.1, sourceWidth * SEGMENT_ARROW_WIDTH_EXPORT_SCALE);
+    const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
+    const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScale)}`;
     const markCode =
       arrow.direction === "->"
-        ? `{\\arrow[${arrowOpts}]{>}}`
+        ? `{\\arrow[${arrowOpts}]{Stealth}}`
         : arrow.direction === "<-"
-        ? `{\\arrowreversed[${arrowOpts}]{>}}`
-        : `{\\arrow[${arrowOpts}]{>};\\arrowreversed[${arrowOpts}]{>}}`;
+        ? `{\\arrowreversed[${arrowOpts}]{Stealth}}`
+        : `{\\arrow[${arrowOpts}]{Stealth};\\arrowreversed[${arrowOpts}]{Stealth}}`;
     const distribution = arrow.distribution ?? "single";
     let start = clamp01(arrow.startPos ?? 0.45);
     let end = clamp01(arrow.endPos ?? 0.55);
@@ -1479,17 +1504,32 @@ function segmentArrowOverlayToTikz(
     return { kind: "raw", tex: `\\path[${opts.join(", ")}] (${aName}) -- (${bName});` };
   }
 
-  const opts: string[] = [`arrows=${arrow.direction}`];
-  opts.push(`color=${rgbColorExpr(arrow.color ?? base.strokeColor)}`);
-  if (arrow.lineWidthPt !== undefined) {
-    if (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0) {
-      throw new Error("Unsupported SegmentArrowMark: lineWidthPt");
-    }
-    opts.push(`line width=${fmt(arrow.lineWidthPt)}pt`);
-  } else {
-    opts.push(`line width=${fmt(Math.max(0.1, base.strokeWidth))}pt`);
+  const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
+  const sourceWidth = arrow.lineWidthPt ?? base.strokeWidth;
+  const arrowWidth = Math.max(0.1, sourceWidth * SEGMENT_ARROW_WIDTH_EXPORT_SCALE);
+  const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
+  const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * arrowScale));
+  const t = fmt(1 - tailFrac);
+  const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{Stealth[scale=${fmt(arrowScale)}]}`;
+  if (arrow.direction === "->") {
+    return {
+      kind: "raw",
+      tex: `\\draw[${drawStyle}] ($(${aName})!${t}!(${bName})$) -- (${bName});`,
+    };
   }
-  return { kind: "tkz", style: opts.join(", ") };
+  if (arrow.direction === "<-") {
+    return {
+      kind: "raw",
+      tex: `\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`,
+    };
+  }
+  return {
+    kind: "raw",
+    tex: [
+      `\\draw[${drawStyle}] ($(${aName})!${t}!(${bName})$) -- (${bName});`,
+      `\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`,
+    ].join("\n"),
+  };
 }
 
 function lineStyleToTikz(style: SceneModel["lines"][number]["style"], options: TikzExportOptions): string {
@@ -1507,15 +1547,25 @@ function circleStyleToTikz(style: SceneModel["circles"][number]["style"], option
   return parts.join(", ");
 }
 
-function angleMarkStyleToTikz(style: SceneModel["angles"][number]["style"]): string {
+function angleMarkStyleToTikz(
+  style: SceneModel["angles"][number]["style"],
+  isRightAngle: boolean,
+  options: TikzExportOptions
+): string {
   if (!Number.isFinite(style.arcRadius) || style.arcRadius <= 0) {
     throw new Error("Unsupported Angle style: arcRadius must be > 0.");
   }
   const opacity = clamp01(style.strokeOpacity);
+  const strokeScale = isRightAngle
+    ? clampPositive(options.rightAngleStrokeScale ?? 1, 0.01, 100)
+    : clampPositive(options.angleArcStrokeScale ?? 1, 0.01, 100);
+  const sizeScale = isRightAngle
+    ? clampPositive(options.rightAngleSizeScale ?? 1, 0.01, 100)
+    : clampPositive(options.angleArcSizeScale ?? 1, 0.01, 100);
   const opts: string[] = [
     `color=${rgbColorExpr(style.strokeColor)}`,
-    `line width=${fmt(Math.max(0.1, style.strokeWidth))}pt`,
-    `size=${fmt(style.arcRadius)}`,
+    `line width=${fmt(Math.max(0.1, style.strokeWidth * strokeScale))}pt`,
+    `size=${fmt(style.arcRadius * sizeScale)}`,
   ];
   if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
   return opts.join(", ");
@@ -1536,7 +1586,11 @@ function angleFillStyleToTikz(style: SceneModel["angles"][number]["style"]): str
   return opts.join(", ");
 }
 
-function angleLabelStyleToTikz(style: SceneModel["angles"][number]["style"], vertexWorld: { x: number; y: number }): string {
+function angleLabelStyleToTikz(
+  style: SceneModel["angles"][number]["style"],
+  vertexWorld: { x: number; y: number },
+  options: TikzExportOptions
+): string {
   const dx = style.labelPosWorld.x - vertexWorld.x;
   const dy = style.labelPosWorld.y - vertexWorld.y;
   const dist = Math.hypot(dx, dy);
@@ -1544,12 +1598,16 @@ function angleLabelStyleToTikz(style: SceneModel["angles"][number]["style"], ver
     throw new Error("Unsupported Angle style: labelPosWorld is invalid.");
   }
   const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
-  const fontPt = Math.max(6, Math.min(72, style.textSize));
+  const labelFontScale = clampPositive(options.angleLabelFontScale ?? 1, 0.01, 100);
+  const fontPt = Math.max(6, Math.min(72, style.textSize * labelFontScale));
+  // Keep angle-label baseline spacing at 3/4 of the previous "original" export
+  // profile (12pt -> 16.2pt), so 9pt maps to 12.15pt.
+  const lineHeightPt = Math.max(6, fontPt * 1.35);
   return [
     `dist=${fmt(dist)}`,
     `angle=${fmt(angleDeg)}`,
     `text=${rgbColorExpr(style.textColor)}`,
-    `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(fontPt * 1.2)}pt}\\selectfont`,
+    `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(lineHeightPt)}pt}\\selectfont`,
   ].join(", ");
 }
 

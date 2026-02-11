@@ -96,6 +96,7 @@ const SHAPES: PointShape[] = [
 const SEGMENT_MARK_OPTIONS = ["none", "|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"] as const;
 const SEGMENT_ARROW_DIRECTIONS = ["->", "<-", "<->"] as const;
 const SEGMENT_ARROW_DISTRIBUTIONS = ["single", "multi"] as const;
+const SEGMENT_ARROW_WIDTH_UI_FACTOR = 8;
 
 const LEFT_MIN = 48;
 const LEFT_MAX = 240;
@@ -432,10 +433,25 @@ export default function App() {
           viewport,
           worldToTikzScale: Number.isFinite(globalScale) ? globalScale : 1,
           pointScale: Number.isFinite(pointScale) ? pointScale : 1,
-          lineScale: Number.isFinite(lineScale) ? lineScale : 1,
+          lineScale: (Number.isFinite(lineScale) ? lineScale : 1) * (0.5 / 1.2),
           screenPxPerWorld: camera.zoom,
           matchCanvas: exportMatchCanvas,
           labelGlow: exportLabelGlow,
+          // Recalibrated defaults from reference pair (canvas -> preferred TikZ):
+          // points: 0.8pt -> 0.4pt, inner sep 2.3pt -> 1.5pt
+          // lines/circles: 1.2pt -> 0.5pt
+          // segments (when starting from 2.625pt): 2.625pt -> 0.5pt
+          // right-angle marker: 1.1pt -> 0.5pt, size 0.65 -> 0.5
+          segmentStrokeScale: (0.5 / 2.625) / (0.5 / 1.2),
+          pointStrokeScale: 0.4 / 1.05,
+          pointInnerSepFixedPt: 1.5,
+          segmentMarkSizeScale: 5 / 8,
+          segmentMarkLineWidthScale: 1 / 2.2,
+          angleLabelFontScale: 9 / 16,
+          angleArcStrokeScale: 0.5 / 1.8,
+          angleArcSizeScale: 1,
+          rightAngleStrokeScale: 0.5 / 1.1,
+          rightAngleSizeScale: 0.5 / 0.65,
         })
       );
       setLastTikzSceneRef(scene);
@@ -1114,7 +1130,7 @@ export default function App() {
                       />
                     </div>
                     <div className="controlRow">
-                      <label className="controlLabel">Mark Size (pt)</label>
+                      <label className="controlLabel">Mark Size</label>
                       <input
                         className="sizeSlider"
                         type="number"
@@ -1158,7 +1174,7 @@ export default function App() {
                       />
                     </div>
                     <div className="controlRow">
-                      <label className="controlLabel">Mark Width (pt)</label>
+                      <label className="controlLabel">Mark Width</label>
                       <input
                         className="sizeSlider"
                         type="number"
@@ -1318,14 +1334,14 @@ export default function App() {
                       />
                     </div>
                     <div className="controlRow">
-                      <label className="controlLabel">Arrow Width (pt)</label>
+                      <label className="controlLabel">Arrow Width</label>
                       <input
                         className="sizeSlider"
                         type="number"
                         min={0}
                         max={12}
-                        step={0.1}
-                        value={selectedSegment.style.segmentArrowMark?.lineWidthPt ?? 1}
+                        step={0.05}
+                        value={(selectedSegment.style.segmentArrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) / SEGMENT_ARROW_WIDTH_UI_FACTOR}
                         onChange={(e) =>
                           updateSelectedSegmentStyle({
                             segmentArrowMark: {
@@ -1339,7 +1355,36 @@ export default function App() {
                                 endPos: 0.55,
                                 step: 0.05,
                               }),
-                              lineWidthPt: Number(e.target.value),
+                              lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Arrow Size</label>
+                      <input
+                        className="sizeSlider"
+                        type="number"
+                        min={0.2}
+                        max={8}
+                        step={0.1}
+                        value={selectedSegment.style.segmentArrowMark?.sizeScale ?? 1}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentArrowMark: {
+                              ...(selectedSegment.style.segmentArrowMark ?? {
+                                enabled: true,
+                                mode: "end",
+                                direction: "->",
+                                distribution: "single",
+                                pos: 0.5,
+                                startPos: 0.45,
+                                endPos: 0.55,
+                                step: 0.05,
+                                lineWidthPt: SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                              }),
+                              sizeScale: Number(e.target.value),
                             },
                           })
                         }

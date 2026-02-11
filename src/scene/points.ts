@@ -58,6 +58,7 @@ export type LineStyle = {
     startPos?: number;
     endPos?: number;
     step?: number;
+    sizeScale?: number;
     color?: string;
     lineWidthPt?: number;
   };
@@ -389,7 +390,7 @@ type SceneEvalContext = {
   circleById: Map<string, SceneCircle>;
   angleById: Map<string, SceneAngle>;
   numberById: Map<string, SceneNumber>;
-  numberCache: Map<string, number | null>;
+  numberCache: Map<string, number>;
   numberInProgress: Set<string>;
   lineInProgress: Set<string>;
   stats: SceneEvalStats;
@@ -439,7 +440,7 @@ function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalC
     circleById,
     angleById,
     numberById,
-    numberCache: new Map<string, number | null>(),
+    numberCache: new Map<string, number>(),
     numberInProgress: new Set<string>(),
     lineInProgress: new Set<string>(),
     stats: {
@@ -1006,7 +1007,7 @@ export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel)
 function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): number | null {
   if (ctx.numberCache.has(id)) {
     ctx.stats.cacheHits += 1;
-    return ctx.numberCache.get(id) ?? null;
+    return ctx.numberCache.get(id)!;
   }
   if (ctx.numberInProgress.has(id)) return null;
   const num = ctx.numberById.get(id);
@@ -1014,7 +1015,12 @@ function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): n
   ctx.numberInProgress.add(id);
   const value = evalNumberDefinition(num.definition, scene, ctx, id);
   ctx.numberInProgress.delete(id);
-  ctx.numberCache.set(id, value);
+  // Do not memoize transient nulls: they can happen during recursive evaluation
+  // (e.g. angleExpr -> number -> circleRadius -> point depending on the same expr).
+  // Caching null would incorrectly keep the number undefined for the whole scene tick.
+  if (value !== null) {
+    ctx.numberCache.set(id, value);
+  }
   return value;
 }
 

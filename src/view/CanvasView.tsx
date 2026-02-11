@@ -26,7 +26,7 @@ const POINT_HIT_TOLERANCE_PX = 12;
 const SEGMENT_HIT_TOLERANCE_PX = 10;
 const LINE_HIT_TOLERANCE_PX = 10;
 const CIRCLE_HIT_TOLERANCE_PX = 10;
-const ANGLE_HIT_TOLERANCE_PX = 10;
+const ANGLE_HIT_TOLERANCE_PX = 20;
 const CLICK_EPSILON_PX = 3;
 
 const GRID_SETTINGS: RectGridSettings = {
@@ -1943,7 +1943,8 @@ function drawSegmentArrowOverlay(
   const uy = d.y / len;
   const color = arrow.color ?? style.strokeColor;
   const lineWidth = Math.max(0.5, arrow.lineWidthPt ?? style.strokeWidth);
-  const headSize = Math.max(6, 7 + lineWidth * 1.2);
+  const headScale = Math.max(0.2, Math.min(8, arrow.sizeScale ?? 1));
+  const headSize = Math.max(6, (7 + lineWidth * 1.2) * headScale);
   const pos = clamp01(arrow.pos ?? style.segmentMark?.pos ?? 0.5);
   const mid = { x: p1.x + ux * len * pos, y: p1.y + uy * len * pos };
 
@@ -2182,7 +2183,10 @@ function hitTestAngle(
     const as = camMath.worldToScreen(entry.a, camera, vp);
     const bs = camMath.worldToScreen(entry.b, camera, vp);
     const r = Math.max(12, entry.angle.style.arcRadius * camera.zoom);
-    const d = distanceToAngleArc(screenPoint, as, bs, entry.theta, r);
+    const d =
+      entry.angle.style.markStyle === "right"
+        ? distanceToRightAngleMark(screenPoint, as, bs, camMath.worldToScreen(entry.c, camera, vp), r * 0.55)
+        : distanceToAngleArc(screenPoint, as, bs, entry.theta, r);
     if (d <= best) {
       best = d;
       bestId = entry.angle.id;
@@ -2372,6 +2376,24 @@ function distanceToAngleArc(
     return Math.min(Math.hypot(p.x - pStart.x, p.y - pStart.y), Math.hypot(p.x - pEnd.x, p.y - pEnd.y));
   }
   return Math.abs(dist - radiusPx);
+}
+
+function distanceToRightAngleMark(
+  p: Vec2,
+  aScreen: Vec2,
+  bScreen: Vec2,
+  cScreen: Vec2,
+  sizePx: number
+): number {
+  const u = normalizeScreenVec({ x: aScreen.x - bScreen.x, y: aScreen.y - bScreen.y });
+  const v = normalizeScreenVec({ x: cScreen.x - bScreen.x, y: cScreen.y - bScreen.y });
+  const p1 = { x: bScreen.x + u.x * sizePx, y: bScreen.y + u.y * sizePx };
+  const p3 = { x: bScreen.x + v.x * sizePx, y: bScreen.y + v.y * sizePx };
+  const p2 = { x: p1.x + v.x * sizePx, y: p1.y + v.y * sizePx };
+  const d1 = projectPointToSegment(p, p1, p2).distance;
+  const d2 = projectPointToSegment(p, p2, p3).distance;
+  const d3 = projectPointToSegment(p, p1, p3).distance;
+  return Math.min(d1, d2, d3);
 }
 
 function isAngleOnArc(theta: number, start: number, sweep: number): boolean {
