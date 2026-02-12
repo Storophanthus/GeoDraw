@@ -7,16 +7,28 @@ export type Viewport = { widthPx: number; heightPx: number };
 export const camera = {
   worldToScreen(p: Vec2, cam: Camera, vp: Viewport): Vec2 {
     const c = { x: vp.widthPx / 2, y: vp.heightPx / 2 };
-    return v.add(v.mul(v.sub(p, cam.pos), cam.zoom), c);
+    return {
+      x: c.x + (p.x - cam.pos.x) * cam.zoom,
+      y: c.y - (p.y - cam.pos.y) * cam.zoom,
+    };
   },
 
   screenToWorld(s: Vec2, cam: Camera, vp: Viewport): Vec2 {
     const c = { x: vp.widthPx / 2, y: vp.heightPx / 2 };
-    return v.add(v.mul(v.sub(s, c), 1 / cam.zoom), cam.pos);
+    return {
+      x: cam.pos.x + (s.x - c.x) / cam.zoom,
+      y: cam.pos.y - (s.y - c.y) / cam.zoom,
+    };
   },
 
   panByScreenDelta(cam: Camera, d: Vec2): Camera {
-    return { ...cam, pos: v.sub(cam.pos, v.mul(d, 1 / cam.zoom)) };
+    return {
+      ...cam,
+      pos: {
+        x: cam.pos.x - d.x / cam.zoom,
+        y: cam.pos.y + d.y / cam.zoom,
+      },
+    };
   },
 
   zoomAtScreenPoint(cam: Camera, vp: Viewport, pScreen: Vec2, zoomFactor: number): Camera {

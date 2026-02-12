@@ -1,0 +1,48 @@
+# GeoDraw Handoff (2026-02-10)
+
+## Branch
+- feature/constrained-points
+
+## Current Focus
+- Export panel UI polish (Objects/Export tabs, cleaner hierarchy, segmented tabs, code-like output panels)
+- Undo/Redo UX (floating canvas controls + keyboard)
+- TikZ export refinements for scale and labels
+
+## Non-Negotiables (Read Before Editing)
+- docs/regression-log.md
+  - Intersection stability rules
+  - Canvas missing-point regression guardrails
+  - TikZ label/halo guarded logic
+- Do not casually retune label placement/halo without explicit visual + fixture validation.
+
+## Key Behaviors Now
+- Right panel tabs: Objects / Export
+- Undo/Redo: floating icon buttons at top-right of canvas + Cmd/Ctrl shortcuts
+- Export options include:
+  - Use current camera viewport
+  - Match canvas size conversion
+  - Global Scale / Point Scale / Line Scale
+- In Match Canvas mode:
+  - Labels use directional placement (above/below/left/right variants)
+  - No fill bubble styling options are emitted for labels
+  - Explicit font=\\fontsize(...) is not emitted
+- Dashed lines use dynamic dash pattern based on line width.
+
+## Validation Commands
+- npm run build
+- npm run test:export
+- npm run test:perf
+
+## Next Task (New Chat)
+Implement **Internal Angle Bisector** tool end-to-end:
+- Geometry model + stable dependencies
+- Interaction + preview
+- Rendering + hit testing
+- Export support (fail-closed tkz behavior)
+- No regressions to intersections/perf/export
+
+## Prompt Starter For Next Chat
+- Branch: feature/constrained-points
+- Read first: docs/regression-log.md, docs/handoff.txt, docs/tkz-euclide-contract.md
+- Implement internal angle bisector tool with stable construction semantics and exporter support.
+- Keep existing behavior intact; run build + export tests + perf tests.

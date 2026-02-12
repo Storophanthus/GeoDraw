@@ -11,9 +11,18 @@ body,
 }
 
 body {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Inter", "Segoe UI", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
   color: #1f2937;
   background: #f3f5f8;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 .appShell {
@@ -46,9 +55,9 @@ body {
 .rightSidebar {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 12px;
-  background: #f8fafc;
+  gap: 10px;
+  padding: 10px 10px 12px;
+  background: #f3f6fb;
   border-left: 1px solid #d7dfe8;
   overflow: auto;
   flex: 0 0 auto;
@@ -88,6 +97,7 @@ body {
   min-height: 0;
   background: #ffffff;
   flex: 1 1 auto;
+  position: relative;
 }
 
 .drawingCanvas {
@@ -101,6 +111,42 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
+}
+
+.canvasTopActions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  z-index: 45;
+  pointer-events: auto;
+}
+
+.iconActionButton {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.iconActionButton:hover:not(:disabled),
+.iconActionButton:focus-visible:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+  outline: none;
+}
+
+.iconActionButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .labelsLayer {
@@ -241,19 +287,99 @@ body {
 }
 
 .sidebarSection {
-  border: 1px solid #dce3ec;
-  border-radius: 12px;
+  border: 1px solid #d9e1ec;
+  border-radius: 16px;
   background: #ffffff;
-  padding: 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  padding: 16px;
+  margin-top: 0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .sectionTitle {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-size: 12px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #475569;
+  font-weight: 700;
+}
+
+.sectionTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sectionTitleRow .sectionTitle {
+  margin: 0;
+}
+
+.tinyToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: #64748b;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tinyToggle input {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+}
+
+.rightTabs {
+  display: flex;
+  gap: 0;
+  padding: 4px;
+  border: 1px solid #d5dde8;
+  border-radius: 14px;
+  background: #edf2f8;
+}
+
+.rightTabButton {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rightTabButton.active {
+  background: #ffffff;
+  color: #1d4ed8;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.constructionInfo {
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.constructionTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  margin-bottom: 4px;
   font-weight: 700;
 }
 
@@ -349,19 +475,91 @@ body {
 .checkboxRow {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  font-size: 13px;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #334155;
 }
 
 .actionButton,
 .deleteButton {
   border: 1px solid #cbd5e1;
   background: #ffffff;
-  border-radius: 8px;
-  padding: 7px 11px;
+  border-radius: 12px;
+  padding: 0 14px;
+  height: 38px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.actionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actionsRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.actionButton.primary {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
+.actionButton.primary:hover:not(:disabled),
+.actionButton.primary:focus-visible:not(:disabled) {
+  background: #1e40af;
+  border-color: #1e40af;
+  outline: none;
+}
+
+.actionButton.secondary {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1f2937;
+}
+
+.actionButton.secondary:hover:not(:disabled),
+.actionButton.secondary:focus-visible:not(:disabled) {
+  background: #eef2f7;
+  outline: none;
+}
+
+.statusText {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.exportTextarea {
+  width: 100%;
+  min-height: 220px;
+  margin-top: 10px;
+  border: 1px solid #d6dee9;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  resize: none;
+  overflow: auto;
+  background: #fbfbfc;
+}
+
+.exportTextarea:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.2);
+  border-color: #3b82f6;
+}
+
+.exportTextareaCompact {
+  min-height: 160px;
 }
 
 .deleteButton {
@@ -393,16 +591,32 @@ body {
 }
 
 .controlRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-top: 10px;
 }
 
 .controlLabel {
   color: #475569;
   font-size: 12px;
+}
+
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.optionsBlock {
+  margin-top: 4px;
+}
+
+.scaleBlock {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #eef2f7;
 }
 
 .shapeButton {
@@ -459,3 +673,92 @@ body {
   background: #fff;
   padding: 0;
 }
+
+.detailsSection {
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+}
+
+.detailsSummary {
+  cursor: pointer;
+  list-style: none;
+}
+
+
+.detailsSummary::-webkit-details-marker {
+  display: none;
+}
+
+/* Object Browser Tabs */
+.objectBrowser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.objectBrowserTabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #edf2f8;
+  border-radius: 8px;
+  overflow-x: auto; /* Just in case, though icons should fit */
+}
+
+.objectBrowserTab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.objectBrowserTab:hover {
+  background: rgba(255, 255, 255, 0.5);
+  color: #334155;
+}
+
+.objectBrowserTab.active {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.objectListScrollArea {
+  height: 320px; /* Fixed height as requested */
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+/* Ensure the objectItem looks good inside the scroll area */
+.objectListScrollArea .objectList {
+  gap: 4px;
+}
+
+.objectListScrollArea .objectItem {
+  border: none; /* Cleaner look in list */
+  background: #f8fafc; /* Slight contrast against white bg */
+}
+
+.objectListScrollArea .objectItem:hover {
+  background: #f1f5f9;
+}
+
+.objectListScrollArea .objectItem.active {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+/* Hide the old objectList style overrides if they conflict, 
+   but keeping .objectList class for structure is fine. 
+   We just made .objectItem borderless inside the scroll area. */

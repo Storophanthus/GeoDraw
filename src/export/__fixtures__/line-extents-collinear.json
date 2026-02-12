@@ -1,0 +1,14 @@
+{
+  "points": [
+    { "id": "p1", "kind": "free", "name": "A", "x": -10, "y": 0 },
+    { "id": "p2", "kind": "free", "name": "B", "x": 0, "y": 0 },
+    { "id": "p3", "kind": "free", "name": "C", "x": 15, "y": 0 },
+    { "id": "p4", "kind": "free", "name": "D", "x": 25, "y": 0 },
+    { "id": "p5", "kind": "free", "name": "E", "x": 5, "y": 2 }
+  ],
+  "lines": [
+    { "id": "l1", "aId": "p1", "bId": "p2", "visible": true }
+  ],
+  "segments": [],
+  "circles": []
+}

@@ -1,5 +1,10 @@
 # Tauri + Vanilla TS
 
+## Project Rules
+
+- Geometry and export guardrails are defined in `AGENTS.md`.
+- Treat `AGENTS.md` non-negotiable invariants as required behavior.
+
 This template should help get you started developing with Tauri in vanilla HTML, CSS and Typescript.
 
 ## Recommended IDE Setup

@@ -1,0 +1,317 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "A",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "free",
+        "x": -2.6224609375,
+        "y": 3.6169921875
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "p_10",
+      "name": "J",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "intersectionPoint",
+        "objA": {
+          "type": "line",
+          "id": "l_1"
+        },
+        "objB": {
+          "type": "segment",
+          "id": "s_2"
+        },
+        "preferredWorld": {
+          "x": 0.9375277905348725,
+          "y": 3.0630847057481665
+        }
+      },
+      "dependsOn": [
+        "line:l_1",
+        "segment:s_2"
+      ]
+    },
+    {
+      "id": "p_11",
+      "name": "K",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "free",
+        "x": -3.293359375,
+        "y": -2.502294921875
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "p_12",
+      "name": "L",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "intersectionPoint",
+        "objA": {
+          "type": "circle",
+          "id": "c_1"
+        },
+        "objB": {
+          "type": "circle",
+          "id": "c_2"
+        },
+        "preferredWorld": {
+          "x": -1.9424894584690269,
+          "y": 4.356932955638787
+        }
+      },
+      "dependsOn": [
+        "circle:c_1",
+        "circle:c_2"
+      ]
+    },
+    {
+      "id": "p_13",
+      "name": "M",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "intersectionPoint",
+        "objA": {
+          "type": "circle",
+          "id": "c_1"
+        },
+        "objB": {
+          "type": "circle",
+          "id": "c_2"
+        },
+        "preferredWorld": {
+          "x": 2.9364417647456293,
+          "y": 0.6699967365755191
+        }
+      },
+      "dependsOn": [
+        "circle:c_1",
+        "circle:c_2"
+      ]
+    },
+    {
+      "id": "p_14",
+      "name": "N",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "intersectionPoint",
+        "objA": {
+          "type": "segment",
+          "id": "s_1"
+        },
+        "objB": {
+          "type": "circle",
+          "id": "c_2"
+        },
+        "preferredWorld": {
+          "x": 3.3503866283703476,
+          "y": -0.32640529927204787
+        }
+      },
+      "dependsOn": [
+        "segment:s_1",
+        "circle:c_2"
+      ]
+    },
+    {
+      "id": "p_15",
+      "name": "O",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "circleLineIntersectionPoint",
+        "circleId": "c_2",
+        "lineId": "l_1",
+        "branchIndex": 0
+      },
+      "dependsOn": [
+        "c_2",
+        "l_1"
+      ]
+    },
+    {
+      "id": "p_2",
+      "name": "B",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "free",
+        "x": 5.98017578125,
+        "y": -2.062646484375
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "p_3",
+      "name": "C",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "pointOnSegment",
+        "segId": "s_1",
+        "u": 0.3065887510519686
+      },
+      "dependsOn": [
+        "s_1"
+      ]
+    },
+    {
+      "id": "p_4",
+      "name": "D",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "intersectionPoint",
+        "objA": {
+          "type": "segment",
+          "id": "s_1"
+        },
+        "objB": {
+          "type": "circle",
+          "id": "c_1"
+        },
+        "preferredWorld": {
+          "x": 2.652482357210735,
+          "y": 0.13436553382676397
+        }
+      },
+      "dependsOn": [
+        "segment:s_1",
+        "circle:c_1"
+      ]
+    },
+    {
+      "id": "p_5",
+      "name": "E",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "pointOnCircle",
+        "circleId": "c_1",
+        "t": 1.6430020844367343
+      },
+      "dependsOn": [
+        "c_1"
+      ]
+    },
+    {
+      "id": "p_6",
+      "name": "F",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "free",
+        "x": -6.173486328125,
+        "y": 2.269677734375
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "p_7",
+      "name": "G",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "free",
+        "x": 6.5798828125,
+        "y": 3.692626953125
+      },
+      "dependsOn": []
+    },
+    {
+      "id": "p_8",
+      "name": "H",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "circleLineIntersectionPoint",
+        "circleId": "c_1",
+        "lineId": "l_1",
+        "branchIndex": 0
+      },
+      "dependsOn": [
+        "c_1",
+        "l_1"
+      ]
+    },
+    {
+      "id": "p_9",
+      "name": "I",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "intersectionPoint",
+        "objA": {
+          "type": "line",
+          "id": "l_1"
+        },
+        "objB": {
+          "type": "segment",
+          "id": "s_1"
+        },
+        "preferredWorld": {
+          "x": -1.3901247144342639,
+          "y": 2.80337832722606
+        }
+      },
+      "dependsOn": [
+        "line:l_1",
+        "segment:s_1"
+      ]
+    }
+  ],
+  "lines": [
+    {
+      "id": "l_1",
+      "aId": "p_6",
+      "bId": "p_7",
+      "visible": true
+    }
+  ],
+  "segments": [
+    {
+      "id": "s_1",
+      "aId": "p_1",
+      "bId": "p_2",
+      "visible": true
+    },
+    {
+      "id": "s_2",
+      "aId": "p_5",
+      "bId": "p_4",
+      "visible": true
+    },
+    {
+      "id": "s_3",
+      "aId": "p_7",
+      "bId": "p_2",
+      "visible": true
+    }
+  ],
+  "circles": [
+    {
+      "id": "c_1",
+      "centerId": "p_3",
+      "throughId": "p_1",
+      "visible": true
+    },
+    {
+      "id": "c_2",
+      "centerId": "p_11",
+      "throughId": "p_10",
+      "visible": true
+    }
+  ]
+}

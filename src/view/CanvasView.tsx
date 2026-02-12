@@ -1,52 +1,48 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import katex from "katex";
 import type { Vec2 } from "../geo/vec2";
-import { add, mul, projectPointToLine, projectPointToSegment, sub } from "../geo/geometry";
-import { drawRectGrid, type RectGridSettings } from "../render/rectGrid";
 import {
-  type GeometryObjectRef,
+  beginSceneEvalTick,
+  endSceneEvalTick,
   getPointWorldPos,
-  isPointDraggable,
-  type PointShape,
-  type SceneModel,
   type ScenePoint,
 } from "../scene/points";
-import { geoStoreHelpers, useGeoStore } from "../state/geoStore";
-import type { ActiveTool, HoveredHit, PendingSelection } from "../state/geoStore";
-import type { Camera } from "./camera";
-import { camera as camMath, type Viewport } from "./camera";
+import { useGeoStore } from "../state/geoStore";
+import type { Viewport } from "./camera";
+import type { ConstructClickIo } from "./constructClickAdapter";
 import { findBestSnap, type SnapCandidate } from "./snapEngine";
+import {
+  createAngleLabelOverlays,
+  createPointLabelOverlays,
+} from "./labelOverlays";
+import { resolveAngles } from "./angleResolution";
+import { CanvasLabelsLayer } from "./CanvasLabelsLayer";
+import { renderCanvasFrame } from "./renderFrame";
+import { useCanvasInteractionController, type PointerState } from "./useCanvasInteractionController";
+import { isValidTarget } from "../tools/toolClick";
 
 const POINT_HIT_TOLERANCE_PX = 12;
 const SEGMENT_HIT_TOLERANCE_PX = 10;
 const LINE_HIT_TOLERANCE_PX = 10;
 const CIRCLE_HIT_TOLERANCE_PX = 10;
+const ANGLE_HIT_TOLERANCE_PX = 20;
 const CLICK_EPSILON_PX = 3;
 
-const GRID_SETTINGS: RectGridSettings = {
+const GRID_SETTINGS = {
   enabled: true,
   rotationRad: 0,
   targetSpacingPx: 40,
   majorEvery: 5,
-  minorOpacity: 0.1,
-  majorOpacity: 0.18,
+  minorOpacity: 0.06,
+  majorOpacity: 0.12,
   minorWidth: 1,
   majorWidth: 1.5,
 };
 
-type PointerMode = "idle" | "pan" | "drag-point" | "drag-label" | "tool-click";
+const ANGLE_STROKE_RENDER_SCALE = 3.25 / 1.8;
 
-type PointerState = {
-  active: boolean;
-  pid: number;
-  mode: PointerMode;
-  pointId: string | null;
-  lastX: number;
-  lastY: number;
-  startX: number;
-  startY: number;
-  moved: boolean;
-};
+function getAngleStrokeRenderWidth(rawStrokeWidth: number): number {
+  return rawStrokeWidth * ANGLE_STROKE_RENDER_SCALE;
+}
 
 export function CanvasView() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -62,16 +58,24 @@ export function CanvasView() {
     startY: 0,
     moved: false,
   });
+  const dragFrameRef = useRef<number | null>(null);
+  const dragPanDeltaRef = useRef<Vec2>({ x: 0, y: 0 });
+  const dragLabelDeltaRef = useRef<Vec2>({ x: 0, y: 0 });
+  const dragPointScreenRef = useRef<Vec2 | null>(null);
+  const dragPointIdRef = useRef<string | null>(null);
+  const dragAngleLabelScreenRef = useRef<Vec2 | null>(null);
 
   const camera = useGeoStore((store) => store.camera);
   const activeTool = useGeoStore((store) => store.activeTool);
   const scene = useGeoStore((store) => store.scene);
   const selectedObject = useGeoStore((store) => store.selectedObject);
+  const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
   const hoveredHit = useGeoStore((store) => store.hoveredHit);
   const cursorWorld = useGeoStore((store) => store.cursorWorld);
   const pendingSelection = useGeoStore((store) => store.pendingSelection);
   const copyStyle = useGeoStore((store) => store.copyStyle);
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
+  const dependencyGlowEnabled = useGeoStore((store) => store.dependencyGlowEnabled);
 
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
   const setHoveredHit = useGeoStore((store) => store.setHoveredHit);
@@ -84,6 +88,14 @@ export function CanvasView() {
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
   const createCircle = useGeoStore((store) => store.createCircle);
+  const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
+  const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
+  const createParallelLine = useGeoStore((store) => store.createParallelLine);
+  const createTangentLines = useGeoStore((store) => store.createTangentLines);
+  const createAngleBisectorLine = useGeoStore((store) => store.createAngleBisectorLine);
+  const createAngle = useGeoStore((store) => store.createAngle);
+  const createSector = useGeoStore((store) => store.createSector);
+  const createAngleFixed = useGeoStore((store) => store.createAngleFixed);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
   const createPointOnLine = useGeoStore((store) => store.createPointOnLine);
@@ -92,50 +104,111 @@ export function CanvasView() {
   const createIntersectionPoint = useGeoStore((store) => store.createIntersectionPoint);
   const movePointTo = useGeoStore((store) => store.movePointTo);
   const movePointLabelBy = useGeoStore((store) => store.movePointLabelBy);
+  const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
+  const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
+  const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
 
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
   const [snapDisabled, setSnapDisabled] = useState(false);
+  const hitTolerances = useMemo(
+    () => ({
+      point: POINT_HIT_TOLERANCE_PX,
+      angle: ANGLE_HIT_TOLERANCE_PX,
+      segment: SEGMENT_HIT_TOLERANCE_PX,
+      line: LINE_HIT_TOLERANCE_PX,
+      circle: CIRCLE_HIT_TOLERANCE_PX,
+    }),
+    []
+  );
+  const constructClickIo = useMemo<ConstructClickIo>(
+    () => ({
+      setPendingSelection,
+      clearPendingSelection,
+      createFreePoint,
+      createSegment,
+      createLine,
+      createCircle,
+      createCircleThreePoint,
+      createPerpendicularLine,
+      createParallelLine,
+      createTangentLines,
+      createAngleBisectorLine,
+      createAngle,
+      createSector,
+      createAngleFixed,
+      createMidpointFromPoints,
+      createMidpointFromSegment,
+      createPointOnLine,
+      createPointOnSegment,
+      createPointOnCircle,
+      createIntersectionPoint,
+      setSelectedObject,
+      setCopyStyleSource,
+      applyCopyStyleTo,
+      getPointWorldById: (id) => {
+        const point = scene.points.find((p) => p.id === id);
+        return point ? getPointWorldPos(point, scene) : null;
+      },
+    }),
+    [
+      setPendingSelection,
+      clearPendingSelection,
+      createFreePoint,
+      createSegment,
+      createLine,
+      createCircle,
+      createCircleThreePoint,
+      createPerpendicularLine,
+      createParallelLine,
+      createTangentLines,
+      createAngleBisectorLine,
+      createAngle,
+      createSector,
+      createAngleFixed,
+      createMidpointFromPoints,
+      createMidpointFromSegment,
+      createPointOnLine,
+      createPointOnSegment,
+      createPointOnCircle,
+      createIntersectionPoint,
+      setSelectedObject,
+      setCopyStyleSource,
+      applyCopyStyleTo,
+      scene,
+    ]
+  );
 
   const resolvedPoints = useMemo(
-    () =>
-      scene.points
-        .map((point) => {
-          const world = getPointWorldPos(point, scene);
-          if (!world) return null;
-          return { point, world };
-        })
-        .filter((item): item is { point: ScenePoint; world: Vec2 } => Boolean(item)),
+    () => {
+      beginSceneEvalTick(scene);
+      try {
+        return scene.points
+          .map((point) => {
+            const world = getPointWorldPos(point, scene);
+            if (!world) return null;
+            return { point, world };
+          })
+          .filter((item): item is { point: ScenePoint; world: Vec2 } => Boolean(item));
+      } finally {
+        endSceneEvalTick(scene);
+      }
+    },
     [scene]
   );
 
-  const labelOverlays = useMemo(() => {
-    return resolvedPoints
-      .filter(({ point }) => point.visible && point.showLabel === "caption" && Boolean(point.captionTex))
-      .map(({ point, world }) => {
-        const screen = camMath.worldToScreen(world, camera, vp);
-        const offset = point.style.labelOffsetPx;
-        const x = screen.x + offset.x;
-        const y = screen.y + offset.y;
-        const html = katex.renderToString(point.captionTex || "", {
-          throwOnError: false,
-          displayMode: false,
-          strict: "ignore",
-        });
-        return {
-          id: point.id,
-          x,
-          y,
-          html,
-          labelFontPx: point.style.labelFontPx,
-          labelColor: point.style.labelColor,
-          labelHaloColor: point.style.labelHaloColor,
-          labelHaloWidthPx: point.style.labelHaloWidthPx,
-        };
-      });
-  }, [camera, resolvedPoints, vp]);
+  const resolvedAngles = useMemo(() => resolveAngles(scene), [scene]);
+
+  const labelOverlays = useMemo(
+    () => createPointLabelOverlays(resolvedPoints, camera, vp),
+    [resolvedPoints, camera, vp]
+  );
+  const angleLabelOverlays = useMemo(
+    () => createAngleLabelOverlays(resolvedAngles, camera, vp),
+    [resolvedAngles, camera, vp]
+  );
 
   const hoverSnap: SnapCandidate | null = useMemo(() => {
     if (!hoverScreen) return null;
@@ -177,55 +250,41 @@ export function CanvasView() {
     () => () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-
-      canvas.width = Math.max(1, Math.floor(vp.widthPx * dpr));
-      canvas.height = Math.max(1, Math.floor(vp.heightPx * dpr));
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, vp.widthPx, vp.heightPx);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
-
-      drawRectGrid(ctx, camera, vp, GRID_SETTINGS);
-      drawCircles(ctx, scene, camera, vp, selectedObject, copyStyle.source);
-      drawLines(ctx, scene, camera, vp, selectedObject, copyStyle.source);
-      drawSegments(ctx, scene, camera, vp, selectedObject, copyStyle.source);
-      drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, scene, camera, vp);
-      drawPoints(ctx, resolvedPoints, selectedObject, camera, vp, copyStyle.source);
-      drawInteractionHighlights(
-        ctx,
+      const selectedDrawableObject = selectedObject?.type === "number" ? null : selectedObject;
+      const recentDrawableObject = recentCreatedObject?.type === "number" ? null : recentCreatedObject;
+      const copySourceDrawable = copyStyle.source?.type === "number" ? null : copyStyle.source;
+      renderCanvasFrame({
+        canvas,
+        scene,
+        camera,
+        vp,
+        dpr,
+        gridSettings: GRID_SETTINGS,
         activeTool,
         pendingSelection,
+        cursorWorld,
+        hoverScreen,
+        hoverSnap,
         hoveredHit,
         hoveredTargetValid,
         resolvedPoints,
-        scene,
-        camera,
-        vp
-      );
-
-      if (hoverSnap && (activeTool === "point" || activeTool === "move")) {
-        const s = camMath.worldToScreen(hoverSnap.world, camera, vp);
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 6, 0, Math.PI * 2);
-        ctx.strokeStyle = "#f97316";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 3]);
-        ctx.stroke();
-        if (hoverSnap.kind === "intersection" && hoverSnap.objA && hoverSnap.objB) {
-          highlightSnapObject(ctx, hoverSnap.objA, scene, camera, vp);
-          highlightSnapObject(ctx, hoverSnap.objB, scene, camera, vp);
-        }
-        ctx.restore();
-      }
-
+        resolvedAngles,
+        angleFixedTool,
+        circleFixedTool,
+        pendingPreviewTolerances: {
+          linePx: LINE_HIT_TOLERANCE_PX,
+          segmentPx: SEGMENT_HIT_TOLERANCE_PX,
+        },
+        selectedDrawableObject,
+        recentDrawableObject,
+        copySourceDrawable,
+        dependencyGlowEnabled,
+        getAngleStrokeRenderWidth,
+      });
     },
     [
       activeTool,
+      angleFixedTool,
       camera,
       copyStyle.source,
       cursorWorld,
@@ -235,9 +294,12 @@ export function CanvasView() {
       hoveredHit,
       hoveredTargetValid,
       pendingSelection,
+      recentCreatedObject,
       resolvedPoints,
+      resolvedAngles,
       scene,
       selectedObject,
+      dependencyGlowEnabled,
       vp,
     ]
   );
@@ -246,1229 +308,55 @@ export function CanvasView() {
     draw();
   }, [draw]);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const readScreen = (e: PointerEvent | WheelEvent): Vec2 => {
-      const rect = canvas.getBoundingClientRect();
-      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    };
-
-    const computeHoveredHit = (screen: Vec2): HoveredHit => {
-      const pointId = hitTestPoint(screen, resolvedPoints, camera, vp, POINT_HIT_TOLERANCE_PX);
-      if (pointId) return { type: "point", id: pointId };
-      const segmentId = hitTestSegment(screen, scene, camera, vp, SEGMENT_HIT_TOLERANCE_PX);
-      if (segmentId) return { type: "segment", id: segmentId };
-      const lineId = hitTestLine(screen, scene, camera, vp, LINE_HIT_TOLERANCE_PX);
-      if (lineId) return { type: "line2p", id: lineId };
-      const circleId = hitTestCircle(screen, scene, camera, vp, CIRCLE_HIT_TOLERANCE_PX);
-      if (circleId) return { type: "circle", id: circleId };
-      return null;
-    };
-
-    const applyCursor = (nextHovered: HoveredHit, modeOverride?: PointerMode) => {
-      const mode = modeOverride ?? pointerRef.current.mode;
-      let nextCursor = "default";
-
-      if (activeTool === "move") {
-        if (mode === "pan" || mode === "drag-point" || mode === "drag-label") {
-          nextCursor = "grabbing";
-        } else if (nextHovered?.type === "point") {
-          nextCursor = "pointer";
-        } else {
-          nextCursor = "grab";
-        }
-      } else if (nextHovered && isValidTarget(activeTool, pendingSelection, nextHovered)) {
-        nextCursor = "pointer";
-      } else if (toolAllowsEmptyPointCreation(activeTool)) {
-        nextCursor = "crosshair";
-      }
-
-      canvas.style.cursor = nextCursor;
-    };
-
-    applyCursor(hoveredHit);
-
-    const onDown = (e: PointerEvent) => {
-      const screen = readScreen(e);
-      setHoverScreen(screen);
-      setSnapDisabled(e.shiftKey);
-      setCursorWorld(camMath.screenToWorld(screen, camera, vp));
-      const hovered = computeHoveredHit(screen);
-      setHoveredHit(hovered);
-      const hitPointId = hitTestPoint(screen, resolvedPoints, camera, vp, POINT_HIT_TOLERANCE_PX);
-      const hitLabelId =
-        hitTestLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current) ??
-        hitTestLabel(screen, resolvedPoints, camera, vp, pointDefaults.labelOffsetPx);
-      const hitSegmentId = hitTestSegment(screen, scene, camera, vp, SEGMENT_HIT_TOLERANCE_PX);
-      const hitLineId = hitTestLine(screen, scene, camera, vp, LINE_HIT_TOLERANCE_PX);
-      const hitCircleId = hitTestCircle(screen, scene, camera, vp, CIRCLE_HIT_TOLERANCE_PX);
-
-      let mode: PointerMode = "idle";
-      let pointId: string | null = null;
-
-      if (activeTool === "move") {
-        if (hitLabelId) {
-          mode = "drag-label";
-          pointId = hitLabelId;
-          setSelectedObject({ type: "point", id: hitLabelId });
-        } else if (hitPointId) {
-          const hitPoint = scene.points.find((item) => item.id === hitPointId) ?? null;
-          setSelectedObject({ type: "point", id: hitPointId });
-          if (hitPoint && isPointDraggable(hitPoint)) {
-            mode = "drag-point";
-            pointId = hitPointId;
-          }
-        } else if (hitSegmentId) {
-          setSelectedObject({ type: "segment", id: hitSegmentId });
-          mode = "idle";
-        } else if (hitLineId) {
-          setSelectedObject({ type: "line", id: hitLineId });
-          mode = "idle";
-        } else if (hitCircleId) {
-          setSelectedObject({ type: "circle", id: hitCircleId });
-          mode = "idle";
-        } else {
-          mode = "pan";
-          setSelectedObject(null);
-        }
-      } else {
-        mode = "tool-click";
-      }
-
-      canvas.setPointerCapture(e.pointerId);
-      pointerRef.current = {
-        active: true,
-        pid: e.pointerId,
-        mode,
-        pointId,
-        lastX: e.clientX,
-        lastY: e.clientY,
-        startX: e.clientX,
-        startY: e.clientY,
-        moved: false,
-      };
-      applyCursor(hovered, mode);
-    };
-
-    const onMove = (e: PointerEvent) => {
-      const screen = readScreen(e);
-      setHoverScreen(screen);
-      setSnapDisabled(e.shiftKey);
-      setCursorWorld(camMath.screenToWorld(screen, camera, vp));
-      const hovered = computeHoveredHit(screen);
-      setHoveredHit(hovered);
-      applyCursor(hovered);
-      const st = pointerRef.current;
-      if (!st.active || st.pid !== e.pointerId) return;
-
-      const dx = e.clientX - st.lastX;
-      const dy = e.clientY - st.lastY;
-      st.lastX = e.clientX;
-      st.lastY = e.clientY;
-
-      const travelX = e.clientX - st.startX;
-      const travelY = e.clientY - st.startY;
-      if (travelX * travelX + travelY * travelY > CLICK_EPSILON_PX * CLICK_EPSILON_PX) {
-        st.moved = true;
-      }
-
-      if (st.mode === "pan") {
-        panByScreenDelta({ x: dx, y: dy });
-        return;
-      }
-
-      if (st.mode === "drag-point" && st.pointId) {
-        const world = camMath.screenToWorld(screen, camera, vp);
-        movePointTo(st.pointId, world);
-        return;
-      }
-
-      if (st.mode === "drag-label" && st.pointId) {
-        movePointLabelBy(st.pointId, { x: dx, y: dy });
-      }
-    };
-
-    const finish = (e: PointerEvent) => {
-      const st = pointerRef.current;
-      if (!st.active || st.pid !== e.pointerId) return;
-
-      if (st.mode === "tool-click" && !st.moved) {
-        const screen = readScreen(e);
-        const hitObject = hitTestTopObject(screen, resolvedPoints, scene, camera, vp);
-        const snap =
-          !e.shiftKey && activeTool !== "move" && activeTool !== "copyStyle"
-            ? findBestSnap(screen, camera, vp, scene, POINT_HIT_TOLERANCE_PX)
-            : null;
-        handleToolClick(screen, activeTool, pendingSelection, {
-          hitPointId: hitTestPoint(screen, resolvedPoints, camera, vp, POINT_HIT_TOLERANCE_PX),
-          hitSegmentId: hitTestSegment(screen, scene, camera, vp, SEGMENT_HIT_TOLERANCE_PX),
-          hitObject,
-          shiftKey: e.shiftKey,
-          hasCopyStyleSource: Boolean(copyStyle.source),
-          snap,
-        }, {
-          setPendingSelection,
-          clearPendingSelection,
-          createFreePoint,
-          createSegment,
-          createLine,
-          createCircle,
-          createMidpointFromPoints,
-          createMidpointFromSegment,
-          createPointOnLine,
-          createPointOnSegment,
-          createPointOnCircle,
-          createIntersectionPoint,
-          setSelectedObject,
-          setCopyStyleSource,
-          applyCopyStyleTo,
-          camera,
-          vp,
-        });
-      }
-
-      pointerRef.current = {
-        active: false,
-        pid: -1,
-        mode: "idle",
-        pointId: null,
-        lastX: 0,
-        lastY: 0,
-        startX: 0,
-        startY: 0,
-        moved: false,
-      };
-      setSnapDisabled(e.shiftKey);
-      const screen = readScreen(e);
-      const hovered = computeHoveredHit(screen);
-      setHoveredHit(hovered);
-      applyCursor(hovered);
-    };
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const screen = readScreen(e);
-      const zoomFactor = Math.pow(1.0015, -e.deltaY);
-      zoomAtScreenPoint(vp, screen, zoomFactor);
-    };
-
-    const onLeave = () => {
-      setHoverScreen(null);
-      setCursorWorld(null);
-      setHoveredHit(null);
-      canvas.style.cursor = "default";
-    };
-
-    canvas.addEventListener("pointerdown", onDown);
-    canvas.addEventListener("pointermove", onMove);
-    canvas.addEventListener("pointerup", finish);
-    canvas.addEventListener("pointercancel", finish);
-    canvas.addEventListener("pointerleave", onLeave);
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-
-    return () => {
-      canvas.removeEventListener("pointerdown", onDown);
-      canvas.removeEventListener("pointermove", onMove);
-      canvas.removeEventListener("pointerup", finish);
-      canvas.removeEventListener("pointercancel", finish);
-      canvas.removeEventListener("pointerleave", onLeave);
-      canvas.removeEventListener("wheel", onWheel);
-    };
-  }, [
+  useCanvasInteractionController({
+    canvasRef,
+    labelsLayerRef,
+    pointerRef,
+    dragBuffers: {
+      dragFrameRef,
+      dragPanDeltaRef,
+      dragLabelDeltaRef,
+      dragPointScreenRef,
+      dragPointIdRef,
+      dragAngleLabelScreenRef,
+    },
     activeTool,
-    camera,
-    copyStyle.source,
-    createFreePoint,
-    createLine,
-    createCircle,
-    clearPendingSelection,
-    createMidpointFromPoints,
-    createMidpointFromSegment,
-    createPointOnLine,
-    createPointOnSegment,
-    createPointOnCircle,
-    createIntersectionPoint,
-    applyCopyStyleTo,
-    createSegment,
-    movePointLabelBy,
-    movePointTo,
-    panByScreenDelta,
-    hoveredHit,
     pendingSelection,
-    pointDefaults.labelOffsetPx,
-    resolvedPoints,
+    copyStyleSource: copyStyle.source,
     scene,
-    setCopyStyleSource,
-    setHoveredHit,
-    setCursorWorld,
-    setPendingSelection,
-    setSelectedObject,
+    camera,
     vp,
-    zoomAtScreenPoint,
-  ]);
+    resolvedPoints,
+    resolvedAngles,
+    hoveredHit,
+    pointLabelOffsetPx: pointDefaults.labelOffsetPx,
+    angleFixedTool,
+    circleFixedTool,
+    constructClickIo,
+    tolerances: hitTolerances,
+    clickEpsilonPx: CLICK_EPSILON_PX,
+    actions: {
+      panByScreenDelta,
+      movePointTo,
+      movePointLabelBy,
+      moveAngleLabelTo,
+      setHoverScreen,
+      setSnapDisabled,
+      setCursorWorld,
+      setHoveredHit,
+      setSelectedObject,
+      zoomAtScreenPoint,
+    },
+  });
 
   return (
     <div className="canvasStack">
       <canvas ref={canvasRef} className="drawingCanvas" />
-      <div className="labelsLayer" aria-hidden ref={labelsLayerRef}>
-        {labelOverlays.map((label) => (
-          <div
-            key={label.id}
-            className="pointLabel tex"
-            data-point-id={label.id}
-            style={{
-              transform: `translate(${label.x}px, ${label.y}px)`,
-              fontSize: `${label.labelFontPx}px`,
-              color: label.labelColor,
-              textShadow: `${label.labelHaloColor} 0 0 ${label.labelHaloWidthPx}px, ${label.labelHaloColor} 0 0 ${Math.max(
-                1,
-                label.labelHaloWidthPx * 0.6
-              )}px`,
-            }}
-            dangerouslySetInnerHTML={{ __html: label.html }}
-          />
-        ))}
-      </div>
+      <CanvasLabelsLayer
+        labelsLayerRef={labelsLayerRef}
+        labelOverlays={labelOverlays}
+        angleLabelOverlays={angleLabelOverlays}
+      />
     </div>
   );
-}
-
-function handleToolClick(
-  screen: Vec2,
-  activeTool: ActiveTool,
-  pendingSelection: PendingSelection,
-  hits: {
-    hitPointId: string | null;
-    hitSegmentId: string | null;
-    hitObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null;
-    shiftKey: boolean;
-    hasCopyStyleSource: boolean;
-    snap: SnapCandidate | null;
-  },
-  io: {
-    setPendingSelection: (next: PendingSelection) => void;
-    clearPendingSelection: () => void;
-    createFreePoint: (world: Vec2) => string;
-    createSegment: (aId: string, bId: string) => string | null;
-    createLine: (aId: string, bId: string) => string | null;
-    createCircle: (centerId: string, throughId: string) => string | null;
-    createMidpointFromPoints: (aId: string, bId: string) => string | null;
-    createMidpointFromSegment: (segId: string) => string | null;
-    createPointOnLine: (lineId: string, s: number) => string | null;
-    createPointOnSegment: (segId: string, u: number) => string | null;
-    createPointOnCircle: (circleId: string, t: number) => string | null;
-    createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
-    setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle"; id: string } | null) => void;
-    setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle"; id: string }) => void;
-    applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle"; id: string }) => void;
-    camera: Camera;
-    vp: Viewport;
-  }
-) {
-  const resolveOrCreatePointAtCursor = (): string => {
-    const snap = hits.shiftKey ? null : hits.snap;
-    if (snap?.kind === "point" && snap.pointId) return snap.pointId;
-    if (snap?.kind === "intersection" && snap.objA && snap.objB) {
-      const created = io.createIntersectionPoint(snap.objA, snap.objB, snap.world);
-      if (created) return created;
-    }
-    if (snap?.kind === "onLine" && snap.lineId && typeof snap.s === "number") {
-      const created = io.createPointOnLine(snap.lineId, snap.s);
-      if (created) return created;
-    }
-    if (snap?.kind === "onSegment" && snap.segId && typeof snap.u === "number") {
-      const created = io.createPointOnSegment(snap.segId, snap.u);
-      if (created) return created;
-    }
-    if (snap?.kind === "onCircle" && snap.circleId && typeof snap.t === "number") {
-      const created = io.createPointOnCircle(snap.circleId, snap.t);
-      if (created) return created;
-    }
-    if (hits.hitPointId) return hits.hitPointId;
-    const world = camMath.screenToWorld(screen, io.camera, io.vp);
-    return io.createFreePoint(world);
-  };
-
-  if (activeTool === "point") {
-    const snap = hits.shiftKey ? null : hits.snap;
-    if (snap?.kind === "point" && snap.pointId) {
-      io.setSelectedObject({ type: "point", id: snap.pointId });
-      return;
-    }
-    if (snap?.kind === "intersection" && snap.objA && snap.objB) {
-      io.createIntersectionPoint(snap.objA, snap.objB, snap.world);
-      return;
-    }
-    if (snap?.kind === "onLine" && snap.lineId && typeof snap.s === "number") {
-      io.createPointOnLine(snap.lineId, snap.s);
-      return;
-    }
-    if (snap?.kind === "onSegment" && snap.segId && typeof snap.u === "number") {
-      io.createPointOnSegment(snap.segId, snap.u);
-      return;
-    }
-    if (snap?.kind === "onCircle" && snap.circleId && typeof snap.t === "number") {
-      io.createPointOnCircle(snap.circleId, snap.t);
-      return;
-    }
-    if (hits.hitPointId) {
-      io.setSelectedObject({ type: "point", id: hits.hitPointId });
-      return;
-    }
-    const world = camMath.screenToWorld(screen, io.camera, io.vp);
-    io.createFreePoint(world);
-    return;
-  }
-
-  if (activeTool === "copyStyle") {
-    if (!hits.hitObject) return;
-    io.setSelectedObject(hits.hitObject);
-    if (hits.shiftKey || !hits.hasCopyStyleSource) {
-      io.setCopyStyleSource(hits.hitObject);
-      return;
-    }
-    io.applyCopyStyleTo(hits.hitObject);
-    return;
-  }
-
-  if (activeTool === "segment") {
-    if (!pendingSelection || pendingSelection.tool !== "segment") {
-      io.setPendingSelection({ tool: "segment", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
-      return;
-    }
-    const bId = resolveOrCreatePointAtCursor();
-    io.createSegment(pendingSelection.first.id, bId);
-    io.clearPendingSelection();
-    return;
-  }
-
-  if (activeTool === "line2p") {
-    if (!pendingSelection || pendingSelection.tool !== "line2p") {
-      io.setPendingSelection({ tool: "line2p", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
-      return;
-    }
-    const bId = resolveOrCreatePointAtCursor();
-    io.createLine(pendingSelection.first.id, bId);
-    io.clearPendingSelection();
-    return;
-  }
-
-  if (activeTool === "circle_cp") {
-    if (!pendingSelection || pendingSelection.tool !== "circle_cp") {
-      io.setPendingSelection({ tool: "circle_cp", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
-      return;
-    }
-    const throughId = resolveOrCreatePointAtCursor();
-    io.createCircle(pendingSelection.first.id, throughId);
-    io.clearPendingSelection();
-    return;
-  }
-
-  if (activeTool === "midpoint") {
-    if (pendingSelection && pendingSelection.tool === "midpoint") {
-      const bId = resolveOrCreatePointAtCursor();
-      io.createMidpointFromPoints(pendingSelection.first.id, bId);
-      io.clearPendingSelection();
-      return;
-    }
-
-    if (hits.hitPointId) {
-      io.setPendingSelection({ tool: "midpoint", step: 2, first: { type: "point", id: hits.hitPointId } });
-      return;
-    }
-
-    if (hits.hitSegmentId) {
-      io.createMidpointFromSegment(hits.hitSegmentId);
-      io.clearPendingSelection();
-      return;
-    }
-
-    io.setPendingSelection({ tool: "midpoint", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
-  }
-}
-
-function toolAllowsEmptyPointCreation(activeTool: ActiveTool): boolean {
-  return (
-    activeTool === "point" ||
-    activeTool === "segment" ||
-    activeTool === "line2p" ||
-    activeTool === "circle_cp" ||
-    activeTool === "midpoint"
-  );
-}
-
-function isValidTarget(
-  activeTool: ActiveTool,
-  pendingSelection: PendingSelection,
-  hoveredHit: HoveredHit
-): boolean {
-  if (!hoveredHit) return false;
-
-  if (activeTool === "segment") return hoveredHit.type === "point";
-  if (activeTool === "line2p") return hoveredHit.type === "point";
-  if (activeTool === "circle_cp") return hoveredHit.type === "point";
-
-  if (activeTool === "midpoint") {
-    if (pendingSelection?.tool === "midpoint") return hoveredHit.type === "point";
-    return hoveredHit.type === "segment" || hoveredHit.type === "point";
-  }
-
-  return false;
-}
-
-function hitTestTopObject(
-  screenPoint: Vec2,
-  points: Array<{ point: ScenePoint; world: Vec2 }>,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport
-): { type: "point" | "segment" | "line" | "circle"; id: string } | null {
-  const pointId = hitTestPoint(screenPoint, points, camera, vp, POINT_HIT_TOLERANCE_PX);
-  if (pointId) return { type: "point", id: pointId };
-
-  const segmentId = hitTestSegment(screenPoint, scene, camera, vp, SEGMENT_HIT_TOLERANCE_PX);
-  if (segmentId) return { type: "segment", id: segmentId };
-
-  const lineId = hitTestLine(screenPoint, scene, camera, vp, LINE_HIT_TOLERANCE_PX);
-  if (lineId) return { type: "line", id: lineId };
-
-  const circleId = hitTestCircle(screenPoint, scene, camera, vp, CIRCLE_HIT_TOLERANCE_PX);
-  if (circleId) return { type: "circle", id: circleId };
-
-  return null;
-}
-
-function hitTestPoint(
-  screenPoint: Vec2,
-  points: Array<{ point: ScenePoint; world: Vec2 }>,
-  camera: Camera,
-  vp: Viewport,
-  tolerancePx: number
-): string | null {
-  const maxDistanceSq = tolerancePx * tolerancePx;
-  let closestId: string | null = null;
-  let closestDistanceSq = maxDistanceSq;
-
-  for (let i = points.length - 1; i >= 0; i -= 1) {
-    const entry = points[i];
-    if (!entry.point.visible) continue;
-    const p = camMath.worldToScreen(entry.world, camera, vp);
-    const dx = screenPoint.x - p.x;
-    const dy = screenPoint.y - p.y;
-    const d2 = dx * dx + dy * dy;
-    if (d2 <= closestDistanceSq) {
-      closestDistanceSq = d2;
-      closestId = entry.point.id;
-    }
-  }
-
-  return closestId;
-}
-
-function hitTestSegment(
-  screenPoint: Vec2,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport,
-  tolerancePx: number
-): string | null {
-  let bestId: string | null = null;
-  let best = tolerancePx;
-
-  for (let i = scene.segments.length - 1; i >= 0; i -= 1) {
-    const seg = scene.segments[i];
-    if (!seg.visible) continue;
-    const a = geoStoreHelpers.getPointWorldById(scene, seg.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, seg.bId);
-    if (!a || !b) continue;
-    const ap = camMath.worldToScreen(a, camera, vp);
-    const bp = camMath.worldToScreen(b, camera, vp);
-    const pr = projectPointToSegment(screenPoint, ap, bp);
-    if (pr.distance <= best) {
-      best = pr.distance;
-      bestId = seg.id;
-    }
-  }
-
-  return bestId;
-}
-
-function hitTestLine(
-  screenPoint: Vec2,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport,
-  tolerancePx: number
-): string | null {
-  let bestId: string | null = null;
-  let best = tolerancePx;
-
-  for (let i = scene.lines.length - 1; i >= 0; i -= 1) {
-    const line = scene.lines[i];
-    if (!line.visible) continue;
-    const a = geoStoreHelpers.getPointWorldById(scene, line.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, line.bId);
-    if (!a || !b) continue;
-    const ap = camMath.worldToScreen(a, camera, vp);
-    const bp = camMath.worldToScreen(b, camera, vp);
-    const pr = projectPointToLine(screenPoint, ap, bp);
-    if (pr.distance <= best) {
-      best = pr.distance;
-      bestId = line.id;
-    }
-  }
-
-  return bestId;
-}
-
-function hitTestCircle(
-  screenPoint: Vec2,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport,
-  tolerancePx: number
-): string | null {
-  let bestId: string | null = null;
-  let best = tolerancePx;
-
-  for (let i = scene.circles.length - 1; i >= 0; i -= 1) {
-    const circle = scene.circles[i];
-    if (!circle.visible) continue;
-    const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-    const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
-    if (!center || !through) continue;
-    const centerScreen = camMath.worldToScreen(center, camera, vp);
-    const throughScreen = camMath.worldToScreen(through, camera, vp);
-    const radiusPx = Math.hypot(throughScreen.x - centerScreen.x, throughScreen.y - centerScreen.y);
-    const d = Math.abs(Math.hypot(screenPoint.x - centerScreen.x, screenPoint.y - centerScreen.y) - radiusPx);
-    if (d <= best) {
-      best = d;
-      bestId = circle.id;
-    }
-  }
-  return bestId;
-}
-
-function drawCircles(
-  ctx: CanvasRenderingContext2D,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport,
-  selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
-  copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
-) {
-  ctx.save();
-  for (const circle of scene.circles) {
-    if (!circle.visible) continue;
-    const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-    const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
-    if (!center || !through) continue;
-    const c = camMath.worldToScreen(center, camera, vp);
-    const t = camMath.worldToScreen(through, camera, vp);
-    const r = Math.hypot(t.x - c.x, t.y - c.y);
-    ctx.setLineDash(circle.style.strokeDash === "dashed" ? [8, 6] : []);
-    if ((circle.style.fillOpacity ?? 0) > 0 && circle.style.fillColor) {
-      ctx.globalAlpha = circle.style.fillOpacity ?? 0;
-      ctx.fillStyle = circle.style.fillColor;
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.strokeStyle = circle.style.strokeColor;
-    ctx.globalAlpha = circle.style.strokeOpacity;
-    ctx.lineWidth = circle.style.strokeWidth;
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-    ctx.stroke();
-
-    if (selectedObject?.type === "circle" && selectedObject.id === circle.id) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      ctx.strokeStyle = "#f59e0b";
-      ctx.lineWidth = circle.style.strokeWidth + 2;
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    if (copySource?.type === "circle" && copySource.id === circle.id) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      ctx.strokeStyle = "#2563eb";
-      ctx.lineWidth = circle.style.strokeWidth + 3;
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-}
-
-function drawPendingPreview(
-  ctx: CanvasRenderingContext2D,
-  pendingSelection: PendingSelection,
-  cursorWorld: Vec2 | null,
-  cursorScreen: Vec2 | null,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport
-) {
-  if (!pendingSelection) return;
-  const firstWorld = geoStoreHelpers.getPointWorldById(scene, pendingSelection.first.id);
-  if (!firstWorld) return;
-  const p1 = camMath.worldToScreen(firstWorld, camera, vp);
-
-  ctx.save();
-  ctx.globalAlpha = 0.65;
-  ctx.setLineDash([6, 5]);
-  ctx.strokeStyle = "#0ea5e9";
-  ctx.lineWidth = 1.3;
-
-  if ((pendingSelection.tool === "segment" || pendingSelection.tool === "midpoint") && cursorWorld) {
-    const p2 = camMath.worldToScreen(cursorWorld, camera, vp);
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
-
-  if (pendingSelection.tool === "line2p" && cursorWorld) {
-    const d = sub(cursorWorld, firstWorld);
-    const len = Math.hypot(d.x, d.y);
-    if (len < 1e-9) {
-      ctx.restore();
-      return;
-    }
-    const dir = { x: d.x / len, y: d.y / len };
-    const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 2;
-    const q1 = camMath.worldToScreen(add(firstWorld, mul(dir, -span)), camera, vp);
-    const q2 = camMath.worldToScreen(add(firstWorld, mul(dir, span)), camera, vp);
-    ctx.beginPath();
-    ctx.moveTo(q1.x, q1.y);
-    ctx.lineTo(q2.x, q2.y);
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
-
-  if (pendingSelection.tool === "circle_cp" && cursorScreen) {
-    const radiusPx = Math.hypot(cursorScreen.x - p1.x, cursorScreen.y - p1.y);
-    ctx.globalAlpha = 0.45;
-    ctx.lineWidth = 1.1;
-    ctx.beginPath();
-    ctx.arc(p1.x, p1.y, radiusPx, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
-function drawInteractionHighlights(
-  ctx: CanvasRenderingContext2D,
-  activeTool: ActiveTool,
-  pendingSelection: PendingSelection,
-  hoveredHit: HoveredHit,
-  hoveredTargetValid: boolean,
-  resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport
-) {
-  if (pendingSelection) {
-    drawHitHighlight(
-      ctx,
-      { type: "point", id: pendingSelection.first.id },
-      resolvedPoints,
-      scene,
-      camera,
-      vp,
-      "#22c55e",
-      0.95
-    );
-  }
-
-  if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
-    drawHitHighlight(ctx, hoveredHit, resolvedPoints, scene, camera, vp, "#0ea5e9", 0.9);
-  }
-}
-
-function drawHitHighlight(
-  ctx: CanvasRenderingContext2D,
-  hit: Exclude<HoveredHit, null>,
-  resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport,
-  color: string,
-  alpha: number
-) {
-  if (hit.type === "point") {
-    const point = resolvedPoints.find((item) => item.point.id === hit.id);
-    if (!point || !point.point.visible) return;
-    const p = camMath.worldToScreen(point.world, camera, vp);
-    const r = Math.max(point.point.style.sizePx + 4, 8);
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2.5;
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = color;
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
-
-  if (hit.type === "segment") {
-    const seg = scene.segments.find((item) => item.id === hit.id);
-    if (!seg || !seg.visible) return;
-    const a = geoStoreHelpers.getPointWorldById(scene, seg.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, seg.bId);
-    if (!a || !b) return;
-    const p1 = camMath.worldToScreen(a, camera, vp);
-    const p2 = camMath.worldToScreen(b, camera, vp);
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.setLineDash([]);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = seg.style.strokeWidth + 2.5;
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
-
-  if (hit.type === "line2p") {
-    const line = scene.lines.find((item) => item.id === hit.id);
-    if (!line || !line.visible) return;
-    const a = geoStoreHelpers.getPointWorldById(scene, line.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, line.bId);
-    if (!a || !b) return;
-    const d = sub(b, a);
-    const len = Math.hypot(d.x, d.y);
-    if (len < 1e-9) return;
-    const dir = { x: d.x / len, y: d.y / len };
-    const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 2;
-    const p1 = camMath.worldToScreen(add(a, mul(dir, -span)), camera, vp);
-    const p2 = camMath.worldToScreen(add(a, mul(dir, span)), camera, vp);
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.setLineDash([]);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = line.style.strokeWidth + 2.5;
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
-
-  const circle = scene.circles.find((item) => item.id === hit.id);
-  if (!circle || !circle.visible) return;
-  const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-  const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
-  if (!center || !through) return;
-  const c = camMath.worldToScreen(center, camera, vp);
-  const t = camMath.worldToScreen(through, camera, vp);
-  const r = Math.hypot(t.x - c.x, t.y - c.y);
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.setLineDash([]);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = circle.style.strokeWidth + 2.5;
-  ctx.beginPath();
-  ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawLines(
-  ctx: CanvasRenderingContext2D,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport,
-  selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
-  copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
-) {
-  ctx.save();
-
-  for (const line of scene.lines) {
-    if (!line.visible) continue;
-    const a = geoStoreHelpers.getPointWorldById(scene, line.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, line.bId);
-    if (!a || !b) continue;
-
-    const d = sub(b, a);
-    const len = Math.hypot(d.x, d.y);
-    if (len < 1e-9) continue;
-
-    const dir = { x: d.x / len, y: d.y / len };
-    const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 2;
-    const p1 = camMath.worldToScreen(add(a, mul(dir, -span)), camera, vp);
-    const p2 = camMath.worldToScreen(add(a, mul(dir, span)), camera, vp);
-
-    ctx.setLineDash(line.style.dash === "dashed" ? [8, 6] : []);
-    ctx.strokeStyle = line.style.strokeColor;
-    ctx.globalAlpha = line.style.opacity;
-    ctx.lineWidth = line.style.strokeWidth;
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-
-    if (selectedObject?.type === "line" && selectedObject.id === line.id) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      ctx.strokeStyle = "#f59e0b";
-      ctx.lineWidth = line.style.strokeWidth + 2;
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-
-    if (copySource?.type === "line" && copySource.id === line.id) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      ctx.strokeStyle = "#2563eb";
-      ctx.lineWidth = line.style.strokeWidth + 3;
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-  }
-
-  ctx.restore();
-}
-
-function drawSegments(
-  ctx: CanvasRenderingContext2D,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport,
-  selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
-  copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
-) {
-  ctx.save();
-
-  for (const seg of scene.segments) {
-    if (!seg.visible) continue;
-    const a = geoStoreHelpers.getPointWorldById(scene, seg.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, seg.bId);
-    if (!a || !b) continue;
-
-    const p1 = camMath.worldToScreen(a, camera, vp);
-    const p2 = camMath.worldToScreen(b, camera, vp);
-
-    ctx.setLineDash(seg.style.dash === "dashed" ? [8, 6] : []);
-    ctx.strokeStyle = seg.style.strokeColor;
-    ctx.globalAlpha = seg.style.opacity;
-    ctx.lineWidth = seg.style.strokeWidth;
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-
-    if (selectedObject?.type === "segment" && selectedObject.id === seg.id) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      ctx.strokeStyle = "#f59e0b";
-      ctx.lineWidth = seg.style.strokeWidth + 2;
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-
-    if (copySource?.type === "segment" && copySource.id === seg.id) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      ctx.strokeStyle = "#2563eb";
-      ctx.lineWidth = seg.style.strokeWidth + 3;
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-  }
-
-  ctx.restore();
-}
-
-function drawPoints(
-  ctx: CanvasRenderingContext2D,
-  resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>,
-  selectedObject: { type: "point" | "segment" | "line" | "circle"; id: string } | null,
-  camera: Camera,
-  vp: Viewport,
-  copySource: { type: "point" | "segment" | "line" | "circle"; id: string } | null
-) {
-  ctx.save();
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-
-  for (const { point, world } of resolvedPoints) {
-    if (!point.visible) continue;
-    const p = camMath.worldToScreen(world, camera, vp);
-    const selected = selectedObject?.type === "point" && selectedObject.id === point.id;
-
-    drawPointSymbol(
-      ctx,
-      point.style.shape,
-      p.x,
-      p.y,
-      point.style.sizePx,
-      point.style.fillColor,
-      point.style.fillOpacity,
-      point.style.strokeColor,
-      point.style.strokeWidth,
-      point.style.strokeOpacity
-    );
-
-    if (selected) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(point.style.sizePx + 3, 7), 0, Math.PI * 2);
-      ctx.strokeStyle = "#93c5fd";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-
-    if (copySource?.type === "point" && copySource.id === point.id) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(point.style.sizePx + 4.5, 8), 0, Math.PI * 2);
-      ctx.strokeStyle = "#2563eb";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-
-    if (point.showLabel === "name" && point.name) {
-      const labelOffset = point.style.labelOffsetPx;
-      const lx = p.x + labelOffset.x;
-      const ly = p.y + labelOffset.y;
-      ctx.font = `${point.style.labelFontPx}px system-ui`;
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      ctx.miterLimit = 2;
-      ctx.strokeStyle = point.style.labelHaloColor;
-      ctx.lineWidth = point.style.labelHaloWidthPx;
-      ctx.strokeText(point.name, lx, ly);
-      ctx.fillStyle = point.style.labelColor;
-      ctx.fillText(point.name, lx, ly);
-    }
-  }
-
-  ctx.restore();
-}
-
-function hitTestLabel(
-  screenPoint: Vec2,
-  points: Array<{ point: ScenePoint; world: Vec2 }>,
-  camera: Camera,
-  vp: Viewport,
-  defaultOffset: Vec2
-): string | null {
-  for (let i = points.length - 1; i >= 0; i -= 1) {
-    const { point, world } = points[i];
-    if (!point.visible || point.showLabel === "none") continue;
-    const p = camMath.worldToScreen(world, camera, vp);
-    const labelOffset = point.style.labelOffsetPx ?? defaultOffset;
-    const labelText = point.showLabel === "name" ? point.name : point.captionTex;
-    if (!labelText) continue;
-    const fontPx = point.style.labelFontPx ?? 16;
-    const x = p.x + labelOffset.x - 2;
-    const y = p.y + labelOffset.y - fontPx * 0.65;
-    const w = Math.max(18, labelText.length * (fontPx * 0.58) + 8);
-    const h = Math.max(16, fontPx * 1.2);
-    if (screenPoint.x >= x && screenPoint.x <= x + w && screenPoint.y >= y && screenPoint.y <= y + h) {
-      return point.id;
-    }
-  }
-  return null;
-}
-
-function hitTestLabelFromDom(clientX: number, clientY: number, labelsLayer: HTMLDivElement | null): string | null {
-  if (!labelsLayer) return null;
-  const labels = labelsLayer.querySelectorAll<HTMLElement>(".pointLabel[data-point-id]");
-  for (let i = labels.length - 1; i >= 0; i -= 1) {
-    const el = labels[i];
-    const rect = el.getBoundingClientRect();
-    if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
-      return el.dataset.pointId ?? null;
-    }
-  }
-  return null;
-}
-
-function highlightSnapObject(
-  ctx: CanvasRenderingContext2D,
-  obj: GeometryObjectRef,
-  scene: SceneModel,
-  camera: Camera,
-  vp: Viewport
-) {
-  ctx.save();
-  ctx.setLineDash([6, 4]);
-  ctx.strokeStyle = "rgba(249, 115, 22, 0.9)";
-  ctx.lineWidth = 2;
-
-  if (obj.type === "line") {
-    const line = scene.lines.find((item) => item.id === obj.id);
-    if (!line) {
-      ctx.restore();
-      return;
-    }
-    const a = geoStoreHelpers.getPointWorldById(scene, line.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, line.bId);
-    if (!a || !b) {
-      ctx.restore();
-      return;
-    }
-    const d = sub(b, a);
-    const len = Math.hypot(d.x, d.y);
-    if (len < 1e-9) {
-      ctx.restore();
-      return;
-    }
-    const dir = { x: d.x / len, y: d.y / len };
-    const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 1.8;
-    const p1 = camMath.worldToScreen(add(a, mul(dir, -span)), camera, vp);
-    const p2 = camMath.worldToScreen(add(a, mul(dir, span)), camera, vp);
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
-
-  if (obj.type === "segment") {
-    const seg = scene.segments.find((item) => item.id === obj.id);
-    if (!seg) {
-      ctx.restore();
-      return;
-    }
-    const a = geoStoreHelpers.getPointWorldById(scene, seg.aId);
-    const b = geoStoreHelpers.getPointWorldById(scene, seg.bId);
-    if (!a || !b) {
-      ctx.restore();
-      return;
-    }
-    const p1 = camMath.worldToScreen(a, camera, vp);
-    const p2 = camMath.worldToScreen(b, camera, vp);
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
-
-  const circle = scene.circles.find((item) => item.id === obj.id);
-  if (!circle) {
-    ctx.restore();
-    return;
-  }
-  const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-  const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
-  if (!center || !through) {
-    ctx.restore();
-    return;
-  }
-  const c = camMath.worldToScreen(center, camera, vp);
-  const t = camMath.worldToScreen(through, camera, vp);
-  const r = Math.hypot(t.x - c.x, t.y - c.y);
-  ctx.beginPath();
-  ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawPointSymbol(
-  ctx: CanvasRenderingContext2D,
-  shape: PointShape,
-  x: number,
-  y: number,
-  sizePx: number,
-  fillColor: string,
-  fillOpacity: number,
-  strokeColor: string,
-  strokeWidth: number,
-  strokeOpacity: number
-) {
-  const r = Math.max(1.5, sizePx);
-  ctx.save();
-  ctx.lineWidth = strokeWidth;
-  ctx.strokeStyle = strokeColor;
-  ctx.fillStyle = fillColor;
-  ctx.globalAlpha = fillOpacity;
-
-  if (shape === "dot") {
-    ctx.beginPath();
-    ctx.arc(x, y, Math.max(1.2, r * 0.4), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    return;
-  }
-
-  if (shape === "x" || shape === "plus" || shape === "cross") {
-    ctx.globalAlpha = strokeOpacity;
-    ctx.beginPath();
-    if (shape === "x" || shape === "cross") {
-      ctx.moveTo(x - r, y - r);
-      ctx.lineTo(x + r, y + r);
-      ctx.moveTo(x + r, y - r);
-      ctx.lineTo(x - r, y + r);
-    }
-    if (shape === "plus" || shape === "cross") {
-      ctx.moveTo(x - r, y);
-      ctx.lineTo(x + r, y);
-      ctx.moveTo(x, y - r);
-      ctx.lineTo(x, y + r);
-    }
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
-
-  ctx.beginPath();
-  switch (shape) {
-    case "circle":
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      break;
-    case "diamond":
-      ctx.moveTo(x, y - r);
-      ctx.lineTo(x + r, y);
-      ctx.lineTo(x, y + r);
-      ctx.lineTo(x - r, y);
-      ctx.closePath();
-      break;
-    case "square":
-      ctx.rect(x - r, y - r, r * 2, r * 2);
-      break;
-    case "triUp":
-      ctx.moveTo(x, y - r);
-      ctx.lineTo(x + r, y + r);
-      ctx.lineTo(x - r, y + r);
-      ctx.closePath();
-      break;
-    case "triDown":
-      ctx.moveTo(x, y + r);
-      ctx.lineTo(x + r, y - r);
-      ctx.lineTo(x - r, y - r);
-      ctx.closePath();
-      break;
-  }
-  ctx.fill();
-  ctx.globalAlpha = strokeOpacity;
-  ctx.stroke();
-  ctx.restore();
 }

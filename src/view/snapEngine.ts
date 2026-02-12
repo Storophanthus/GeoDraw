@@ -1,18 +1,23 @@
 import type { Vec2 } from "../geo/vec2";
 import {
   circleCircleIntersections,
-  distance,
   lineCircleIntersections,
   lineLineIntersection,
   projectPointToCircle,
   projectPointToLine,
   projectPointToSegment,
 } from "../geo/geometry";
-import { getPointWorldPos, type GeometryObjectRef, type SceneModel } from "../scene/points";
+import {
+  getCircleWorldGeometry,
+  getLineWorldAnchors,
+  getPointWorldPos,
+  type GeometryObjectRef,
+  type SceneModel,
+} from "../scene/points";
 import type { Camera, Viewport } from "./camera";
 import { camera as camMath } from "./camera";
 
-type LineLike = { ref: GeometryObjectRef; a: Vec2; b: Vec2 };
+type LineLike = { ref: GeometryObjectRef; a: Vec2; b: Vec2; finite: boolean };
 type CircleLike = { ref: GeometryObjectRef; center: Vec2; radius: number };
 
 type SnapKind = "point" | "intersection" | "onLine" | "onSegment" | "onCircle";
@@ -68,14 +73,15 @@ export function findBestSnap(
 
   for (const line of scene.lines) {
     if (!line.visible) continue;
-    const a = getPointWorld(scene, line.aId);
-    const b = getPointWorld(scene, line.bId);
+    const anchors = getLineWorldAnchors(line, scene);
+    const a = anchors?.a ?? null;
+    const b = anchors?.b ?? null;
     if (!a || !b) continue;
     const ap = camMath.worldToScreen(a, camera, vp);
     const bp = camMath.worldToScreen(b, camera, vp);
     const pr = projectPointToLine(screen, ap, bp);
     if (pr.distance <= tolerancePx) {
-      nearLines.push({ ref: { type: "line", id: line.id }, a, b });
+      nearLines.push({ ref: { type: "line", id: line.id }, a, b, finite: false });
       const wpr = projectPointToLine(cursorWorld, a, b);
       const sp = camMath.worldToScreen(wpr.point, camera, vp);
       candidates.push({
@@ -98,7 +104,7 @@ export function findBestSnap(
     const bp = camMath.worldToScreen(b, camera, vp);
     const pr = projectPointToSegment(screen, ap, bp);
     if (pr.distance <= tolerancePx) {
-      nearSegments.push({ ref: { type: "segment", id: seg.id }, a, b });
+      nearSegments.push({ ref: { type: "segment", id: seg.id }, a, b, finite: true });
       const wpr = projectPointToSegment(cursorWorld, a, b);
       const sp = camMath.worldToScreen(wpr.point, camera, vp);
       candidates.push({
@@ -114,10 +120,10 @@ export function findBestSnap(
 
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
-    const center = getPointWorld(scene, circle.centerId);
-    const through = getPointWorld(scene, circle.throughId);
-    if (!center || !through) continue;
-    const radius = distance(center, through);
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (!geom) continue;
+    const center = geom.center;
+    const radius = geom.radius;
     const cScreen = camMath.worldToScreen(center, camera, vp);
     const rScreen = radius * camera.zoom;
     const dToBoundary = Math.abs(Math.hypot(screen.x - cScreen.x, screen.y - cScreen.y) - rScreen);
@@ -141,6 +147,7 @@ export function findBestSnap(
     for (let j = i + 1; j < lineLikes.length; j += 1) {
       const p = lineLineIntersection(lineLikes[i].a, lineLikes[i].b, lineLikes[j].a, lineLikes[j].b);
       if (!p) continue;
+      if (!lineLikeContainsPoint(lineLikes[i], p) || !lineLikeContainsPoint(lineLikes[j], p)) continue;
       pushIntersectionCandidate(p, lineLikes[i].ref, lineLikes[j].ref, screen, camera, vp, tolerancePx, candidates);
     }
   }
@@ -149,6 +156,7 @@ export function findBestSnap(
     for (const circle of nearCircles) {
       const intersections = lineCircleIntersections(line.a, line.b, circle.center, circle.radius);
       for (const p of intersections) {
+        if (!lineLikeContainsPoint(line, p)) continue;
         pushIntersectionCandidate(p, line.ref, circle.ref, screen, camera, vp, tolerancePx, candidates);
       }
     }
@@ -207,4 +215,21 @@ function getPointWorld(scene: SceneModel, pointId: string): Vec2 | null {
   const point = scene.points.find((item) => item.id === pointId);
   if (!point) return null;
   return getPointWorldPos(point, scene);
+}
+
+function lineLikeContainsPoint(line: LineLike, p: Vec2): boolean {
+  if (!line.finite) return true;
+  return pointWithinSegmentDomain(p, line.a, line.b);
+}
+
+function pointWithinSegmentDomain(p: Vec2, a: Vec2, b: Vec2): boolean {
+  const EPS = 1e-6;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dd = dx * dx + dy * dy;
+  if (dd <= EPS * EPS) return Math.hypot(p.x - a.x, p.y - a.y) <= EPS;
+  const ux = p.x - a.x;
+  const uy = p.y - a.y;
+  const u = (ux * dx + uy * dy) / dd;
+  return u >= -EPS && u <= 1 + EPS;
 }

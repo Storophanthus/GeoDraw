@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p1",
+      "name": "O",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 0, "y": 0 }
+    },
+    {
+      "id": "p2",
+      "name": "B",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 2, "y": 0 }
+    },
+    {
+      "id": "p3",
+      "name": "P",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 4, "y": 3 }
+    }
+  ],
+  "lines": [
+    { "id": "l_t0", "kind": "tangent", "throughId": "p3", "circleId": "c1", "branchIndex": 0, "visible": true },
+    { "id": "l_t1", "kind": "tangent", "throughId": "p3", "circleId": "c1", "branchIndex": 1, "visible": true }
+  ],
+  "segments": [],
+  "circles": [
+    { "id": "c1", "kind": "twoPoint", "centerId": "p1", "throughId": "p2", "visible": true }
+  ],
+  "angles": [],
+  "numbers": []
+}

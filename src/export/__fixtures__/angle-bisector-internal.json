@@ -1,0 +1,41 @@
+{
+  "points": [
+    {
+      "id": "p1",
+      "name": "A",
+      "definition": { "kind": "free", "x": -2.0, "y": 0.5 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p2",
+      "name": "B",
+      "definition": { "kind": "free", "x": 0.0, "y": 0.0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p3",
+      "name": "C",
+      "definition": { "kind": "free", "x": 2.2, "y": 1.4 },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "lines": [
+    {
+      "id": "l_bis",
+      "kind": "angleBisector",
+      "aId": "p1",
+      "bId": "p2",
+      "cId": "p3",
+      "visible": true
+    }
+  ],
+  "segments": [
+    { "id": "s1", "aId": "p2", "bId": "p1", "visible": true },
+    { "id": "s2", "aId": "p2", "bId": "p3", "visible": true }
+  ],
+  "circles": [],
+  "angles": []
+}

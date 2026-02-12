@@ -1,0 +1,67 @@
+import { useState } from "react";
+import { useGeoStore } from "../state/geoStore";
+import { useGlobalCanvasHotkeys } from "./useGlobalCanvasHotkeys";
+import { useSidebarResize } from "./useSidebarResize";
+import type { WorkspaceShellProps } from "./WorkspaceShell";
+
+const LEFT_MIN = 48;
+const LEFT_MAX = 240;
+const RIGHT_MIN = 240;
+const RIGHT_MAX = 560;
+const COLLAPSED_W = 18;
+
+export function useAppShellController(): WorkspaceShellProps {
+  const activeTool = useGeoStore((store) => store.activeTool);
+  const setActiveTool = useGeoStore((store) => store.setActiveTool);
+  const deleteSelectedObject = useGeoStore((store) => store.deleteSelectedObject);
+  const clearCopyStyle = useGeoStore((store) => store.clearCopyStyle);
+  const undo = useGeoStore((store) => store.undo);
+  const redo = useGeoStore((store) => store.redo);
+  const canUndo = useGeoStore((store) => store.canUndo);
+  const canRedo = useGeoStore((store) => store.canRedo);
+
+  const [leftWidth, setLeftWidth] = useState(56);
+  const [rightWidth, setRightWidth] = useState(312);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+
+  useGlobalCanvasHotkeys({
+    activeTool,
+    onSetMoveTool: () => setActiveTool("move"),
+    onClearCopyStyle: clearCopyStyle,
+    onDeleteSelectedObject: deleteSelectedObject,
+    onUndo: undo,
+    onRedo: redo,
+  });
+
+  const { startResize } = useSidebarResize({
+    leftCollapsed,
+    rightCollapsed,
+    leftWidth,
+    rightWidth,
+    setLeftWidth,
+    setRightWidth,
+    leftMin: LEFT_MIN,
+    leftMax: LEFT_MAX,
+    rightMin: RIGHT_MIN,
+    rightMax: RIGHT_MAX,
+  });
+
+  return {
+    activeTool,
+    onSelectTool: setActiveTool,
+    leftCollapsed,
+    setLeftCollapsed,
+    leftWidth,
+    rightCollapsed,
+    setRightCollapsed,
+    rightWidth,
+    collapsedWidth: COLLAPSED_W,
+    canUndo,
+    canRedo,
+    onUndo: undo,
+    onRedo: redo,
+    onStartResizeLeft: startResize("left"),
+    onStartResizeRight: startResize("right"),
+  };
+}

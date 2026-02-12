@@ -1,0 +1,288 @@
+import { projectPointToLine, projectPointToSegment } from "../geo/geometry";
+import {
+  computeOrientedAngleRad,
+  getCircleWorldGeometry,
+  getLineWorldAnchors,
+  getPointWorldPos,
+  type SceneModel,
+  type ScenePoint,
+} from "../scene/points";
+import { camera as camMath, type Camera, type Viewport } from "../view/camera";
+import type { Vec2 } from "../geo/vec2";
+
+export type EngineHit =
+  | { type: "point"; id: string }
+  | { type: "angle"; id: string }
+  | { type: "segment"; id: string }
+  | { type: "line"; id: string }
+  | { type: "circle"; id: string }
+  | null;
+
+export type HitTestOptions = {
+  pointTolPx?: number;
+  angleTolPx?: number;
+  segmentTolPx?: number;
+  lineTolPx?: number;
+  circleTolPx?: number;
+};
+
+export type ResolvedPoint = { point: ScenePoint; world: Vec2 };
+export type ResolvedAngle = {
+  angle: SceneModel["angles"][number];
+  a: Vec2;
+  b: Vec2;
+  c: Vec2;
+  theta: number;
+};
+
+export function resolveVisibleAngles(scene: SceneModel): ResolvedAngle[] {
+  const out: ResolvedAngle[] = [];
+  for (let i = 0; i < scene.angles.length; i += 1) {
+    const angle = scene.angles[i];
+    if (!angle.visible) continue;
+    const aPoint = scene.points.find((p) => p.id === angle.aId);
+    const bPoint = scene.points.find((p) => p.id === angle.bId);
+    const cPoint = scene.points.find((p) => p.id === angle.cId);
+    if (!aPoint || !bPoint || !cPoint) continue;
+    const a = getPointWorldPos(aPoint, scene);
+    const b = getPointWorldPos(bPoint, scene);
+    const c = getPointWorldPos(cPoint, scene);
+    if (!a || !b || !c) continue;
+    const theta = computeOrientedAngleRad(a, b, c);
+    if (theta === null) continue;
+    out.push({ angle, a, b, c, theta });
+  }
+  return out;
+}
+
+export function hitTestPointId(
+  screenPoint: Vec2,
+  points: ResolvedPoint[],
+  camera: Camera,
+  vp: Viewport,
+  tolerancePx: number
+): string | null {
+  const maxDistanceSq = tolerancePx * tolerancePx;
+  let closestId: string | null = null;
+  let closestDistanceSq = maxDistanceSq;
+
+  for (let i = points.length - 1; i >= 0; i -= 1) {
+    const entry = points[i];
+    if (!entry.point.visible) continue;
+    const p = camMath.worldToScreen(entry.world, camera, vp);
+    const dx = screenPoint.x - p.x;
+    const dy = screenPoint.y - p.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 <= closestDistanceSq) {
+      closestDistanceSq = d2;
+      closestId = entry.point.id;
+    }
+  }
+
+  return closestId;
+}
+
+export function hitTestSegmentId(
+  screenPoint: Vec2,
+  scene: SceneModel,
+  camera: Camera,
+  vp: Viewport,
+  tolerancePx: number
+): string | null {
+  let bestId: string | null = null;
+  let best = tolerancePx;
+
+  for (let i = scene.segments.length - 1; i >= 0; i -= 1) {
+    const seg = scene.segments[i];
+    if (!seg.visible) continue;
+    const aPoint = scene.points.find((p) => p.id === seg.aId);
+    const bPoint = scene.points.find((p) => p.id === seg.bId);
+    if (!aPoint || !bPoint) continue;
+    const aWorld = getPointWorldPos(aPoint, scene);
+    const bWorld = getPointWorldPos(bPoint, scene);
+    if (!aWorld || !bWorld) continue;
+    const ap = camMath.worldToScreen(aWorld, camera, vp);
+    const bp = camMath.worldToScreen(bWorld, camera, vp);
+    const pr = projectPointToSegment(screenPoint, ap, bp);
+    if (pr.distance <= best) {
+      best = pr.distance;
+      bestId = seg.id;
+    }
+  }
+
+  return bestId;
+}
+
+export function hitTestLineId(
+  screenPoint: Vec2,
+  scene: SceneModel,
+  camera: Camera,
+  vp: Viewport,
+  tolerancePx: number
+): string | null {
+  let bestId: string | null = null;
+  let best = tolerancePx;
+
+  for (let i = scene.lines.length - 1; i >= 0; i -= 1) {
+    const line = scene.lines[i];
+    if (!line.visible) continue;
+    const anchors = getLineWorldAnchors(line, scene);
+    const aWorld = anchors?.a ?? null;
+    const bWorld = anchors?.b ?? null;
+    if (!aWorld || !bWorld) continue;
+    const a = camMath.worldToScreen(aWorld, camera, vp);
+    const b = camMath.worldToScreen(bWorld, camera, vp);
+    const pr = projectPointToLine(screenPoint, a, b);
+    if (pr.distance <= best) {
+      best = pr.distance;
+      bestId = line.id;
+    }
+  }
+
+  return bestId;
+}
+
+export function hitTestCircleId(
+  screenPoint: Vec2,
+  scene: SceneModel,
+  camera: Camera,
+  vp: Viewport,
+  tolerancePx: number
+): string | null {
+  let bestId: string | null = null;
+  let best = tolerancePx;
+
+  for (let i = scene.circles.length - 1; i >= 0; i -= 1) {
+    const circle = scene.circles[i];
+    if (!circle.visible) continue;
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (!geom) continue;
+    const centerScreen = camMath.worldToScreen(geom.center, camera, vp);
+    const radiusPx = geom.radius * camera.zoom;
+    const d = Math.abs(Math.hypot(screenPoint.x - centerScreen.x, screenPoint.y - centerScreen.y) - radiusPx);
+    if (d <= best) {
+      best = d;
+      bestId = circle.id;
+    }
+  }
+
+  return bestId;
+}
+
+export function hitTestAngleId(
+  screenPoint: Vec2,
+  resolvedAngles: ResolvedAngle[],
+  camera: Camera,
+  vp: Viewport,
+  tolerancePx: number
+): string | null {
+  let bestId: string | null = null;
+  let best = tolerancePx;
+  for (let i = resolvedAngles.length - 1; i >= 0; i -= 1) {
+    const entry = resolvedAngles[i];
+    if (!entry.angle.visible) continue;
+    const as = camMath.worldToScreen(entry.a, camera, vp);
+    const bs = camMath.worldToScreen(entry.b, camera, vp);
+    const cs = camMath.worldToScreen(entry.c, camera, vp);
+    const r = Math.max(12, entry.angle.style.arcRadius * camera.zoom);
+    const d =
+      entry.angle.style.markStyle === "right"
+        ? distanceToRightAngleMark(screenPoint, as, bs, cs, r * 0.55)
+        : distanceToAngleArc(screenPoint, as, bs, entry.theta, r);
+    if (d <= best) {
+      best = d;
+      bestId = entry.angle.id;
+    }
+  }
+  return bestId;
+}
+
+export function hitTestTopObject(
+  scene: SceneModel,
+  camera: Camera,
+  vp: Viewport,
+  screenPoint: Vec2,
+  opts: HitTestOptions = {}
+): EngineHit {
+  const pointTolPx = opts.pointTolPx ?? 10;
+  const angleTolPx = opts.angleTolPx ?? 10;
+  const segmentTolPx = opts.segmentTolPx ?? 8;
+  const lineTolPx = opts.lineTolPx ?? 8;
+  const circleTolPx = opts.circleTolPx ?? 8;
+
+  const resolvedPoints: ResolvedPoint[] = [];
+  for (let i = 0; i < scene.points.length; i += 1) {
+    const point = scene.points[i];
+    const world = getPointWorldPos(point, scene);
+    if (!world) continue;
+    resolvedPoints.push({ point, world });
+  }
+
+  const pointId = hitTestPointId(screenPoint, resolvedPoints, camera, vp, pointTolPx);
+  if (pointId) return { type: "point", id: pointId };
+  const angleId = hitTestAngleId(screenPoint, resolveVisibleAngles(scene), camera, vp, angleTolPx);
+  if (angleId) return { type: "angle", id: angleId };
+  const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx);
+  if (segmentId) return { type: "segment", id: segmentId };
+  const lineId = hitTestLineId(screenPoint, scene, camera, vp, lineTolPx);
+  if (lineId) return { type: "line", id: lineId };
+  const circleId = hitTestCircleId(screenPoint, scene, camera, vp, circleTolPx);
+  if (circleId) return { type: "circle", id: circleId };
+
+  return null;
+}
+
+function angleSweep(aScreen: Vec2, bScreen: Vec2, thetaRad: number): { start: number; sweep: number } {
+  const start = Math.atan2(aScreen.y - bScreen.y, aScreen.x - bScreen.x);
+  const sweep = Math.min(Math.PI * 2, Math.max(0, thetaRad));
+  return { start, sweep };
+}
+
+function distanceToAngleArc(p: Vec2, aScreen: Vec2, bScreen: Vec2, thetaRad: number, radiusPx: number): number {
+  const sweep = angleSweep(aScreen, bScreen, thetaRad);
+  const dx = p.x - bScreen.x;
+  const dy = p.y - bScreen.y;
+  const dist = Math.hypot(dx, dy);
+  const theta = Math.atan2(dy, dx);
+  const isWithin = isAngleOnArc(theta, sweep.start, sweep.sweep);
+  if (!isWithin) {
+    const pStart = { x: bScreen.x + Math.cos(sweep.start) * radiusPx, y: bScreen.y + Math.sin(sweep.start) * radiusPx };
+    const pEnd = {
+      x: bScreen.x + Math.cos(sweep.start - sweep.sweep) * radiusPx,
+      y: bScreen.y + Math.sin(sweep.start - sweep.sweep) * radiusPx,
+    };
+    return Math.min(Math.hypot(p.x - pStart.x, p.y - pStart.y), Math.hypot(p.x - pEnd.x, p.y - pEnd.y));
+  }
+  return Math.abs(dist - radiusPx);
+}
+
+function distanceToRightAngleMark(p: Vec2, aScreen: Vec2, bScreen: Vec2, cScreen: Vec2, sizePx: number): number {
+  const u = normalizeScreenVec({ x: aScreen.x - bScreen.x, y: aScreen.y - bScreen.y });
+  const v = normalizeScreenVec({ x: cScreen.x - bScreen.x, y: cScreen.y - bScreen.y });
+  const p1 = { x: bScreen.x + u.x * sizePx, y: bScreen.y + u.y * sizePx };
+  const p3 = { x: bScreen.x + v.x * sizePx, y: bScreen.y + v.y * sizePx };
+  const p2 = { x: p1.x + v.x * sizePx, y: p1.y + v.y * sizePx };
+  const d1 = projectPointToSegment(p, p1, p2).distance;
+  const d2 = projectPointToSegment(p, p2, p3).distance;
+  const d3 = projectPointToSegment(p, p1, p3).distance;
+  return Math.min(d1, d2, d3);
+}
+
+function normalizeScreenVec(v: Vec2): Vec2 {
+  const len = Math.hypot(v.x, v.y);
+  if (len < 1e-9) return { x: 1, y: 0 };
+  return { x: v.x / len, y: v.y / len };
+}
+
+function isAngleOnArc(theta: number, start: number, sweep: number): boolean {
+  const norm = (a: number): number => {
+    let out = a;
+    while (out < 0) out += Math.PI * 2;
+    while (out >= Math.PI * 2) out -= Math.PI * 2;
+    return out;
+  };
+  const t = norm(theta);
+  const s = norm(start);
+  const delta = norm(s - t);
+  return delta <= sweep + 1e-9;
+}

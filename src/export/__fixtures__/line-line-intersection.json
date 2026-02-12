@@ -1,0 +1,22 @@
+{
+  "points": [
+    { "id": "p1", "kind": "free", "name": "A", "x": -2, "y": -1 },
+    { "id": "p2", "kind": "free", "name": "B", "x": 2, "y": 3 },
+    { "id": "p3", "kind": "free", "name": "C", "x": -2, "y": 2 },
+    { "id": "p4", "kind": "free", "name": "D", "x": 3, "y": -1 },
+    {
+      "id": "p5",
+      "kind": "intersectionPoint",
+      "name": "E",
+      "objA": { "type": "line", "id": "l1" },
+      "objB": { "type": "line", "id": "l2" },
+      "preferredWorld": { "x": 0.27, "y": 1.27 }
+    }
+  ],
+  "lines": [
+    { "id": "l1", "aId": "p1", "bId": "p2", "visible": true },
+    { "id": "l2", "aId": "p3", "bId": "p4", "visible": true }
+  ],
+  "segments": [],
+  "circles": []
+}

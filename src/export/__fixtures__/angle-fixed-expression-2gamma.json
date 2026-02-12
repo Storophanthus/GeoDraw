@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "A",
+      "definition": { "kind": "free", "x": 1, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_2",
+      "name": "B",
+      "definition": { "kind": "free", "x": 0, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_3",
+      "name": "C",
+      "definition": { "kind": "free", "x": 0.5, "y": 0.8660254037844386 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_4",
+      "name": "D",
+      "definition": {
+        "kind": "pointByRotation",
+        "centerId": "p_2",
+        "pointId": "p_1",
+        "angleExpr": "2*gamma",
+        "direction": "CCW",
+        "radiusMode": "keep"
+      },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "lines": [
+    {
+      "id": "l_1",
+      "kind": "twoPoint",
+      "aId": "p_2",
+      "bId": "p_4",
+      "visible": true
+    }
+  ],
+  "segments": [],
+  "circles": [],
+  "angles": [
+    {
+      "id": "a_1",
+      "aId": "p_1",
+      "bId": "p_2",
+      "cId": "p_3",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "strokeOpacity": 1,
+        "textColor": "#0f172a",
+        "textSize": 16,
+        "fillEnabled": false,
+        "fillColor": "#93c5fd",
+        "fillOpacity": 0.2,
+        "markStyle": "arc",
+        "arcRadius": 1.2,
+        "labelText": "\\gamma",
+        "labelPosWorld": { "x": 0.6, "y": 0.4 },
+        "showLabel": true,
+        "showValue": false
+      }
+    }
+  ]
+}

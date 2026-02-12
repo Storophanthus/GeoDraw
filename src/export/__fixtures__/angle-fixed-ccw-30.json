@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "A",
+      "definition": { "kind": "free", "x": 1, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_2",
+      "name": "B",
+      "definition": { "kind": "free", "x": 0, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_3",
+      "name": "C",
+      "definition": {
+        "kind": "pointByRotation",
+        "centerId": "p_2",
+        "pointId": "p_1",
+        "angleDeg": 30,
+        "direction": "CCW",
+        "radiusMode": "keep"
+      },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "lines": [
+    {
+      "id": "l_1",
+      "kind": "twoPoint",
+      "aId": "p_2",
+      "bId": "p_3",
+      "visible": true
+    }
+  ],
+  "segments": [],
+  "circles": [],
+  "angles": []
+}

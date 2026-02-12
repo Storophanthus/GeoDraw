@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p_1", "name": "A", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 0, "y": 0 } },
+    { "id": "p_2", "name": "B", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 1.8, "y": 0.2 } },
+    { "id": "p_3", "name": "C", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 3.0, "y": 1.6 } },
+    { "id": "p_4", "name": "D", "visible": true, "showLabel": "name", "definition": { "kind": "midpointPoints", "aId": "p_1", "bId": "p_3" } }
+  ],
+  "lines": [
+    { "id": "l_1", "kind": "twoPoint", "aId": "p_1", "bId": "p_3", "visible": true }
+  ],
+  "segments": [],
+  "circles": [],
+  "angles": [
+    {
+      "id": "a_1",
+      "aId": "p_1",
+      "bId": "p_2",
+      "cId": "p_3",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "strokeOpacity": 1,
+        "textColor": "#0f172a",
+        "textSize": 16,
+        "fillEnabled": false,
+        "fillColor": "#93c5fd",
+        "fillOpacity": 0.2,
+        "markStyle": "arc",
+        "arcRadius": 0.9,
+        "labelText": "",
+        "labelPosWorld": { "x": 2.35, "y": 1.1 },
+        "showLabel": true,
+        "showValue": true
+      }
+    }
+  ]
+}

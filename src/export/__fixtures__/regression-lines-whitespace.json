@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p1", "name": "A", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": -20, "y": -16 } },
+    { "id": "p2", "name": "B", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 25, "y": 20 } },
+    { "id": "p3", "name": "C", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": -3, "y": 2 } },
+    { "id": "p4", "name": "D", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 4, "y": -1 } }
+  ],
+  "lines": [
+    { "id": "l1", "aId": "p1", "bId": "p2", "visible": true },
+    { "id": "l2", "aId": "p3", "bId": "p4", "visible": true }
+  ],
+  "segments": [],
+  "circles": []
+}

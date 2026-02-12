@@ -1,14 +1,54 @@
 import type { Vec2 } from "../geo/vec2";
+import type { NumberExpressionEvalResult } from "./eval/numericExpression";
 import {
-  add,
-  circleCircleIntersections,
-  distance,
-  lineCircleIntersectionBranches,
-  lineCircleIntersections,
-  lineLineIntersection,
-  mul,
-  sub,
-} from "../geo/geometry";
+  type AngleExpressionEvalResult,
+} from "./eval/expressionEval";
+import {
+  beginSceneEvalTick as beginSceneEvalTickCore,
+  endSceneEvalTick as endSceneEvalTickCore,
+  getOrCreateSceneEvalContext as getOrCreateSceneEvalContextCore,
+  type SceneEvalStats,
+  updateImplicitEvalStats,
+} from "./eval/evalContext";
+import { objectIntersectionsWithOps } from "./eval/intersectionQueries";
+import { computeOrientedAngleRad } from "./eval/angleMath";
+import {
+  evaluateAngleExpressionDegreesWithCtxInScene,
+  evaluateNumberExpressionWithCtxInScene,
+} from "./eval/numberExpressionEvaluators";
+import { evalNumberByIdWithCtxInScene } from "./eval/numberEvaluators";
+import {
+  asCircleWithCtx,
+  asLineLikeWithCtx,
+  buildGeometryResolveOpsWithCtx,
+  getCircleWorldGeometryWithCtxInScene,
+  resolveLineAnchorsWithCtx,
+} from "./eval/geometryAdapters";
+import {
+  rememberStableGenericIntersectionPoint,
+  rememberStableCircleLinePoint,
+  resolveCircleLinePairAssignmentsWithCtx,
+  resolveGenericIntersectionPairAssignmentsWithCtx,
+} from "./eval/intersectionStabilityAdapters";
+import {
+  evalPointUnchecked as evalPointUncheckedCore,
+} from "./eval/pointEvalDispatch";
+import { evalPointWithCtxInScene } from "./eval/pointRuntime";
+import {
+  buildSceneEvalContextForScene,
+  type SceneEvalContext,
+} from "./eval/sceneContextBuilder";
+
+export {
+  isNameUnique,
+  isPointDraggable,
+  isValidPointName,
+  movePoint,
+  nextLabelFromIndex,
+} from "./pointBasics";
+export type { NumberExpressionEvalResult } from "./eval/numericExpression";
+export type { AngleExpressionEvalResult } from "./eval/expressionEval";
+export type { SceneEvalStats } from "./eval/evalContext";
 
 export type PointShape =
   | "circle"
@@ -39,17 +79,57 @@ export type PointStyle = {
 export type LineStyle = {
   strokeColor: string;
   strokeWidth: number;
-  dash: "solid" | "dashed";
+  dash: "solid" | "dashed" | "dotted";
   opacity: number;
+  segmentMark?: {
+    enabled: boolean;
+    mark: "none" | "|" | "||" | "|||" | "s" | "s|" | "s||" | "x" | "o" | "oo" | "z";
+    pos: number;
+    sizePt: number;
+    color?: string;
+    lineWidthPt?: number;
+  };
+  segmentArrowMark?: {
+    enabled: boolean;
+    mode: "end" | "mid";
+    direction: "->" | "<-" | "<->";
+    pos?: number;
+    distribution?: "single" | "multi";
+    startPos?: number;
+    endPos?: number;
+    step?: number;
+    sizeScale?: number;
+    color?: string;
+    lineWidthPt?: number;
+  };
 };
 
 export type CircleStyle = {
   strokeColor: string;
   strokeWidth: number;
-  strokeDash: "solid" | "dashed";
+  strokeDash: "solid" | "dashed" | "dotted";
   strokeOpacity: number;
   fillColor?: string;
   fillOpacity?: number;
+};
+
+export type AngleMarkStyle = "arc" | "right" | "none";
+
+export type AngleStyle = {
+  strokeColor: string;
+  strokeWidth: number;
+  strokeOpacity: number;
+  textColor: string;
+  textSize: number;
+  fillEnabled: boolean;
+  fillColor: string;
+  fillOpacity: number;
+  markStyle: AngleMarkStyle;
+  arcRadius: number;
+  labelText: string;
+  labelPosWorld: Vec2;
+  showLabel: boolean;
+  showValue: boolean;
 };
 
 export type ShowLabelMode = "none" | "name" | "caption";
@@ -136,10 +216,30 @@ export type PointOnCircle = {
   style: PointStyle;
 };
 
+export type PointByRotation = {
+  id: string;
+  kind: "pointByRotation";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  centerId: string;
+  pointId: string;
+  angleDeg?: number;
+  angleExpr?: string;
+  direction: "CCW" | "CW";
+  radiusMode: "keep";
+  style: PointStyle;
+};
+
 export type GeometryObjectRef =
   | { type: "line"; id: string }
   | { type: "segment"; id: string }
   | { type: "circle"; id: string };
+
+export type LineLikeObjectRef = { type: "line"; id: string } | { type: "segment"; id: string };
 
 export type IntersectionPoint = {
   id: string;
@@ -153,6 +253,7 @@ export type IntersectionPoint = {
   objA: GeometryObjectRef;
   objB: GeometryObjectRef;
   preferredWorld: Vec2;
+  excludePointId?: string;
   style: PointStyle;
 };
 
@@ -168,6 +269,7 @@ export type CircleLineIntersectionPoint = {
   circleId: string;
   lineId: string;
   branchIndex: 0 | 1;
+  excludePointId?: string;
   style: PointStyle;
 };
 
@@ -178,6 +280,7 @@ export type ScenePoint =
   | PointOnLine
   | PointOnSegment
   | PointOnCircle
+  | PointByRotation
   | IntersectionPoint
   | CircleLineIntersectionPoint;
 
@@ -190,20 +293,153 @@ export type SceneSegment = {
   style: LineStyle;
 };
 
-export type SceneLine = {
+export type SceneLineTwoPoint = {
   id: string;
+  kind?: "twoPoint";
   aId: string;
   bId: string;
   visible: boolean;
   style: LineStyle;
 };
 
-export type SceneCircle = {
+export type SceneLinePerpendicular = {
   id: string;
+  kind: "perpendicular";
+  throughId: string;
+  base: LineLikeObjectRef;
+  visible: boolean;
+  style: LineStyle;
+};
+
+export type SceneLineParallel = {
+  id: string;
+  kind: "parallel";
+  throughId: string;
+  base: LineLikeObjectRef;
+  visible: boolean;
+  style: LineStyle;
+};
+
+export type SceneLineAngleBisector = {
+  id: string;
+  kind: "angleBisector";
+  aId: string;
+  bId: string;
+  cId: string;
+  visible: boolean;
+  style: LineStyle;
+};
+
+export type SceneLineTangent = {
+  id: string;
+  kind: "tangent";
+  throughId: string;
+  circleId: string;
+  branchIndex: 0 | 1;
+  visible: boolean;
+  style: LineStyle;
+};
+
+export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular | SceneLineParallel | SceneLineAngleBisector | SceneLineTangent;
+
+export type SceneCircleTwoPoint = {
+  id: string;
+  kind?: "twoPoint";
   centerId: string;
   throughId: string;
   visible: boolean;
   style: CircleStyle;
+};
+
+export type SceneCircleThreePoint = {
+  id: string;
+  kind: "threePoint";
+  aId: string;
+  bId: string;
+  cId: string;
+  visible: boolean;
+  style: CircleStyle;
+};
+
+export type SceneCircleFixedRadius = {
+  id: string;
+  kind: "fixedRadius";
+  centerId: string;
+  radius: number;
+  radiusExpr?: string;
+  visible: boolean;
+  style: CircleStyle;
+};
+
+export type SceneCircle = SceneCircleTwoPoint | SceneCircleThreePoint | SceneCircleFixedRadius;
+
+export type SceneAngle = {
+  id: string;
+  kind?: "angle" | "sector";
+  aId: string;
+  bId: string;
+  cId: string;
+  visible: boolean;
+  style: AngleStyle;
+};
+
+export type SceneNumberConstant = {
+  kind: "constant";
+  value: number;
+};
+
+export type SceneNumberDistancePoints = {
+  kind: "distancePoints";
+  aId: string;
+  bId: string;
+};
+
+export type SceneNumberSegmentLength = {
+  kind: "segmentLength";
+  segId: string;
+};
+
+export type SceneNumberCircleRadius = {
+  kind: "circleRadius";
+  circleId: string;
+};
+
+export type SceneNumberCircleArea = {
+  kind: "circleArea";
+  circleId: string;
+};
+
+export type SceneNumberAngleDegrees = {
+  kind: "angleDegrees";
+  angleId: string;
+};
+
+export type SceneNumberRatio = {
+  kind: "ratio";
+  numeratorId: string;
+  denominatorId: string;
+};
+
+export type SceneNumberExpression = {
+  kind: "expression";
+  expr: string;
+};
+
+export type SceneNumberDefinition =
+  | SceneNumberConstant
+  | SceneNumberDistancePoints
+  | SceneNumberSegmentLength
+  | SceneNumberCircleRadius
+  | SceneNumberCircleArea
+  | SceneNumberAngleDegrees
+  | SceneNumberRatio
+  | SceneNumberExpression;
+
+export type SceneNumber = {
+  id: string;
+  name: string;
+  visible: boolean;
+  definition: SceneNumberDefinition;
 };
 
 export type SceneModel = {
@@ -211,30 +447,33 @@ export type SceneModel = {
   segments: SceneSegment[];
   lines: SceneLine[];
   circles: SceneCircle[];
+  angles: SceneAngle[];
+  numbers: SceneNumber[];
 };
 
-export function nextLabelFromIndex(index: number): string {
-  const letterIndex = index % 26;
-  const cycle = Math.floor(index / 26);
-  const letter = String.fromCharCode(65 + letterIndex);
-  if (cycle === 0) return letter;
-  return `${letter}_${cycle}`;
+const sceneEvalContexts = new WeakMap<SceneModel, SceneEvalContext>();
+const sceneLastEvalStats = new WeakMap<SceneModel, SceneEvalStats>();
+let sceneEvalTick = 0;
+
+function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalContext {
+  const tick = ++sceneEvalTick;
+  return buildSceneEvalContextForScene(scene, explicit, tick, performance.now());
 }
 
-export function isNameUnique(
-  name: string,
-  existingNames: Iterable<string>,
-  ignoreName?: string
-): boolean {
-  for (const existing of existingNames) {
-    if (existing === ignoreName) continue;
-    if (existing === name) return false;
-  }
-  return true;
+function getOrCreateSceneEvalContext(scene: SceneModel): SceneEvalContext {
+  return getOrCreateSceneEvalContextCore(scene, sceneEvalContexts, () => buildSceneEvalContext(scene, false));
 }
 
-export function isValidPointName(name: string): boolean {
-  return /^[A-Za-z][A-Za-z0-9_]*$/.test(name);
+export function beginSceneEvalTick(scene: SceneModel): void {
+  beginSceneEvalTickCore(scene, sceneEvalContexts, () => buildSceneEvalContext(scene, true));
+}
+
+export function endSceneEvalTick(scene: SceneModel): SceneEvalStats | null {
+  return endSceneEvalTickCore(scene, sceneEvalContexts, sceneLastEvalStats);
+}
+
+export function getLastSceneEvalStats(scene: SceneModel): SceneEvalStats | null {
+  return sceneLastEvalStats.get(scene) ?? null;
 }
 
 export function getPointWorldPos(
@@ -242,178 +481,240 @@ export function getPointWorldPos(
   scene: SceneModel,
   visited: Set<string> = new Set()
 ): Vec2 | null {
-  if (visited.has(point.id)) return null;
-  const nextVisited = new Set(visited);
-  nextVisited.add(point.id);
-
-  if (point.kind === "free") return point.position;
-
-  if (point.kind === "midpointPoints") {
-    const a = scene.points.find((item) => item.id === point.aId);
-    const b = scene.points.find((item) => item.id === point.bId);
-    if (!a || !b) return null;
-    const pa = getPointWorldPos(a, scene, nextVisited);
-    const pb = getPointWorldPos(b, scene, nextVisited);
-    if (!pa || !pb) return null;
-    return { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 };
-  }
-
-  if (point.kind === "midpointSegment") {
-    const seg = scene.segments.find((item) => item.id === point.segId);
-    if (!seg) return null;
-    const a = scene.points.find((item) => item.id === seg.aId);
-    const b = scene.points.find((item) => item.id === seg.bId);
-    if (!a || !b) return null;
-    const pa = getPointWorldPos(a, scene, nextVisited);
-    const pb = getPointWorldPos(b, scene, nextVisited);
-    if (!pa || !pb) return null;
-    return { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 };
-  }
-
-  if (point.kind === "pointOnLine") {
-    const line = scene.lines.find((item) => item.id === point.lineId);
-    if (!line) return null;
-    const a = getPointWorldById(line.aId, scene, nextVisited);
-    const b = getPointWorldById(line.bId, scene, nextVisited);
-    if (!a || !b) return null;
-    return add(a, mul(sub(b, a), point.s));
-  }
-
-  if (point.kind === "pointOnSegment") {
-    const seg = scene.segments.find((item) => item.id === point.segId);
-    if (!seg) return null;
-    const a = getPointWorldById(seg.aId, scene, nextVisited);
-    const b = getPointWorldById(seg.bId, scene, nextVisited);
-    if (!a || !b) return null;
-    return add(a, mul(sub(b, a), clamp(point.u, 0, 1)));
-  }
-
-  if (point.kind === "pointOnCircle") {
-    const circle = scene.circles.find((item) => item.id === point.circleId);
-    if (!circle) return null;
-    const center = getPointWorldById(circle.centerId, scene, nextVisited);
-    const through = getPointWorldById(circle.throughId, scene, nextVisited);
-    if (!center || !through) return null;
-    const radius = distance(center, through);
-    return {
-      x: center.x + Math.cos(point.t) * radius,
-      y: center.y + Math.sin(point.t) * radius,
-    };
-  }
-
-  if (point.kind === "circleLineIntersectionPoint") {
-    const circle = scene.circles.find((item) => item.id === point.circleId);
-    const line = scene.lines.find((item) => item.id === point.lineId);
-    if (!circle || !line) return null;
-    const center = getPointWorldById(circle.centerId, scene, nextVisited);
-    const through = getPointWorldById(circle.throughId, scene, nextVisited);
-    const la = getPointWorldById(line.aId, scene, nextVisited);
-    const lb = getPointWorldById(line.bId, scene, nextVisited);
-    if (!center || !through || !la || !lb) return null;
-    const r = distance(center, through);
-    const branches = lineCircleIntersectionBranches(la, lb, center, r);
-    if (branches.length === 0) return null;
-    if (branches.length === 1) return branches[0].point;
-    return branches[point.branchIndex]?.point ?? branches[0].point;
-  }
-
-  const intersections = objectIntersections(point.objA, point.objB, scene);
-  if (intersections.length === 0) return null;
-  return chooseClosestToPreferred(intersections, point.preferredWorld);
+  void visited;
+  const ctx = getOrCreateSceneEvalContext(scene);
+  const value = evalPoint(point.id, scene, ctx);
+  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
+  return value;
 }
 
-export function isPointDraggable(point: ScenePoint): boolean {
-  if (point.locked) return false;
-  return (
-    point.kind === "free" ||
-    point.kind === "pointOnLine" ||
-    point.kind === "pointOnSegment" ||
-    point.kind === "pointOnCircle"
-  );
+function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  return evalPointWithCtxInScene(pointId, scene, ctx, {
+    evalPointUnchecked,
+  });
 }
 
-export function movePoint(point: ScenePoint, world: Vec2): ScenePoint {
-  if (point.kind !== "free") return point;
-  if (point.locked) return point;
-  return { ...point, position: world };
+function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  return evalPointUncheckedCore(point, scene, ctx, {
+    getPointWorldById,
+    resolveLineAnchorsById: (lineId, s, c) => {
+      const line = c.lineById.get(lineId);
+      if (!line) return null;
+      return resolveLineAnchors(line, s, c);
+    },
+    getCircleWorldGeometryById: (circleId, s, c) => {
+      const circle = c.circleById.get(circleId);
+      if (!circle) return null;
+      return getCircleWorldGeometryWithCtx(circle, s, c);
+    },
+    evaluateAngleExpressionDegreesWithCtx,
+    resolveCircleLinePairAssignments,
+    rememberStableCircleLinePoint,
+    objectIntersections,
+    resolveGenericIntersectionPairAssignments,
+    rememberStableGenericIntersectionPoint,
+  });
 }
 
-function getPointWorldById(pointId: string, scene: SceneModel, visited: Set<string>): Vec2 | null {
-  const point = scene.points.find((item) => item.id === pointId);
-  if (!point) return null;
-  return getPointWorldPos(point, scene, visited);
+function getPointWorldById(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  return evalPoint(pointId, scene, ctx);
 }
 
-function objectIntersections(a: GeometryObjectRef, b: GeometryObjectRef, scene: SceneModel): Vec2[] {
-  const la = asLine(a, scene);
-  const lb = asLine(b, scene);
-  if (la && lb) {
-    const p = lineLineIntersection(la.a, la.b, lb.a, lb.b);
-    return p ? [p] : [];
-  }
-
-  const circleA = asCircle(a, scene);
-  const circleB = asCircle(b, scene);
-
-  if (la && circleB) return lineCircleIntersections(la.a, la.b, circleB.center, circleB.radius);
-  if (lb && circleA) return lineCircleIntersections(lb.a, lb.b, circleA.center, circleA.radius);
-  if (circleA && circleB) {
-    return circleCircleIntersections(circleA.center, circleA.radius, circleB.center, circleB.radius);
-  }
-  return [];
+function objectIntersections(
+  a: GeometryObjectRef,
+  b: GeometryObjectRef,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): Vec2[] {
+  return objectIntersectionsWithOps(a, b, {
+    asLineLike: (ref) => asLineLike(ref, scene, ctx),
+    asCircle: (ref) => asCircle(ref, scene, ctx),
+    onLineLineCall: () => {
+      ctx.stats.lineLineCalls += 1;
+    },
+    onCircleLineCall: () => {
+      ctx.stats.circleLineCalls += 1;
+    },
+    onCircleCircleCall: () => {
+      ctx.stats.circleCircleCalls += 1;
+    },
+    onAllocation: (count) => {
+      ctx.stats.allocationsEstimate += count;
+    },
+  });
 }
 
-function asLine(
+function asLineLike(
   ref: GeometryObjectRef,
-  scene: SceneModel
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): { a: Vec2; b: Vec2; finite: boolean } | null {
+  return asLineLikeWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
+}
+
+function resolveLineAnchors(
+  line: SceneLine,
+  scene: SceneModel,
+  ctx: SceneEvalContext
 ): { a: Vec2; b: Vec2 } | null {
-  if (ref.type === "line") {
-    const line = scene.lines.find((item) => item.id === ref.id);
-    if (!line) return null;
-    const a = getPointWorldById(line.aId, scene, new Set());
-    const b = getPointWorldById(line.bId, scene, new Set());
-    if (!a || !b) return null;
-    return { a, b };
-  }
+  return resolveLineAnchorsWithCtx(line, scene, ctx, buildGeometryResolveOps(scene, ctx));
+}
 
-  if (ref.type === "segment") {
-    const seg = scene.segments.find((item) => item.id === ref.id);
-    if (!seg) return null;
-    const a = getPointWorldById(seg.aId, scene, new Set());
-    const b = getPointWorldById(seg.bId, scene, new Set());
-    if (!a || !b) return null;
-    return { a, b };
-  }
-
-  return null;
+export function getLineWorldAnchors(line: SceneLine, scene: SceneModel): { a: Vec2; b: Vec2 } | null {
+  const ctx = getOrCreateSceneEvalContext(scene);
+  const value = resolveLineAnchors(line, scene, ctx);
+  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
+  return value;
 }
 
 function asCircle(
   ref: GeometryObjectRef,
-  scene: SceneModel
+  scene: SceneModel,
+  ctx: SceneEvalContext
 ): { center: Vec2; radius: number } | null {
-  if (ref.type !== "circle") return null;
-  const circle = scene.circles.find((item) => item.id === ref.id);
-  if (!circle) return null;
-  const center = getPointWorldById(circle.centerId, scene, new Set());
-  const through = getPointWorldById(circle.throughId, scene, new Set());
-  if (!center || !through) return null;
-  return { center, radius: distance(center, through) };
+  return asCircleWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
 }
 
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
+function getCircleWorldGeometryWithCtx(
+  circle: SceneCircle,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): { center: Vec2; radius: number } | null {
+  return getCircleWorldGeometryWithCtxInScene(circle, scene, ctx, buildGeometryResolveOps(scene, ctx));
 }
 
-function chooseClosestToPreferred(points: Vec2[], preferredWorld: Vec2): Vec2 {
-  let best = points[0];
-  let bestDist = distance(best, preferredWorld);
-  for (let i = 1; i < points.length; i += 1) {
-    const d = distance(points[i], preferredWorld);
-    if (d < bestDist) {
-      best = points[i];
-      bestDist = d;
+function buildGeometryResolveOps(scene: SceneModel, ctx: SceneEvalContext) {
+  return buildGeometryResolveOpsWithCtx(scene, ctx, {
+    getPointWorldById,
+    evaluateNumberExpressionWithCtx,
+  });
+}
+
+export function getCircleWorldGeometry(circle: SceneCircle, scene: SceneModel): { center: Vec2; radius: number } | null {
+  const ctx = getOrCreateSceneEvalContext(scene);
+  const value = getCircleWorldGeometryWithCtx(circle, scene, ctx);
+  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
+  return value;
+}
+
+function resolveCircleLinePairAssignments(
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  circleId: string,
+  lineId: string,
+  branches: Array<{ point: Vec2; t: number }>,
+  stabilitySignature: string
+): Map<string, Vec2 | null> {
+  return resolveCircleLinePairAssignmentsWithCtx(scene, ctx, circleId, lineId, branches, stabilitySignature, {
+    getPointWorldById,
+  });
+}
+
+function resolveGenericIntersectionPairAssignments(
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  objA: GeometryObjectRef,
+  objB: GeometryObjectRef,
+  intersections: Vec2[]
+): Map<string, Vec2 | null> {
+  return resolveGenericIntersectionPairAssignmentsWithCtx(scene, ctx, objA, objB, intersections, {
+    getPointWorldById,
+  });
+}
+
+export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel): number | null {
+  const id = typeof numOrId === "string" ? numOrId : numOrId.id;
+  const ctx = getOrCreateSceneEvalContext(scene);
+  const value = evalNumberById(id, scene, ctx);
+  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
+  return value;
+}
+
+function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): number | null {
+  return evalNumberByIdWithCtxInScene(id, scene, ctx, {
+    getPointWorldById,
+    getCircleWorldGeometryById: (circleId, s, c) => {
+      const circle = c.circleById.get(circleId);
+      if (!circle) return null;
+      return getCircleWorldGeometryWithCtx(circle, s, c);
+    },
+    evaluateNumberExpressionWithCtx,
+  });
+}
+
+export { computeConvexAngleRad, computeOrientedAngleRad } from "./eval/angleMath";
+
+export function evaluateAngleExpressionDegrees(scene: SceneModel, exprRaw: string): AngleExpressionEvalResult {
+  const expr = exprRaw.trim();
+  if (!expr) return { ok: false, error: "Empty angle expression." };
+  const ctx = getOrCreateSceneEvalContext(scene);
+  return evaluateAngleExpressionDegreesWithCtx(scene, expr, ctx);
+}
+
+export function evaluateNumberExpression(scene: SceneModel, exprRaw: string): NumberExpressionEvalResult {
+  const expr = exprRaw.trim();
+  if (!expr) return { ok: false, error: "Empty number expression." };
+  const ctx = getOrCreateSceneEvalContext(scene);
+  return evaluateNumberExpressionWithCtx(scene, expr, ctx);
+}
+
+function evaluateAngleExpressionDegreesWithCtx(
+  scene: SceneModel,
+  exprRaw: string,
+  ctx: SceneEvalContext
+): AngleExpressionEvalResult {
+  return evaluateAngleExpressionDegreesWithCtxInScene(
+    exprRaw,
+    {
+      angles: scene.angles.map((angle) => ({
+        id: angle.id,
+        aId: angle.aId,
+        bId: angle.bId,
+        cId: angle.cId,
+        labelText: angle.style.labelText,
+      })),
+      numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
+    },
+    {
+      getAngleValueDeg: (angleId) => {
+        const angle = ctx.angleById.get(angleId);
+        if (!angle) return null;
+        const a = getPointWorldById(angle.aId, scene, ctx);
+        const b = getPointWorldById(angle.bId, scene, ctx);
+        const c = getPointWorldById(angle.cId, scene, ctx);
+        if (!a || !b || !c) return null;
+        const theta = computeOrientedAngleRad(a, b, c);
+        if (theta === null) return null;
+        return (theta * 180) / Math.PI;
+      },
+      getAnglePointNames: (angleId) => {
+        const angle = ctx.angleById.get(angleId);
+        if (!angle) return null;
+        const pa = ctx.pointById.get(angle.aId);
+        const pb = ctx.pointById.get(angle.bId);
+        const pc = ctx.pointById.get(angle.cId);
+        if (!pa || !pb || !pc) return null;
+        return { aName: pa.name, bName: pb.name, cName: pc.name };
+      },
+      getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
     }
-  }
-  return best;
+  );
+}
+
+function evaluateNumberExpressionWithCtx(
+  scene: SceneModel,
+  exprRaw: string,
+  ctx: SceneEvalContext,
+  excludeNumberId?: string
+): NumberExpressionEvalResult {
+  return evaluateNumberExpressionWithCtxInScene(
+    exprRaw,
+    {
+      numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
+    },
+    {
+      getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
+      excludeNumberId,
+    }
+  );
 }
