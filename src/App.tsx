@@ -36,6 +36,7 @@ import {
 import { useGeoStore, type ActiveTool } from "./state/geoStore";
 import type { Camera } from "./view/camera";
 import { CanvasView } from "./view/CanvasView";
+import { ObjectBrowser } from "./ui/ObjectBrowser";
 
 type IconProps = {
   size?: number;
@@ -70,6 +71,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   parallel_line: { icon: ParallelIcon, tooltip: "Parallel Line", ariaLabel: "Parallel line tool" },
   angle: { icon: AngleIcon, tooltip: "Angle (deg)", ariaLabel: "Angle tool" },
   angle_fixed: { icon: AngleFixedIcon, tooltip: "Angle with Fixed Value (deg)", ariaLabel: "Fixed angle tool" },
+  angle_bisector: { icon: AngleBisectorIcon, tooltip: "Internal Angle Bisector", ariaLabel: "Angle bisector tool" },
   circle_cp: { icon: Circle, tooltip: "Circle Center + Point (O)", ariaLabel: "Circle center-through-point tool" },
   circle_3p: { icon: CircleThreePointIcon, tooltip: "Circle through 3 Points", ariaLabel: "Circle through three points tool" },
   circle_fixed: { icon: CircleRadiusIcon, tooltip: "Circle with Fixed Radius", ariaLabel: "Circle with fixed radius tool" },
@@ -78,7 +80,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
   { id: "move", label: "MOVE", tools: ["move"] },
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
-  { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line"] },
+  { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "CIRCLES", tools: ["circle_cp", "circle_3p", "circle_fixed"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
@@ -435,10 +437,10 @@ export default function App() {
       const optionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
       const viewport = exportUseCurrentView
         ? getViewportFromCamera(
-            camera,
-            leftCollapsed ? COLLAPSED_W : leftWidth,
-            rightCollapsed ? COLLAPSED_W : rightWidth
-          )
+          camera,
+          leftCollapsed ? COLLAPSED_W : leftWidth,
+          rightCollapsed ? COLLAPSED_W : rightWidth
+        )
         : undefined;
       setTikzText(
         exportTikzWithOptions(scene, {
@@ -633,98 +635,11 @@ export default function App() {
 
             {rightTab === "algebra" && <section className="sidebarSection">
               <h2 className="sectionTitle">Objects</h2>
-              <div className="objectList">
-                {scene.points.length === 0 &&
-                  scene.segments.length === 0 &&
-                  scene.lines.length === 0 &&
-                  scene.circles.length === 0 &&
-                  scene.angles.length === 0 &&
-                  scene.numbers.length === 0 && (
-                  <div className="emptyState">No objects</div>
-                )}
-                {scene.points.map((point) => (
-                  <button
-                    key={point.id}
-                    className={
-                      selectedObject?.type === "point" && selectedObject.id === point.id
-                        ? "objectItem active"
-                        : "objectItem"
-                    }
-                    onClick={() => setSelectedObject({ type: "point", id: point.id })}
-                  >
-                    Point {point.name}
-                  </button>
-                ))}
-                {scene.segments.map((segment) => (
-                  <button
-                    key={segment.id}
-                    className={
-                      selectedObject?.type === "segment" && selectedObject.id === segment.id
-                        ? "objectItem active"
-                        : "objectItem"
-                    }
-                    onClick={() => setSelectedObject({ type: "segment", id: segment.id })}
-                  >
-                    Segment {segment.id}
-                  </button>
-                ))}
-                {scene.lines.map((line) => (
-                  <button
-                    key={line.id}
-                    className={
-                      selectedObject?.type === "line" && selectedObject.id === line.id
-                        ? "objectItem active"
-                        : "objectItem"
-                    }
-                    onClick={() => setSelectedObject({ type: "line", id: line.id })}
-                  >
-                    Line {line.id}
-                  </button>
-                ))}
-                {scene.circles.map((circle) => (
-                  <button
-                    key={circle.id}
-                    className={
-                      selectedObject?.type === "circle" && selectedObject.id === circle.id
-                        ? "objectItem active"
-                        : "objectItem"
-                    }
-                    onClick={() => setSelectedObject({ type: "circle", id: circle.id })}
-                  >
-                    Circle {circle.id}
-                  </button>
-                ))}
-                {scene.angles.map((angle) => (
-                  <button
-                    key={angle.id}
-                    className={
-                      selectedObject?.type === "angle" && selectedObject.id === angle.id
-                        ? "objectItem active"
-                        : "objectItem"
-                    }
-                    onClick={() => setSelectedObject({ type: "angle", id: angle.id })}
-                  >
-                    Angle {angle.id}
-                  </button>
-                ))}
-                {scene.numbers.map((num) => (
-                  <button
-                    key={num.id}
-                    className={
-                      selectedObject?.type === "number" && selectedObject.id === num.id
-                        ? "objectItem active"
-                        : "objectItem"
-                    }
-                    onClick={() => setSelectedObject({ type: "number", id: num.id })}
-                  >
-                    Number {num.name}
-                    {(() => {
-                      const value = getNumberValue(num.id, scene);
-                      return value === null ? " = undefined" : ` = ${value.toFixed(6)}`;
-                    })()}
-                  </button>
-                ))}
-              </div>
+              <ObjectBrowser
+                scene={scene}
+                selectedObject={selectedObject}
+                setSelectedObject={setSelectedObject}
+              />
             </section>}
 
             {rightTab === "export" && <section className="sidebarSection">
@@ -926,132 +841,6 @@ export default function App() {
                   </div>
                 </div>
               )}
-              <div className="toolInfo">
-                <div className="subSectionTitle">Numbers</div>
-                <div className="controlRow">
-                  <label className="controlLabel">Constant</label>
-                  <input
-                    className="renameInput"
-                    type="text"
-                    value={newNumberValue}
-                    onChange={(e) => setNewNumberValue(e.target.value)}
-                    placeholder="e.g. 2.5"
-                  />
-                </div>
-                <div className="actionsRow">
-                  <button
-                    className="actionButton secondary"
-                    onClick={() => {
-                      const v = Number(newNumberValue);
-                      if (!Number.isFinite(v)) return;
-                      createNumber({ kind: "constant", value: v });
-                    }}
-                  >
-                    Add Constant
-                  </button>
-                  {selectedSegment && (
-                    <button
-                      className="actionButton secondary"
-                      onClick={() => createNumber({ kind: "segmentLength", segId: selectedSegment.id })}
-                    >
-                      Store Length
-                    </button>
-                  )}
-                  {selectedCircle && (
-                    <button
-                      className="actionButton secondary"
-                      onClick={() => createNumber({ kind: "circleRadius", circleId: selectedCircle.id })}
-                    >
-                      Store Radius
-                    </button>
-                  )}
-                  {selectedCircle && (
-                    <button
-                      className="actionButton secondary"
-                      onClick={() => createNumber({ kind: "circleArea", circleId: selectedCircle.id })}
-                    >
-                      Store Area
-                    </button>
-                  )}
-                  {selectedAngle && (
-                    <button
-                      className="actionButton secondary"
-                      onClick={() => createNumber({ kind: "angleDegrees", angleId: selectedAngle.id })}
-                    >
-                      Store Angle
-                    </button>
-                  )}
-                </div>
-                <div className="controlRow">
-                  <label className="controlLabel">Formula</label>
-                  <input
-                    className="renameInput"
-                    type="text"
-                    value={newNumberExpr}
-                    onChange={(e) => setNewNumberExpr(e.target.value)}
-                    placeholder="e.g. n_1+n_2^2"
-                  />
-                </div>
-                <div className="actionsRow">
-                  <button
-                    className="actionButton secondary"
-                    onClick={() => {
-                      const expr = newNumberExpr.trim();
-                      if (!expr) return;
-                      createNumber({ kind: "expression", expr });
-                    }}
-                  >
-                    Add Formula
-                  </button>
-                </div>
-                {scene.numbers.length >= 2 && (
-                  <>
-                    <div className="controlRow">
-                      <label className="controlLabel">Ratio Num</label>
-                      <select
-                        className="selectInput"
-                        value={ratioNumeratorId}
-                        onChange={(e) => setRatioNumeratorId(e.target.value)}
-                      >
-                        {scene.numbers.map((num) => (
-                          <option key={num.id} value={num.id}>
-                            {num.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="controlRow">
-                      <label className="controlLabel">Ratio Den</label>
-                      <select
-                        className="selectInput"
-                        value={ratioDenominatorId}
-                        onChange={(e) => setRatioDenominatorId(e.target.value)}
-                      >
-                        {scene.numbers.map((num) => (
-                          <option key={num.id} value={num.id}>
-                            {num.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="actionsRow">
-                      <button
-                        className="actionButton secondary"
-                        onClick={() => {
-                          if (!ratioNumeratorId || !ratioDenominatorId || ratioNumeratorId === ratioDenominatorId) return;
-                          createNumber({
-                            kind: "ratio",
-                            numeratorId: ratioNumeratorId,
-                            denominatorId: ratioDenominatorId,
-                          });
-                        }}
-                      >
-                        Add Ratio
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
               {selectedNumber && (
                 <div className="toolInfo">
                   <div className="subSectionTitle">Number</div>
@@ -2076,6 +1865,133 @@ export default function App() {
                   Make this default for this object
                 </label>
               </div>
+
+              <div className="toolInfo">
+                <div className="subSectionTitle">Numbers</div>
+                <div className="controlRow">
+                  <label className="controlLabel">Constant</label>
+                  <input
+                    className="renameInput"
+                    type="text"
+                    value={newNumberValue}
+                    onChange={(e) => setNewNumberValue(e.target.value)}
+                    placeholder="e.g. 2.5"
+                  />
+                </div>
+                <div className="actionsRow">
+                  <button
+                    className="actionButton secondary"
+                    onClick={() => {
+                      const v = Number(newNumberValue);
+                      if (!Number.isFinite(v)) return;
+                      createNumber({ kind: "constant", value: v });
+                    }}
+                  >
+                    Add Constant
+                  </button>
+                  {selectedSegment && (
+                    <button
+                      className="actionButton secondary"
+                      onClick={() => createNumber({ kind: "segmentLength", segId: selectedSegment.id })}
+                    >
+                      Store Length
+                    </button>
+                  )}
+                  {selectedCircle && (
+                    <button
+                      className="actionButton secondary"
+                      onClick={() => createNumber({ kind: "circleRadius", circleId: selectedCircle.id })}
+                    >
+                      Store Radius
+                    </button>
+                  )}
+                  {selectedCircle && (
+                    <button
+                      className="actionButton secondary"
+                      onClick={() => createNumber({ kind: "circleArea", circleId: selectedCircle.id })}
+                    >
+                      Store Area
+                    </button>
+                  )}
+                  {selectedAngle && (
+                    <button
+                      className="actionButton secondary"
+                      onClick={() => createNumber({ kind: "angleDegrees", angleId: selectedAngle.id })}
+                    >
+                      Store Angle
+                    </button>
+                  )}
+                </div>
+                <div className="controlRow">
+                  <label className="controlLabel">Formula</label>
+                  <input
+                    className="renameInput"
+                    type="text"
+                    value={newNumberExpr}
+                    onChange={(e) => setNewNumberExpr(e.target.value)}
+                    placeholder="e.g. n_1+n_2^2"
+                  />
+                </div>
+                <div className="actionsRow">
+                  <button
+                    className="actionButton secondary"
+                    onClick={() => {
+                      const expr = newNumberExpr.trim();
+                      if (!expr) return;
+                      createNumber({ kind: "expression", expr });
+                    }}
+                  >
+                    Add Formula
+                  </button>
+                </div>
+                {scene.numbers.length >= 2 && (
+                  <>
+                    <div className="controlRow">
+                      <label className="controlLabel">Ratio Num</label>
+                      <select
+                        className="selectInput"
+                        value={ratioNumeratorId}
+                        onChange={(e) => setRatioNumeratorId(e.target.value)}
+                      >
+                        {scene.numbers.map((num) => (
+                          <option key={num.id} value={num.id}>
+                            {num.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="controlRow">
+                      <label className="controlLabel">Ratio Den</label>
+                      <select
+                        className="selectInput"
+                        value={ratioDenominatorId}
+                        onChange={(e) => setRatioDenominatorId(e.target.value)}
+                      >
+                        {scene.numbers.map((num) => (
+                          <option key={num.id} value={num.id}>
+                            {num.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="actionsRow">
+                      <button
+                        className="actionButton secondary"
+                        onClick={() => {
+                          if (!ratioNumeratorId || !ratioDenominatorId || ratioNumeratorId === ratioDenominatorId) return;
+                          createNumber({
+                            kind: "ratio",
+                            numeratorId: ratioNumeratorId,
+                            denominatorId: ratioDenominatorId,
+                          });
+                        }}
+                      >
+                        Add Ratio
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </section>}
           </>
         )}
@@ -2102,19 +2018,25 @@ function describeSelectedConstruction(
       const baseText =
         line.base.type === "line"
           ? (() => {
-              const baseLine = lineById.get(line.base.id);
-              return baseLine && baseLine.kind !== "perpendicular" && baseLine.kind !== "parallel"
-                ? `line through ${pointLabel(baseLine.aId, pointNameById)} and ${pointLabel(baseLine.bId, pointNameById)}`
-                : `line ${line.base.id}`;
-            })()
+            const baseLine = lineById.get(line.base.id);
+            return baseLine && baseLine.kind !== "perpendicular" && baseLine.kind !== "parallel"
+              ? `line through ${pointLabel(baseLine.aId, pointNameById)} and ${pointLabel(baseLine.bId, pointNameById)}`
+              : `line ${line.base.id}`;
+          })()
           : (() => {
-              const baseSeg = segmentById.get(line.base.id);
-              return baseSeg
-                ? `segment ${pointLabel(baseSeg.aId, pointNameById)}${pointLabel(baseSeg.bId, pointNameById)}`
-                : `segment ${line.base.id}`;
-            })();
+            const baseSeg = segmentById.get(line.base.id);
+            return baseSeg
+              ? `segment ${pointLabel(baseSeg.aId, pointNameById)}${pointLabel(baseSeg.bId, pointNameById)}`
+              : `segment ${line.base.id}`;
+          })();
       const modeText = line.kind === "perpendicular" ? "Perpendicular" : "Parallel";
       return `${modeText} line through ${pointLabel(line.throughId, pointNameById)} to ${baseText}.`;
+    }
+    if (line.kind === "angleBisector") {
+      return `Internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
+        line.bId,
+        pointNameById
+      )}${pointLabel(line.cId, pointNameById)}.`;
     }
     return `Line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
   }
@@ -2180,9 +2102,9 @@ function describeNumberConstruction(
     const angle = angleById.get(def.angleId);
     return angle
       ? `Degree value of angle ${pointLabel(angle.aId, pointNameById)}${pointLabel(angle.bId, pointNameById)}${pointLabel(
-          angle.cId,
-          pointNameById
-        )}.`
+        angle.cId,
+        pointNameById
+      )}.`
       : `Degree value of angle ${def.angleId}.`;
   }
   if (def.kind === "expression") {
@@ -2222,6 +2144,12 @@ function describePointConstruction(
         circleById
       )}.`;
     }
+    if (line.kind === "angleBisector") {
+      return `Point on internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
+        line.bId,
+        pointNameById
+      )}${pointLabel(line.cId, pointNameById)}.`;
+    }
     return `Point on line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
   }
   if (point.kind === "pointOnSegment") {
@@ -2254,16 +2182,20 @@ function describePointConstruction(
       : `circle ${point.circleId}`;
     const lineText = line
       ? line.kind === "perpendicular" || line.kind === "parallel"
-        ? `line through ${pointLabel(line.throughId, pointNameById)} ${
-            line.kind === "perpendicular" ? "perpendicular to" : "parallel to"
-          } ${describeObjectRef(
-            line.base,
-            pointNameById,
-            lineById,
-            segmentById,
-            circleById
-          )}`
-        : `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
+        ? `line through ${pointLabel(line.throughId, pointNameById)} ${line.kind === "perpendicular" ? "perpendicular to" : "parallel to"
+        } ${describeObjectRef(
+          line.base,
+          pointNameById,
+          lineById,
+          segmentById,
+          circleById
+        )}`
+        : line.kind === "angleBisector"
+          ? `internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
+            line.bId,
+            pointNameById
+          )}${pointLabel(line.cId, pointNameById)}`
+          : `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
       : `line ${point.lineId}`;
     return `Intersection of ${lineText} with ${circleText}.`;
   }
@@ -2286,15 +2218,20 @@ function describeObjectRef(
   if (ref.type === "line") {
     const line = lineById.get(ref.id);
     if (line?.kind === "perpendicular" || line?.kind === "parallel") {
-      return `line through ${pointLabel(line.throughId, pointNameById)} ${
-        line.kind === "perpendicular" ? "perpendicular to" : "parallel to"
-      } ${describeObjectRef(
-        line.base,
-        pointNameById,
-        lineById,
-        segmentById,
-        circleById
-      )}`;
+      return `line through ${pointLabel(line.throughId, pointNameById)} ${line.kind === "perpendicular" ? "perpendicular to" : "parallel to"
+        } ${describeObjectRef(
+          line.base,
+          pointNameById,
+          lineById,
+          segmentById,
+          circleById
+        )}`;
+    }
+    if (line?.kind === "angleBisector") {
+      return `internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
+        line.bId,
+        pointNameById
+      )}${pointLabel(line.cId, pointNameById)}`;
     }
     return line
       ? `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
@@ -2618,6 +2555,18 @@ function AngleFixedIcon({ size = 18, strokeWidth = 2 }: IconProps) {
       <text x="15.6" y="9.6" fontSize="7.2" fill="currentColor" stroke="none">
         θ
       </text>
+    </svg>
+  );
+}
+
+function AngleBisectorIcon({ size = 18, strokeWidth = 2 }: IconProps) {
+  const w = size;
+  const h = size;
+  return (
+    <svg viewBox="0 0 24 24" width={w} height={h} aria-hidden fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
+      <path d="M4 18L12 6L20 18" strokeLinecap="round" />
+      <path d="M12 6L12 18" strokeLinecap="round" />
+      <path d="M8.5 15.5a4.5 4.5 0 0 1 7 0" strokeLinecap="round" />
     </svg>
   );
 }

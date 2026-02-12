@@ -645,3 +645,92 @@ textarea {
   background: #fff;
   padding: 0;
 }
+
+.detailsSection {
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+}
+
+.detailsSummary {
+  cursor: pointer;
+  list-style: none;
+}
+
+
+.detailsSummary::-webkit-details-marker {
+  display: none;
+}
+
+/* Object Browser Tabs */
+.objectBrowser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.objectBrowserTabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #edf2f8;
+  border-radius: 8px;
+  overflow-x: auto; /* Just in case, though icons should fit */
+}
+
+.objectBrowserTab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.objectBrowserTab:hover {
+  background: rgba(255, 255, 255, 0.5);
+  color: #334155;
+}
+
+.objectBrowserTab.active {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.objectListScrollArea {
+  height: 320px; /* Fixed height as requested */
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+/* Ensure the objectItem looks good inside the scroll area */
+.objectListScrollArea .objectList {
+  gap: 4px;
+}
+
+.objectListScrollArea .objectItem {
+  border: none; /* Cleaner look in list */
+  background: #f8fafc; /* Slight contrast against white bg */
+}
+
+.objectListScrollArea .objectItem:hover {
+  background: #f1f5f9;
+}
+
+.objectListScrollArea .objectItem.active {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+/* Hide the old objectList style overrides if they conflict, 
+   but keeping .objectList class for structure is fine. 
+   We just made .objectItem borderless inside the scroll area. */
