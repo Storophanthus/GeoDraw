@@ -561,6 +561,39 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
       throw new Error("Expected three-point circle fixture to emit \\tkzDrawCircle.");
     }
   }
+
+  if (fileName === "export-no-patterns.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\usetikzlibrary{patterns}")) {
+      throw new Error("Expected no-patterns fixture to omit patterns library line.");
+    }
+    if (tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
+      throw new Error("Expected no-patterns fixture to omit patterns.meta library line.");
+    }
+  }
+
+  if (fileName === "export-with-patterns.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\usetikzlibrary{patterns}")) {
+      throw new Error("Expected patterns fixture to emit \\usetikzlibrary{patterns}.");
+    }
+    if (tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
+      throw new Error("Expected classic patterns fixture to avoid patterns.meta.");
+    }
+    if (!tikz.includes("pattern=north east lines")) {
+      throw new Error("Expected patterns fixture to emit classic pattern style.");
+    }
+  }
+
+  if (fileName === "export-with-patterns-meta.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
+      throw new Error("Expected patterns-meta fixture to emit \\usetikzlibrary{patterns,patterns.meta}.");
+    }
+    if (!tikz.includes("pattern={Lines[angle=45,distance=4pt]}")) {
+      throw new Error("Expected patterns-meta fixture to emit pattern={...} style.");
+    }
+  }
 }
 
 function parseDrawLines(

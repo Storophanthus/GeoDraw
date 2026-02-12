@@ -89,6 +89,16 @@
   - Snapshot semantics are explicit:
     - scalar vars are evaluated at command execution time
     - existing objects do not auto-update on scalar reassignment
+- Export now auto-emits optional TikZ pattern libraries only when needed:
+  - no pattern styles => no `\\usetikzlibrary{patterns}` line emitted
+  - classic pattern styles (`pattern=...`, `pattern color=...`) => emits exactly `\\usetikzlibrary{patterns}`
+  - meta pattern styles (`pattern={...}`) => emits exactly `\\usetikzlibrary{patterns,patterns.meta}`
+  - deterministic: single line, stable ordering, no duplicates
+- Properties panel now exposes fill pattern controls for current fill-capable objects:
+  - Circle style: `Fill Pattern`, `Pattern Color`
+  - Angle/Sector style: `Fill Pattern`, `Pattern Color`
+  - Backed by typed style fields: `pattern`, `patternColor`
+  - Export picks these up automatically (`pattern=...`, `pattern color=...`) and injects required TikZ library lines.
 
 ## Active Work (Open)
 - No active bugfix from this handoff currently.
@@ -106,6 +116,8 @@
   - scalar vars
   - command object aliases
   This is intentional to keep deterministic, fail-closed behavior.
+- Pattern-library auto-emission only affects export header lines; drawing semantics are unchanged.
+- Future polygon fill can reuse the same `pattern`/`patternColor` style contract to stay consistent across object classes.
 
 ## Historical (Do Not Reopen Automatically)
 - Items below are historical progress logs and rationale.

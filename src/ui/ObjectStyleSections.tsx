@@ -3,6 +3,14 @@ import type { AngleStyle, CircleStyle, LineStyle, SceneAngle, SceneCircle, Scene
 const SEGMENT_MARK_OPTIONS = ["none", "|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"] as const;
 const SEGMENT_ARROW_DIRECTIONS = ["->", "<-", "<->"] as const;
 const SEGMENT_ARROW_DISTRIBUTIONS = ["single", "multi"] as const;
+const FILL_PATTERN_OPTIONS = [
+  { value: "", label: "None" },
+  { value: "north east lines", label: "North East Lines" },
+  { value: "north west lines", label: "North West Lines" },
+  { value: "grid", label: "Grid" },
+  { value: "crosshatch", label: "Crosshatch" },
+  { value: "dots", label: "Dots" },
+] as const;
 const SEGMENT_ARROW_WIDTH_UI_FACTOR = 8;
 
 type ObjectStyleSectionsProps = {
@@ -668,7 +676,7 @@ export function ObjectStyleSections({
             <input
               className="colorInput"
               type="color"
-              value={selectedCircle.style.fillColor ?? "#000000"}
+              value={selectedCircle.style.fillColor ?? "#FFFFFF"}
               onChange={(e) => updateSelectedCircleStyle({ fillColor: e.target.value })}
             />
           </div>
@@ -681,9 +689,39 @@ export function ObjectStyleSections({
               max={1}
               step={0.01}
               value={selectedCircle.style.fillOpacity ?? 0}
-              onChange={(e) => updateSelectedCircleStyle({ fillOpacity: Number(e.target.value) })}
+              onChange={(e) =>
+                updateSelectedCircleStyle({
+                  fillOpacity: Number(e.target.value),
+                  fillColor: selectedCircle.style.fillColor ?? "#FFFFFF",
+                })
+              }
             />
           </div>
+          <div className="controlRow">
+            <label className="controlLabel">Fill Pattern</label>
+            <select
+              className="selectInput"
+              value={selectedCircle.style.pattern ?? ""}
+              onChange={(e) => updateSelectedCircleStyle({ pattern: e.target.value })}
+            >
+              {FILL_PATTERN_OPTIONS.map((opt) => (
+                <option key={opt.value || "none"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(selectedCircle.style.pattern ?? "") !== "" && (
+            <div className="controlRow">
+              <label className="controlLabel">Pattern Color</label>
+              <input
+                className="colorInput"
+                type="color"
+                value={selectedCircle.style.patternColor ?? selectedCircle.style.strokeColor}
+                onChange={(e) => updateSelectedCircleStyle({ patternColor: e.target.value })}
+              />
+            </div>
+          )}
         </div>
       )}
 

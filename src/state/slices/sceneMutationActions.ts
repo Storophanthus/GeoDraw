@@ -379,6 +379,8 @@ export function createSceneMutationActions({
                 strokeOpacity: angle.style.strokeOpacity,
                 fillColor: angle.style.fillColor,
                 fillOpacity: angle.style.fillOpacity,
+                pattern: angle.style.pattern ?? "",
+                patternColor: angle.style.patternColor,
               },
               angleStyle: {
                 ...angle.style,
@@ -605,6 +607,8 @@ function angleStyleFromCircleStyle(style: CircleStyle): Partial<AngleStyle> {
     strokeOpacity: style.strokeOpacity,
     fillColor: style.fillColor ?? style.strokeColor,
     fillOpacity: style.fillOpacity ?? style.strokeOpacity,
+    pattern: style.pattern ?? "",
+    patternColor: style.patternColor,
   };
 }
 

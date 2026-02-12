@@ -1,5 +1,6 @@
 import { getCircleWorldGeometry, type SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
+import { resolveCanvasFillStyle } from "../patternFill";
 import { applyStrokeDash } from "../strokeStyle";
 import type { DrawableObjectSelection } from "./types";
 
@@ -22,7 +23,12 @@ export function drawCircles(
     applyStrokeDash(ctx, circle.style.strokeDash, circle.style.strokeWidth);
     if ((circle.style.fillOpacity ?? 0) > 0 && circle.style.fillColor) {
       ctx.globalAlpha = circle.style.fillOpacity ?? 0;
-      ctx.fillStyle = circle.style.fillColor;
+      ctx.fillStyle = resolveCanvasFillStyle(
+        ctx,
+        circle.style.fillColor,
+        circle.style.pattern,
+        circle.style.patternColor
+      );
       ctx.beginPath();
       ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
       ctx.fill();

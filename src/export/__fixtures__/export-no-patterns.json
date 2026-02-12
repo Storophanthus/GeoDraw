@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "O",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 0, "y": 0 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_2",
+      "name": "A",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 3, "y": 0 },
+      "dependsOn": []
+    }
+  ],
+  "numbers": [],
+  "lines": [],
+  "segments": [],
+  "circles": [
+    {
+      "id": "c_1",
+      "kind": "twoPoint",
+      "centerId": "p_1",
+      "throughId": "p_2",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.5,
+        "strokeDash": "solid",
+        "strokeOpacity": 1,
+        "fillColor": "#93c5fd",
+        "fillOpacity": 0.35
+      }
+    }
+  ],
+  "angles": []
+}

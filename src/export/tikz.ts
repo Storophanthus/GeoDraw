@@ -1096,7 +1096,8 @@ export function renderTikz(cmds: TikzCommand[]): string {
 
   out.push("\\end{tikzpicture}");
   const withNamedColors = hoistNamedColors(out);
-  return withNamedColors.join("\n");
+  const withOptionalLibraries = injectOptionalTikzLibraries(withNamedColors);
+  return withOptionalLibraries.join("\n");
 }
 
 export function exportTikz(scene: SceneModel): string {
@@ -1749,6 +1750,11 @@ function circleStyleToTikz(style: SceneModel["circles"][number]["style"], option
     parts.push(`fill=${rgbColorExpr(style.fillColor ?? style.strokeColor)}`);
     parts.push(`fill opacity=${fmt(fillOpacity)}`);
   }
+  const pattern = readPatternOption(style);
+  if (pattern) {
+    parts.push(pattern.patternExpr);
+    if (pattern.patternColorExpr) parts.push(pattern.patternColorExpr);
+  }
   return parts.join(", ");
 }
 
@@ -1832,6 +1838,28 @@ function sectorFillStyleToTikz(style: SceneModel["angles"][number]["style"]): st
     throw new Error("Unsupported Angle style: fillOpacity is not finite.");
   }
   return [`fill=${rgbColorExpr(style.fillColor)}`, `fill opacity=${fmt(clamp01(style.fillOpacity))}`].join(", ");
+}
+
+function readPatternOption(style: unknown): { patternExpr: string; patternColorExpr?: string } | null {
+  if (!style || typeof style !== "object") return null;
+  const raw = style as Record<string, unknown>;
+  const patternRaw = raw.pattern;
+  if (patternRaw === undefined || patternRaw === null || patternRaw === "") return null;
+  if (typeof patternRaw !== "string") {
+    throw new Error("Unsupported style option: pattern");
+  }
+  const pattern = patternRaw.trim();
+  if (!pattern) return null;
+  const patternExpr = `pattern=${pattern}`;
+
+  const patternColorRaw = raw.patternColor;
+  if (patternColorRaw === undefined || patternColorRaw === null || patternColorRaw === "") {
+    return { patternExpr };
+  }
+  if (typeof patternColorRaw !== "string") {
+    throw new Error("Unsupported style option: patternColor");
+  }
+  return { patternExpr, patternColorExpr: `pattern color=${rgbColorExpr(patternColorRaw)}` };
 }
 
 function lineLikeStyleToTikz(
@@ -2075,6 +2103,37 @@ function hoistNamedColors(lines: string[]): string[] {
 
   const out = [...rewritten];
   out.splice(beginIdx + 1, 0, ...colorDefs);
+  return out;
+}
+
+function injectOptionalTikzLibraries(lines: string[]): string[] {
+  const beginIdx = lines.findIndex((line) => line.trim().startsWith("\\begin{tikzpicture}"));
+  if (beginIdx < 0) return lines;
+
+  let needsPatterns = false;
+  let needsPatternsMeta = false;
+  const patternRegex = /pattern\s*=|pattern color\s*=/;
+  const patternMetaRegex = /pattern\s*=\s*\{/;
+  for (const line of lines) {
+    if (patternMetaRegex.test(line)) {
+      needsPatternsMeta = true;
+      needsPatterns = true;
+      break;
+    }
+    if (patternRegex.test(line)) {
+      needsPatterns = true;
+    }
+  }
+
+  if (!needsPatterns) return lines;
+
+  const libraryLine = needsPatternsMeta
+    ? "\\usetikzlibrary{patterns,patterns.meta}"
+    : "\\usetikzlibrary{patterns}";
+
+  if (lines.some((line) => line.trim() === libraryLine)) return lines;
+  const out = [...lines];
+  out.splice(beginIdx, 0, libraryLine);
   return out;
 }
 

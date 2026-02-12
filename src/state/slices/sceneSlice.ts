@@ -53,6 +53,7 @@ export const defaultCircleStyle: CircleStyle = {
   strokeDash: "solid",
   strokeOpacity: 1,
   fillOpacity: 0,
+  pattern: "",
 };
 
 export const defaultAngleStyle: AngleStyle = {
@@ -64,6 +65,7 @@ export const defaultAngleStyle: AngleStyle = {
   fillEnabled: false,
   fillColor: "#93c5fd",
   fillOpacity: 0.2,
+  pattern: "",
   markStyle: "arc",
   arcRadius: 1.2,
   labelText: "",

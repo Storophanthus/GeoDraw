@@ -111,6 +111,8 @@ export type CircleStyle = {
   strokeOpacity: number;
   fillColor?: string;
   fillOpacity?: number;
+  pattern?: string;
+  patternColor?: string;
 };
 
 export type AngleMarkStyle = "arc" | "right" | "none";
@@ -124,6 +126,8 @@ export type AngleStyle = {
   fillEnabled: boolean;
   fillColor: string;
   fillOpacity: number;
+  pattern?: string;
+  patternColor?: string;
   markStyle: AngleMarkStyle;
   arcRadius: number;
   labelText: string;

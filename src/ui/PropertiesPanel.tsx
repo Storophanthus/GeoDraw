@@ -350,7 +350,9 @@ function circleStyleEqual(a: SceneModel["circles"][number]["style"], b: SceneMod
     a.strokeDash === b.strokeDash &&
     a.strokeOpacity === b.strokeOpacity &&
     (a.fillColor ?? "") === (b.fillColor ?? "") &&
-    (a.fillOpacity ?? 0) === (b.fillOpacity ?? 0)
+    (a.fillOpacity ?? 0) === (b.fillOpacity ?? 0) &&
+    (a.pattern ?? "") === (b.pattern ?? "") &&
+    (a.patternColor ?? "") === (b.patternColor ?? "")
   );
 }
 

@@ -2,6 +2,7 @@ import type { Vec2 } from "../../geo/vec2";
 import type { SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import { drawAngleArcPreview, drawAngleSector, drawRightAngleMark } from "../angleRender";
+import { resolveCanvasFillStyle } from "../patternFill";
 import type { DrawableObjectSelection } from "./types";
 
 export type ResolvedAngleForRender = {
@@ -33,7 +34,12 @@ export function drawAngles(
     ctx.save();
     if (angle.style.fillEnabled && angle.style.fillOpacity > 0) {
       ctx.globalAlpha = angle.style.fillOpacity;
-      ctx.fillStyle = angle.style.fillColor;
+      ctx.fillStyle = resolveCanvasFillStyle(
+        ctx,
+        angle.style.fillColor,
+        angle.style.pattern,
+        angle.style.patternColor
+      );
       drawAngleSector(ctx, as, bs, entry.theta, radiusPx);
       ctx.fill();
     }
