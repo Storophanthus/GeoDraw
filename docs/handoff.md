@@ -102,6 +102,13 @@
   - `src/view/previews/pendingPreview.ts` (`drawPendingPreview`)
   - Includes 3-point circumcircle helper and per-tool preview logic.
 - Stage #2 App decomposition started:
+  - Left toolbar extracted from `src/App.tsx` into `src/ui/ToolPalette.tsx`.
+  - `ToolPalette` owns:
+    - tool registry/group definitions
+    - flyout state (`openFlyoutGroup`, `groupLastSelected`)
+    - long-press + context-menu behavior
+    - outside-click and Escape flyout close behavior
+  - `App.tsx` now delegates toolbar rendering to `ToolPalette` and no longer contains duplicate toolbar icon/helper code.
   - Export tab UI extracted from `src/App.tsx` into `src/ui/ExportPanel.tsx`.
   - `ExportPanel` refactored to be store-driven + self-contained state (scene/camera from store, local export controls/actions).
   - Export panel is always mounted and uses `visible` prop to preserve state across tab switches.
@@ -112,6 +119,34 @@
     - `src/state/selectors/constructionDescription.ts`
     - `selectConstructionDescription(selectedObject, scene)`
   - `App.tsx` no longer owns construction-description helper functions.
+  - Right sidebar shell/tabs wrapper extracted from `src/App.tsx` into `src/ui/RightSidebar.tsx`.
+    - `RightSidebar` now owns right-tab local state (`algebra` / `export`) and renders:
+      - tab switcher
+      - object browser section
+      - `ExportPanel` + `PropertiesPanel` visibility wiring
+      - right-sidebar collapse/expand controls
+  - `App.tsx` now composes high-level layout only (left palette, canvas, right sidebar, resizers, history buttons).
+  - Top-canvas history controls extracted from `src/App.tsx` into `src/ui/HistoryControls.tsx`.
+  - Sidebar resize drag lifecycle extracted from `App.tsx` into reusable hook:
+    - `src/ui/useSidebarResize.ts`
+    - owns pointermove/pointerup listeners, clamping, and startResize handlers.
+  - Global keyboard shortcuts extracted from `App.tsx` into reusable hook:
+    - `src/ui/useGlobalCanvasHotkeys.ts`
+    - owns Escape copy-style cancel, undo/redo shortcuts, delete/backspace delete.
+  - App shell/resizer markup extracted from `App.tsx` into:
+    - `src/ui/WorkspaceShell.tsx`
+    - owns composition layout for left palette, canvas/history, resize handles, right sidebar.
+  - Direct `App.tsx` store wiring grouped into app-shell controller hook:
+    - `src/ui/useAppShellController.ts`
+    - owns:
+      - store selectors/actions used by shell
+      - left/right sidebar local widths + collapsed state
+      - global hotkeys hook wiring
+      - sidebar resize hook wiring
+    - `App.tsx` now reduced to:
+      - `const shell = useAppShellController()`
+      - `<WorkspaceShell {...shell} />`
+  - `App.tsx` now primarily wires store actions and composes shell components.
   - Behavior unchanged; structural extraction/refactor only.
 - Verified after each extraction:
   - `npm run build` passes
@@ -138,7 +173,9 @@
 3. Gradually move pure evaluation/hit-test logic out of monolith files into engine modules.
    - `CanvasView` click-release top-object hit-test now uses `engine/hitTestTopObject`.
    - `CanvasView` hover/click hit tests now use engine primitives (`hitTestPointId/SegmentId/LineId/CircleId/AngleId`).
-   - Next major stage: continue `App.tsx` decomposition (properties panel extraction and prop cleanup).
+   - Next major stage: continue by reducing monolithic `CanvasView.tsx` interaction orchestration:
+     - extract pointer-mode state transitions into dedicated interaction controller module(s)
+     - keep behavior identical and regression-locked.
 4. Keep behavior identical (no geometry semantics change in same commit).
 5. Re-run:
    - `npm run build`

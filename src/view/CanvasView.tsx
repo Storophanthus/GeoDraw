@@ -383,6 +383,8 @@ export function CanvasView() {
         } else {
           nextCursor = "grab";
         }
+      } else if (activeTool === "copyStyle") {
+        nextCursor = nextHovered ? "pointer" : "grab";
       } else if (nextHovered && isValidTarget(activeTool, pendingSelection, nextHovered)) {
         nextCursor = "pointer";
       } else if (toolAllowsEmptyPointCreation(activeTool, pendingSelection)) {
