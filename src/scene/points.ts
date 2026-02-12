@@ -1,10 +1,7 @@
 import type { Vec2 } from "../geo/vec2";
 import {
-  add,
   distance,
   lineCircleIntersectionBranches,
-  mul,
-  sub,
 } from "../geo/geometry";
 import type { NumberExpressionEvalResult } from "./eval/numericExpression";
 import {
@@ -33,7 +30,6 @@ import {
 import {
   circleLinePairAssignmentKey,
   circleLineStabilitySignature,
-  clamp,
   genericIntersectionPairKey,
   genericIntersectionSignature,
   sameObjectPair,
@@ -45,6 +41,13 @@ import {
   type GenericAssignmentPoint,
 } from "./eval/intersectionAssignments";
 import { objectIntersectionsWithOps } from "./eval/intersectionQueries";
+import {
+  evalMidpoint,
+  evalPointByRotation,
+  evalPointOnCircle,
+  evalPointOnLine,
+  evalPointOnSegment,
+} from "./eval/pointGeometryEval";
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
@@ -583,7 +586,7 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
     const pb = getPointWorldById(point.bId, scene, ctx);
     if (!pa || !pb) return null;
     ctx.stats.allocationsEstimate += 1;
-    return { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 };
+    return evalMidpoint(pa, pb);
   }
 
   if (point.kind === "midpointSegment") {
@@ -593,7 +596,7 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
     const pb = getPointWorldById(seg.bId, scene, ctx);
     if (!pa || !pb) return null;
     ctx.stats.allocationsEstimate += 1;
-    return { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 };
+    return evalMidpoint(pa, pb);
   }
 
   if (point.kind === "pointOnLine") {
@@ -602,7 +605,7 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
     const anchors = resolveLineAnchors(line, scene, ctx);
     if (!anchors) return null;
     ctx.stats.allocationsEstimate += 1;
-    return add(anchors.a, mul(sub(anchors.b, anchors.a), point.s));
+    return evalPointOnLine(anchors, point.s);
   }
 
   if (point.kind === "pointOnSegment") {
@@ -612,7 +615,7 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
     const b = getPointWorldById(seg.bId, scene, ctx);
     if (!a || !b) return null;
     ctx.stats.allocationsEstimate += 1;
-    return add(a, mul(sub(b, a), clamp(point.u, 0, 1)));
+    return evalPointOnSegment(a, b, point.u);
   }
 
   if (point.kind === "pointOnCircle") {
@@ -622,32 +625,18 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
     if (!geom) return null;
     const { center, radius } = geom;
     ctx.stats.allocationsEstimate += 1;
-    return {
-      x: center.x + Math.cos(point.t) * radius,
-      y: center.y + Math.sin(point.t) * radius,
-    };
+    return evalPointOnCircle(center, radius, point.t);
   }
 
   if (point.kind === "pointByRotation") {
     const center = getPointWorldById(point.centerId, scene, ctx);
     const base = getPointWorldById(point.pointId, scene, ctx);
     if (!center || !base) return null;
-    const vx = base.x - center.x;
-    const vy = base.y - center.y;
-    const len = Math.hypot(vx, vy);
-    if (len <= 1e-12) return null;
     const expr = point.angleExpr ?? String(point.angleDeg ?? "");
     const exprEval = evaluateAngleExpressionDegreesWithCtx(scene, expr, ctx);
     if (!exprEval.ok) return null;
-    const sign = point.direction === "CCW" ? 1 : -1;
-    const theta = (exprEval.valueDeg * Math.PI) / 180;
-    const c = Math.cos(sign * theta);
-    const s = Math.sin(sign * theta);
     ctx.stats.allocationsEstimate += 1;
-    return {
-      x: center.x + vx * c - vy * s,
-      y: center.y + vx * s + vy * c,
-    };
+    return evalPointByRotation(center, base, exprEval.valueDeg, point.direction);
   }
 
   if (point.kind === "circleLineIntersectionPoint") {

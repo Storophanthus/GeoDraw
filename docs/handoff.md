@@ -336,6 +336,18 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: point geometry helper extraction):
+  - Added `src/scene/eval/pointGeometryEval.ts`:
+    - `evalMidpoint(...)`
+    - `evalPointOnLine(...)`
+    - `evalPointOnSegment(...)`
+    - `evalPointOnCircle(...)`
+    - `evalPointByRotation(...)`
+  - `points.ts` now delegates pure geometry computations for these point kinds.
+  - Behavior unchanged (only orchestration remains in `points.ts`).
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
