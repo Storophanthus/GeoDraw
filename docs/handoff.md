@@ -205,6 +205,19 @@
   - Added `src/ui/NumbersSection.tsx`
   - `src/ui/PropertiesPanel.tsx` now delegates full Numbers block rendering/handlers to `NumbersSection`.
   - No behavior change; just structural extraction.
+- Properties panel decomposition (UI monolith mitigation step 2):
+  - Added `src/ui/ObjectStyleSections.tsx`
+    - Owns selected object style editors for Segment / Line / Circle / Angle.
+    - Includes segment marking + arrow marking sub-panels and all existing handlers.
+  - Added `src/ui/PointPropertiesSection.tsx`
+    - Owns selected point detail/editor UI (name, caption, visibility, label mode, lock/auxiliary, point style).
+  - `src/ui/PropertiesPanel.tsx`
+    - reduced to orchestration/composition for:
+      - tool info blocks
+      - object selection wiring
+      - default-style toggle
+      - composing `PointPropertiesSection`, `ObjectStyleSections`, `NumbersSection`
+    - line count reduced substantially (~1415 -> ~442) with behavior preserved.
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
