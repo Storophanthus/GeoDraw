@@ -468,6 +468,14 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: point-runtime orchestration extraction):
+  - Added `src/scene/eval/pointRuntime.ts`:
+    - `evalPointByIdWithRuntime(...)`
+  - `points.ts` `evalPoint(...)` now delegates point cache/in-progress orchestration to this helper.
+  - Point-kind evaluation and intersection behavior unchanged.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`

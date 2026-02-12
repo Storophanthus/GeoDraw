@@ -44,6 +44,7 @@ import {
   resolveGenericIntersectionPairAssignmentsInScene,
 } from "./eval/intersectionPairResolution";
 import { buildGeometryResolveOpsRuntime } from "./eval/geometryResolveRuntime";
+import { evalPointByIdWithRuntime } from "./eval/pointRuntime";
 import {
   buildSceneEvalContextForScene,
   type SceneEvalContext,
@@ -487,29 +488,27 @@ export function getPointWorldPos(
 }
 
 function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  const cached = ctx.pointCache.get(pointId);
-  if (cached !== undefined) {
-    ctx.stats.cacheHits += 1;
-    return cached;
-  }
-  if (ctx.inProgress.has(pointId)) {
-    // Cycle guard: return transient null without caching, otherwise we may
-    // incorrectly freeze a valid downstream point as null for this tick.
-    return null;
-  }
-  const point = ctx.pointById.get(pointId);
-  if (!point) {
-    ctx.pointCache.set(pointId, null);
-    return null;
-  }
-  ctx.inProgress.add(pointId);
-  ctx.stats.totalNodeEvalCalls += 1;
-  const computed = evalPointUnchecked(point, scene, ctx);
-  if (computed !== null) {
-    ctx.pointCache.set(pointId, computed);
-  }
-  ctx.inProgress.delete(pointId);
-  return computed;
+  return evalPointByIdWithRuntime(pointId, {
+    getCache: (id) => ctx.pointCache.get(id),
+    setCache: (id, value) => {
+      ctx.pointCache.set(id, value);
+    },
+    isInProgress: (id) => ctx.inProgress.has(id),
+    addInProgress: (id) => {
+      ctx.inProgress.add(id);
+    },
+    removeInProgress: (id) => {
+      ctx.inProgress.delete(id);
+    },
+    getPointById: (id) => ctx.pointById.get(id) ?? null,
+    evalPointUnchecked: (point) => evalPointUnchecked(point, scene, ctx),
+    onCacheHit: () => {
+      ctx.stats.cacheHits += 1;
+    },
+    onNodeEval: () => {
+      ctx.stats.totalNodeEvalCalls += 1;
+    },
+  });
 }
 
 function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
