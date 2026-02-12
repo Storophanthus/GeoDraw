@@ -411,6 +411,17 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: scene geometry access extraction):
+  - Added `src/scene/eval/sceneGeometryAccess.ts`:
+    - `asLineLikeInScene(...)`
+    - `resolveLineAnchorsInScene(...)`
+    - `asCircleInScene(...)`
+    - `getCircleWorldGeometryInScene(...)`
+  - `points.ts` now delegates geometry-resolve wrappers to this module.
+  - Behavior unchanged; this is adapter centralization.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`

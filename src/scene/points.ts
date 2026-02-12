@@ -18,12 +18,6 @@ import {
 } from "./eval/evalContext";
 import { evalNumberDefinitionWithOps } from "./eval/numberDefinitions";
 import {
-  asCircleWithOps,
-  asLineLikeWithOps,
-  getCircleWorldGeometryWithOps,
-  resolveLineAnchorsWithOps,
-} from "./eval/geometryResolve";
-import {
   circleLinePairAssignmentKey,
   circleLineStabilitySignature,
   genericIntersectionPairKey,
@@ -51,6 +45,12 @@ import {
   evaluateNumberExpressionWithRuntime,
 } from "./eval/expressionRuntime";
 import { evalNumberByIdWithRuntime } from "./eval/numberRuntime";
+import {
+  asCircleInScene,
+  asLineLikeInScene,
+  getCircleWorldGeometryInScene,
+  resolveLineAnchorsInScene,
+} from "./eval/sceneGeometryAccess";
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
@@ -736,7 +736,7 @@ function asLineLike(
   scene: SceneModel,
   ctx: SceneEvalContext
 ): { a: Vec2; b: Vec2; finite: boolean } | null {
-  return asLineLikeWithOps(ref, buildGeometryResolveOps(scene, ctx));
+  return asLineLikeInScene(ref, buildGeometryResolveOps(scene, ctx));
 }
 
 function resolveLineAnchors(
@@ -744,7 +744,7 @@ function resolveLineAnchors(
   scene: SceneModel,
   ctx: SceneEvalContext
 ): { a: Vec2; b: Vec2 } | null {
-  return resolveLineAnchorsWithOps(line, buildGeometryResolveOps(scene, ctx));
+  return resolveLineAnchorsInScene(line, buildGeometryResolveOps(scene, ctx));
 }
 
 export function getLineWorldAnchors(line: SceneLine, scene: SceneModel): { a: Vec2; b: Vec2 } | null {
@@ -759,7 +759,7 @@ function asCircle(
   scene: SceneModel,
   ctx: SceneEvalContext
 ): { center: Vec2; radius: number } | null {
-  return asCircleWithOps(ref, buildGeometryResolveOps(scene, ctx));
+  return asCircleInScene(ref, buildGeometryResolveOps(scene, ctx));
 }
 
 function getCircleWorldGeometryWithCtx(
@@ -767,7 +767,7 @@ function getCircleWorldGeometryWithCtx(
   scene: SceneModel,
   ctx: SceneEvalContext
 ): { center: Vec2; radius: number } | null {
-  return getCircleWorldGeometryWithOps(circle, buildGeometryResolveOps(scene, ctx));
+  return getCircleWorldGeometryInScene(circle, buildGeometryResolveOps(scene, ctx));
 }
 
 function buildGeometryResolveOps(scene: SceneModel, ctx: SceneEvalContext) {
