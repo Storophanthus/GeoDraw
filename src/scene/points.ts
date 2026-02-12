@@ -20,8 +20,7 @@ import {
   evaluateAngleExpressionDegreesWithCtxInScene,
   evaluateNumberExpressionWithCtxInScene,
 } from "./eval/numberExpressionEvaluators";
-import { evalNumberByIdWithRuntime } from "./eval/numberRuntime";
-import { evalNumberDefinitionInScene } from "./eval/numberSceneEval";
+import { evalNumberByIdWithCtxInScene } from "./eval/numberEvaluators";
 import {
   resolveCircleLinePairAssignmentsInScene,
   resolveGenericIntersectionPairAssignmentsInScene,
@@ -677,62 +676,15 @@ export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel)
 }
 
 function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): number | null {
-  return evalNumberByIdWithRuntime<SceneNumberDefinition>(id, {
-    hasCache: (numberId) => ctx.numberCache.has(numberId),
-    getCache: (numberId) => ctx.numberCache.get(numberId),
-    setCache: (numberId, value) => {
-      ctx.numberCache.set(numberId, value);
+  return evalNumberByIdWithCtxInScene(id, scene, ctx, {
+    getPointWorldById,
+    getCircleWorldGeometryById: (circleId, s, c) => {
+      const circle = c.circleById.get(circleId);
+      if (!circle) return null;
+      return getCircleWorldGeometryWithCtx(circle, s, c);
     },
-    isInProgress: (numberId) => ctx.numberInProgress.has(numberId),
-    addInProgress: (numberId) => {
-      ctx.numberInProgress.add(numberId);
-    },
-    removeInProgress: (numberId) => {
-      ctx.numberInProgress.delete(numberId);
-    },
-    getDefinitionById: (numberId) => {
-      const num = ctx.numberById.get(numberId);
-      return num ? num.definition : null;
-    },
-    evalDefinition: (def, selfNumberId) => evalNumberDefinition(def, scene, ctx, selfNumberId),
-    onCacheHit: () => {
-      ctx.stats.cacheHits += 1;
-    },
+    evaluateNumberExpressionWithCtx,
   });
-}
-
-function evalNumberDefinition(
-  def: SceneNumberDefinition,
-  scene: SceneModel,
-  ctx: SceneEvalContext,
-  selfNumberId?: string
-): number | null {
-  return evalNumberDefinitionInScene(
-    def,
-    {
-      getPointWorldById: (id) => getPointWorldById(id, scene, ctx),
-      getSegmentById: (id) => {
-        const seg = ctx.segmentById.get(id);
-        return seg ? { aId: seg.aId, bId: seg.bId } : null;
-      },
-      getCircleRadiusById: (id) => {
-        const circle = ctx.circleById.get(id);
-        if (!circle) return null;
-        const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
-        return geom ? geom.radius : null;
-      },
-      getAngleById: (id) => {
-        const angle = ctx.angleById.get(id);
-        return angle ? { aId: angle.aId, bId: angle.bId, cId: angle.cId } : null;
-      },
-      evaluateNumberExpression: (expr, excludeNumberId) => {
-        const result = evaluateNumberExpressionWithCtx(scene, expr, ctx, excludeNumberId);
-        return result.ok ? result.value : null;
-      },
-      evalNumberById: (id) => evalNumberById(id, scene, ctx),
-    },
-    selfNumberId
-  );
 }
 
 export { computeConvexAngleRad, computeOrientedAngleRad } from "./eval/angleMath";
