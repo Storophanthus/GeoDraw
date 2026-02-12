@@ -2636,9 +2636,9 @@ function CircleThreePointIcon({ size = 18, strokeWidth = 2 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth={strokeWidth} />
-      <circle cx="8" cy="7" r="1.2" fill="currentColor" />
-      <circle cx="6.5" cy="14.5" r="1.2" fill="currentColor" />
-      <circle cx="16.5" cy="14.5" r="1.2" fill="currentColor" />
+      <circle cx="8" cy="7" r="1.9" fill="currentColor" />
+      <circle cx="6.5" cy="14.5" r="1.9" fill="currentColor" />
+      <circle cx="16.5" cy="14.5" r="1.9" fill="currentColor" />
     </svg>
   );
 }
