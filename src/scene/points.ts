@@ -42,6 +42,12 @@ import {
   lineLikeContainsPoint,
   sameObjectPair,
 } from "./eval/intersectionUtils";
+import {
+  assignCircleLinePairPoints,
+  assignGenericIntersectionPairPoints,
+  type CircleLineAssignmentPoint,
+  type GenericAssignmentPoint,
+} from "./eval/intersectionAssignments";
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
@@ -848,110 +854,17 @@ function resolveCircleLinePairAssignments(
   const cached = ctx.circleLinePairAssignments.get(key);
   if (cached) return cached;
 
-  const out = new Map<string, Vec2 | null>();
-  const pairPoints: CircleLineIntersectionPoint[] = [];
+  const pairPoints: CircleLineAssignmentPoint[] = [];
   for (const item of scene.points) {
     if (item.kind !== "circleLineIntersectionPoint") continue;
     if (item.circleId !== circleId || item.lineId !== lineId) continue;
     pairPoints.push(item);
   }
-  if (pairPoints.length === 0) {
-    ctx.circleLinePairAssignments.set(key, out);
-    return out;
-  }
-
-  if (branches.length === 0) {
-    for (const item of pairPoints) out.set(item.id, null);
-    ctx.circleLinePairAssignments.set(key, out);
-    return out;
-  }
-
-  const ROOT_EPS = 1e-6;
-  if (branches.length === 1) {
-    const root = branches[0].point;
-    for (const item of pairPoints) {
-      let result: Vec2 | null = root;
-      if (item.excludePointId) {
-        const excluded = getPointWorldById(item.excludePointId, scene, ctx);
-        if (excluded && distance(excluded, root) <= ROOT_EPS) {
-          result = null;
-        }
-      }
-      if (result) rememberStableCircleLinePoint(item.id, stabilitySignature, result);
-      out.set(item.id, result);
-    }
-    ctx.circleLinePairAssignments.set(key, out);
-    return out;
-  }
-
-  const root0 = branches[0].point;
-  const root1 = branches[1].point;
-  type AssignmentRequest = {
-    point: CircleLineIntersectionPoint;
-    candidates: [0 | 1, 0 | 1];
-    forced: boolean;
-    hasPrev: boolean;
-    order: number;
-  };
-  const requests: AssignmentRequest[] = [];
-  for (let i = 0; i < pairPoints.length; i += 1) {
-    const item = pairPoints[i];
-    let forcedCandidate: 0 | 1 | null = null;
-    if (item.excludePointId) {
-      const excluded = getPointWorldById(item.excludePointId, scene, ctx);
-      if (excluded) {
-        const d0 = distance(root0, excluded);
-        const d1 = distance(root1, excluded);
-        if (d0 <= ROOT_EPS && d1 > ROOT_EPS) forcedCandidate = 1;
-        else if (d1 <= ROOT_EPS && d0 > ROOT_EPS) forcedCandidate = 0;
-        else if (d0 <= ROOT_EPS && d1 <= ROOT_EPS) {
-          out.set(item.id, null);
-          continue;
-        }
-      }
-    }
-
-    const prev = getPreviousStableCircleLinePoint(item.id, stabilitySignature);
-    let primary: 0 | 1 = item.branchIndex === 1 ? 1 : 0;
-    if (forcedCandidate !== null) {
-      primary = forcedCandidate;
-    } else if (prev) {
-      const d0 = distance(root0, prev);
-      const d1 = distance(root1, prev);
-      if (Math.abs(d0 - d1) > 1e-9) primary = d0 <= d1 ? 0 : 1;
-    }
-    const secondary: 0 | 1 = primary === 0 ? 1 : 0;
-    requests.push({
-      point: item,
-      candidates: [primary, secondary],
-      forced: forcedCandidate !== null,
-      hasPrev: prev !== null,
-      order: i,
-    });
-  }
-
-  requests.sort((a, b) => {
-    if (a.forced !== b.forced) return a.forced ? -1 : 1;
-    if (a.hasPrev !== b.hasPrev) return a.hasPrev ? -1 : 1;
-    return a.order - b.order;
+  const out = assignCircleLinePairPoints(pairPoints, branches, {
+    getExcludedPointWorld: (pointId) => getPointWorldById(pointId, scene, ctx),
+    getPreviousStablePoint: (pointId) => getPreviousStableCircleLinePoint(pointId, stabilitySignature),
+    rememberStablePoint: (pointId, value) => rememberStableCircleLinePoint(pointId, stabilitySignature, value),
   });
-
-  const used = new Set<0 | 1>();
-  for (const req of requests) {
-    let chosenIdx: 0 | 1 | null = null;
-    if (!used.has(req.candidates[0])) {
-      chosenIdx = req.candidates[0];
-    } else if (!used.has(req.candidates[1])) {
-      chosenIdx = req.candidates[1];
-    } else {
-      // More than two points may legitimately exist on the same pair.
-      // Keep deterministic fallback to primary candidate.
-      chosenIdx = req.candidates[0];
-    }
-    if (!used.has(chosenIdx)) used.add(chosenIdx);
-    out.set(req.point.id, chosenIdx === 0 ? root0 : root1);
-  }
-
   ctx.circleLinePairAssignments.set(key, out);
   return out;
 }
@@ -984,108 +897,17 @@ function resolveGenericIntersectionPairAssignments(
   const cached = ctx.genericIntersectionPairAssignments.get(key);
   if (cached) return cached;
 
-  const out = new Map<string, Vec2 | null>();
-  const pairPoints: IntersectionPoint[] = [];
+  const pairPoints: GenericAssignmentPoint[] = [];
   for (const item of scene.points) {
     if (item.kind !== "intersectionPoint") continue;
     if (!sameObjectPair(item.objA, item.objB, objA, objB)) continue;
     pairPoints.push(item);
   }
-  if (pairPoints.length === 0) {
-    ctx.genericIntersectionPairAssignments.set(key, out);
-    return out;
-  }
-
-  if (intersections.length === 0) {
-    for (const item of pairPoints) out.set(item.id, null);
-    ctx.genericIntersectionPairAssignments.set(key, out);
-    return out;
-  }
-
-  const ROOT_EPS = 1e-6;
-  if (intersections.length === 1) {
-    const root = intersections[0];
-    for (const item of pairPoints) {
-      let result: Vec2 | null = root;
-      if (item.excludePointId) {
-        const excluded = getPointWorldById(item.excludePointId, scene, ctx);
-        if (excluded && distance(excluded, root) <= ROOT_EPS) {
-          result = null;
-        }
-      }
-      out.set(item.id, result);
-      if (result) rememberStableGenericIntersectionPoint(item.id, objA, objB, result);
-    }
-    ctx.genericIntersectionPairAssignments.set(key, out);
-    return out;
-  }
-
-  // Two-root ownership assignment.
-  const root0 = intersections[0];
-  const root1 = intersections[1];
-  type AssignmentRequest = {
-    point: IntersectionPoint;
-    candidates: [0 | 1, 0 | 1];
-    forced: boolean;
-    hasPrev: boolean;
-    order: number;
-  };
-  const requests: AssignmentRequest[] = [];
-  for (let i = 0; i < pairPoints.length; i += 1) {
-    const item = pairPoints[i];
-    let forcedCandidate: 0 | 1 | null = null;
-    if (item.excludePointId) {
-      const excluded = getPointWorldById(item.excludePointId, scene, ctx);
-      if (excluded) {
-        const d0 = distance(root0, excluded);
-        const d1 = distance(root1, excluded);
-        if (d0 <= ROOT_EPS && d1 > ROOT_EPS) forcedCandidate = 1;
-        else if (d1 <= ROOT_EPS && d0 > ROOT_EPS) forcedCandidate = 0;
-        else if (d0 <= ROOT_EPS && d1 <= ROOT_EPS) {
-          out.set(item.id, null);
-          continue;
-        }
-      }
-    }
-    let primary: 0 | 1;
-    const prev = getPreviousStableGenericIntersectionPoint(item.id, objA, objB);
-    if (forcedCandidate !== null) {
-      primary = forcedCandidate;
-    } else if (prev) {
-      const d0 = distance(root0, prev);
-      const d1 = distance(root1, prev);
-      primary = d0 <= d1 ? 0 : 1;
-    } else {
-      primary = distance(root0, item.preferredWorld) <= distance(root1, item.preferredWorld) ? 0 : 1;
-    }
-    const secondary: 0 | 1 = primary === 0 ? 1 : 0;
-    requests.push({
-      point: item,
-      candidates: [primary, secondary],
-      forced: forcedCandidate !== null,
-      hasPrev: prev !== null,
-      order: i,
-    });
-  }
-
-  requests.sort((a, b) => {
-    if (a.forced !== b.forced) return a.forced ? -1 : 1;
-    if (a.hasPrev !== b.hasPrev) return a.hasPrev ? -1 : 1;
-    return a.order - b.order;
+  const out = assignGenericIntersectionPairPoints(pairPoints, intersections, {
+    getExcludedPointWorld: (pointId) => getPointWorldById(pointId, scene, ctx),
+    getPreviousStablePoint: (pointId) => getPreviousStableGenericIntersectionPoint(pointId, objA, objB),
+    rememberStablePoint: (pointId, value) => rememberStableGenericIntersectionPoint(pointId, objA, objB, value),
   });
-
-  const used = new Set<0 | 1>();
-  for (const req of requests) {
-    let chosenIdx: 0 | 1;
-    if (!used.has(req.candidates[0])) chosenIdx = req.candidates[0];
-    else if (!used.has(req.candidates[1])) chosenIdx = req.candidates[1];
-    else chosenIdx = req.candidates[0];
-    if (!used.has(chosenIdx)) used.add(chosenIdx);
-    const chosen = chosenIdx === 0 ? root0 : root1;
-    out.set(req.point.id, chosen);
-    rememberStableGenericIntersectionPoint(req.point.id, objA, objB, chosen);
-  }
-
   ctx.genericIntersectionPairAssignments.set(key, out);
   return out;
 }

@@ -316,6 +316,16 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: intersection assignment extraction):
+  - Added `src/scene/eval/intersectionAssignments.ts`:
+    - `assignCircleLinePairPoints(...)`
+    - `assignGenericIntersectionPairPoints(...)`
+  - `src/scene/points.ts` now delegates both pair-assignment algorithms to this module
+    via callback ops (excluded point lookup + stable-point memory access).
+  - Kept deterministic ownership rules and stability behavior unchanged.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
