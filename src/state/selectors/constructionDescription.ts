@@ -1,0 +1,307 @@
+import {
+  type GeometryObjectRef,
+  type SceneModel,
+  type ScenePoint,
+} from "../../scene/points";
+
+export function selectConstructionDescription(
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle" | "number"; id: string } | null,
+  scene: SceneModel
+): string | null {
+  const pointNameById = new Map(scene.points.map((p) => [p.id, p.name]));
+  const lineById = new Map(scene.lines.map((l) => [l.id, l]));
+  const segmentById = new Map(scene.segments.map((s) => [s.id, s]));
+  const circleById = new Map(scene.circles.map((c) => [c.id, c]));
+  const angleById = new Map(scene.angles.map((a) => [a.id, a]));
+  const numberById = new Map(scene.numbers.map((n) => [n.id, n]));
+
+  return describeSelectedConstruction(
+    selectedObject,
+    scene,
+    pointNameById,
+    lineById,
+    segmentById,
+    circleById,
+    angleById,
+    numberById
+  );
+}
+
+function describeSelectedConstruction(
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle" | "number"; id: string } | null,
+  scene: SceneModel,
+  pointNameById: Map<string, string>,
+  lineById: Map<string, SceneModel["lines"][number]>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>,
+  angleById: Map<string, SceneModel["angles"][number]>,
+  numberById: Map<string, SceneModel["numbers"][number]>
+): string | null {
+  if (!selectedObject) return null;
+  if (selectedObject.type === "line") {
+    const line = lineById.get(selectedObject.id);
+    if (!line) return `Line ${selectedObject.id}`;
+    if (line.kind === "perpendicular" || line.kind === "parallel") {
+      const baseText =
+        line.base.type === "line"
+          ? (() => {
+            const baseLine = lineById.get(line.base.id);
+            return baseLine && baseLine.kind !== "perpendicular" && baseLine.kind !== "parallel"
+              ? `line through ${pointLabel(baseLine.aId, pointNameById)} and ${pointLabel(baseLine.bId, pointNameById)}`
+              : `line ${line.base.id}`;
+          })()
+          : (() => {
+            const baseSeg = segmentById.get(line.base.id);
+            return baseSeg
+              ? `segment ${pointLabel(baseSeg.aId, pointNameById)}${pointLabel(baseSeg.bId, pointNameById)}`
+              : `segment ${line.base.id}`;
+          })();
+      const modeText = line.kind === "perpendicular" ? "Perpendicular" : "Parallel";
+      return `${modeText} line through ${pointLabel(line.throughId, pointNameById)} to ${baseText}.`;
+    }
+    if (line.kind === "angleBisector") {
+      return `Internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
+        line.bId,
+        pointNameById
+      )}${pointLabel(line.cId, pointNameById)}.`;
+    }
+    return `Line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
+  }
+  if (selectedObject.type === "segment") {
+    const segment = segmentById.get(selectedObject.id);
+    if (!segment) return `Segment ${selectedObject.id}`;
+    return `Segment from ${pointLabel(segment.aId, pointNameById)} to ${pointLabel(segment.bId, pointNameById)}.`;
+  }
+  if (selectedObject.type === "circle") {
+    const circle = circleById.get(selectedObject.id);
+    if (!circle) return `Circle ${selectedObject.id}`;
+    return describeCircleForConstruction(circle, pointNameById);
+  }
+  if (selectedObject.type === "angle") {
+    const angle = angleById.get(selectedObject.id);
+    if (!angle) return `Angle ${selectedObject.id}`;
+    return `Angle ${pointLabel(angle.aId, pointNameById)}${pointLabel(angle.bId, pointNameById)}${pointLabel(
+      angle.cId,
+      pointNameById
+    )} (degrees).`;
+  }
+  if (selectedObject.type === "number") {
+    const num = numberById.get(selectedObject.id);
+    if (!num) return null;
+    return describeNumberConstruction(num, pointNameById, segmentById, circleById, angleById, numberById);
+  }
+
+  const point = scene.points.find((item) => item.id === selectedObject.id);
+  if (!point) return null;
+  return describePointConstruction(point, pointNameById, lineById, segmentById, circleById);
+}
+
+function describeNumberConstruction(
+  num: SceneModel["numbers"][number],
+  pointNameById: Map<string, string>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>,
+  angleById: Map<string, SceneModel["angles"][number]>,
+  numberById: Map<string, SceneModel["numbers"][number]>
+): string {
+  const def = num.definition;
+  if (def.kind === "constant") return `Number ${num.name} = ${def.value}.`;
+  if (def.kind === "distancePoints") {
+    return `Distance ${pointLabel(def.aId, pointNameById)}${pointLabel(def.bId, pointNameById)}.`;
+  }
+  if (def.kind === "segmentLength") {
+    const seg = segmentById.get(def.segId);
+    return seg
+      ? `Length of segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}.`
+      : `Length of segment ${def.segId}.`;
+  }
+  if (def.kind === "circleRadius") {
+    const circle = circleById.get(def.circleId);
+    if (!circle) return `Radius of circle ${def.circleId}.`;
+    return `Radius of ${describeCircleRef(circle, pointNameById)}.`;
+  }
+  if (def.kind === "circleArea") {
+    const circle = circleById.get(def.circleId);
+    if (!circle) return `Area of circle ${def.circleId}.`;
+    return `Area of ${describeCircleRef(circle, pointNameById)}.`;
+  }
+  if (def.kind === "angleDegrees") {
+    const angle = angleById.get(def.angleId);
+    return angle
+      ? `Degree value of angle ${pointLabel(angle.aId, pointNameById)}${pointLabel(angle.bId, pointNameById)}${pointLabel(
+        angle.cId,
+        pointNameById
+      )}.`
+      : `Degree value of angle ${def.angleId}.`;
+  }
+  if (def.kind === "expression") {
+    return `Number formula: ${def.expr}.`;
+  }
+  const n = numberById.get(def.numeratorId)?.name ?? def.numeratorId;
+  const d = numberById.get(def.denominatorId)?.name ?? def.denominatorId;
+  return `Ratio ${n}/${d}.`;
+}
+
+function describePointConstruction(
+  point: ScenePoint,
+  pointNameById: Map<string, string>,
+  lineById: Map<string, SceneModel["lines"][number]>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>
+): string {
+  if (point.kind === "free") return `Free point ${point.name}.`;
+  if (point.kind === "midpointPoints") {
+    return `Midpoint of ${pointLabel(point.aId, pointNameById)} and ${pointLabel(point.bId, pointNameById)}.`;
+  }
+  if (point.kind === "midpointSegment") {
+    const seg = segmentById.get(point.segId);
+    if (!seg) return `Midpoint of segment ${point.segId}.`;
+    return `Midpoint of segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}.`;
+  }
+  if (point.kind === "pointOnLine") {
+    const line = lineById.get(point.lineId);
+    if (!line) return `Point on line ${point.lineId}.`;
+    if (line.kind === "perpendicular" || line.kind === "parallel") {
+      const relation = line.kind === "perpendicular" ? "perpendicular to" : "parallel to";
+      return `Point on line through ${pointLabel(line.throughId, pointNameById)} ${relation} ${describeObjectRef(
+        line.base,
+        pointNameById,
+        lineById,
+        segmentById,
+        circleById
+      )}.`;
+    }
+    if (line.kind === "angleBisector") {
+      return `Point on internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
+        line.bId,
+        pointNameById
+      )}${pointLabel(line.cId, pointNameById)}.`;
+    }
+    return `Point on line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
+  }
+  if (point.kind === "pointOnSegment") {
+    const seg = segmentById.get(point.segId);
+    if (!seg) return `Point on segment ${point.segId}.`;
+    return `Point on segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}.`;
+  }
+  if (point.kind === "pointOnCircle") {
+    const circle = circleById.get(point.circleId);
+    if (!circle) return `Point on circle ${point.circleId}.`;
+    return `Point on ${describeCircleRef(circle, pointNameById)}.`;
+  }
+  if (point.kind === "pointByRotation") {
+    const angleText = point.angleExpr?.trim()
+      ? point.angleExpr.trim()
+      : typeof point.angleDeg === "number" && Number.isFinite(point.angleDeg)
+        ? point.angleDeg.toFixed(2)
+        : "0";
+    const sign = point.direction === "CCW" ? "" : "-";
+    return `Point from rotation of ${pointLabel(point.pointId, pointNameById)} around ${pointLabel(
+      point.centerId,
+      pointNameById
+    )} by ${sign}${angleText}° (${point.direction}).`;
+  }
+  if (point.kind === "circleLineIntersectionPoint") {
+    const circle = circleById.get(point.circleId);
+    const line = lineById.get(point.lineId);
+    const circleText = circle
+      ? describeCircleRef(circle, pointNameById)
+      : `circle ${point.circleId}`;
+    const lineText = line
+      ? line.kind === "perpendicular" || line.kind === "parallel"
+        ? `line through ${pointLabel(line.throughId, pointNameById)} ${line.kind === "perpendicular" ? "perpendicular to" : "parallel to"
+        } ${describeObjectRef(
+          line.base,
+          pointNameById,
+          lineById,
+          segmentById,
+          circleById
+        )}`
+        : line.kind === "angleBisector"
+          ? `internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
+            line.bId,
+            pointNameById
+          )}${pointLabel(line.cId, pointNameById)}`
+          : `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
+      : `line ${point.lineId}`;
+    return `Intersection of ${lineText} with ${circleText}.`;
+  }
+  return `Intersection of ${describeObjectRef(point.objA, pointNameById, lineById, segmentById, circleById)} and ${describeObjectRef(
+    point.objB,
+    pointNameById,
+    lineById,
+    segmentById,
+    circleById
+  )}.`;
+}
+
+function describeObjectRef(
+  ref: GeometryObjectRef,
+  pointNameById: Map<string, string>,
+  lineById: Map<string, SceneModel["lines"][number]>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>
+): string {
+  if (ref.type === "line") {
+    const line = lineById.get(ref.id);
+    if (line?.kind === "perpendicular" || line?.kind === "parallel") {
+      return `line through ${pointLabel(line.throughId, pointNameById)} ${line.kind === "perpendicular" ? "perpendicular to" : "parallel to"
+        } ${describeObjectRef(
+          line.base,
+          pointNameById,
+          lineById,
+          segmentById,
+          circleById
+        )}`;
+    }
+    if (line?.kind === "angleBisector") {
+      return `internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
+        line.bId,
+        pointNameById
+      )}${pointLabel(line.cId, pointNameById)}`;
+    }
+    return line
+      ? `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
+      : `line ${ref.id}`;
+  }
+  if (ref.type === "segment") {
+    const seg = segmentById.get(ref.id);
+    return seg
+      ? `segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}`
+      : `segment ${ref.id}`;
+  }
+  const circle = circleById.get(ref.id);
+  return circle
+    ? describeCircleRef(circle, pointNameById)
+    : `circle ${ref.id}`;
+}
+
+function describeCircleRef(circle: SceneModel["circles"][number], pointNameById: Map<string, string>): string {
+  if (circle.kind === "fixedRadius") {
+    return `circle centered at ${pointLabel(circle.centerId, pointNameById)}`;
+  }
+  if (circle.kind === "threePoint") {
+    return `circle through ${pointLabel(circle.aId, pointNameById)}, ${pointLabel(circle.bId, pointNameById)}, ${pointLabel(
+      circle.cId,
+      pointNameById
+    )}`;
+  }
+  return `circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(circle.throughId, pointNameById)}`;
+}
+
+function describeCircleForConstruction(circle: SceneModel["circles"][number], pointNameById: Map<string, string>): string {
+  if (circle.kind === "fixedRadius") {
+    return `Circle with center ${pointLabel(circle.centerId, pointNameById)} and radius ${circle.radiusExpr ?? circle.radius}.`;
+  }
+  if (circle.kind === "threePoint") {
+    return `Circle through ${pointLabel(circle.aId, pointNameById)}, ${pointLabel(circle.bId, pointNameById)}, ${pointLabel(
+      circle.cId,
+      pointNameById
+    )}.`;
+  }
+  return `Circle with center ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(circle.throughId, pointNameById)}.`;
+}
+
+function pointLabel(pointId: string, pointNameById: Map<string, string>): string {
+  return pointNameById.get(pointId) ?? pointId;
+}

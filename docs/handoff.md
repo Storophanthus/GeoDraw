@@ -1,7 +1,7 @@
 # GeoDraw Handoff (Stability Contract)
 
 ## Branch / Baseline
-- Active branch: `feature/constrained-points`
+- Active branch: `refactor/stage2-app-decomposition`
 - Keep commits small and scoped.
 - Do not bundle unrelated files in feature commits.
 
@@ -101,6 +101,18 @@
 - Pending tool preview rendering extracted from `CanvasView`:
   - `src/view/previews/pendingPreview.ts` (`drawPendingPreview`)
   - Includes 3-point circumcircle helper and per-tool preview logic.
+- Stage #2 App decomposition started:
+  - Export tab UI extracted from `src/App.tsx` into `src/ui/ExportPanel.tsx`.
+  - `ExportPanel` refactored to be store-driven + self-contained state (scene/camera from store, local export controls/actions).
+  - Export panel is always mounted and uses `visible` prop to preserve state across tab switches.
+  - Properties tab UI extracted from `src/App.tsx` into `src/ui/PropertiesPanel.tsx`.
+  - `PropertiesPanel` then refactored to be store-driven (`useGeoStore` + local panel state/effects), removing a large prop surface from `App.tsx`.
+  - `PropertiesPanel` is always mounted and uses `visible` prop.
+  - Construction-description logic moved out of `App.tsx` into selector module:
+    - `src/state/selectors/constructionDescription.ts`
+    - `selectConstructionDescription(selectedObject, scene)`
+  - `App.tsx` no longer owns construction-description helper functions.
+  - Behavior unchanged; structural extraction/refactor only.
 - Verified after each extraction:
   - `npm run build` passes
   - `npm run test:export` passes (22 fixtures)
@@ -126,7 +138,7 @@
 3. Gradually move pure evaluation/hit-test logic out of monolith files into engine modules.
    - `CanvasView` click-release top-object hit-test now uses `engine/hitTestTopObject`.
    - `CanvasView` hover/click hit tests now use engine primitives (`hitTestPointId/SegmentId/LineId/CircleId/AngleId`).
-   - Next major stage: start `App.tsx` decomposition (panel/state wiring extraction).
+   - Next major stage: continue `App.tsx` decomposition (properties panel extraction and prop cleanup).
 4. Keep behavior identical (no geometry semantics change in same commit).
 5. Re-run:
    - `npm run build`
