@@ -78,6 +78,8 @@ export type TikzCommand =
   | { kind: "DrawLine"; a: string; b: string; addLeft: number; addRight: number; style?: string }
   | { kind: "DrawCircle"; o: string; x: string; style?: string }
   | { kind: "DrawCircleRadius"; o: string; radius: number; style?: string }
+  | { kind: "DrawSector"; o: string; a: string; b: string; style?: string }
+  | { kind: "FillSector"; o: string; a: string; b: string; style?: string }
   | { kind: "FillAngle"; a: string; b: string; c: string; style?: string }
   | { kind: "MarkAngle"; a: string; b: string; c: string; style?: string }
   | { kind: "MarkRightAngle"; a: string; b: string; c: string; style?: string }
@@ -746,6 +748,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const aName = mustName(pointName, angle.aId);
     const bName = mustName(pointName, angle.bId);
     const cName = mustName(pointName, angle.cId);
+    if (angle.kind === "sector") {
+      if (angle.style.fillEnabled) {
+        const fillStyle = sectorFillStyleToTikz(angle.style);
+        draws.push({ kind: "FillSector", o: bName, a: aName, b: cName, style: fillStyle });
+      }
+      draws.push({
+        kind: "DrawSector",
+        o: bName,
+        a: aName,
+        b: cName,
+        style: sectorDrawStyleToTikz(angle.style, options),
+      });
+      continue;
+    }
     if (angle.style.fillEnabled) {
       const fillStyle = angleFillStyleToTikz(angle.style);
       draws.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
@@ -826,6 +842,8 @@ export function renderTikz(cmds: TikzCommand[]): string {
       c.kind !== "DrawRaw" &&
       c.kind !== "DrawLine" &&
       c.kind !== "DrawCircle" &&
+      c.kind !== "DrawSector" &&
+      c.kind !== "FillSector" &&
       c.kind !== "FillAngle" &&
       c.kind !== "MarkAngle" &&
       c.kind !== "MarkRightAngle" &&
@@ -841,6 +859,8 @@ export function renderTikz(cmds: TikzCommand[]): string {
       c.kind === "DrawRaw" ||
       c.kind === "DrawLine" ||
       c.kind === "DrawCircle" ||
+      c.kind === "DrawSector" ||
+      c.kind === "FillSector" ||
       c.kind === "DrawCircleRadius" ||
       c.kind === "FillAngle" ||
       c.kind === "MarkAngle" ||
@@ -1015,6 +1035,14 @@ export function renderTikz(cmds: TikzCommand[]): string {
       assertTkzMacro("tkzDrawCircle");
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzDrawCircle${opts}(${cmd.o},${cmd.x})`);
+    } else if (cmd.kind === "DrawSector") {
+      assertTkzMacro("tkzDrawSector");
+      const opts = cmd.style ? `[${cmd.style}]` : "";
+      out.push(`\\tkzDrawSector${opts}(${cmd.o},${cmd.a})(${cmd.b})`);
+    } else if (cmd.kind === "FillSector") {
+      assertTkzMacro("tkzFillSector");
+      const opts = cmd.style ? `[${cmd.style}]` : "";
+      out.push(`\\tkzFillSector${opts}(${cmd.o},${cmd.a})(${cmd.b})`);
     } else if (cmd.kind === "DrawCircleRadius") {
       assertCircleFixedMacro("tkzDefCircle");
       assertCircleFixedMacro("tkzGetPoint");
@@ -1786,6 +1814,24 @@ function angleLabelStyleToTikz(
     `text=${rgbColorExpr(style.textColor)}`,
     `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(lineHeightPt)}pt}\\selectfont`,
   ].join(", ");
+}
+
+function sectorDrawStyleToTikz(style: SceneModel["angles"][number]["style"], options: TikzExportOptions): string {
+  const opacity = clamp01(style.strokeOpacity);
+  const strokeScale = clampPositive(options.angleArcStrokeScale ?? 1, 0.01, 100);
+  const opts: string[] = [
+    `color=${rgbColorExpr(style.strokeColor)}`,
+    `line width=${fmt(Math.max(0.1, style.strokeWidth * strokeScale))}pt`,
+  ];
+  if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
+  return opts.join(", ");
+}
+
+function sectorFillStyleToTikz(style: SceneModel["angles"][number]["style"]): string {
+  if (!Number.isFinite(style.fillOpacity)) {
+    throw new Error("Unsupported Angle style: fillOpacity is not finite.");
+  }
+  return [`fill=${rgbColorExpr(style.fillColor)}`, `fill opacity=${fmt(clamp01(style.fillOpacity))}`].join(", ");
 }
 
 function lineLikeStyleToTikz(

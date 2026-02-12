@@ -83,6 +83,7 @@ export type ConstructionSnapshot = {
   circles: SnapshotCircle[];
   angles: Array<{
     id: string;
+    kind: "angle" | "sector";
     aId: string;
     bId: string;
     cId: string;
@@ -189,13 +190,17 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
     .sort((a, b) => a.id.localeCompare(b.id));
 
   const angles = scene.angles
-    .map((angle) => ({
-      id: angle.id,
-      aId: angle.aId,
-      bId: angle.bId,
-      cId: angle.cId,
-      visible: angle.visible,
-    }))
+    .map((angle) => {
+      const kind: "angle" | "sector" = angle.kind === "sector" ? "sector" : "angle";
+      return {
+        id: angle.id,
+        kind,
+        aId: angle.aId,
+        bId: angle.bId,
+        cId: angle.cId,
+        visible: angle.visible,
+      };
+    })
     .sort((a, b) => a.id.localeCompare(b.id));
 
   return {

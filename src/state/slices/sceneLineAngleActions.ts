@@ -23,6 +23,7 @@ export function createSceneLineAngleActions(
   | "createTangentLines"
   | "createAngleBisectorLine"
   | "createAngle"
+  | "createSector"
   | "createAngleFixed"
 > {
   return {
@@ -272,6 +273,61 @@ export function createSceneLineAngleActions(
                 visible: true,
                 style: {
                   ...prev.angleDefaults,
+                  labelPosWorld,
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "angle", id },
+          recentCreatedObject: { type: "angle", id },
+          nextAngleId: prev.nextAngleId + 1,
+        };
+      });
+      return id;
+    },
+
+    createSector(centerId, startId, endId) {
+      if (centerId === startId || centerId === endId || startId === endId) return null;
+      let id: string | null = null;
+      ctx.setState((prev) => {
+        const pCenter = prev.scene.points.find((p) => p.id === centerId);
+        const pStart = prev.scene.points.find((p) => p.id === startId);
+        const pEnd = prev.scene.points.find((p) => p.id === endId);
+        if (!pCenter || !pStart || !pEnd) return prev;
+        const wCenter = getPointWorldPos(pCenter, prev.scene);
+        const wStart = getPointWorldPos(pStart, prev.scene);
+        const wEnd = getPointWorldPos(pEnd, prev.scene);
+        if (!wCenter || !wStart || !wEnd) return prev;
+        const r = distance(wCenter, wStart);
+        if (!Number.isFinite(r) || r <= 1e-12) return prev;
+        const theta = computeOrientedAngleRad(wStart, wCenter, wEnd);
+        if (theta === null) return prev;
+        const start = Math.atan2(wStart.y - wCenter.y, wStart.x - wCenter.x);
+        const mid = start + theta * 0.5;
+        const labelDist = Math.max(0.45, r * 0.72);
+        const labelPosWorld = { x: wCenter.x + Math.cos(mid) * labelDist, y: wCenter.y + Math.sin(mid) * labelDist };
+
+        id = `a_${prev.nextAngleId}`;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            angles: [
+              ...prev.scene.angles,
+              {
+                id,
+                kind: "sector",
+                aId: startId,
+                bId: centerId,
+                cId: endId,
+                visible: true,
+                style: {
+                  ...prev.angleDefaults,
+                  arcRadius: r,
+                  fillEnabled: true,
+                  showLabel: false,
+                  showValue: false,
+                  labelText: "",
                   labelPosWorld,
                 },
               },

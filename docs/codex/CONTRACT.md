@@ -20,6 +20,27 @@ It does **not** change product requirements; it enforces engineering discipline.
 
 ---
 
+## 0.5) Session Start & Context-Low Protocol (Mandatory)
+
+Before writing code for any new feature/fix, Codex must:
+
+1. Open and read:
+   - `docs/codex/CONTRACT.md`
+   - `docs/handoff.md`
+2. Post a short execution checklist in-progress (what files/modules are expected to change).
+3. If the task is expected to exceed one context window:
+   - create a checkpoint commit before risky rewires,
+   - update `docs/handoff.md` at each milestone (done/next/risks/open invariants),
+   - continue from handoff instead of memory.
+
+When context remaining is low, Codex must prioritize:
+
+1. checkpointing current stable state (commit when appropriate),
+2. updating `docs/handoff.md`,
+3. only then continuing feature work.
+
+---
+
 ## 1) Non-negotiables (Hard Rules)
 
 1. **Fail-closed exporter**

@@ -26,6 +26,7 @@ export type ToolClickIO = {
   createTangentLines: (throughId: string, circleId: string) => string[];
   createAngleBisectorLine: (aId: string, bId: string, cId: string) => string | null;
   createAngle: (aId: string, bId: string, cId: string) => string | null;
+  createSector: (centerId: string, startId: string, endId: string) => string | null;
   createAngleFixed: (
     vertexId: string,
     basePointId: string,
@@ -42,6 +43,7 @@ export type ToolClickIO = {
   setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
   applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
+  getPointWorldById: (id: string) => Vec2 | null;
   camera: Camera;
   vp: Viewport;
 };
@@ -193,6 +195,39 @@ export function handleToolClick(
     }
     const cId = resolveOrCreatePointAtCursor();
     io.createAngle(pendingSelection.first.id, pendingSelection.second.id, cId);
+    io.clearPendingSelection();
+    return;
+  }
+
+  if (activeTool === "sector") {
+    if (!pendingSelection || pendingSelection.tool !== "sector") {
+      io.setPendingSelection({ tool: "sector", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+    if (pendingSelection.step === 2) {
+      const aId = resolveOrCreatePointAtCursor();
+      if (aId === pendingSelection.first.id) return;
+      io.setPendingSelection({ tool: "sector", step: 3, first: pendingSelection.first, second: { type: "point", id: aId } });
+      return;
+    }
+    let endId: string | null = hits.hitPointId;
+    if (!endId) {
+      const center = io.getPointWorldById(pendingSelection.first.id);
+      const start = io.getPointWorldById(pendingSelection.second.id);
+      const cursorWorld = camMath.screenToWorld(screen, io.camera, io.vp);
+      if (!center || !start) return;
+      const vx = cursorWorld.x - center.x;
+      const vy = cursorWorld.y - center.y;
+      const d = Math.hypot(vx, vy);
+      const r = Math.hypot(start.x - center.x, start.y - center.y);
+      if (!Number.isFinite(r) || r <= 1e-12) return;
+      const ux = d <= 1e-12 ? (start.x - center.x) / r : vx / d;
+      const uy = d <= 1e-12 ? (start.y - center.y) / r : vy / d;
+      endId = io.createFreePoint({ x: center.x + ux * r, y: center.y + uy * r });
+    }
+    if (!endId) return;
+    const created = io.createSector(pendingSelection.first.id, pendingSelection.second.id, endId);
+    if (!created) return;
     io.clearPendingSelection();
     return;
   }
@@ -385,6 +420,7 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     activeTool === "circle_cp" ||
     activeTool === "circle_3p" ||
     activeTool === "circle_fixed" ||
+    activeTool === "sector" ||
     activeTool === "midpoint" ||
     activeTool === "angle_bisector" ||
     activeTool === "angle" ||
@@ -406,6 +442,7 @@ export function isValidTarget(
   if (activeTool === "circle_fixed") return hoveredHit.type === "point";
   if (activeTool === "angle_bisector") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";
+  if (activeTool === "sector") return hoveredHit.type === "point";
   if (activeTool === "angle_fixed") {
     if (pendingSelection?.tool === "angle_fixed" && pendingSelection.step === 3) return false;
     return hoveredHit.type === "point";

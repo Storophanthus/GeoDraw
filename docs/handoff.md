@@ -8,6 +8,15 @@
 - Feature implementation protocol (must follow): see `docs/architecture-snapshot.md` section
   "Feature Implementation Protocol (For Future Changes)".
 
+## Feature Start Protocol (Mandatory)
+- Re-open `docs/codex/CONTRACT.md` before touching code.
+- Re-open this file (`docs/handoff.md`) and confirm current active work.
+- Define expected module touch-set first; avoid ad-hoc edits outside that set.
+- For multi-cycle features:
+  - checkpoint commit at stable milestones,
+  - update this handoff with `Done / Next / Risks`,
+  - resume from handoff state, not memory.
+
 ## Done (Current Truth)
 - `PropertiesPanel` is already decomposed and **not** a monolith now:
   - `src/ui/PropertiesPanel.tsx` (~373 lines, orchestration/composition)
@@ -29,6 +38,11 @@
   - Construction descriptions include tangent language
   - Export handles tangent lines deterministically via computed tangent helper point + `\\tkzDrawLine`
   - Regression fixture added: `src/export/__fixtures__/tangent-line-through-point.json`
+- Process guardrails added:
+  - PR checklist template: `.github/pull_request_template.md`
+  - Handoff enforcement script: `scripts/check-handoff-update.mjs`
+  - CI workflow: `.github/workflows/guardrails.yml`
+  - npm command: `npm run check:handoff`
 
 ## Active Work (Open)
 - No active bugfix from this handoff currently.

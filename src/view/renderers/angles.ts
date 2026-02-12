@@ -28,6 +28,7 @@ export function drawAngles(
     const bs = camMath.worldToScreen(b, camera, vp);
     const cs = camMath.worldToScreen(c, camera, vp);
     const radiusPx = Math.max(12, angle.style.arcRadius * camera.zoom);
+    const isSector = angle.kind === "sector";
 
     ctx.save();
     if (angle.style.fillEnabled && angle.style.fillOpacity > 0) {
@@ -39,7 +40,16 @@ export function drawAngles(
     ctx.globalAlpha = angle.style.strokeOpacity;
     ctx.strokeStyle = angle.style.strokeColor;
     ctx.lineWidth = mapStrokeWidth(angle.style.strokeWidth);
-    if (angle.style.markStyle === "right") {
+    if (isSector) {
+      const start = Math.atan2(as.y - bs.y, as.x - bs.x);
+      const end = start - entry.theta;
+      ctx.beginPath();
+      ctx.moveTo(bs.x, bs.y);
+      ctx.lineTo(bs.x + Math.cos(start) * radiusPx, bs.y + Math.sin(start) * radiusPx);
+      ctx.arc(bs.x, bs.y, radiusPx, start, end, true);
+      ctx.lineTo(bs.x, bs.y);
+      ctx.stroke();
+    } else if (angle.style.markStyle === "right") {
       drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.55);
       ctx.stroke();
     } else if (angle.style.markStyle === "arc") {
@@ -51,7 +61,16 @@ export function drawAngles(
       ctx.globalAlpha = 1;
       ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
       ctx.lineWidth = mapStrokeWidth(angle.style.strokeWidth) + (isNew ? 1.5 : 1.6);
-      if (angle.style.markStyle === "right") {
+      if (isSector) {
+        const start = Math.atan2(as.y - bs.y, as.x - bs.x);
+        const end = start - entry.theta;
+        ctx.beginPath();
+        ctx.moveTo(bs.x, bs.y);
+        ctx.lineTo(bs.x + Math.cos(start) * (radiusPx + 2), bs.y + Math.sin(start) * (radiusPx + 2));
+        ctx.arc(bs.x, bs.y, radiusPx + 2, start, end, true);
+        ctx.lineTo(bs.x, bs.y);
+        ctx.stroke();
+      } else if (angle.style.markStyle === "right") {
         drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.63);
         ctx.stroke();
       } else if (angle.style.markStyle === "arc") {

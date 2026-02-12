@@ -150,6 +150,19 @@ Exporter rule:
 - If required macro is missing from whitelist, exporter fails closed:
   - `Unsupported construction: CircleFixedRadius (missing tkz macro: <name>)`
 
+## CircularSector
+
+GeoDraw sector `Sector(A,O,B)` (center at `O`) maps to:
+
+```tex
+\tkzFillSector[fill=<color>,fill opacity=<o>](O,A)(B)
+\tkzDrawSector[color=<color>,line width=<w>pt](O,A)(B)
+```
+
+Notes:
+- `A` and `B` define the sector rays from center `O`.
+- Exporter is fail-closed via macro whitelist checks (`tkzFillSector`, `tkzDrawSector`).
+
 ## SegmentMark
 
 GeoDraw segment cosmetic `segmentMark` maps to:

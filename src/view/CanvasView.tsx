@@ -94,6 +94,7 @@ export function CanvasView() {
   const createTangentLines = useGeoStore((store) => store.createTangentLines);
   const createAngleBisectorLine = useGeoStore((store) => store.createAngleBisectorLine);
   const createAngle = useGeoStore((store) => store.createAngle);
+  const createSector = useGeoStore((store) => store.createSector);
   const createAngleFixed = useGeoStore((store) => store.createAngleFixed);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
@@ -136,6 +137,7 @@ export function CanvasView() {
       createTangentLines,
       createAngleBisectorLine,
       createAngle,
+      createSector,
       createAngleFixed,
       createMidpointFromPoints,
       createMidpointFromSegment,
@@ -146,6 +148,10 @@ export function CanvasView() {
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
+      getPointWorldById: (id) => {
+        const point = scene.points.find((p) => p.id === id);
+        return point ? getPointWorldPos(point, scene) : null;
+      },
     }),
     [
       setPendingSelection,
@@ -160,6 +166,7 @@ export function CanvasView() {
       createTangentLines,
       createAngleBisectorLine,
       createAngle,
+      createSector,
       createAngleFixed,
       createMidpointFromPoints,
       createMidpointFromSegment,
@@ -170,6 +177,7 @@ export function CanvasView() {
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
+      scene,
     ]
   );
 

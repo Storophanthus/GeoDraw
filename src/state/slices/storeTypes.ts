@@ -23,6 +23,7 @@ export type ActiveTool =
   | "circle_cp"
   | "circle_3p"
   | "circle_fixed"
+  | "sector"
   | "perp_line"
   | "parallel_line"
   | "tangent_line"
@@ -93,6 +94,17 @@ export type PendingSelection =
       tool: "circle_fixed";
       step: 2;
       first: { type: "point"; id: string };
+    }
+  | {
+      tool: "sector";
+      step: 2;
+      first: { type: "point"; id: string };
+    }
+  | {
+      tool: "sector";
+      step: 3;
+      first: { type: "point"; id: string };
+      second: { type: "point"; id: string };
     }
   | {
       tool: "angle";
@@ -182,6 +194,7 @@ export type GeoActions = {
   createTangentLines: (throughId: string, circleId: string) => string[];
   createAngleBisectorLine: (aId: string, bId: string, cId: string) => string | null;
   createAngle: (aId: string, bId: string, cId: string) => string | null;
+  createSector: (centerId: string, startId: string, endId: string) => string | null;
   createAngleFixed: (
     vertexId: string,
     basePointId: string,

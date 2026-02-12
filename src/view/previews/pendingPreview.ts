@@ -14,7 +14,7 @@ import {
 import type { HoveredHit, PendingSelection } from "../../state/geoStore";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import type { SnapCandidate } from "../snapEngine";
-import { drawAngleArcPreview } from "../angleRender";
+import { drawAngleArcPreview, drawAngleSector } from "../angleRender";
 
 export type AngleFixedToolState = { angleExpr: string; direction: "CCW" | "CW" };
 export type CircleFixedToolState = { radius: string };
@@ -312,6 +312,76 @@ export function drawPendingPreview(
         ctx.restore();
       }
     }
+  }
+
+  if (pendingSelection.tool === "sector" && pendingSelection.step === 3) {
+    const oPoint = scene.points.find((p) => p.id === pendingSelection.first.id);
+    const aPoint = scene.points.find((p) => p.id === pendingSelection.second.id);
+    const o = oPoint ? getPointWorldPos(oPoint, scene) : null;
+    const a = aPoint ? getPointWorldPos(aPoint, scene) : null;
+    if (!o || !a) {
+      ctx.restore();
+      return;
+    }
+    const r = Math.hypot(a.x - o.x, a.y - o.y);
+    if (!Number.isFinite(r) || r <= 1e-12) {
+      ctx.restore();
+      return;
+    }
+
+    let c: Vec2 | null = null;
+    if (hoverSnap?.kind === "point" && hoverSnap.pointId) {
+      const p = scene.points.find((pt) => pt.id === hoverSnap.pointId);
+      c = p ? getPointWorldPos(p, scene) : null;
+    }
+    if (!c && hoveredHit?.type === "point") {
+      const p = scene.points.find((pt) => pt.id === hoveredHit.id);
+      c = p ? getPointWorldPos(p, scene) : null;
+    }
+    if (!c) c = cursorWorld;
+    if (!c) {
+      ctx.restore();
+      return;
+    }
+    const vx = c.x - o.x;
+    const vy = c.y - o.y;
+    const d = Math.hypot(vx, vy);
+    const ux = d <= 1e-12 ? (a.x - o.x) / r : vx / d;
+    const uy = d <= 1e-12 ? (a.y - o.y) / r : vy / d;
+    const cOn = { x: o.x + ux * r, y: o.y + uy * r };
+    const theta = computeOrientedAngleRad(a, o, cOn);
+    if (theta === null) {
+      ctx.restore();
+      return;
+    }
+    const as = camMath.worldToScreen(a, camera, vp);
+    const os = camMath.worldToScreen(o, camera, vp);
+    const radiusPx = r * camera.zoom;
+    const start = Math.atan2(as.y - os.y, as.x - os.x);
+
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = "#0ea5e9";
+    drawAngleSector(ctx, as, os, theta, radiusPx);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.strokeStyle = "#0284c7";
+    ctx.setLineDash([6, 5]);
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(os.x, os.y);
+    ctx.lineTo(os.x + Math.cos(start) * radiusPx, os.y + Math.sin(start) * radiusPx);
+    ctx.stroke();
+    drawAngleArcPreview(ctx, as, os, theta, radiusPx);
+    const endAng = start - theta;
+    ctx.beginPath();
+    ctx.moveTo(os.x, os.y);
+    ctx.lineTo(os.x + Math.cos(endAng) * radiusPx, os.y + Math.sin(endAng) * radiusPx);
+    ctx.stroke();
+    ctx.restore();
   }
 
   if (pendingSelection.tool === "angle_bisector" && pendingSelection.step === 3) {

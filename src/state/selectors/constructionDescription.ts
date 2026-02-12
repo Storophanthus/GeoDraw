@@ -87,10 +87,13 @@ function describeSelectedConstruction(
   if (selectedObject.type === "angle") {
     const angle = angleById.get(selectedObject.id);
     if (!angle) return `Angle ${selectedObject.id}`;
-    return `Angle ${pointLabel(angle.aId, pointNameById)}${pointLabel(angle.bId, pointNameById)}${pointLabel(
-      angle.cId,
-      pointNameById
-    )} (degrees).`;
+    if (angle.kind === "sector") {
+      return `Sector ${pointLabel(angle.aId, pointNameById)}${pointLabel(angle.bId, pointNameById)}${pointLabel(
+        angle.cId,
+        pointNameById
+      )}.`;
+    }
+    return `Angle ${pointLabel(angle.aId, pointNameById)}${pointLabel(angle.bId, pointNameById)}${pointLabel(angle.cId, pointNameById)} (degrees).`;
   }
   if (selectedObject.type === "number") {
     const num = numberById.get(selectedObject.id);

@@ -375,6 +375,7 @@ export type SceneCircle = SceneCircleTwoPoint | SceneCircleThreePoint | SceneCir
 
 export type SceneAngle = {
   id: string;
+  kind?: "angle" | "sector";
   aId: string;
   bId: string;
   cId: string;

@@ -128,6 +128,9 @@ constructFromClick({
     createAngle() {
       return null;
     },
+    createSector() {
+      return null;
+    },
     createAngleFixed() {
       return null;
     },
@@ -152,6 +155,9 @@ constructFromClick({
     setSelectedObject() {},
     setCopyStyleSource() {},
     applyCopyStyleTo() {},
+    getPointWorldById() {
+      return null;
+    },
     angleFixedTool: { angleExpr: "45", direction: "CCW" },
     camera,
     vp,

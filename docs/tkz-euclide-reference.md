@@ -66,6 +66,10 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 \tkzDefPoints{0/0/O}
 \tkzDefCircle[R](O,3.5) \tkzGetPoint{X}
 \tkzDrawCircle(O,X)
+
+% Circular sector AOB (center O)
+\tkzFillSector[fill=blue!20,fill opacity=0.25](O,A)(B)
+\tkzDrawSector[color=blue,line width=1pt](O,A)(B)
 ```
 
 ## User Cheat-Sheet (verbatim)

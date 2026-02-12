@@ -48,6 +48,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   circle_cp: { icon: Circle, tooltip: "Circle Center + Point (O)", ariaLabel: "Circle center-through-point tool" },
   circle_3p: { icon: CircleThreePointIcon, tooltip: "Circle through 3 Points", ariaLabel: "Circle through three points tool" },
   circle_fixed: { icon: CircleRadiusIcon, tooltip: "Circle with Fixed Radius", ariaLabel: "Circle with fixed radius tool" },
+  sector: { icon: SectorIcon, tooltip: "Circular Sector", ariaLabel: "Circular sector tool" },
 };
 
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
@@ -55,7 +56,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
-  { id: "circles", label: "CIRCLES", tools: ["circle_cp", "circle_3p", "circle_fixed"] },
+  { id: "circles", label: "CIRCLES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
 ];
 
@@ -396,6 +397,19 @@ function CircleThreePointIcon({ size = 18, strokeWidth = 2 }: IconProps) {
       <circle cx="8" cy="7" r="1.9" fill="currentColor" />
       <circle cx="6.5" cy="14.5" r="1.9" fill="currentColor" />
       <circle cx="16.5" cy="14.5" r="1.9" fill="currentColor" />
+    </svg>
+  );
+}
+
+function SectorIcon({ size = 18, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 12 L19 12" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+      <path d="M12 12 L16.95 16.95" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+      <path d="M19 12 A7 7 0 0 1 16.95 16.95" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+      <text x="6.8" y="8.8" fontSize="6.8" fill="currentColor" stroke="none">
+        θ
+      </text>
     </svg>
   );
 }

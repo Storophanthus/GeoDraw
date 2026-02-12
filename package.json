@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "check:handoff": "node scripts/check-handoff-update.mjs",
     "test:export": "node scripts/test-export.mjs",
     "test:perf": "tsx src/scene/__tests__/eval-perf.test.ts",
     "test:scene": "tsx src/scene/__tests__/intersection-ownership-regression.test.ts",

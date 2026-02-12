@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p1",
+      "name": "O",
+      "definition": { "kind": "free", "x": 0, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p2",
+      "name": "A",
+      "definition": { "kind": "free", "x": 3, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p3",
+      "name": "B",
+      "definition": { "kind": "free", "x": 1.5, "y": 2.598076211 },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "numbers": [],
+  "lines": [],
+  "segments": [],
+  "circles": [],
+  "angles": [
+    {
+      "id": "a1",
+      "kind": "sector",
+      "aId": "p2",
+      "bId": "p1",
+      "cId": "p3",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "strokeOpacity": 1,
+        "textColor": "#0f172a",
+        "textSize": 16,
+        "fillEnabled": true,
+        "fillColor": "#93c5fd",
+        "fillOpacity": 0.25,
+        "markStyle": "arc",
+        "arcRadius": 3,
+        "labelText": "",
+        "labelPosWorld": { "x": 1.2, "y": 0.9 },
+        "showLabel": false,
+        "showValue": false
+      }
+    }
+  ]
+}

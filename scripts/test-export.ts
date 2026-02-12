@@ -287,6 +287,7 @@ function hydrateAngle(raw: Record<string, unknown>): SceneAngle {
   };
   return {
     id: String(raw.id),
+    kind: raw.kind === "sector" ? "sector" : "angle",
     aId: String(raw.aId),
     bId: String(raw.bId),
     cId: String(raw.cId),
@@ -472,6 +473,16 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("\\pi/2")) {
       throw new Error("Expected custom angle label text to be preserved as TeX.");
+    }
+  }
+
+  if (fileName === "sector-basic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDrawSector")) {
+      throw new Error("Expected sector fixture to emit \\tkzDrawSector.");
+    }
+    if (!tikz.includes("\\tkzFillSector")) {
+      throw new Error("Expected sector fixture to emit \\tkzFillSector.");
     }
   }
 
