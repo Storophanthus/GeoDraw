@@ -43,10 +43,43 @@
   - Handoff enforcement script: `scripts/check-handoff-update.mjs`
   - CI workflow: `.github/workflows/guardrails.yml`
   - npm command: `npm run check:handoff`
+- Command Bar references upgrade added:
+  - New parser: `src/CommandParser.ts` (pure parser/evaluator, no store side effects).
+  - New UI: `src/CommandBar.tsx` fixed at bottom of workspace.
+  - Supported constructors:
+    - `Point(x,y)`
+    - `Line(x1,y1,x2,y2)` and `Line(A,B)`
+    - `Segment(A,B)`
+    - `Circle(x,y,r)`, `Circle(O,A)`, `Circle(O,r)`
+    - `Distance(A,B)` (evaluation only; creates nothing)
+  - Label resolution rules:
+    - exact label match
+    - unknown => `Unknown point: <id>`
+    - non-point => `Not a point: <id>`
+    - ambiguous => `Ambiguous identifier: <id>`
+  - Expression eval supports safe allowlist functions/constants and `ans` chaining.
+  - Input safety guards:
+    - max length cap
+    - disallowed token filter (`import`, `createUnit`, `unit`, `range`, `ones`, `zeros`, `matrix`)
+    - AST allowlist validation for symbols/functions/operators.
+  - Feedback:
+    - success/error status text
+    - expression result display
+    - history up/down (last 20)
+    - Esc clears input.
 
 ## Active Work (Open)
 - No active bugfix from this handoff currently.
 - Current focus (if continuing refactor): incremental polish only, no behavior changes.
+- Command Bar Phase 2 candidates:
+  - assignment syntax (e.g. `r=5`) and reusable scalar variables beyond `ans`.
+  - variable assignment and reusable symbols.
+  - richer command grammar with explicit object creation naming.
+
+## Risks / Notes
+- `mathjs` bundle size impact should be monitored (parser currently uses strict guards to keep scope safe).
+- `Circle(x,y,r)` currently constructs a center point and then uses existing fixed-radius-circle creation, which is deterministic and compatible with current scene model.
+- In current model `Circle(O,r)` maps directly to fixed-radius circle creation (`createCircleFixedRadius`), no synthetic through-point needed.
 
 ## Historical (Do Not Reopen Automatically)
 - Items below are historical progress logs and rationale.
