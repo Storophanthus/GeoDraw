@@ -10,8 +10,6 @@ import {
   type SceneEvalStats,
   updateImplicitEvalStats,
 } from "./eval/evalContext";
-import {
-} from "./eval/intersectionUtils";
 import { objectIntersectionsWithOps } from "./eval/intersectionQueries";
 import { computeOrientedAngleRad } from "./eval/angleMath";
 import {
@@ -40,6 +38,7 @@ import {
   buildSceneEvalContextForScene,
   type SceneEvalContext,
 } from "./eval/sceneContextBuilder";
+
 export {
   isNameUnique,
   isPointDraggable,
