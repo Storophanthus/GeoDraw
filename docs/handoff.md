@@ -460,6 +460,14 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: geometry-resolve runtime wiring extraction):
+  - Added `src/scene/eval/geometryResolveRuntime.ts`:
+    - `buildGeometryResolveOpsRuntime(...)`
+  - `points.ts` `buildGeometryResolveOps(...)` now delegates to this helper.
+  - No geometry algorithm change (same callbacks/data sources).
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
