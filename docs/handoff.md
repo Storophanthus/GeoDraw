@@ -73,6 +73,11 @@
   - `hitTestAngleId`
   - `resolveVisibleAngles`
 - `CanvasView` now delegates hover/click object hit testing to `src/engine/hitTest.ts` (local duplicated hit-test functions removed).
+- `CanvasView` interaction orchestration (slice 1) extracted into:
+  - `src/view/pointerInteraction.ts`
+  - `decideMovePointerDown(...)` (move-tool pointer-down decision tree)
+  - `computeCanvasCursor(...)` (cursor policy for move/copyStyle/targetable tools)
+  - `CanvasView` now calls these helpers instead of inlining equivalent branching logic.
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
@@ -173,8 +178,8 @@
 3. Gradually move pure evaluation/hit-test logic out of monolith files into engine modules.
    - `CanvasView` click-release top-object hit-test now uses `engine/hitTestTopObject`.
    - `CanvasView` hover/click hit tests now use engine primitives (`hitTestPointId/SegmentId/LineId/CircleId/AngleId`).
-   - Next major stage: continue by reducing monolithic `CanvasView.tsx` interaction orchestration:
-     - extract pointer-mode state transitions into dedicated interaction controller module(s)
+   - Next major stage: continue `CanvasView` interaction orchestration extraction (slice 2):
+     - extract drag-update scheduling and mode-specific drag application (`pan`, `drag-point`, `drag-label`, `drag-angle-label`) into dedicated controller helper(s)
      - keep behavior identical and regression-locked.
 4. Keep behavior identical (no geometry semantics change in same commit).
 5. Re-run:

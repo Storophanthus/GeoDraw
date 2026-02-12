@@ -8,7 +8,6 @@ import {
   computeOrientedAngleRad,
   endSceneEvalTick,
   getPointWorldPos,
-  isPointDraggable,
   type SceneModel,
   type ScenePoint,
 } from "../scene/points";
@@ -21,8 +20,9 @@ import { drawAngleArcPreview } from "./angleRender";
 import { hitTestAngleLabelHandle, hitTestPointLabel, hitTestPointLabelFromDom } from "./labelHit";
 import { drawPendingPreview } from "./previews/pendingPreview";
 import { drawAngles, drawCircles, drawLines, drawPoints, drawSegments } from "./renderers";
+import { computeCanvasCursor, decideMovePointerDown, type PointerMode } from "./pointerInteraction";
 import { highlightSnapObject } from "./snapHighlight";
-import { isValidTarget, toolAllowsEmptyPointCreation } from "../tools/toolClick";
+import { isValidTarget } from "../tools/toolClick";
 import {
   constructFromClick,
   hitTestAngleId as engineHitTestAngleId,
@@ -55,8 +55,6 @@ const GRID_SETTINGS: RectGridSettings = {
 // a visual remap so current defaults look like the old mid-slider appearance.
 const ANGLE_STROKE_RENDER_SCALE = 3.25 / 1.8;
 const ANGLE_TEXT_RENDER_SCALE = 25 / 16;
-
-type PointerMode = "idle" | "pan" | "drag-point" | "drag-label" | "drag-angle-label" | "tool-click";
 
 type PointerState = {
   active: boolean;
@@ -373,25 +371,7 @@ export function CanvasView() {
 
     const applyCursor = (nextHovered: HoveredHit, modeOverride?: PointerMode) => {
       const mode = modeOverride ?? pointerRef.current.mode;
-      let nextCursor = "default";
-
-      if (activeTool === "move") {
-        if (mode === "pan" || mode === "drag-point" || mode === "drag-label" || mode === "drag-angle-label") {
-          nextCursor = "grabbing";
-        } else if (nextHovered?.type === "point" || nextHovered?.type === "angle") {
-          nextCursor = "pointer";
-        } else {
-          nextCursor = "grab";
-        }
-      } else if (activeTool === "copyStyle") {
-        nextCursor = nextHovered ? "pointer" : "grab";
-      } else if (nextHovered && isValidTarget(activeTool, pendingSelection, nextHovered)) {
-        nextCursor = "pointer";
-      } else if (toolAllowsEmptyPointCreation(activeTool, pendingSelection)) {
-        nextCursor = "crosshair";
-      }
-
-      canvas.style.cursor = nextCursor;
+      canvas.style.cursor = computeCanvasCursor(activeTool, mode, nextHovered, pendingSelection);
     };
 
     const flushDragUpdate = () => {
@@ -460,37 +440,19 @@ export function CanvasView() {
       let pointId: string | null = null;
 
       if (activeTool === "move") {
-        if (hitLabelId) {
-          mode = "drag-label";
-          pointId = hitLabelId;
-          setSelectedObject({ type: "point", id: hitLabelId });
-        } else if (hitAngleLabelId) {
-          mode = "drag-angle-label";
-          pointId = hitAngleLabelId;
-          setSelectedObject({ type: "angle", id: hitAngleLabelId });
-        } else if (hitPointId) {
-          const hitPoint = scene.points.find((item) => item.id === hitPointId) ?? null;
-          setSelectedObject({ type: "point", id: hitPointId });
-          if (hitPoint && isPointDraggable(hitPoint)) {
-            mode = "drag-point";
-            pointId = hitPointId;
-          }
-        } else if (hitSegmentId) {
-          setSelectedObject({ type: "segment", id: hitSegmentId });
-          mode = "idle";
-        } else if (hitLineId) {
-          setSelectedObject({ type: "line", id: hitLineId });
-          mode = "idle";
-        } else if (hitCircleId) {
-          setSelectedObject({ type: "circle", id: hitCircleId });
-          mode = "idle";
-        } else if (hitAngleId) {
-          setSelectedObject({ type: "angle", id: hitAngleId });
-          mode = "idle";
-        } else {
-          mode = "pan";
-          setSelectedObject(null);
-        }
+        const decision = decideMovePointerDown({
+          hitLabelId,
+          hitAngleLabelId,
+          hitPointId,
+          hitSegmentId,
+          hitLineId,
+          hitCircleId,
+          hitAngleId,
+          scenePoints: scene.points,
+        });
+        mode = decision.mode;
+        pointId = decision.pointId;
+        setSelectedObject(decision.selectedObject);
       } else {
         mode = "tool-click";
       }
