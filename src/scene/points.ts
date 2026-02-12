@@ -32,10 +32,10 @@ import {
   resolveCircleLinePairAssignmentsWithCtx,
   resolveGenericIntersectionPairAssignmentsWithCtx,
 } from "./eval/intersectionStabilityAdapters";
-import { evalPointByIdWithRuntime } from "./eval/pointRuntime";
 import {
   evalPointUnchecked as evalPointUncheckedCore,
 } from "./eval/pointEvalDispatch";
+import { evalPointWithCtxInScene } from "./eval/pointValueRuntime";
 import {
   buildSceneEvalContextForScene,
   type SceneEvalContext,
@@ -479,26 +479,8 @@ export function getPointWorldPos(
 }
 
 function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  return evalPointByIdWithRuntime(pointId, {
-    getCache: (id) => ctx.pointCache.get(id),
-    setCache: (id, value) => {
-      ctx.pointCache.set(id, value);
-    },
-    isInProgress: (id) => ctx.inProgress.has(id),
-    addInProgress: (id) => {
-      ctx.inProgress.add(id);
-    },
-    removeInProgress: (id) => {
-      ctx.inProgress.delete(id);
-    },
-    getPointById: (id) => ctx.pointById.get(id) ?? null,
-    evalPointUnchecked: (point) => evalPointUnchecked(point, scene, ctx),
-    onCacheHit: () => {
-      ctx.stats.cacheHits += 1;
-    },
-    onNodeEval: () => {
-      ctx.stats.totalNodeEvalCalls += 1;
-    },
+  return evalPointWithCtxInScene(pointId, scene, ctx, {
+    evalPointUnchecked,
   });
 }
 
