@@ -37,17 +37,8 @@ import {
 import { buildGeometryResolveOpsRuntime } from "./eval/geometryResolveRuntime";
 import { evalPointByIdWithRuntime } from "./eval/pointRuntime";
 import {
-  evalMidpointPointsPoint as evalMidpointPointsPointCore,
-  evalMidpointSegmentPoint as evalMidpointSegmentPointCore,
-  evalPointByRotationPoint as evalPointByRotationPointCore,
-  evalPointOnCirclePoint as evalPointOnCirclePointCore,
-  evalPointOnLinePoint as evalPointOnLinePointCore,
-  evalPointOnSegmentPoint as evalPointOnSegmentPointCore,
-} from "./eval/pointKindEvaluators";
-import {
-  evalCircleLineIntersectionPoint as evalCircleLineIntersectionPointCore,
-  evalGenericIntersectionPoint as evalGenericIntersectionPointCore,
-} from "./eval/pointIntersectionEvaluators";
+  evalPointUnchecked as evalPointUncheckedCore,
+} from "./eval/pointEvalDispatch";
 import {
   buildSceneEvalContextForScene,
   type SceneEvalContext,
@@ -515,90 +506,24 @@ function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): V
 }
 
 function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  if (point.kind === "free") return point.position;
-
-  if (point.kind === "midpointPoints") return evalMidpointPointsPoint(point, scene, ctx);
-  if (point.kind === "midpointSegment") return evalMidpointSegmentPoint(point, scene, ctx);
-  if (point.kind === "pointOnLine") return evalPointOnLinePoint(point, scene, ctx);
-  if (point.kind === "pointOnSegment") return evalPointOnSegmentPoint(point, scene, ctx);
-  if (point.kind === "pointOnCircle") return evalPointOnCirclePoint(point, scene, ctx);
-  if (point.kind === "pointByRotation") return evalPointByRotationPoint(point, scene, ctx);
-  if (point.kind === "circleLineIntersectionPoint") return evalCircleLineIntersectionPoint(point, scene, ctx);
-  return evalGenericIntersectionPoint(point, scene, ctx);
-}
-
-function evalMidpointPointsPoint(point: MidpointFromPoints, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  return evalMidpointPointsPointCore(point, scene, ctx, {
+  return evalPointUncheckedCore(point, scene, ctx, {
     getPointWorldById,
-  });
-}
-
-function evalMidpointSegmentPoint(point: MidpointFromSegment, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  return evalMidpointSegmentPointCore(point, scene, ctx, {
-    getPointWorldById,
-  });
-}
-
-function evalPointOnLinePoint(point: PointOnLine, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  return evalPointOnLinePointCore(point, scene, ctx, {
-    resolveLineAnchors: (lineId, s, c) => {
+    resolveLineAnchorsById: (lineId, s, c) => {
       const line = c.lineById.get(lineId);
       if (!line) return null;
       return resolveLineAnchors(line, s, c);
     },
-  });
-}
-
-function evalPointOnSegmentPoint(point: PointOnSegment, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  return evalPointOnSegmentPointCore(point, scene, ctx, {
-    getPointWorldById,
-  });
-}
-
-function evalPointOnCirclePoint(point: PointOnCircle, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  return evalPointOnCirclePointCore(point, scene, ctx, {
-    getCircleWorldGeometryWithCtx: (circleId, s, c) => {
+    getCircleWorldGeometryById: (circleId, s, c) => {
       const circle = c.circleById.get(circleId);
       if (!circle) return null;
       return getCircleWorldGeometryWithCtx(circle, s, c);
     },
-  });
-}
-
-function evalPointByRotationPoint(point: PointByRotation, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  return evalPointByRotationPointCore(point, scene, ctx, {
-    getPointWorldById,
     evaluateAngleExpressionDegreesWithCtx,
-  });
-}
-
-function evalCircleLineIntersectionPoint(
-  point: CircleLineIntersectionPoint,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): Vec2 | null {
-  return evalCircleLineIntersectionPointCore(point, scene, ctx, {
-    getCircleWorldGeometryWithCtx: (circleId, s, c) => {
-      const circle = c.circleById.get(circleId);
-      if (!circle) return null;
-      return getCircleWorldGeometryWithCtx(circle, s, c);
-    },
-    resolveLineAnchors: (lineId, s, c) => {
-      const line = c.lineById.get(lineId);
-      if (!line) return null;
-      return resolveLineAnchors(line, s, c);
-    },
     resolveCircleLinePairAssignments,
-    rememberStablePoint: rememberStableCircleLinePoint,
-  });
-}
-
-function evalGenericIntersectionPoint(point: IntersectionPoint, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  return evalGenericIntersectionPointCore(point, scene, ctx, {
+    rememberStableCircleLinePoint,
     objectIntersections,
     resolveGenericIntersectionPairAssignments,
-    rememberStablePoint: (pointId, _signature, value) =>
-      rememberStableGenericIntersectionPoint(pointId, point.objA, point.objB, value),
+    rememberStableGenericIntersectionPoint,
   });
 }
 
