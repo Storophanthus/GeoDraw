@@ -105,6 +105,58 @@ Responsibility:
 - `src/scene/points.ts` should remain facade/types + thin orchestration.
 - Exporter must stay fail-closed and deterministic.
 
+## Feature Implementation Protocol (For Future Changes)
+When adding/modifying a feature, follow this order and file placement policy:
+
+1. Data model first
+- Add/extend types in `src/scene/points.ts` (types/facade only).
+- Do not add heavy evaluator logic directly in `points.ts`.
+
+2. Evaluation logic second
+- Add pure evaluation code in `src/scene/eval/*`:
+  - point/number/circle logic in evaluator modules
+  - intersection behavior in intersection modules
+  - reuse adapters/runtime helpers instead of inlining in facade files
+
+3. Store wiring third
+- Add actions in `src/state/slices/*` by concern:
+  - creation actions -> `sceneCreationActions.ts`
+  - mutation/update actions -> `sceneMutationActions.ts`
+  - line/angle constructors -> `sceneLineAngleActions.ts`
+- Keep `src/state/geoStore.ts` as composition/wiring only.
+
+4. Canvas interaction fourth
+- Put pointer/tool flow in `src/view/*` helpers/hooks.
+- `CanvasView.tsx` should call helpers, not accumulate new large switch blocks.
+
+5. UI/editor fifth
+- Put panel/editor UI in `src/ui/*` section components.
+- Do not re-inline sections back into `App.tsx` or `PropertiesPanel.tsx`.
+
+6. Export mapping last (fail-closed)
+- Implement exporter mapping in `src/export/tikz.ts` only with whitelisted macros/options.
+- If unsupported mapping: throw explicit error (never silent fallback).
+
+### “No New God File” Rule
+Before merging, verify:
+- No large feature-specific logic was appended directly into:
+  - `src/App.tsx`
+  - `src/view/CanvasView.tsx`
+  - `src/state/geoStore.ts`
+  - `src/scene/points.ts`
+  - `src/ui/PropertiesPanel.tsx`
+- If a change needs > ~120 lines in one of these files, split into a dedicated module first.
+
+### Required Checklist Per Feature
+1. Add/update fixture/regression test relevant to the feature.
+2. Run:
+   - `npm run build`
+   - `npm run test:export`
+3. Update docs if behavior/contracts changed:
+   - `docs/handoff.md`
+   - `docs/architecture-snapshot.md`
+   - `docs/tkz-euclide-contract.md` (if export-related)
+
 ## Regression Safety Gates
 - Always run after geometry/export changes:
   - `npm run build`
@@ -118,4 +170,3 @@ Responsibility:
 - Point identities are not merged by proximity.
 - Directed angle behavior is consistent between preview/final/export.
 - `PropertiesPanel` is already decomposed (not a monolith).
-

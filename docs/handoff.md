@@ -5,6 +5,8 @@
 - Keep commits small and scoped.
 - Do not bundle unrelated files in feature commits.
 - Architecture map reference: `docs/architecture-snapshot.md`
+- Feature implementation protocol (must follow): see `docs/architecture-snapshot.md` section
+  "Feature Implementation Protocol (For Future Changes)".
 
 ## Done (Current Truth)
 - `PropertiesPanel` is already decomposed and **not** a monolith now:
