@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import {
     Circle,
+    CircleDot,
     Hash,
     Layers,
     Minus,
@@ -21,13 +22,13 @@ type TabId = "all" | "points" | "lines" | "circles" | "angles" | "numbers";
 export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: ObjectBrowserProps) {
     const [activeTab, setActiveTab] = useState<TabId>("all");
 
-    const tabs: Array<{ id: TabId; icon: React.ElementType; label: string; count: number }> = [
-        { id: "all", icon: Layers, label: "All", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.angles.length + scene.numbers.length },
-        { id: "points", icon: Circle, label: "Points", count: scene.points.length },
-        { id: "lines", icon: Minus, label: "Lines", count: scene.segments.length + scene.lines.length },
-        { id: "circles", icon: Circle, label: "Circles", count: scene.circles.length },
-        { id: "angles", icon: Triangle, label: "Angles", count: scene.angles.length },
-        { id: "numbers", icon: Hash, label: "Numbers", count: scene.numbers.length },
+    const tabs: Array<{ id: TabId; icon: React.ElementType; label: string; description: string; count: number }> = [
+        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.angles.length + scene.numbers.length },
+        { id: "points", icon: CircleDot, label: "Points", description: "Filter by Points", count: scene.points.length },
+        { id: "lines", icon: Minus, label: "Lines", description: "Filter by Lines & Segments", count: scene.segments.length + scene.lines.length },
+        { id: "circles", icon: Circle, label: "Circles", description: "Filter by Circles", count: scene.circles.length },
+        { id: "angles", icon: Triangle, label: "Angles", description: "Filter by Angles", count: scene.angles.length },
+        { id: "numbers", icon: Hash, label: "Numbers", description: "Filter by Numbers & Values", count: scene.numbers.length },
     ];
 
     const filteredContent = useMemo(() => {
@@ -153,7 +154,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         key={tab.id}
                         className={activeTab === tab.id ? "objectBrowserTab active" : "objectBrowserTab"}
                         onClick={() => setActiveTab(tab.id)}
-                        title={tab.label}
+                        title={tab.description}
                     >
                         <tab.icon size={16} />
                         {/* Optional: <span className="tabCount">{tab.count}</span> */}
