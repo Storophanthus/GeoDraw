@@ -48,6 +48,7 @@ import {
   evalPointOnLine,
   evalPointOnSegment,
 } from "./eval/pointGeometryEval";
+import { getPreviousStablePoint, rememberStablePoint } from "./eval/stablePointMemory";
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
@@ -453,7 +454,6 @@ type SceneEvalContext = CoreSceneEvalContext<
 
 const sceneEvalContexts = new WeakMap<SceneModel, SceneEvalContext>();
 const sceneLastEvalStats = new WeakMap<SceneModel, SceneEvalStats>();
-const lastResolvedPointWorld = new Map<string, { value: Vec2; signature: string }>();
 let sceneEvalTick = 0;
 
 function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalContext {
@@ -824,7 +824,7 @@ function getPreviousStableGenericIntersectionPoint(
   a: GeometryObjectRef,
   b: GeometryObjectRef
 ): Vec2 | null {
-  return getPreviousStableCircleLinePoint(pointId, genericIntersectionSignature(a, b));
+  return getPreviousStablePoint(pointId, genericIntersectionSignature(a, b));
 }
 
 function rememberStableGenericIntersectionPoint(
@@ -833,7 +833,7 @@ function rememberStableGenericIntersectionPoint(
   b: GeometryObjectRef,
   value: Vec2
 ): void {
-  rememberStableCircleLinePoint(pointId, genericIntersectionSignature(a, b), value);
+  rememberStablePoint(pointId, genericIntersectionSignature(a, b), value);
 }
 
 function resolveGenericIntersectionPairAssignments(
@@ -863,14 +863,11 @@ function resolveGenericIntersectionPairAssignments(
 }
 
 function getPreviousStableCircleLinePoint(pointId: string, signature: string): Vec2 | null {
-  const prev = lastResolvedPointWorld.get(pointId);
-  if (!prev) return null;
-  if (prev.signature !== signature) return null;
-  return prev.value;
+  return getPreviousStablePoint(pointId, signature);
 }
 
 function rememberStableCircleLinePoint(pointId: string, signature: string, value: Vec2): void {
-  lastResolvedPointWorld.set(pointId, { value, signature });
+  rememberStablePoint(pointId, signature, value);
 }
 
 export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel): number | null {

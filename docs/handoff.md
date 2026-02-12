@@ -374,6 +374,15 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: stable-point memory extraction):
+  - Added `src/scene/eval/stablePointMemory.ts`:
+    - `getPreviousStablePoint(...)`
+    - `rememberStablePoint(...)`
+  - `points.ts` now delegates stable intersection memory reads/writes to this module.
+  - This is structural only; stability signatures/selection behavior unchanged.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
