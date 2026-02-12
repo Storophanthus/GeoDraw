@@ -13,13 +13,23 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 
 ```tex
 % Mark convex angle ABC
-\tkzMarkAngle[size=1.2](A,B,C)
+\tkzMarkAngle[arc=l,mark=none,size=1.2](A,B,C)
+
+% Mark convex angle ABC with || bars
+\tkzMarkAngle[arc=l,mark=||,mksize=4,mkcolor=red,mkpos=0.35,size=1.2](A,B,C)
+
+% Double/triple arc
+\tkzMarkAngle[arc=ll,mark=none,size=1.2](A,B,C)
+\tkzMarkAngle[arc=lll,mark=none,size=1.2](A,B,C)
 
 % Fill convex angle ABC
 \tkzFillAngle[fill=blue!30,fill opacity=0.3,size=1.2](A,B,C)
 
 % Right-angle marker at B
 \tkzMarkRightAngles[size=0.35](A,B,C)
+
+% Right-angle arc + inner dot
+\tkzMarkRightAngles[german,size=0.35](A,B,C)
 
 % Label by distance + absolute direction from B
 \tkzLabelAngle[dist=1.4,angle=42](A,B,C){$1.571\ \mathrm{rad}$}

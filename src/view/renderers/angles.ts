@@ -1,5 +1,6 @@
 import type { Vec2 } from "../../geo/vec2";
 import type { SceneModel } from "../../scene/points";
+import { isRightAngle } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import { drawAngleArcPreview, drawAngleSector, drawRightAngleMark } from "../angleRender";
 import { resolveCanvasFillStyle } from "../patternFill";
@@ -30,6 +31,12 @@ export function drawAngles(
     const cs = camMath.worldToScreen(c, camera, vp);
     const radiusPx = Math.max(12, angle.style.arcRadius * camera.zoom);
     const isSector = angle.kind === "sector";
+    const right = isRightAngle(a, b, c);
+    const resolvedMarkStyle =
+      angle.style.markStyle === "right"
+        ? "rightSquare"
+        : (angle.style.markStyle as "arc" | "none" | "rightSquare" | "rightArcDot");
+    const markSizePx = Math.max(3, (angle.style.markSize ?? 4) * camera.zoom * 0.06);
 
     ctx.save();
     if (angle.style.fillEnabled && angle.style.fillOpacity > 0) {
@@ -55,11 +62,30 @@ export function drawAngles(
       ctx.arc(bs.x, bs.y, radiusPx, start, end, true);
       ctx.lineTo(bs.x, bs.y);
       ctx.stroke();
-    } else if (angle.style.markStyle === "right") {
-      drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.55);
-      ctx.stroke();
-    } else if (angle.style.markStyle === "arc") {
-      drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
+    } else if (resolvedMarkStyle !== "none") {
+      if (right && resolvedMarkStyle === "rightSquare") {
+        drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.55);
+        ctx.stroke();
+      } else {
+        drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
+        if (!right) {
+          if ((angle.style.arcMultiplicity ?? 1) >= 2) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 6);
+          if ((angle.style.arcMultiplicity ?? 1) >= 3) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 12);
+          drawArcBarMarks(
+            ctx,
+            as,
+            bs,
+            entry.theta,
+            radiusPx,
+            angle.style.markSymbol ?? "none",
+            markSizePx,
+            angle.style.markPos ?? 0.5,
+            angle.style.markColor ?? angle.style.strokeColor
+          );
+        } else if (resolvedMarkStyle === "rightArcDot") {
+          drawRightInnerDot(ctx, as, bs, entry.theta, radiusPx * 0.7, Math.max(2, ctx.lineWidth * 0.8));
+        }
+      }
     }
 
     if (selectedObject?.type === "angle" && selectedObject.id === angle.id) {
@@ -76,11 +102,17 @@ export function drawAngles(
         ctx.arc(bs.x, bs.y, radiusPx + 2, start, end, true);
         ctx.lineTo(bs.x, bs.y);
         ctx.stroke();
-      } else if (angle.style.markStyle === "right") {
-        drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.63);
-        ctx.stroke();
-      } else if (angle.style.markStyle === "arc") {
-        drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);
+      } else if (resolvedMarkStyle !== "none") {
+        if (right && resolvedMarkStyle === "rightSquare") {
+          drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.63);
+          ctx.stroke();
+        } else {
+          drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);
+          if (!right) {
+            if ((angle.style.arcMultiplicity ?? 1) >= 2) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 8);
+            if ((angle.style.arcMultiplicity ?? 1) >= 3) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 14);
+          }
+        }
       }
       const lScreen = camMath.worldToScreen(angle.style.labelPosWorld, camera, vp);
       ctx.beginPath();
@@ -91,4 +123,57 @@ export function drawAngles(
 
     ctx.restore();
   }
+}
+
+function drawArcBarMarks(
+  ctx: CanvasRenderingContext2D,
+  a: Vec2,
+  b: Vec2,
+  theta: number,
+  radius: number,
+  mark: "none" | "|" | "||" | "|||",
+  markSize: number,
+  pos: number,
+  markColor: string
+): void {
+  const count = mark === "|" ? 1 : mark === "||" ? 2 : mark === "|||" ? 3 : 0;
+  if (count === 0) return;
+  const start = Math.atan2(a.y - b.y, a.x - b.x);
+  const p = Math.max(0.1, Math.min(0.9, Number.isFinite(pos) ? pos : 0.5));
+  const mid = start - theta * p;
+  const nx = Math.cos(mid);
+  const ny = Math.sin(mid);
+  const tx = -ny;
+  const ty = nx;
+  ctx.save();
+  ctx.strokeStyle = markColor;
+  const spacing = markSize * 1.25;
+  for (let i = 0; i < count; i += 1) {
+    const offset = (i - (count - 1) * 0.5) * spacing;
+    const cx = b.x + nx * (radius + offset);
+    const cy = b.y + ny * (radius + offset);
+    ctx.beginPath();
+    ctx.moveTo(cx - tx * markSize, cy - ty * markSize);
+    ctx.lineTo(cx + tx * markSize, cy + ty * markSize);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawRightInnerDot(
+  ctx: CanvasRenderingContext2D,
+  a: Vec2,
+  b: Vec2,
+  theta: number,
+  radius: number,
+  dotRadius: number
+): void {
+  const start = Math.atan2(a.y - b.y, a.x - b.x);
+  const mid = start - theta * 0.5;
+  const cx = b.x + Math.cos(mid) * radius;
+  const cy = b.y + Math.sin(mid) * radius;
+  ctx.beginPath();
+  ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.fill();
 }

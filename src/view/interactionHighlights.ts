@@ -2,6 +2,7 @@ import type { Vec2 } from "../geo/vec2";
 import { add, mul, sub } from "../geo/geometry";
 import {
   computeOrientedAngleRad,
+  isRightAngle,
   type SceneModel,
   type ScenePoint,
 } from "../scene/points";
@@ -203,7 +204,13 @@ function drawHitHighlight(
       ctx.restore();
       return;
     }
-    drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
+    const right = isRightAngle(a, b, c);
+    const markStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
+    if (right && markStyle === "rightSquare") {
+      drawRightAngleHighlight(ctx, as, bs, camMath.worldToScreen(c, camera, vp), radiusPx * 0.55);
+    } else {
+      drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
+    }
     ctx.restore();
     return;
   }
@@ -228,4 +235,27 @@ function drawHitHighlight(
 
 function getAngleStrokeRenderWidth(rawStrokeWidth: number): number {
   return rawStrokeWidth * ANGLE_STROKE_RENDER_SCALE;
+}
+
+function drawRightAngleHighlight(
+  ctx: CanvasRenderingContext2D,
+  aScreen: Vec2,
+  bScreen: Vec2,
+  cScreen: Vec2,
+  sizePx: number
+): void {
+  const uLen = Math.hypot(aScreen.x - bScreen.x, aScreen.y - bScreen.y) || 1;
+  const vLen = Math.hypot(cScreen.x - bScreen.x, cScreen.y - bScreen.y) || 1;
+  const ux = (aScreen.x - bScreen.x) / uLen;
+  const uy = (aScreen.y - bScreen.y) / uLen;
+  const vx = (cScreen.x - bScreen.x) / vLen;
+  const vy = (cScreen.y - bScreen.y) / vLen;
+  const p1 = { x: bScreen.x + ux * sizePx, y: bScreen.y + uy * sizePx };
+  const p3 = { x: bScreen.x + vx * sizePx, y: bScreen.y + vy * sizePx };
+  const p2 = { x: p1.x + vx * sizePx, y: p1.y + vy * sizePx };
+  ctx.beginPath();
+  ctx.moveTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.lineTo(p3.x, p3.y);
+  ctx.stroke();
 }

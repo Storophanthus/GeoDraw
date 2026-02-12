@@ -99,6 +99,16 @@
   - Angle/Sector style: `Fill Pattern`, `Pattern Color`
   - Backed by typed style fields: `pattern`, `patternColor`
   - Export picks these up automatically (`pattern=...`, `pattern color=...`) and injects required TikZ library lines.
+- Angle mark cosmetics upgraded with deterministic right-angle detection:
+  - Right-angle detection uses `isRightAngle` (dot-product EPS in `src/scene/eval/angleMath.ts`).
+  - UI is conditional:
+    - right angles: `RightSquare`, `RightArcDot`, `None`
+    - non-right angles: `Vanilla`, `Arc+|`, `Arc+||`, `Arc+|||`, `Double`, `Triple`, `None`
+  - Export mapping:
+    - non-right -> `\\tkzMarkAngle[arc=l|ll|lll,...]` (+ optional `mark`, `mksize`, `mkcolor`, `mkpos`)
+    - right square -> `\\tkzMarkRightAngles[...]`
+    - right arc-dot -> `\\tkzMarkRightAngles[german,...]`
+  - Added export regression fixtures for all mark variants.
 
 ## Active Work (Open)
 - No active bugfix from this handoff currently.

@@ -101,14 +101,23 @@ Notes:
 GeoDraw `Angle(A,B,C)` maps to tkz-euclide angle macros with vertex at `B`:
 
 ```tex
-\tkzMarkAngle[<tikz opts>,size=<r>](A,B,C)
+\tkzMarkAngle[arc=l|ll|lll,mark=<none|\\||\\|\\||\\|\\|\\|>,mksize=<s>,mkcolor=<c>,mkpos=<p>,<tikz opts>,size=<r>](A,B,C)
 \tkzFillAngle[fill=<color>,fill opacity=<o>,size=<r>](A,B,C)
 \tkzMarkRightAngles[<tikz opts>,size=<r>](A,B,C)
+\tkzMarkRightAngles[german,<tikz opts>,size=<r>](A,B,C)
 \tkzLabelAngle[dist=<d>,angle=<deg>,<tikz text opts>](A,B,C){<label>}
 ```
 
 Notes:
 - `\tkzMarkRightAngles` (plural) is the public macro in tkz-euclide 5.x.
+- Right-angle styles:
+  - `RightSquare` -> `\tkzMarkRightAngles[...]`
+  - `RightArcDot` -> `\tkzMarkRightAngles[german,...]`
+- Non-right styles:
+  - Vanilla arc -> `arc=l, mark=none`
+  - Double arc -> `arc=ll`
+  - Triple arc -> `arc=lll`
+  - Arc bars -> `mark=|` / `mark=||` / `mark=|||`
 - Label placement uses `dist` + `angle`, derived from `labelPosWorld` relative to vertex `B`.
 - Exporter is fail-closed: if any required macro is missing from whitelist, export throws.
 

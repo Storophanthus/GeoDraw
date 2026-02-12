@@ -115,7 +115,15 @@ export type CircleStyle = {
   patternColor?: string;
 };
 
-export type AngleMarkStyle = "arc" | "right" | "none";
+export type AngleMarkStyle =
+  | "arc"
+  | "none"
+  | "rightSquare"
+  | "rightArcDot"
+  // Legacy value kept for scene backward compatibility.
+  | "right";
+
+export type AngleMarkSymbol = "none" | "|" | "||" | "|||";
 
 export type AngleStyle = {
   strokeColor: string;
@@ -129,6 +137,11 @@ export type AngleStyle = {
   pattern?: string;
   patternColor?: string;
   markStyle: AngleMarkStyle;
+  markSymbol: AngleMarkSymbol;
+  arcMultiplicity: 1 | 2 | 3;
+  markPos: number;
+  markSize: number;
+  markColor: string;
   arcRadius: number;
   labelText: string;
   labelPosWorld: Vec2;
@@ -660,7 +673,7 @@ function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): n
   });
 }
 
-export { computeConvexAngleRad, computeOrientedAngleRad } from "./eval/angleMath";
+export { computeConvexAngleRad, computeOrientedAngleRad, isRightAngle, RIGHT_ANGLE_EPS } from "./eval/angleMath";
 
 export function evaluateAngleExpressionDegrees(scene: SceneModel, exprRaw: string): AngleExpressionEvalResult {
   const expr = exprRaw.trim();

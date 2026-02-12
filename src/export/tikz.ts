@@ -1,6 +1,7 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
 import {
   computeOrientedAngleRad,
+  isRightAngle,
   evaluateAngleExpressionDegrees,
   getCircleWorldGeometry,
   getLineWorldAnchors,
@@ -766,12 +767,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const fillStyle = angleFillStyleToTikz(angle.style);
       draws.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
     }
-    if (angle.style.markStyle === "arc") {
-      const markStyle = angleMarkStyleToTikz(angle.style, false, options);
-      draws.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
-    } else if (angle.style.markStyle === "right") {
-      const markStyle = angleMarkStyleToTikz(angle.style, true, options);
+    const right = isRightAngle(aWorld, bWorld, cWorld);
+    const markKind = resolveAngleMarkKind(angle.style.markStyle, right);
+    if (markKind === "rightSquare" || markKind === "rightArcDot") {
+      const markStyle = angleMarkStyleToTikz(angle.style, true, options, markKind);
       draws.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: markStyle });
+    } else if (markKind === "arc") {
+      const markStyle = angleMarkStyleToTikz(angle.style, false, options, markKind);
+      draws.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
     }
     if (angle.style.showLabel || angle.style.showValue) {
       const labelText = buildAngleLabelTex(angle.style.labelText, angle.style.showLabel, angle.style.showValue, theta);
@@ -1761,7 +1764,8 @@ function circleStyleToTikz(style: SceneModel["circles"][number]["style"], option
 function angleMarkStyleToTikz(
   style: SceneModel["angles"][number]["style"],
   isRightAngle: boolean,
-  options: TikzExportOptions
+  options: TikzExportOptions,
+  markKind: "arc" | "rightSquare" | "rightArcDot"
 ): string {
   if (!Number.isFinite(style.arcRadius) || style.arcRadius <= 0) {
     throw new Error("Unsupported Angle style: arcRadius must be > 0.");
@@ -1778,8 +1782,47 @@ function angleMarkStyleToTikz(
     `line width=${fmt(Math.max(0.1, style.strokeWidth * strokeScale))}pt`,
     `size=${fmt(style.arcRadius * sizeScale)}`,
   ];
+  if (isRightAngle && markKind === "rightArcDot") {
+    opts.push("german");
+  }
+  if (!isRightAngle && markKind === "arc") {
+    const arcMultiplicity = style.arcMultiplicity ?? 1;
+    const arcExpr = arcMultiplicity === 3 ? "lll" : arcMultiplicity === 2 ? "ll" : "l";
+    opts.push(`arc=${arcExpr}`);
+    const markSymbol = style.markSymbol ?? "none";
+    if (markSymbol !== "none" && markSymbol !== "|" && markSymbol !== "||" && markSymbol !== "|||") {
+      throw new Error(`Unsupported construction: angle mark style symbol ${String(markSymbol)}`);
+    }
+    opts.push(`mark=${markSymbol}`);
+    const mkPos = Number.isFinite(style.markPos) ? Math.max(0, Math.min(1, style.markPos)) : 0.5;
+    const mkSize = Number.isFinite(style.markSize) ? Math.max(0.1, style.markSize) : 4;
+    const mkColor = style.markColor && style.markColor.trim() ? style.markColor : style.strokeColor;
+    opts.push(`mkpos=${fmt(mkPos)}`);
+    opts.push(`mksize=${fmt(mkSize)}`);
+    opts.push(`mkcolor=${rgbColorExpr(mkColor)}`);
+  }
   if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
   return opts.join(", ");
+}
+
+function resolveAngleMarkKind(
+  markStyle: SceneModel["angles"][number]["style"]["markStyle"],
+  isRightAngle: boolean
+): "none" | "arc" | "rightSquare" | "rightArcDot" {
+  const normalized = markStyle === "right" ? "rightSquare" : markStyle;
+  if (
+    normalized !== "none" &&
+    normalized !== "arc" &&
+    normalized !== "rightSquare" &&
+    normalized !== "rightArcDot"
+  ) {
+    throw new Error(`Unsupported construction: angle mark style ${String(markStyle)}`);
+  }
+  if (normalized === "none") return "none";
+  if (!isRightAngle) return "arc";
+  if (normalized === "rightArcDot") return "rightArcDot";
+  if (normalized === "rightSquare") return "rightSquare";
+  return "rightSquare";
 }
 
 function angleFillStyleToTikz(style: SceneModel["angles"][number]["style"]): string {

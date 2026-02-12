@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   evaluateAngleExpressionDegrees,
+  isRightAngle,
   evaluateNumberExpression,
   getNumberValue,
   getPointWorldPos,
@@ -104,6 +105,18 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     if (selectedAngle) return "angle";
     return null;
   }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedSegment]);
+  const selectedAngleIsRight = useMemo(() => {
+    if (!selectedAngle) return false;
+    const a = scene.points.find((p) => p.id === selectedAngle.aId);
+    const b = scene.points.find((p) => p.id === selectedAngle.bId);
+    const c = scene.points.find((p) => p.id === selectedAngle.cId);
+    if (!a || !b || !c) return false;
+    const wa = getPointWorldPos(a, scene);
+    const wb = getPointWorldPos(b, scene);
+    const wc = getPointWorldPos(c, scene);
+    if (!wa || !wb || !wc) return false;
+    return isRightAngle(wa, wb, wc);
+  }, [scene, selectedAngle]);
   const selectedStyleAsDefault = useMemo(() => {
     if (selectedPoint) return pointStyleEqual(pointDefaults, selectedPoint.style);
     if (selectedSegment) return lineStyleEqual(segmentDefaults, selectedSegment.style);
@@ -241,6 +254,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   selectedLine={selectedLine}
   selectedCircle={selectedCircle}
   selectedAngle={selectedAngle}
+  selectedAngleIsRight={selectedAngleIsRight}
   updateSelectedSegmentStyle={updateSelectedSegmentStyle}
   updateSelectedLineStyle={updateSelectedLineStyle}
   updateSelectedCircleStyle={updateSelectedCircleStyle}
@@ -367,6 +381,11 @@ function angleStyleEqual(a: SceneModel["angles"][number]["style"], b: SceneModel
     a.fillColor === b.fillColor &&
     a.fillOpacity === b.fillOpacity &&
     a.markStyle === b.markStyle &&
+    a.markSymbol === b.markSymbol &&
+    a.arcMultiplicity === b.arcMultiplicity &&
+    a.markPos === b.markPos &&
+    a.markSize === b.markSize &&
+    a.markColor === b.markColor &&
     a.arcRadius === b.arcRadius &&
     a.labelText === b.labelText &&
     a.showLabel === b.showLabel &&

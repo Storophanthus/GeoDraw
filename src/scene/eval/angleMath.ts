@@ -1,5 +1,7 @@
 import type { Vec2 } from "../../geo/vec2";
 
+export const RIGHT_ANGLE_EPS = 1e-6;
+
 export function computeConvexAngleRad(a: Vec2, b: Vec2, c: Vec2): number | null {
   const bax = a.x - b.x;
   const bay = a.y - b.y;
@@ -27,4 +29,16 @@ export function computeOrientedAngleRad(a: Vec2, b: Vec2, c: Vec2): number | nul
   while (delta < 0) delta += Math.PI * 2;
   while (delta >= Math.PI * 2) delta -= Math.PI * 2;
   return delta;
+}
+
+export function isRightAngle(a: Vec2, b: Vec2, c: Vec2, eps: number = RIGHT_ANGLE_EPS): boolean {
+  const bax = a.x - b.x;
+  const bay = a.y - b.y;
+  const bcx = c.x - b.x;
+  const bcy = c.y - b.y;
+  const baLen = Math.hypot(bax, bay);
+  const bcLen = Math.hypot(bcx, bcy);
+  if (baLen <= 1e-12 || bcLen <= 1e-12) return false;
+  const dot = bax * bcx + bay * bcy;
+  return Math.abs(dot) <= eps * baLen * bcLen;
 }

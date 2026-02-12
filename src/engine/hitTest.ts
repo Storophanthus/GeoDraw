@@ -1,5 +1,6 @@
 import { projectPointToLine, projectPointToSegment } from "../geo/geometry";
 import {
+  isRightAngle,
   computeOrientedAngleRad,
   getCircleWorldGeometry,
   getLineWorldAnchors,
@@ -185,8 +186,10 @@ export function hitTestAngleId(
     const bs = camMath.worldToScreen(entry.b, camera, vp);
     const cs = camMath.worldToScreen(entry.c, camera, vp);
     const r = Math.max(12, entry.angle.style.arcRadius * camera.zoom);
+    const right = isRightAngle(entry.a, entry.b, entry.c);
+    const markStyle = entry.angle.style.markStyle === "right" ? "rightSquare" : entry.angle.style.markStyle;
     const d =
-      entry.angle.style.markStyle === "right"
+      right && markStyle === "rightSquare"
         ? distanceToRightAngleMark(screenPoint, as, bs, cs, r * 0.55)
         : distanceToAngleArc(screenPoint, as, bs, entry.theta, r);
     if (d <= best) {

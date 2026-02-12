@@ -279,6 +279,11 @@ function hydrateAngle(raw: Record<string, unknown>): SceneAngle {
     fillColor: "#93c5fd",
     fillOpacity: 0.2,
     markStyle: "arc",
+    markSymbol: "none",
+    arcMultiplicity: 1,
+    markPos: 0.5,
+    markSize: 4,
+    markColor: "#334155",
     arcRadius: 1.2,
     labelText: "",
     labelPosWorld: { x: 0, y: 0 },
@@ -474,6 +479,40 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("\\pi/2")) {
       throw new Error("Expected custom angle label text to be preserved as TeX.");
     }
+  }
+
+  if (fileName === "angle-nonright-vanilla.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkAngle")) throw new Error("Expected vanilla non-right angle to emit \\tkzMarkAngle.");
+    if (!tikz.includes("arc=l")) throw new Error("Expected vanilla non-right angle to emit arc=l.");
+  }
+
+  if (fileName === "angle-nonright-doublearc.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("arc=ll")) throw new Error("Expected double-arc angle to emit arc=ll.");
+  }
+
+  if (fileName === "angle-nonright-triplearc.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("arc=lll")) throw new Error("Expected triple-arc angle to emit arc=lll.");
+  }
+
+  if (fileName === "angle-nonright-markbars.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("mark=||")) throw new Error("Expected mark-bars angle to emit mark=||.");
+    if (!tikz.includes("mkpos=0.35")) throw new Error("Expected mark-bars angle to emit mkpos=0.35.");
+  }
+
+  if (fileName === "angle-right-square.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-square angle to emit \\tkzMarkRightAngles.");
+    if (tikz.includes("german")) throw new Error("Expected right-square angle to omit german option.");
+  }
+
+  if (fileName === "angle-right-german.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-arc-dot angle to emit \\tkzMarkRightAngles.");
+    if (!tikz.includes("german")) throw new Error("Expected right-arc-dot angle to include german option.");
   }
 
   if (fileName === "sector-basic.json") {
