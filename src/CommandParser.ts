@@ -35,6 +35,10 @@ export type ParseResult =
   | { kind: "assignObject"; name: string; cmd: Command }
   | { kind: "error"; message: string };
 
+type ExprValue =
+  | { kind: "scalar"; value: number }
+  | { kind: "point"; x: number; y: number };
+
 type EvalResult = { ok: true; value: number } | { ok: false; error: string };
 
 function formatNumber(value: number): string {
@@ -146,6 +150,127 @@ function evaluateExpression(expr: string, ctx: ParseContext): EvalResult {
     return { ok: false, error: "Expression must evaluate to a finite number" };
   }
   return { ok: true, value };
+}
+
+function toScalarExprValue(value: number): ExprValue {
+  return { kind: "scalar", value };
+}
+
+function toPointExprValue(x: number, y: number): ExprValue {
+  return { kind: "point", x, y };
+}
+
+function exprPointByLabel(label: string, ctx: ParseContext): { ok: true; value: ExprValue } | { ok: false; error: string } {
+  const resolved = resolvePointIdentifier(label, ctx);
+  if (!resolved.ok) return { ok: false, error: resolved.message };
+  const map = ctx.pointWorldById;
+  if (!map) return { ok: false, error: `Point coordinate context is missing for: ${label}` };
+  const w = map.get(resolved.id);
+  if (!w) return { ok: false, error: `Point is missing: ${label}` };
+  return { ok: true, value: toPointExprValue(w.x, w.y) };
+}
+
+function evalPointExpressionNode(node: MathNode, ctx: ParseContext): { ok: true; value: ExprValue } | { ok: false; error: string } {
+  const anyNode = node as unknown as {
+    type?: string;
+    value?: number;
+    name?: string;
+    op?: string;
+    args?: MathNode[];
+    content?: MathNode;
+  };
+
+  if (anyNode.type === "ParenthesisNode" && anyNode.content) return evalPointExpressionNode(anyNode.content, ctx);
+
+  if (anyNode.type === "ConstantNode") {
+    const numeric = evaluateExpression(node.toString(), ctx);
+    if (!numeric.ok) return { ok: false, error: numeric.error };
+    return { ok: true, value: toScalarExprValue(numeric.value) };
+  }
+
+  if (anyNode.type === "SymbolNode") {
+    if (!anyNode.name) return { ok: false, error: "Unsupported symbol: unknown" };
+    if (ctx.scalarsByName.has(anyNode.name)) return { ok: true, value: toScalarExprValue(ctx.scalarsByName.get(anyNode.name) as number) };
+    if (anyNode.name === "ans") return { ok: true, value: toScalarExprValue(ctx.ans ?? 0) };
+    if (anyNode.name === "pi") return { ok: true, value: toScalarExprValue(Math.PI) };
+    if (anyNode.name === "e") return { ok: true, value: toScalarExprValue(Math.E) };
+    if (anyNode.name === "tau") return { ok: true, value: toScalarExprValue(Math.PI * 2) };
+    return exprPointByLabel(anyNode.name, ctx);
+  }
+
+  if (anyNode.type === "OperatorNode") {
+    const op = anyNode.op ?? "";
+    const args = anyNode.args ?? [];
+    if (op === "-" && args.length === 1) {
+      const v = evalPointExpressionNode(args[0], ctx);
+      if (!v.ok) return v;
+      if (v.value.kind === "scalar") return { ok: true, value: toScalarExprValue(-v.value.value) };
+      return { ok: true, value: toPointExprValue(-v.value.x, -v.value.y) };
+    }
+    if (args.length !== 2) return { ok: false, error: `Unsupported operator arity: ${op}` };
+    const left = evalPointExpressionNode(args[0], ctx);
+    if (!left.ok) return left;
+    const right = evalPointExpressionNode(args[1], ctx);
+    if (!right.ok) return right;
+
+    if (op === "+" || op === "-") {
+      if (left.value.kind === "point" && right.value.kind === "point") {
+        return {
+          ok: true,
+          value: toPointExprValue(
+            op === "+" ? left.value.x + right.value.x : left.value.x - right.value.x,
+            op === "+" ? left.value.y + right.value.y : left.value.y - right.value.y
+          ),
+        };
+      }
+      if (left.value.kind === "scalar" && right.value.kind === "scalar") {
+        return { ok: true, value: toScalarExprValue(op === "+" ? left.value.value + right.value.value : left.value.value - right.value.value) };
+      }
+      return { ok: false, error: `Unsupported ${op} between point and scalar` };
+    }
+
+    if (op === "*") {
+      if (left.value.kind === "scalar" && right.value.kind === "scalar") {
+        return { ok: true, value: toScalarExprValue(left.value.value * right.value.value) };
+      }
+      if (left.value.kind === "scalar" && right.value.kind === "point") {
+        return { ok: true, value: toPointExprValue(left.value.value * right.value.x, left.value.value * right.value.y) };
+      }
+      if (left.value.kind === "point" && right.value.kind === "scalar") {
+        return { ok: true, value: toPointExprValue(left.value.x * right.value.value, left.value.y * right.value.value) };
+      }
+      return { ok: false, error: "Unsupported * between two points" };
+    }
+
+    if (op === "/") {
+      if (right.value.kind !== "scalar" || Math.abs(right.value.value) <= 1e-12) return { ok: false, error: "Division requires non-zero scalar divisor" };
+      if (left.value.kind === "scalar") return { ok: true, value: toScalarExprValue(left.value.value / right.value.value) };
+      return { ok: true, value: toPointExprValue(left.value.x / right.value.value, left.value.y / right.value.value) };
+    }
+
+    if (op === "^") {
+      if (left.value.kind !== "scalar" || right.value.kind !== "scalar") return { ok: false, error: "Exponentiation only supports scalars" };
+      const powered = left.value.value ** right.value.value;
+      if (!Number.isFinite(powered)) return { ok: false, error: "Exponentiation result is not finite" };
+      return { ok: true, value: toScalarExprValue(powered) };
+    }
+
+    return { ok: false, error: `Unsupported operator: ${op}` };
+  }
+
+  return { ok: false, error: `Unsupported expression node: ${anyNode.type ?? "unknown"}` };
+}
+
+function evaluatePointOrScalarExpression(expr: string, ctx: ParseContext): { ok: true; value: ExprValue } | { ok: false; error: string } {
+  if (expr.length > MAX_INPUT_LENGTH) return { ok: false, error: "Input is too long" };
+  if (DISALLOWED_TOKEN_RE.test(expr)) return { ok: false, error: "Expression uses disallowed token" };
+  let node: MathNode;
+  try {
+    node = math.parse(expr);
+  } catch {
+    return { ok: false, error: "Invalid expression syntax" };
+  }
+  return evalPointExpressionNode(node, ctx);
 }
 
 function splitArgs(raw: string): string[] | null {
@@ -365,18 +490,28 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
     const conflict = checkAssignmentNameAvailable(left, ctx);
     if (conflict) return conflict;
 
-    const rhs = parseCommandLike(assignment.right, ctx);
-    if (rhs.kind === "error") return rhs;
-    if (rhs.kind === "expr") {
-      if (typeof rhs.numeric !== "number" || !Number.isFinite(rhs.numeric)) {
-        return err("Assignment right-hand side must evaluate to a finite number");
+    const commandMatch = assignment.right.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
+    if (commandMatch) {
+      const args = splitArgs(commandMatch[2]);
+      if (!args) return err("Invalid command arguments");
+      const rhsCmd = parseCommand(commandMatch[1], args, ctx);
+      if (rhsCmd.kind === "error") return rhsCmd;
+      if (rhsCmd.kind === "cmd") return { kind: "assignObject", name: left, cmd: rhsCmd.cmd };
+      if (rhsCmd.kind === "expr") {
+        if (typeof rhsCmd.numeric !== "number" || !Number.isFinite(rhsCmd.numeric)) {
+          return err("Assignment right-hand side must evaluate to a finite number");
+        }
+        return { kind: "assignScalar", name: left, value: rhsCmd.numeric };
       }
-      return { kind: "assignScalar", name: left, value: rhs.numeric };
+      return err("Unsupported assignment right-hand side");
     }
-    if (rhs.kind === "cmd") {
-      return { kind: "assignObject", name: left, cmd: rhs.cmd };
+
+    const rhsExpr = evaluatePointOrScalarExpression(assignment.right, ctx);
+    if (!rhsExpr.ok) return err(rhsExpr.error);
+    if (rhsExpr.value.kind === "point") {
+      return { kind: "assignObject", name: left, cmd: { type: "CreatePointXY", x: rhsExpr.value.x, y: rhsExpr.value.y } };
     }
-    return err("Unsupported assignment right-hand side");
+    return { kind: "assignScalar", name: left, value: rhsExpr.value.value };
   }
 
   return parseCommandLike(input, ctx);

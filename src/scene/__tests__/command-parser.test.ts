@@ -91,6 +91,16 @@ if (assignPoint.type !== "CreatePointXY" || assignPoint.x !== 1 || assignPoint.y
   throw new Error("P = Point(1,2) mismatch");
 }
 
+const assignPointVec = mustAssignObject("X = A + B", baseCtx, "X", "CreatePointXY");
+if (assignPointVec.type !== "CreatePointXY" || assignPointVec.x !== 3 || assignPointVec.y !== 4) {
+  throw new Error("X = A + B mismatch");
+}
+
+const assignPointAffine = mustAssignObject("Y = A + B/2", baseCtx, "Y", "CreatePointXY");
+if (assignPointAffine.type !== "CreatePointXY" || Math.abs(assignPointAffine.x - 1.5) > 1e-9 || Math.abs(assignPointAffine.y - 2) > 1e-9) {
+  throw new Error("Y = A + B/2 mismatch");
+}
+
 const assignLine = mustAssignObject("l = Line(A,B)", baseCtx, "l", "CreateLineByPoints");
 if (assignLine.type !== "CreateLineByPoints" || assignLine.aId !== "pA" || assignLine.bId !== "pB") {
   throw new Error("l = Line(A,B) mismatch");
@@ -152,6 +162,7 @@ const unknownScalarCtx: ParseContext = {
   symbolsByLabel: new Map([["O", [{ kind: "point", id: "pO", label: "O" }]]]),
 };
 mustError("Circle(O,r)", unknownScalarCtx, "Unknown scalar: r");
+mustError("Z = A + 2", baseCtx, "Unsupported + between point and scalar");
 
 const usedAliasCtx: ParseContext = {
   ...baseCtx,
