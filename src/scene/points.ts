@@ -50,6 +50,7 @@ import {
   evaluateAngleExpressionWithRuntime,
   evaluateNumberExpressionWithRuntime,
 } from "./eval/expressionRuntime";
+import { evalNumberByIdWithRuntime } from "./eval/numberRuntime";
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
@@ -880,23 +881,28 @@ export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel)
 }
 
 function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): number | null {
-  if (ctx.numberCache.has(id)) {
-    ctx.stats.cacheHits += 1;
-    return ctx.numberCache.get(id)!;
-  }
-  if (ctx.numberInProgress.has(id)) return null;
-  const num = ctx.numberById.get(id);
-  if (!num) return null;
-  ctx.numberInProgress.add(id);
-  const value = evalNumberDefinition(num.definition, scene, ctx, id);
-  ctx.numberInProgress.delete(id);
-  // Do not memoize transient nulls: they can happen during recursive evaluation
-  // (e.g. angleExpr -> number -> circleRadius -> point depending on the same expr).
-  // Caching null would incorrectly keep the number undefined for the whole scene tick.
-  if (value !== null) {
-    ctx.numberCache.set(id, value);
-  }
-  return value;
+  return evalNumberByIdWithRuntime<SceneNumberDefinition>(id, {
+    hasCache: (numberId) => ctx.numberCache.has(numberId),
+    getCache: (numberId) => ctx.numberCache.get(numberId),
+    setCache: (numberId, value) => {
+      ctx.numberCache.set(numberId, value);
+    },
+    isInProgress: (numberId) => ctx.numberInProgress.has(numberId),
+    addInProgress: (numberId) => {
+      ctx.numberInProgress.add(numberId);
+    },
+    removeInProgress: (numberId) => {
+      ctx.numberInProgress.delete(numberId);
+    },
+    getDefinitionById: (numberId) => {
+      const num = ctx.numberById.get(numberId);
+      return num ? num.definition : null;
+    },
+    evalDefinition: (def, selfNumberId) => evalNumberDefinition(def, scene, ctx, selfNumberId),
+    onCacheHit: () => {
+      ctx.stats.cacheHits += 1;
+    },
+  });
 }
 
 function evalNumberDefinition(

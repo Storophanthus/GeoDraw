@@ -403,6 +403,14 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: number runtime extraction):
+  - Added `src/scene/eval/numberRuntime.ts`:
+    - `evalNumberByIdWithRuntime(...)`
+  - `points.ts` `evalNumberById(...)` now delegates cache/in-progress orchestration to this helper.
+  - Number definition math/evaluation callbacks unchanged.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
