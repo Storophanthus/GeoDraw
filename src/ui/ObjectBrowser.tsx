@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import {
     Circle,
-    CircleDot,
     Hash,
     Layers,
     Minus,
@@ -24,7 +23,13 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
 
     const tabs: Array<{ id: TabId; icon: React.ElementType; label: string; description: string; count: number }> = [
         { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.angles.length + scene.numbers.length },
-        { id: "points", icon: CircleDot, label: "Points", description: "Filter by Points", count: scene.points.length },
+        {
+            id: "points",
+            icon: (props) => <Circle {...props} fill="currentColor" />,
+            label: "Points",
+            description: "Filter by Points",
+            count: scene.points.length
+        },
         { id: "lines", icon: Minus, label: "Lines", description: "Filter by Lines & Segments", count: scene.segments.length + scene.lines.length },
         { id: "circles", icon: Circle, label: "Circles", description: "Filter by Circles", count: scene.circles.length },
         { id: "angles", icon: Triangle, label: "Angles", description: "Filter by Angles", count: scene.angles.length },
