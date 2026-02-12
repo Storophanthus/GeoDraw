@@ -1,6 +1,4 @@
 import type { Vec2 } from "../geo/vec2";
-import {
-} from "../geo/geometry";
 import type { NumberExpressionEvalResult } from "./eval/numericExpression";
 import {
   type AngleExpressionEvalResult,
@@ -19,9 +17,9 @@ import { objectIntersectionsWithOps } from "./eval/intersectionQueries";
 import { getPreviousStablePoint, rememberStablePoint } from "./eval/stablePointMemory";
 import { computeOrientedAngleRad } from "./eval/angleMath";
 import {
-  evaluateAngleExpressionWithRuntime,
-  evaluateNumberExpressionWithRuntime,
-} from "./eval/expressionRuntime";
+  evaluateAngleExpressionDegreesWithCtxInScene,
+  evaluateNumberExpressionWithCtxInScene,
+} from "./eval/numberExpressionEvaluators";
 import { evalNumberByIdWithRuntime } from "./eval/numberRuntime";
 import {
   asCircleInScene,
@@ -765,37 +763,42 @@ function evaluateAngleExpressionDegreesWithCtx(
   exprRaw: string,
   ctx: SceneEvalContext
 ): AngleExpressionEvalResult {
-  return evaluateAngleExpressionWithRuntime(exprRaw, {
-    angles: scene.angles.map((angle) => ({
-      id: angle.id,
-      aId: angle.aId,
-      bId: angle.bId,
-      cId: angle.cId,
-      labelText: angle.style.labelText,
-    })),
-    numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
-    getAngleValueDeg: (angleId) => {
-      const angle = ctx.angleById.get(angleId);
-      if (!angle) return null;
-      const a = getPointWorldById(angle.aId, scene, ctx);
-      const b = getPointWorldById(angle.bId, scene, ctx);
-      const c = getPointWorldById(angle.cId, scene, ctx);
-      if (!a || !b || !c) return null;
-      const theta = computeOrientedAngleRad(a, b, c);
-      if (theta === null) return null;
-      return (theta * 180) / Math.PI;
+  return evaluateAngleExpressionDegreesWithCtxInScene(
+    exprRaw,
+    {
+      angles: scene.angles.map((angle) => ({
+        id: angle.id,
+        aId: angle.aId,
+        bId: angle.bId,
+        cId: angle.cId,
+        labelText: angle.style.labelText,
+      })),
+      numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
     },
-    getAnglePointNames: (angleId) => {
-      const angle = ctx.angleById.get(angleId);
-      if (!angle) return null;
-      const pa = ctx.pointById.get(angle.aId);
-      const pb = ctx.pointById.get(angle.bId);
-      const pc = ctx.pointById.get(angle.cId);
-      if (!pa || !pb || !pc) return null;
-      return { aName: pa.name, bName: pb.name, cName: pc.name };
-    },
-    getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
-  });
+    {
+      getAngleValueDeg: (angleId) => {
+        const angle = ctx.angleById.get(angleId);
+        if (!angle) return null;
+        const a = getPointWorldById(angle.aId, scene, ctx);
+        const b = getPointWorldById(angle.bId, scene, ctx);
+        const c = getPointWorldById(angle.cId, scene, ctx);
+        if (!a || !b || !c) return null;
+        const theta = computeOrientedAngleRad(a, b, c);
+        if (theta === null) return null;
+        return (theta * 180) / Math.PI;
+      },
+      getAnglePointNames: (angleId) => {
+        const angle = ctx.angleById.get(angleId);
+        if (!angle) return null;
+        const pa = ctx.pointById.get(angle.aId);
+        const pb = ctx.pointById.get(angle.bId);
+        const pc = ctx.pointById.get(angle.cId);
+        if (!pa || !pb || !pc) return null;
+        return { aName: pa.name, bName: pb.name, cName: pc.name };
+      },
+      getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
+    }
+  );
 }
 
 function evaluateNumberExpressionWithCtx(
@@ -804,9 +807,14 @@ function evaluateNumberExpressionWithCtx(
   ctx: SceneEvalContext,
   excludeNumberId?: string
 ): NumberExpressionEvalResult {
-  return evaluateNumberExpressionWithRuntime(exprRaw, {
-    numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
-    getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
-    excludeNumberId,
-  });
+  return evaluateNumberExpressionWithCtxInScene(
+    exprRaw,
+    {
+      numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
+    },
+    {
+      getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
+      excludeNumberId,
+    }
+  );
 }
