@@ -293,6 +293,29 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- UI decomposition (Properties tool-info extraction):
+  - Added `src/ui/ToolInfoSection.tsx`
+    - moved tool-specific info/config panels from `PropertiesPanel`:
+      - Copy Style info
+      - Fixed Angle tool info
+      - Fixed Radius Circle tool info
+  - `src/ui/PropertiesPanel.tsx` now composes `ToolInfoSection` + object editors.
+  - Behavior preserved.
+- Scene decomposition (`points.ts` slice: intersection utility extraction):
+  - Added `src/scene/eval/intersectionUtils.ts` with pure helpers:
+    - `clamp(...)`
+    - `circleLineStabilitySignature(...)`
+    - `genericIntersectionPairKey(...)`
+    - `genericIntersectionSignature(...)`
+    - `sameObjectPair(...)`
+    - `lineLikeContainsPoint(...)`
+    - `pointWithinSegmentDomain(...)`
+    - `circleLinePairAssignmentKey(...)`
+  - `src/scene/points.ts` now imports and uses these utilities; duplicate local implementations removed.
+  - No algorithmic change intended; this is structural extraction only.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`

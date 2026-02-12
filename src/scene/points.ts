@@ -33,6 +33,15 @@ import {
   getCircleWorldGeometryWithOps,
   resolveLineAnchorsWithOps,
 } from "./eval/geometryResolve";
+import {
+  circleLinePairAssignmentKey,
+  circleLineStabilitySignature,
+  clamp,
+  genericIntersectionPairKey,
+  genericIntersectionSignature,
+  lineLikeContainsPoint,
+  sameObjectPair,
+} from "./eval/intersectionUtils";
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
@@ -827,37 +836,6 @@ export function getCircleWorldGeometry(circle: SceneCircle, scene: SceneModel): 
   return value;
 }
 
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-function circleLineStabilitySignature(
-  circleId: string,
-  lineId: string,
-  _la: Vec2,
-  _lb: Vec2,
-  _center: Vec2,
-  _radius: number
-): string {
-  // Keep branch continuity stable across drags. Geometry snapshots in the key
-  // caused frequent cache misses and root flips ("teleporting") while parents moved.
-  return `cli:${circleId}:${lineId}`;
-}
-
-function circleLinePairKey(circleId: string, lineId: string): string {
-  return `${circleId}:${lineId}`;
-}
-
-function objectRefKey(ref: GeometryObjectRef): string {
-  return `${ref.type}:${ref.id}`;
-}
-
-function genericIntersectionPairKey(a: GeometryObjectRef, b: GeometryObjectRef): string {
-  const ak = objectRefKey(a);
-  const bk = objectRefKey(b);
-  return ak <= bk ? `${ak}|${bk}` : `${bk}|${ak}`;
-}
-
 function resolveCircleLinePairAssignments(
   scene: SceneModel,
   ctx: SceneEvalContext,
@@ -866,7 +844,7 @@ function resolveCircleLinePairAssignments(
   branches: Array<{ point: Vec2; t: number }>,
   stabilitySignature: string
 ): Map<string, Vec2 | null> {
-  const key = circleLinePairKey(circleId, lineId);
+  const key = circleLinePairAssignmentKey(circleId, lineId);
   const cached = ctx.circleLinePairAssignments.get(key);
   if (cached) return cached;
 
@@ -978,10 +956,6 @@ function resolveCircleLinePairAssignments(
   return out;
 }
 
-function genericIntersectionSignature(a: GeometryObjectRef, b: GeometryObjectRef): string {
-  return `gix:${genericIntersectionPairKey(a, b)}`;
-}
-
 function getPreviousStableGenericIntersectionPoint(
   pointId: string,
   a: GeometryObjectRef,
@@ -997,14 +971,6 @@ function rememberStableGenericIntersectionPoint(
   value: Vec2
 ): void {
   rememberStableCircleLinePoint(pointId, genericIntersectionSignature(a, b), value);
-}
-
-function sameObjectRef(a: GeometryObjectRef, b: GeometryObjectRef): boolean {
-  return a.type === b.type && a.id === b.id;
-}
-
-function sameObjectPair(a1: GeometryObjectRef, b1: GeometryObjectRef, a2: GeometryObjectRef, b2: GeometryObjectRef): boolean {
-  return (sameObjectRef(a1, a2) && sameObjectRef(b1, b2)) || (sameObjectRef(a1, b2) && sameObjectRef(b1, a2));
 }
 
 function resolveGenericIntersectionPairAssignments(
@@ -1133,23 +1099,6 @@ function getPreviousStableCircleLinePoint(pointId: string, signature: string): V
 
 function rememberStableCircleLinePoint(pointId: string, signature: string, value: Vec2): void {
   lastResolvedPointWorld.set(pointId, { value, signature });
-}
-
-function lineLikeContainsPoint(lineLike: { a: Vec2; b: Vec2; finite: boolean }, p: Vec2): boolean {
-  if (!lineLike.finite) return true;
-  return pointWithinSegmentDomain(p, lineLike.a, lineLike.b);
-}
-
-function pointWithinSegmentDomain(p: Vec2, a: Vec2, b: Vec2): boolean {
-  const EPS = 1e-6;
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const dd = dx * dx + dy * dy;
-  if (dd <= EPS * EPS) return distance(p, a) <= EPS;
-  const ux = p.x - a.x;
-  const uy = p.y - a.y;
-  const u = (ux * dx + uy * dy) / dd;
-  return u >= -EPS && u <= 1 + EPS;
 }
 
 export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel): number | null {
