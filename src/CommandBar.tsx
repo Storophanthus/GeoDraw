@@ -2,7 +2,7 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 import { parseCommandInput, type ParseContext, type Symbol } from "./CommandParser";
 import { getPointWorldPos } from "./scene/points";
 import type { SceneModel } from "./scene/points";
-import { useGeoStore } from "./state/geoStore";
+import { commandBarApi, useGeoStore } from "./state/geoStore";
 
 type StatusKind = "idle" | "ok" | "error";
 
@@ -13,7 +13,12 @@ type Status = {
 
 const MAX_HISTORY = 20;
 
-function buildParseContext(scene: SceneModel, ans: number | null): ParseContext {
+function buildParseContext(
+  scene: SceneModel,
+  ans: number | null,
+  scalarVars: Record<string, number>,
+  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle"; id: string }>
+): ParseContext {
   const symbolsByLabel = new Map<string, Symbol[]>();
   const add = (symbol: Symbol) => {
     const list = symbolsByLabel.get(symbol.label);
@@ -37,7 +42,13 @@ function buildParseContext(scene: SceneModel, ans: number | null): ParseContext 
     if (w) pointWorldById.set(p.id, w);
   }
 
-  return { symbolsByLabel, pointWorldById, ans: ans ?? undefined };
+  return {
+    symbolsByLabel,
+    pointWorldById,
+    scalarsByName: new Map(Object.entries(scalarVars)),
+    objectNames: new Set(Object.keys(objectAliases)),
+    ans: ans ?? undefined,
+  };
 }
 
 export function CommandBar() {
@@ -77,7 +88,8 @@ export function CommandBar() {
       return;
     }
 
-    const parsed = parseCommandInput(raw, buildParseContext(scene, ans));
+    const parseCtx = buildParseContext(scene, ans, commandBarApi.getScalarVars(), commandBarApi.getCommandObjectAliases());
+    const parsed = parseCommandInput(raw, parseCtx);
     if (parsed.kind === "error") {
       setStatus({ kind: "error", text: parsed.message });
       return;
@@ -91,6 +103,84 @@ export function CommandBar() {
       }
       setStatus({ kind: "ok", text: `= ${parsed.value}` });
       return;
+    }
+
+    if (parsed.kind === "assignScalar") {
+      const out = commandBarApi.setScalarVar(parsed.name, parsed.value);
+      if (!out.ok) {
+        setStatus({ kind: "error", text: out.error });
+        return;
+      }
+      setStatus({ kind: "ok", text: `${parsed.name} = ${parsed.value}` });
+      return;
+    }
+
+    if (parsed.kind === "assignObject") {
+      const { name, cmd } = parsed;
+      if (cmd.type === "CreatePointXY") {
+        const id = commandBarApi.createPointXYWithLabel(cmd.x, cmd.y, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct point" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Point created` });
+        return;
+      }
+      if (cmd.type === "CreateLineXY") {
+        const id = commandBarApi.createLineXYWithLabel(cmd.x1, cmd.y1, cmd.x2, cmd.y2, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct line" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Line created` });
+        return;
+      }
+      if (cmd.type === "CreateLineByPoints") {
+        const id = commandBarApi.createLineThroughPointsWithLabel(cmd.aId, cmd.bId, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct line" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Line created` });
+        return;
+      }
+      if (cmd.type === "CreateSegmentByPoints") {
+        const id = commandBarApi.createSegmentThroughPointsWithLabel(cmd.aId, cmd.bId, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct segment" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Segment created` });
+        return;
+      }
+      if (cmd.type === "CreateCircleCenterThrough") {
+        const id = commandBarApi.createCircleCenterThroughWithLabel(cmd.centerId, cmd.throughId, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct circle" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Circle created` });
+        return;
+      }
+      if (cmd.type === "CreateCircleCenterRadius") {
+        const id = commandBarApi.createCircleCenterRadiusWithLabel(cmd.centerId, cmd.r, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct circle" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Circle created` });
+        return;
+      }
+      if (cmd.type === "CreateCircleXYR") {
+        const centerId = createFreePoint({ x: cmd.x, y: cmd.y });
+        const id = commandBarApi.createCircleCenterRadiusWithLabel(centerId, cmd.r, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct circle" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Circle created` });
+        return;
+      }
     }
 
     const cmd = parsed.cmd;

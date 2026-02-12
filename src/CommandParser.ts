@@ -4,7 +4,7 @@ const math = create(all, { number: "number", matrix: "Array", predictable: true 
 const MAX_INPUT_LENGTH = 300;
 const DISALLOWED_TOKEN_RE = /\b(import|createUnit|unit|range|ones|zeros|matrix)\b/i;
 const ALLOWED_FUNCTIONS = new Set(["sin", "cos", "tan", "sqrt", "abs", "min", "max", "pow"]);
-const ALLOWED_SYMBOLS = new Set(["ans", "pi", "e", "tau"]);
+const BASE_ALLOWED_SYMBOLS = new Set(["ans", "pi", "e", "tau"]);
 const IDENT_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 export type Symbol =
@@ -14,6 +14,8 @@ export type Symbol =
 export type ParseContext = {
   symbolsByLabel: Map<string, Symbol[]>;
   pointWorldById?: Map<string, { x: number; y: number }>;
+  scalarsByName: Map<string, number>;
+  objectNames: Set<string>;
   ans?: number;
 };
 
@@ -29,7 +31,11 @@ export type Command =
 export type ParseResult =
   | { kind: "expr"; value: string; numeric?: number }
   | { kind: "cmd"; cmd: Command }
+  | { kind: "assignScalar"; name: string; value: number }
+  | { kind: "assignObject"; name: string; cmd: Command }
   | { kind: "error"; message: string };
+
+type EvalResult = { ok: true; value: number } | { ok: false; error: string };
 
 function formatNumber(value: number): string {
   if (!Number.isFinite(value)) return String(value);
@@ -42,7 +48,7 @@ function err(message: string): ParseResult {
   return { kind: "error", message };
 }
 
-function ensureSafeNode(node: MathNode): string | null {
+function ensureSafeNode(node: MathNode, allowedSymbols: Set<string>): string | null {
   const queue: MathNode[] = [node];
   while (queue.length > 0) {
     const current = queue.pop();
@@ -62,7 +68,7 @@ function ensureSafeNode(node: MathNode): string | null {
       case "ParenthesisNode":
         break;
       case "SymbolNode":
-        if (!anyNode.name || !ALLOWED_SYMBOLS.has(anyNode.name)) {
+        if (!anyNode.name || !allowedSymbols.has(anyNode.name)) {
           return `Unsupported symbol: ${anyNode.name ?? "unknown"}`;
         }
         break;
@@ -93,7 +99,7 @@ function ensureSafeNode(node: MathNode): string | null {
   return null;
 }
 
-function evaluateExpression(expr: string, ans?: number): { ok: true; value: number } | { ok: false; error: string } {
+function evaluateExpression(expr: string, ctx: ParseContext): EvalResult {
   if (expr.length > MAX_INPUT_LENGTH) return { ok: false, error: "Input is too long" };
   if (DISALLOWED_TOKEN_RE.test(expr)) return { ok: false, error: "Expression uses disallowed token" };
 
@@ -104,11 +110,14 @@ function evaluateExpression(expr: string, ans?: number): { ok: true; value: numb
     return { ok: false, error: "Invalid expression syntax" };
   }
 
-  const safe = ensureSafeNode(node);
+  const allowedSymbols = new Set<string>(BASE_ALLOWED_SYMBOLS);
+  for (const key of ctx.scalarsByName.keys()) allowedSymbols.add(key);
+
+  const safe = ensureSafeNode(node, allowedSymbols);
   if (safe) return { ok: false, error: safe };
 
-  const scope = {
-    ans: ans ?? 0,
+  const scope: Record<string, number | ((...args: number[]) => number)> = {
+    ans: ctx.ans ?? 0,
     pi: Math.PI,
     e: Math.E,
     tau: Math.PI * 2,
@@ -121,6 +130,10 @@ function evaluateExpression(expr: string, ans?: number): { ok: true; value: numb
     max: Math.max,
     pow: Math.pow,
   };
+
+  for (const [name, value] of ctx.scalarsByName.entries()) {
+    scope[name] = value;
+  }
 
   let value: unknown;
   try {
@@ -156,6 +169,27 @@ function splitArgs(raw: string): string[] | null {
   return args;
 }
 
+function splitAssignment(raw: string): { left: string; right: string } | null {
+  let depth = 0;
+  let eqIndex = -1;
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (ch === "(") depth += 1;
+    else if (ch === ")") {
+      depth -= 1;
+      if (depth < 0) return null;
+    } else if (ch === "=" && depth === 0) {
+      if (eqIndex !== -1) return null;
+      eqIndex = i;
+    }
+  }
+  if (depth !== 0 || eqIndex === -1) return null;
+  return {
+    left: raw.slice(0, eqIndex).trim(),
+    right: raw.slice(eqIndex + 1).trim(),
+  };
+}
+
 function asIdentifier(value: string): string | null {
   return IDENT_RE.test(value) ? value : null;
 }
@@ -168,31 +202,44 @@ function resolvePointIdentifier(label: string, ctx: ParseContext): { ok: true; i
   return { ok: true, id: symbols[0].id };
 }
 
-function parseDistance(args: string[], ctx: ParseContext): ParseResult {
-  if (args.length !== 2) return err("Distance(A, B) expects 2 point labels");
+function resolveScalarIdentifier(label: string, ctx: ParseContext): { ok: true; value: number } | { ok: false; message: string } {
+  const value = ctx.scalarsByName.get(label);
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return { ok: false, message: `Unknown scalar: ${label}` };
+  }
+  return { ok: true, value };
+}
+
+function parseDistanceNumeric(args: string[], ctx: ParseContext): EvalResult {
+  if (args.length !== 2) return { ok: false, error: "Distance(A, B) expects 2 point labels" };
   const aLabel = asIdentifier(args[0]);
   const bLabel = asIdentifier(args[1]);
-  if (!aLabel || !bLabel) return err("Distance(A, B) expects point labels");
+  if (!aLabel || !bLabel) return { ok: false, error: "Distance(A, B) expects point labels" };
   const a = resolvePointIdentifier(aLabel, ctx);
-  if (!a.ok) return err(a.message);
+  if (!a.ok) return { ok: false, error: a.message };
   const b = resolvePointIdentifier(bLabel, ctx);
-  if (!b.ok) return err(b.message);
+  if (!b.ok) return { ok: false, error: b.message };
 
   const pMap = ctx.pointWorldById;
-  if (!pMap) return err("Distance requires point coordinates in context");
+  if (!pMap) return { ok: false, error: "Distance requires point coordinates in context" };
   const pa = pMap.get(a.id);
   const pb = pMap.get(b.id);
-  if (!pa || !pb) return err("Distance point is missing");
+  if (!pa || !pb) return { ok: false, error: "Distance point is missing" };
 
   const dx = pa.x - pb.x;
   const dy = pa.y - pb.y;
-  const d = Math.sqrt(dx * dx + dy * dy);
-  return { kind: "expr", value: formatNumber(d), numeric: d };
+  return { ok: true, value: Math.sqrt(dx * dx + dy * dy) };
+}
+
+function parseDistanceResult(args: string[], ctx: ParseContext): ParseResult {
+  const d = parseDistanceNumeric(args, ctx);
+  if (!d.ok) return err(d.error);
+  return { kind: "expr", value: formatNumber(d.value), numeric: d.value };
 }
 
 function parseCommand(name: string, args: string[], ctx: ParseContext): ParseResult {
   const evalArg = (raw: string): number | null => {
-    const out = evaluateExpression(raw, ctx.ans);
+    const out = evaluateExpression(raw, ctx);
     return out.ok ? out.value : null;
   };
 
@@ -262,22 +309,47 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
           if (!through.ok) return err(through.message);
           return { kind: "cmd", cmd: { type: "CreateCircleCenterThrough", centerId: center.id, throughId: through.id } };
         }
+        const scalar = resolveScalarIdentifier(secondIdent, ctx);
+        if (!scalar.ok) return err(scalar.message);
+        if (!(scalar.value > 0)) return err("Circle radius must be > 0");
+        return { kind: "cmd", cmd: { type: "CreateCircleCenterRadius", centerId: center.id, r: scalar.value } };
       }
 
-      const r = evalArg(args[1]);
-      if (r === null) return err("Circle radius must be a finite number");
-      if (!(r > 0)) return err("Circle radius must be > 0");
-      return { kind: "cmd", cmd: { type: "CreateCircleCenterRadius", centerId: center.id, r } };
+      const rEval = evaluateExpression(args[1], ctx);
+      if (!rEval.ok) return err("Circle radius must be a finite number");
+      if (!(rEval.value > 0)) return err("Circle radius must be > 0");
+      return { kind: "cmd", cmd: { type: "CreateCircleCenterRadius", centerId: center.id, r: rEval.value } };
     }
 
     return err("Circle expects Circle(x,y,r), Circle(O,A), or Circle(O,r)");
   }
 
   if (name === "Distance") {
-    return parseDistance(args, ctx);
+    return parseDistanceResult(args, ctx);
   }
 
   return err(`Unknown command: ${name}`);
+}
+
+function parseCommandLike(input: string, ctx: ParseContext): ParseResult {
+  const commandMatch = input.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
+  if (!commandMatch) {
+    const evaluated = evaluateExpression(input, ctx);
+    if (!evaluated.ok) return err(evaluated.error);
+    return { kind: "expr", value: formatNumber(evaluated.value), numeric: evaluated.value };
+  }
+  const name = commandMatch[1];
+  const args = splitArgs(commandMatch[2]);
+  if (!args) return err("Invalid command arguments");
+  return parseCommand(name, args, ctx);
+}
+
+function checkAssignmentNameAvailable(name: string, ctx: ParseContext): ParseResult | null {
+  if (ctx.scalarsByName.has(name)) return err(`Name already used: ${name}`);
+  if (ctx.objectNames.has(name)) return err(`Name already used: ${name}`);
+  const existing = ctx.symbolsByLabel.get(name);
+  if (existing && existing.length > 0) return err(`Name already used: ${name}`);
+  return null;
 }
 
 export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseResult {
@@ -286,15 +358,26 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
   if (input.length > MAX_INPUT_LENGTH) return err("Input is too long");
   if (DISALLOWED_TOKEN_RE.test(input)) return err("Expression uses disallowed token");
 
-  const commandMatch = input.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
-  if (commandMatch) {
-    const name = commandMatch[1];
-    const args = splitArgs(commandMatch[2]);
-    if (!args) return err("Invalid command arguments");
-    return parseCommand(name, args, ctx);
+  const assignment = splitAssignment(input);
+  if (assignment) {
+    const left = asIdentifier(assignment.left);
+    if (!left) return err("Invalid assignment target");
+    const conflict = checkAssignmentNameAvailable(left, ctx);
+    if (conflict) return conflict;
+
+    const rhs = parseCommandLike(assignment.right, ctx);
+    if (rhs.kind === "error") return rhs;
+    if (rhs.kind === "expr") {
+      if (typeof rhs.numeric !== "number" || !Number.isFinite(rhs.numeric)) {
+        return err("Assignment right-hand side must evaluate to a finite number");
+      }
+      return { kind: "assignScalar", name: left, value: rhs.numeric };
+    }
+    if (rhs.kind === "cmd") {
+      return { kind: "assignObject", name: left, cmd: rhs.cmd };
+    }
+    return err("Unsupported assignment right-hand side");
   }
 
-  const evaluated = evaluateExpression(input, ctx.ans);
-  if (!evaluated.ok) return err(evaluated.error);
-  return { kind: "expr", value: formatNumber(evaluated.value), numeric: evaluated.value };
+  return parseCommandLike(input, ctx);
 }

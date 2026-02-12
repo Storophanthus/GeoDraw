@@ -67,19 +67,45 @@
     - expression result display
     - history up/down (last 20)
     - Esc clears input.
+- Command Bar Phase 2 assignments added:
+  - Assignment syntax:
+    - scalar: `n_1 = 2.023242`
+    - named objects: `B = Point(...)`, `l = Line(...)`, `s = Segment(...)`, `c_1 = Circle(...)`
+  - Parser remains pure and now returns deterministic assignment intents:
+    - `assignScalar`
+    - `assignObject`
+  - Scalar assignments now create visible scene `Number` objects (constants) via store API.
+  - Scalar lookup for command evaluation is derived from current scene numbers (`getScalarVars`), not hidden-only state.
+  - Named non-point object aliases added in store:
+    - `commandObjectAliases` map + `getCommandObjectAliases`
+  - Label/name conflict policy enforced (Phase 2):
+    - no overwrite for scalar names
+    - no overwrite for existing point labels
+    - no overwrite for tracked command object aliases
+  - `Circle(O, X)` resolution priority is deterministic:
+    - if `X` is a point label => center-through circle
+    - else if `X` is a scalar name => center-radius circle
+    - else error
+  - Snapshot semantics are explicit:
+    - scalar vars are evaluated at command execution time
+    - existing objects do not auto-update on scalar reassignment
 
 ## Active Work (Open)
 - No active bugfix from this handoff currently.
 - Current focus (if continuing refactor): incremental polish only, no behavior changes.
 - Command Bar Phase 2 candidates:
-  - assignment syntax (e.g. `r=5`) and reusable scalar variables beyond `ans`.
-  - variable assignment and reusable symbols.
-  - richer command grammar with explicit object creation naming.
+  - optional overwrite semantics (`set`, `:=`, `let`, `del`) if desired.
+  - parametric dependencies (Phase 3) where objects depend on scalars dynamically.
 
 ## Risks / Notes
 - `mathjs` bundle size impact should be monitored (parser currently uses strict guards to keep scope safe).
 - `Circle(x,y,r)` currently constructs a center point and then uses existing fixed-radius-circle creation, which is deterministic and compatible with current scene model.
 - In current model `Circle(O,r)` maps directly to fixed-radius circle creation (`createCircleFixedRadius`), no synthetic through-point needed.
+- Command Bar name collisions now span three namespaces:
+  - point labels
+  - scalar vars
+  - command object aliases
+  This is intentional to keep deterministic, fail-closed behavior.
 
 ## Historical (Do Not Reopen Automatically)
 - Items below are historical progress logs and rationale.

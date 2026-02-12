@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { camera as cameraMath } from "../view/camera";
+import { getNumberValue } from "../scene/points";
 import {
   type SetStateOptions,
 } from "./slices/historySlice";
@@ -37,6 +38,7 @@ import { createUiActions } from "./slices/uiActions";
 import { createSceneRenameActions } from "./slices/sceneRenameActions";
 import { createStoreRuntime } from "./slices/storeRuntime";
 import { geoStoreHelpers } from "./geoStoreHelpers";
+import { isNameUnique } from "../scene/pointBasics";
 
 export type {
   ActiveTool,
@@ -55,6 +57,7 @@ const runtime = createStoreRuntime({
   normalizeScene: normalizeSceneIntegrity,
 });
 const setState: (updater: (prev: GeoState) => GeoState, options?: SetStateOptions) => void = runtime.setState;
+const commandBarObjectAliases = new Map<string, { type: "point" | "segment" | "line" | "circle"; id: string }>();
 
 const actions: GeoActions = {
   ...createInteractionActions({
@@ -96,6 +99,141 @@ const actions: GeoActions = {
   ...createSceneRenameActions({
     setState,
   }),
+};
+
+export const commandBarApi = {
+  getScalarVars(): Record<string, number> {
+    const scene = runtime.getState().scene;
+    const out: Record<string, number> = {};
+    for (let i = 0; i < scene.numbers.length; i += 1) {
+      const n = scene.numbers[i];
+      const v = getNumberValue(n.id, scene);
+      if (typeof v === "number" && Number.isFinite(v)) out[n.name] = v;
+    }
+    return out;
+  },
+  setScalarVar(name: string, value: number): { ok: true } | { ok: false; error: string } {
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false as const, error: "Scalar name is empty" };
+    if (!Number.isFinite(value)) return { ok: false as const, error: "Scalar value must be finite" };
+    const state = runtime.getState();
+    if (!isNameUnique(trimmed, state.scene.points.map((p) => p.name))) {
+      return { ok: false as const, error: `Name already used: ${trimmed}` };
+    }
+    if (!isNameUnique(trimmed, state.scene.numbers.map((n) => n.name))) {
+      return { ok: false as const, error: `Name already used: ${trimmed}` };
+    }
+    if (commandBarObjectAliases.has(trimmed)) return { ok: false as const, error: `Name already used: ${trimmed}` };
+    const id = actions.createNumber({ kind: "constant", value }, trimmed);
+    if (!id) return { ok: false as const, error: `Name already used: ${trimmed}` };
+    return { ok: true as const };
+  },
+  getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle"; id: string }> {
+    return Object.fromEntries(commandBarObjectAliases.entries());
+  },
+  createPointXYWithLabel(x: number, y: number, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    let id: string | null = null;
+    setState((prev) => {
+      const pointId = `p_${prev.nextPointId}`;
+      id = pointId;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          points: [
+            ...prev.scene.points,
+            {
+              id: pointId,
+              kind: "free",
+              name,
+              captionTex: name,
+              visible: true,
+              showLabel: "name",
+              locked: false,
+              auxiliary: false,
+              position: { x, y },
+              style: {
+                ...prev.pointDefaults,
+                labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+              },
+            },
+          ],
+        },
+        selectedObject: { type: "point", id: pointId },
+        recentCreatedObject: { type: "point", id: pointId },
+        nextPointId: prev.nextPointId + 1,
+      };
+    });
+    return id;
+  },
+  createLineThroughPointsWithLabel(aId: string, bId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const lineId = actions.createLine(aId, bId);
+    if (!lineId) return null;
+    commandBarObjectAliases.set(name, { type: "line", id: lineId });
+    return lineId;
+  },
+  createLineXYWithLabel(x1: number, y1: number, x2: number, y2: number, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const aId = actions.createFreePoint({ x: x1, y: y1 });
+    const bId = actions.createFreePoint({ x: x2, y: y2 });
+    const lineId = actions.createLine(aId, bId);
+    if (!lineId) return null;
+    commandBarObjectAliases.set(name, { type: "line", id: lineId });
+    return lineId;
+  },
+  createSegmentThroughPointsWithLabel(aId: string, bId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const segId = actions.createSegment(aId, bId);
+    if (!segId) return null;
+    commandBarObjectAliases.set(name, { type: "segment", id: segId });
+    return segId;
+  },
+  createCircleCenterThroughWithLabel(centerId: string, throughId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const circleId = actions.createCircle(centerId, throughId);
+    if (!circleId) return null;
+    commandBarObjectAliases.set(name, { type: "circle", id: circleId });
+    return circleId;
+  },
+  createCircleCenterRadiusWithLabel(centerId: string, r: number, label: string): string | null {
+    const name = label.trim();
+    if (!name || !Number.isFinite(r) || r <= 0) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const circleId = actions.createCircleFixedRadius(centerId, String(r));
+    if (!circleId) return null;
+    commandBarObjectAliases.set(name, { type: "circle", id: circleId });
+    return circleId;
+  },
 };
 
 function getStore(): GeoStore {
