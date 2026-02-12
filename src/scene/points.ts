@@ -719,20 +719,7 @@ function asLineLike(
   scene: SceneModel,
   ctx: SceneEvalContext
 ): { a: Vec2; b: Vec2; finite: boolean } | null {
-  return asLineLikeWithOps(ref, {
-    getPointWorldById: (id) => getPointWorldById(id, scene, ctx),
-    getLineById: (id) => ctx.lineById.get(id) ?? null,
-    getSegmentById: (id) => {
-      const seg = ctx.segmentById.get(id);
-      return seg ? { aId: seg.aId, bId: seg.bId } : null;
-    },
-    getCircleById: (id) => ctx.circleById.get(id) ?? null,
-    evaluateCircleRadiusExpr: (expr) => {
-      const evaluated = evaluateNumberExpressionWithCtx(scene, expr, ctx);
-      return evaluated.ok ? evaluated.value : null;
-    },
-    lineInProgress: ctx.lineInProgress,
-  });
+  return asLineLikeWithOps(ref, buildGeometryResolveOps(scene, ctx));
 }
 
 function resolveLineAnchors(
@@ -740,20 +727,7 @@ function resolveLineAnchors(
   scene: SceneModel,
   ctx: SceneEvalContext
 ): { a: Vec2; b: Vec2 } | null {
-  return resolveLineAnchorsWithOps(line, {
-    getPointWorldById: (id) => getPointWorldById(id, scene, ctx),
-    getLineById: (id) => ctx.lineById.get(id) ?? null,
-    getSegmentById: (id) => {
-      const seg = ctx.segmentById.get(id);
-      return seg ? { aId: seg.aId, bId: seg.bId } : null;
-    },
-    getCircleById: (id) => ctx.circleById.get(id) ?? null,
-    evaluateCircleRadiusExpr: (expr) => {
-      const evaluated = evaluateNumberExpressionWithCtx(scene, expr, ctx);
-      return evaluated.ok ? evaluated.value : null;
-    },
-    lineInProgress: ctx.lineInProgress,
-  });
+  return resolveLineAnchorsWithOps(line, buildGeometryResolveOps(scene, ctx));
 }
 
 export function getLineWorldAnchors(line: SceneLine, scene: SceneModel): { a: Vec2; b: Vec2 } | null {
@@ -768,20 +742,7 @@ function asCircle(
   scene: SceneModel,
   ctx: SceneEvalContext
 ): { center: Vec2; radius: number } | null {
-  return asCircleWithOps(ref, {
-    getPointWorldById: (id) => getPointWorldById(id, scene, ctx),
-    getLineById: (id) => ctx.lineById.get(id) ?? null,
-    getSegmentById: (id) => {
-      const seg = ctx.segmentById.get(id);
-      return seg ? { aId: seg.aId, bId: seg.bId } : null;
-    },
-    getCircleById: (id) => ctx.circleById.get(id) ?? null,
-    evaluateCircleRadiusExpr: (expr) => {
-      const evaluated = evaluateNumberExpressionWithCtx(scene, expr, ctx);
-      return evaluated.ok ? evaluated.value : null;
-    },
-    lineInProgress: ctx.lineInProgress,
-  });
+  return asCircleWithOps(ref, buildGeometryResolveOps(scene, ctx));
 }
 
 function getCircleWorldGeometryWithCtx(
@@ -789,20 +750,24 @@ function getCircleWorldGeometryWithCtx(
   scene: SceneModel,
   ctx: SceneEvalContext
 ): { center: Vec2; radius: number } | null {
-  return getCircleWorldGeometryWithOps(circle, {
-    getPointWorldById: (id) => getPointWorldById(id, scene, ctx),
-    getLineById: (id) => ctx.lineById.get(id) ?? null,
-    getSegmentById: (id) => {
+  return getCircleWorldGeometryWithOps(circle, buildGeometryResolveOps(scene, ctx));
+}
+
+function buildGeometryResolveOps(scene: SceneModel, ctx: SceneEvalContext) {
+  return {
+    getPointWorldById: (id: string) => getPointWorldById(id, scene, ctx),
+    getLineById: (id: string) => ctx.lineById.get(id) ?? null,
+    getSegmentById: (id: string) => {
       const seg = ctx.segmentById.get(id);
       return seg ? { aId: seg.aId, bId: seg.bId } : null;
     },
-    getCircleById: (id) => ctx.circleById.get(id) ?? null,
-    evaluateCircleRadiusExpr: (expr) => {
+    getCircleById: (id: string) => ctx.circleById.get(id) ?? null,
+    evaluateCircleRadiusExpr: (expr: string) => {
       const evaluated = evaluateNumberExpressionWithCtx(scene, expr, ctx);
       return evaluated.ok ? evaluated.value : null;
     },
     lineInProgress: ctx.lineInProgress,
-  });
+  } as const;
 }
 
 export function getCircleWorldGeometry(circle: SceneCircle, scene: SceneModel): { center: Vec2; radius: number } | null {

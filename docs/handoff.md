@@ -348,6 +348,18 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: shared geometry-resolve ops builder):
+  - In `src/scene/points.ts`, consolidated duplicated resolver-op closures into:
+    - `buildGeometryResolveOps(scene, ctx)`
+  - Reused by:
+    - `asLineLike(...)`
+    - `resolveLineAnchors(...)`
+    - `asCircle(...)`
+    - `getCircleWorldGeometryWithCtx(...)`
+  - Structural refactor only; no algorithm changes.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
