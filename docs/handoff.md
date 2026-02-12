@@ -608,6 +608,7 @@ Required validation after such changes:
      - `src/scene/eval/numberExpressionEvaluators.ts`
      - `src/scene/eval/geometryAdapters.ts`
      - `src/scene/eval/numberEvaluators.ts`
+     - `src/scene/eval/intersectionStabilityAdapters.ts`
    - `src/scene/points.ts` now primarily orchestrates runtime wiring/delegation; next step is continuing to peel remaining orchestration pieces into `src/scene/eval/*`.
    - Next major stage (`ui`): continue `PropertiesPanel` split by extracting tool-info blocks (Angle Fixed / Circle Fixed) and selected-object editors into dedicated subcomponents.
 4. Keep behavior identical (no geometry semantics change in same commit).

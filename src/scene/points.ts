@@ -11,10 +11,8 @@ import {
   updateImplicitEvalStats,
 } from "./eval/evalContext";
 import {
-  genericIntersectionSignature,
 } from "./eval/intersectionUtils";
 import { objectIntersectionsWithOps } from "./eval/intersectionQueries";
-import { getPreviousStablePoint, rememberStablePoint } from "./eval/stablePointMemory";
 import { computeOrientedAngleRad } from "./eval/angleMath";
 import {
   evaluateAngleExpressionDegreesWithCtxInScene,
@@ -22,16 +20,18 @@ import {
 } from "./eval/numberExpressionEvaluators";
 import { evalNumberByIdWithCtxInScene } from "./eval/numberEvaluators";
 import {
-  resolveCircleLinePairAssignmentsInScene,
-  resolveGenericIntersectionPairAssignmentsInScene,
-} from "./eval/intersectionPairResolution";
-import {
   asCircleWithCtx,
   asLineLikeWithCtx,
   buildGeometryResolveOpsWithCtx,
   getCircleWorldGeometryWithCtxInScene,
   resolveLineAnchorsWithCtx,
 } from "./eval/geometryAdapters";
+import {
+  rememberStableGenericIntersectionPoint,
+  rememberStableCircleLinePoint,
+  resolveCircleLinePairAssignmentsWithCtx,
+  resolveGenericIntersectionPairAssignmentsWithCtx,
+} from "./eval/intersectionStabilityAdapters";
 import { evalPointByIdWithRuntime } from "./eval/pointRuntime";
 import {
   evalPointUnchecked as evalPointUncheckedCore,
@@ -613,32 +613,9 @@ function resolveCircleLinePairAssignments(
   branches: Array<{ point: Vec2; t: number }>,
   stabilitySignature: string
 ): Map<string, Vec2 | null> {
-  return resolveCircleLinePairAssignmentsInScene(scene.points, circleId, lineId, branches, {
-    getCached: (key) => ctx.circleLinePairAssignments.get(key),
-    setCached: (key, value) => {
-      ctx.circleLinePairAssignments.set(key, value);
-    },
-    getExcludedPointWorld: (pointId) => getPointWorldById(pointId, scene, ctx),
-    getPreviousStablePoint: (pointId) => getPreviousStableCircleLinePoint(pointId, stabilitySignature),
-    rememberStablePoint: (pointId, value) => rememberStableCircleLinePoint(pointId, stabilitySignature, value),
+  return resolveCircleLinePairAssignmentsWithCtx(scene, ctx, circleId, lineId, branches, stabilitySignature, {
+    getPointWorldById,
   });
-}
-
-function getPreviousStableGenericIntersectionPoint(
-  pointId: string,
-  a: GeometryObjectRef,
-  b: GeometryObjectRef
-): Vec2 | null {
-  return getPreviousStablePoint(pointId, genericIntersectionSignature(a, b));
-}
-
-function rememberStableGenericIntersectionPoint(
-  pointId: string,
-  a: GeometryObjectRef,
-  b: GeometryObjectRef,
-  value: Vec2
-): void {
-  rememberStablePoint(pointId, genericIntersectionSignature(a, b), value);
 }
 
 function resolveGenericIntersectionPairAssignments(
@@ -648,23 +625,9 @@ function resolveGenericIntersectionPairAssignments(
   objB: GeometryObjectRef,
   intersections: Vec2[]
 ): Map<string, Vec2 | null> {
-  return resolveGenericIntersectionPairAssignmentsInScene(scene.points, objA, objB, intersections, {
-    getCached: (key) => ctx.genericIntersectionPairAssignments.get(key),
-    setCached: (key, value) => {
-      ctx.genericIntersectionPairAssignments.set(key, value);
-    },
-    getExcludedPointWorld: (pointId) => getPointWorldById(pointId, scene, ctx),
-    getPreviousStablePoint: (pointId) => getPreviousStableGenericIntersectionPoint(pointId, objA, objB),
-    rememberStablePoint: (pointId, value) => rememberStableGenericIntersectionPoint(pointId, objA, objB, value),
+  return resolveGenericIntersectionPairAssignmentsWithCtx(scene, ctx, objA, objB, intersections, {
+    getPointWorldById,
   });
-}
-
-function getPreviousStableCircleLinePoint(pointId: string, signature: string): Vec2 | null {
-  return getPreviousStablePoint(pointId, signature);
-}
-
-function rememberStableCircleLinePoint(pointId: string, signature: string, value: Vec2): void {
-  rememberStablePoint(pointId, signature, value);
 }
 
 export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel): number | null {
