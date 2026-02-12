@@ -78,6 +78,105 @@
   - `decideMovePointerDown(...)` (move-tool pointer-down decision tree)
   - `computeCanvasCursor(...)` (cursor policy for move/copyStyle/targetable tools)
   - `CanvasView` now calls these helpers instead of inlining equivalent branching logic.
+- `CanvasView` interaction orchestration (slice 2) extracted into:
+  - `src/view/pointerDragInteraction.ts`
+  - `applyBufferedDragUpdate(...)` (mode-specific drag application for pan / drag-point / drag-label / drag-angle-label)
+  - `bufferDragForMode(...)` (mode-specific drag-buffer updates from pointermove)
+  - `resetDragBuffers(...)`
+  - `CanvasView` now delegates drag mode branching to these helpers.
+- `CanvasView` interaction orchestration (slice 3) extracted into:
+  - `src/view/pointerEventController.ts`
+  - `createPointerHandlers(...)` now owns `onDown`, `onMove`, `finish` orchestration with explicit injected deps.
+  - `CanvasView` now provides:
+    - hit-test/hit-resolve callbacks
+    - drag buffers/refs and scheduling callbacks
+    - tool-click construction callback (`constructFromClick` path)
+    - cursor/hover world state callbacks
+- `CanvasView` event lifecycle extraction (slice 4):
+  - `src/view/pointerEventController.ts`
+    - `createCanvasAuxHandlers(...)` now owns `onWheel`/`onLeave`.
+  - `src/view/canvasEventLifecycle.ts`
+    - `bindCanvasEventLifecycle(...)` centralizes pointer/wheel listener attach-detach.
+  - `CanvasView` no longer manually registers/removes each canvas event listener inline.
+- `CanvasView` construction-click adapter extraction (slice 5):
+  - `src/view/constructClickAdapter.ts`
+  - `runConstructClickAdapter(...)` now owns `constructFromClick` payload assembly:
+    - hit-object/top-hit + snap computation
+    - click-hit payload normalization
+    - IO bundle merge with camera/vp/angleFixedTool
+  - `CanvasView` now delegates tool-click release construction wiring to this adapter.
+- `CanvasView` helper-factory extraction (slice 6):
+  - `src/view/canvasInteractionHelpers.ts`
+    - `createReadScreen(canvas)`
+    - `createHoveredHitResolver(...)`
+    - `createDragBufferAccess(...)`
+  - These were moved out of the large `CanvasView` effect body to reduce orchestration noise.
+- `CanvasView` typed dependency-bundle cleanup (slice 7):
+  - `src/view/constructClickAdapter.ts`
+    - exports `ConstructClickIo` type (derived from `constructFromClick` signature).
+  - `CanvasView` now builds:
+    - `hitTolerances` memo bundle
+    - `constructClickIo` memo bundle
+  - Reduces large inline object plumbing and simplifies effect dependency surface.
+- `CanvasView` label overlay prep extraction (slice 8):
+  - `src/view/labelOverlays.ts`
+    - `createPointLabelOverlays(...)`
+    - `createAngleLabelOverlays(...)`
+    - `buildAngleLabelTex(...)`
+    - `getAngleTextRenderSize(...)`
+  - `CanvasView` now consumes these helpers instead of inlining KaTeX overlay prep.
+- `CanvasView` angle resolution extraction (slice 9):
+  - `src/view/angleResolution.ts`
+    - `resolveAngles(scene)` now owns angle point resolution + oriented-angle evaluation.
+  - `CanvasView` now memoizes via `useMemo(() => resolveAngles(scene), [scene])`.
+- `CanvasView` label layer extraction (slice 10):
+  - `src/view/CanvasLabelsLayer.tsx`
+  - `CanvasView` now delegates label DOM rendering for:
+    - point caption overlays
+    - angle label overlays
+  - DOM output/props preserved.
+- `CanvasView` render-pass orchestration extraction (slice 11):
+  - `src/view/renderFrame.ts`
+  - `renderCanvasFrame(...)` now owns frame draw order:
+    - grid -> circles/lines/segments/angles
+    - pending preview
+    - points
+    - interaction highlights
+    - hover snap visual accents
+  - `CanvasView` now delegates draw callback internals to this helper.
+- `CanvasView` interaction-effect extraction (slice 12):
+  - `src/view/useCanvasInteractionController.ts`
+  - Moved the large pointer/wheel/listener orchestration effect out of `CanvasView` into a dedicated hook.
+  - Hook owns:
+    - hover-hit resolver wiring
+    - cursor policy application on interaction changes
+    - drag buffering + RAF flush scheduling
+    - pointer handlers / wheel handlers integration
+    - lifecycle bind/unbind + cleanup of pending RAF
+  - `CanvasView` now supplies refs/state/actions to this hook.
+- Scene expression parser extraction (slice 13):
+  - `src/scene/eval/numericExpression.ts`
+    - `parseNumericExpression(...)`
+    - `NumberExpressionEvalResult`
+  - `src/scene/points.ts` now imports parser from `scene/eval` instead of owning parser internals inline.
+  - `NumberExpressionEvalResult` remains exported through `points.ts` to preserve API surface.
+- Scene expression wrappers/symbol tables extraction (slice 14):
+  - `src/scene/eval/expressionEval.ts`
+    - `buildAngleSymbolTable(...)`
+    - `buildNumberSymbolTable(...)`
+    - `evaluateAngleExpressionDegreesWithSymbols(...)`
+    - `evaluateNumberExpressionWithSymbols(...)`
+    - `AngleExpressionEvalResult`
+  - `src/scene/points.ts` now uses these helpers inside its existing context-aware wrappers:
+    - `evaluateAngleExpressionDegreesWithCtx(...)`
+    - `evaluateNumberExpressionWithCtx(...)`
+  - Public exports preserved through `points.ts` (`AngleExpressionEvalResult`, `NumberExpressionEvalResult`).
+- Scene number-definition branch extraction (slice 15):
+  - `src/scene/eval/numberDefinitions.ts`
+    - `evalNumberDefinitionWithOps(...)`
+  - `src/scene/points.ts`
+    - `evalNumberDefinition(...)` now delegates to `evalNumberDefinitionWithOps(...)`
+    - context/cache-aware callbacks are injected from `points.ts` (no behavior change).
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
@@ -178,9 +277,11 @@
 3. Gradually move pure evaluation/hit-test logic out of monolith files into engine modules.
    - `CanvasView` click-release top-object hit-test now uses `engine/hitTestTopObject`.
    - `CanvasView` hover/click hit tests now use engine primitives (`hitTestPointId/SegmentId/LineId/CircleId/AngleId`).
-   - Next major stage: continue `CanvasView` interaction orchestration extraction (slice 2):
-     - extract drag-update scheduling and mode-specific drag application (`pan`, `drag-point`, `drag-label`, `drag-angle-label`) into dedicated controller helper(s)
-     - keep behavior identical and regression-locked.
+   - `CanvasView` selection/highlight draw extraction completed:
+     - `src/view/interactionHighlights.ts`
+     - owns `drawInteractionHighlights(...)` + internal `drawHitHighlight(...)`
+     - behavior preserved; `CanvasView` now delegates this draw pass.
+   - Next major stage: continue reducing `src/scene/points.ts` by extracting scene-eval-context management (`getOrCreateSceneEvalContext`, stats/finalization helpers) into a dedicated module while preserving tick accounting behavior.
 4. Keep behavior identical (no geometry semantics change in same commit).
 5. Re-run:
    - `npm run build`

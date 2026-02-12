@@ -15,8 +15,8 @@ import { camera as camMath, type Camera, type Viewport } from "../camera";
 import type { SnapCandidate } from "../snapEngine";
 import { drawAngleArcPreview } from "../angleRender";
 
-type AngleFixedToolState = { angleExpr: string; direction: "CCW" | "CW" };
-type CircleFixedToolState = { radius: string };
+export type AngleFixedToolState = { angleExpr: string; direction: "CCW" | "CW" };
+export type CircleFixedToolState = { radius: string };
 
 function circumcircleFromThreePoints(a: Vec2, b: Vec2, c: Vec2): { center: Vec2; radius: number } | null {
   const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));

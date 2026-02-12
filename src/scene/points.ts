@@ -9,6 +9,17 @@ import {
   mul,
   sub,
 } from "../geo/geometry";
+import type { NumberExpressionEvalResult } from "./eval/numericExpression";
+import {
+  buildAngleSymbolTable,
+  buildNumberSymbolTable,
+  evaluateAngleExpressionDegreesWithSymbols,
+  evaluateNumberExpressionWithSymbols,
+  type AngleExpressionEvalResult,
+} from "./eval/expressionEval";
+import { evalNumberDefinitionWithOps } from "./eval/numberDefinitions";
+export type { NumberExpressionEvalResult } from "./eval/numericExpression";
+export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 
 export type PointShape =
   | "circle"
@@ -1318,52 +1329,34 @@ function evalNumberDefinition(
   ctx: SceneEvalContext,
   selfNumberId?: string
 ): number | null {
-  if (def.kind === "constant") {
-    return Number.isFinite(def.value) ? def.value : null;
-  }
-  if (def.kind === "distancePoints") {
-    const a = getPointWorldById(def.aId, scene, ctx);
-    const b = getPointWorldById(def.bId, scene, ctx);
-    if (!a || !b) return null;
-    return distance(a, b);
-  }
-  if (def.kind === "segmentLength") {
-    const seg = ctx.segmentById.get(def.segId);
-    if (!seg) return null;
-    const a = getPointWorldById(seg.aId, scene, ctx);
-    const b = getPointWorldById(seg.bId, scene, ctx);
-    if (!a || !b) return null;
-    return distance(a, b);
-  }
-  if (def.kind === "circleRadius" || def.kind === "circleArea") {
-    const circle = ctx.circleById.get(def.circleId);
-    if (!circle) return null;
-    const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
-    if (!geom) return null;
-    const r = geom.radius;
-    if (def.kind === "circleRadius") return r;
-    return Math.PI * r * r;
-  }
-  if (def.kind === "angleDegrees") {
-    const angle = ctx.angleById.get(def.angleId);
-    if (!angle) return null;
-    const a = getPointWorldById(angle.aId, scene, ctx);
-    const b = getPointWorldById(angle.bId, scene, ctx);
-    const c = getPointWorldById(angle.cId, scene, ctx);
-    if (!a || !b || !c) return null;
-    const theta = computeOrientedAngleRad(a, b, c);
-    if (theta === null) return null;
-    return (theta * 180) / Math.PI;
-  }
-  if (def.kind === "expression") {
-    const result = evaluateNumberExpressionWithCtx(scene, def.expr, ctx, selfNumberId);
-    return result.ok ? result.value : null;
-  }
-  const num = evalNumberById(def.numeratorId, scene, ctx);
-  const den = evalNumberById(def.denominatorId, scene, ctx);
-  if (num === null || den === null) return null;
-  if (Math.abs(den) <= 1e-12) return null;
-  return num / den;
+  return evalNumberDefinitionWithOps(
+    def,
+    {
+      getPointWorldById: (id) => getPointWorldById(id, scene, ctx),
+      getSegmentById: (id) => {
+        const seg = ctx.segmentById.get(id);
+        return seg ? { aId: seg.aId, bId: seg.bId } : null;
+      },
+      getCircleRadiusById: (id) => {
+        const circle = ctx.circleById.get(id);
+        if (!circle) return null;
+        const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
+        return geom ? geom.radius : null;
+      },
+      getAngleById: (id) => {
+        const angle = ctx.angleById.get(id);
+        return angle ? { aId: angle.aId, bId: angle.bId, cId: angle.cId } : null;
+      },
+      evaluateNumberExpression: (expr, excludeNumberId) => {
+        const result = evaluateNumberExpressionWithCtx(scene, expr, ctx, excludeNumberId);
+        return result.ok ? result.value : null;
+      },
+      evalNumberById: (id) => evalNumberById(id, scene, ctx),
+      computeOrientedAngleRad,
+      distance,
+    },
+    selfNumberId
+  );
 }
 
 export function computeConvexAngleRad(a: Vec2, b: Vec2, c: Vec2): number | null {
@@ -1395,9 +1388,6 @@ export function computeOrientedAngleRad(a: Vec2, b: Vec2, c: Vec2): number | nul
   return delta;
 }
 
-export type AngleExpressionEvalResult = { ok: true; valueDeg: number } | { ok: false; error: string };
-export type NumberExpressionEvalResult = { ok: true; value: number } | { ok: false; error: string };
-
 export function evaluateAngleExpressionDegrees(scene: SceneModel, exprRaw: string): AngleExpressionEvalResult {
   const expr = exprRaw.trim();
   if (!expr) return { ok: false, error: "Empty angle expression." };
@@ -1417,16 +1407,38 @@ function evaluateAngleExpressionDegreesWithCtx(
   exprRaw: string,
   ctx: SceneEvalContext
 ): AngleExpressionEvalResult {
-  const expr = exprRaw.trim();
-  if (!expr) return { ok: false, error: "Empty angle expression." };
-  const symbols = buildAngleSymbolTable(scene, ctx);
-  const parsed = parseNumericExpression(expr, symbols);
-  if (!parsed.ok) return parsed;
-  if (!Number.isFinite(parsed.value)) return { ok: false, error: "Angle expression is not finite." };
-  if (parsed.value < 0 || parsed.value > 360) {
-    return { ok: false, error: "Angle expression must evaluate to [0, 360] degrees." };
-  }
-  return { ok: true, valueDeg: parsed.value };
+  const symbols = buildAngleSymbolTable({
+    angles: scene.angles.map((angle) => ({
+      id: angle.id,
+      aId: angle.aId,
+      bId: angle.bId,
+      cId: angle.cId,
+      labelText: angle.style.labelText,
+    })),
+    numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
+    getAngleValueDeg: (angleId) => {
+      const angle = ctx.angleById.get(angleId);
+      if (!angle) return null;
+      const a = getPointWorldById(angle.aId, scene, ctx);
+      const b = getPointWorldById(angle.bId, scene, ctx);
+      const c = getPointWorldById(angle.cId, scene, ctx);
+      if (!a || !b || !c) return null;
+      const theta = computeOrientedAngleRad(a, b, c);
+      if (theta === null) return null;
+      return (theta * 180) / Math.PI;
+    },
+    getAnglePointNames: (angleId) => {
+      const angle = ctx.angleById.get(angleId);
+      if (!angle) return null;
+      const pa = ctx.pointById.get(angle.aId);
+      const pb = ctx.pointById.get(angle.bId);
+      const pc = ctx.pointById.get(angle.cId);
+      if (!pa || !pb || !pc) return null;
+      return { aName: pa.name, bName: pb.name, cName: pc.name };
+    },
+    getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
+  });
+  return evaluateAngleExpressionDegreesWithSymbols(exprRaw, symbols);
 }
 
 function evaluateNumberExpressionWithCtx(
@@ -1435,207 +1447,10 @@ function evaluateNumberExpressionWithCtx(
   ctx: SceneEvalContext,
   excludeNumberId?: string
 ): NumberExpressionEvalResult {
-  const expr = exprRaw.trim();
-  if (!expr) return { ok: false, error: "Empty number expression." };
-  const symbols = buildNumberSymbolTable(scene, ctx, excludeNumberId);
-  const parsed = parseNumericExpression(expr, symbols);
-  if (!parsed.ok) return parsed;
-  if (!Number.isFinite(parsed.value)) return { ok: false, error: "Number expression is not finite." };
-  return { ok: true, value: parsed.value };
-}
-
-function buildAngleSymbolTable(scene: SceneModel, ctx: SceneEvalContext): Map<string, number> {
-  const map = new Map<string, number>();
-  const angles = [...scene.angles].sort((a, b) => a.id.localeCompare(b.id));
-  for (const angle of angles) {
-    const a = getPointWorldById(angle.aId, scene, ctx);
-    const b = getPointWorldById(angle.bId, scene, ctx);
-    const c = getPointWorldById(angle.cId, scene, ctx);
-    if (!a || !b || !c) continue;
-    const theta = computeOrientedAngleRad(a, b, c);
-    if (theta === null) continue;
-    const deg = (theta * 180) / Math.PI;
-
-    registerAngleSymbol(map, angle.id, deg);
-    registerAngleSymbol(map, `angle_${angle.id}`, deg);
-
-    const pa = ctx.pointById.get(angle.aId);
-    const pb = ctx.pointById.get(angle.bId);
-    const pc = ctx.pointById.get(angle.cId);
-    if (pa && pb && pc) {
-      registerAngleSymbol(map, `${pa.name}${pb.name}${pc.name}`, deg);
-    }
-
-    const label = angle.style.labelText.trim();
-    if (label) {
-      const normalized = normalizeAngleLabelSymbol(label);
-      if (normalized) {
-        registerAngleSymbol(map, normalized, deg);
-        registerAngleSymbol(map, normalized.toLowerCase(), deg);
-      }
-    }
-  }
-
-  // Optional convenience constants.
-  registerAngleSymbol(map, "pi", 180);
-  registerAngleSymbol(map, "tau", 360);
-  const numbers = [...scene.numbers].sort((a, b) => a.id.localeCompare(b.id));
-  for (const num of numbers) {
-    const value = evalNumberById(num.id, scene, ctx);
-    if (value === null || !Number.isFinite(value)) continue;
-    registerAngleSymbol(map, num.id, value);
-    registerAngleSymbol(map, `num_${num.id}`, value);
-    registerAngleSymbol(map, num.name, value);
-    registerAngleSymbol(map, num.name.toLowerCase(), value);
-  }
-  return map;
-}
-
-function buildNumberSymbolTable(scene: SceneModel, ctx: SceneEvalContext, excludeNumberId?: string): Map<string, number> {
-  const map = new Map<string, number>();
-  const numbers = [...scene.numbers].sort((a, b) => a.id.localeCompare(b.id));
-  for (const num of numbers) {
-    if (excludeNumberId && num.id === excludeNumberId) continue;
-    const value = evalNumberById(num.id, scene, ctx);
-    if (value === null || !Number.isFinite(value)) continue;
-    registerAngleSymbol(map, num.id, value);
-    registerAngleSymbol(map, `num_${num.id}`, value);
-    registerAngleSymbol(map, num.name, value);
-    registerAngleSymbol(map, num.name.toLowerCase(), value);
-  }
-  registerAngleSymbol(map, "pi", Math.PI);
-  registerAngleSymbol(map, "tau", Math.PI * 2);
-  return map;
-}
-
-function registerAngleSymbol(map: Map<string, number>, key: string, valueDeg: number): void {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return;
-  if (map.has(key)) return;
-  map.set(key, valueDeg);
-}
-
-function normalizeAngleLabelSymbol(labelRaw: string): string | null {
-  let s = labelRaw.trim();
-  if (s.startsWith("$") && s.endsWith("$") && s.length >= 2) s = s.slice(1, -1).trim();
-  if (/^\\[A-Za-z_][A-Za-z0-9_]*$/.test(s)) return s.slice(1);
-  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(s)) return s;
-  return null;
-}
-
-function parseNumericExpression(expr: string, symbols: Map<string, number>): NumberExpressionEvalResult {
-  type Token =
-    | { kind: "num"; v: number }
-    | { kind: "id"; v: string }
-    | { kind: "op"; v: "+" | "-" | "*" | "/" | "^" | "(" | ")" };
-  const tokens: Token[] = [];
-  let i = 0;
-  while (i < expr.length) {
-    const ch = expr[i];
-    if (/\s/.test(ch)) {
-      i += 1;
-      continue;
-    }
-    if (/[0-9.]/.test(ch)) {
-      let j = i + 1;
-      while (j < expr.length && /[0-9._]/.test(expr[j])) j += 1;
-      const raw = expr.slice(i, j).replace(/_/g, "");
-      const v = Number(raw);
-      if (!Number.isFinite(v)) return { ok: false, error: `Invalid number: ${raw}` };
-      tokens.push({ kind: "num", v });
-      i = j;
-      continue;
-    }
-    if (/[A-Za-z_]/.test(ch)) {
-      let j = i + 1;
-      while (j < expr.length && /[A-Za-z0-9_]/.test(expr[j])) j += 1;
-      tokens.push({ kind: "id", v: expr.slice(i, j) });
-      i = j;
-      continue;
-    }
-    if (ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "^" || ch === "(" || ch === ")") {
-      tokens.push({ kind: "op", v: ch });
-      i += 1;
-      continue;
-    }
-    return { ok: false, error: `Unexpected token: ${ch}` };
-  }
-
-  let p = 0;
-  const peek = (): Token | null => (p < tokens.length ? tokens[p] : null);
-  const take = (): Token | null => (p < tokens.length ? tokens[p++] : null);
-
-  const parsePrimary = (): NumberExpressionEvalResult => {
-    const t = take();
-    if (!t) return { ok: false, error: "Unexpected end of expression." };
-    if (t.kind === "num") return { ok: true, value: t.v };
-    if (t.kind === "id") {
-      const v = symbols.get(t.v) ?? symbols.get(t.v.toLowerCase());
-      if (v === undefined) return { ok: false, error: `Unknown symbol: ${t.v}` };
-      return { ok: true, value: v };
-    }
-    if (t.kind === "op" && t.v === "(") {
-      const inner = parseExpr();
-      if (!inner.ok) return inner;
-      const close = take();
-      if (!close || close.kind !== "op" || close.v !== ")") return { ok: false, error: "Missing closing ')'." };
-      return inner;
-    }
-    if (t.kind === "op" && (t.v === "+" || t.v === "-")) {
-      const inner = parsePrimary();
-      if (!inner.ok) return inner;
-      return { ok: true, value: t.v === "-" ? -inner.value : inner.value };
-    }
-    return { ok: false, error: "Expected number, symbol, or parenthesized expression." };
-  };
-
-  const parsePower = (): NumberExpressionEvalResult => {
-    let left = parsePrimary();
-    if (!left.ok) return left;
-    const t = peek();
-    if (t && t.kind === "op" && t.v === "^") {
-      take();
-      const right = parsePower();
-      if (!right.ok) return right;
-      left = { ok: true, value: Math.pow(left.value, right.value) };
-    }
-    return left;
-  };
-
-  const parseTerm = (): NumberExpressionEvalResult => {
-    let left = parsePower();
-    if (!left.ok) return left;
-    while (true) {
-      const t = peek();
-      if (!t || t.kind !== "op" || (t.v !== "*" && t.v !== "/")) break;
-      take();
-      const right = parsePower();
-      if (!right.ok) return right;
-      if (t.v === "*") {
-        left = { ok: true, value: left.value * right.value };
-      } else {
-        if (Math.abs(right.value) <= 1e-12) return { ok: false, error: "Division by zero." };
-        left = { ok: true, value: left.value / right.value };
-      }
-    }
-    return left;
-  };
-
-  const parseExpr = (): NumberExpressionEvalResult => {
-    let left = parseTerm();
-    if (!left.ok) return left;
-    while (true) {
-      const t = peek();
-      if (!t || t.kind !== "op" || (t.v !== "+" && t.v !== "-")) break;
-      take();
-      const right = parseTerm();
-      if (!right.ok) return right;
-      left = { ok: true, value: t.v === "+" ? left.value + right.value : left.value - right.value };
-    }
-    return left;
-  };
-
-  const out = parseExpr();
-  if (!out.ok) return out;
-  if (p !== tokens.length) return { ok: false, error: "Unexpected trailing tokens." };
-  return out;
+  const symbols = buildNumberSymbolTable({
+    numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
+    getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
+    excludeNumberId,
+  });
+  return evaluateNumberExpressionWithSymbols(exprRaw, symbols);
 }
