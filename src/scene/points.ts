@@ -280,7 +280,17 @@ export type SceneLineParallel = {
   style: LineStyle;
 };
 
-export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular | SceneLineParallel;
+export type SceneLineAngleBisector = {
+  id: string;
+  kind: "angleBisector";
+  aId: string;
+  bId: string;
+  cId: string;
+  visible: boolean;
+  style: LineStyle;
+};
+
+export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular | SceneLineParallel | SceneLineAngleBisector;
 
 export type SceneCircleTwoPoint = {
   id: string;
@@ -794,11 +804,36 @@ function resolveLineAnchors(
   if (ctx.lineInProgress.has(line.id)) return null;
   ctx.lineInProgress.add(line.id);
   try {
-    if (line.kind !== "perpendicular" && line.kind !== "parallel") {
+    if (line.kind !== "perpendicular" && line.kind !== "parallel" && line.kind !== "angleBisector") {
       const a = getPointWorldById(line.aId, scene, ctx);
       const b = getPointWorldById(line.bId, scene, ctx);
       if (!a || !b) return null;
       return { a, b };
+    }
+
+    if (line.kind === "angleBisector") {
+      const a = getPointWorldById(line.aId, scene, ctx);
+      const b = getPointWorldById(line.bId, scene, ctx);
+      const c = getPointWorldById(line.cId, scene, ctx);
+      if (!a || !b || !c) return null;
+      const ba = { x: a.x - b.x, y: a.y - b.y };
+      const bc = { x: c.x - b.x, y: c.y - b.y };
+      const baLen = Math.hypot(ba.x, ba.y);
+      const bcLen = Math.hypot(bc.x, bc.y);
+      if (baLen <= 1e-12 || bcLen <= 1e-12) return null;
+      const u = { x: ba.x / baLen, y: ba.y / baLen };
+      const v = { x: bc.x / bcLen, y: bc.y / bcLen };
+      const bis = { x: u.x + v.x, y: u.y + v.y };
+      const bisLen = Math.hypot(bis.x, bis.y);
+      // Degenerate straight angle: no unique internal bisector direction.
+      if (bisLen <= 1e-12) return null;
+      return {
+        a: b,
+        b: {
+          x: b.x + bis.x,
+          y: b.y + bis.y,
+        },
+      };
     }
 
     const through = getPointWorldById(line.throughId, scene, ctx);

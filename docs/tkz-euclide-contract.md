@@ -122,6 +122,10 @@ GeoDraw `AngleFixed(B, A, deg, direction)` creates a rotated point `C` from base
 
 % CW
 \tkzDefPointBy[rotation=center B angle -30](A) \tkzGetPoint{C}
+
+Internal angle bisector of angle ABC:
+\tkzDefTriangleCenter[in](A,B,C) \tkzGetPoint{I}
+\tkzDrawLine(B,I)
 ```
 
 Then draw the resulting direction using GeoDraw's line/ray strategy (currently line through `B,C`).
@@ -131,6 +135,20 @@ Fail-closed rules:
   - `Unsupported construction: AngleFixed (missing tkz macro: <name>)`
 - If signed clockwise rotation is unsupported by backend:
   - `Unsupported AngleFixed option: direction=CW (no tkz mapping)`
+
+## CircleFixedRadius
+
+GeoDraw fixed-radius circle `Circle(center=O, radius=r)` maps to:
+
+```tex
+\tkzDefCircle[R](O,r) \tkzGetPoint{X}
+\tkzDrawCircle(O,X)
+```
+
+Exporter rule:
+- Radius is exported in scene world units under the same global unit transform used for point coordinates.
+- If required macro is missing from whitelist, exporter fails closed:
+  - `Unsupported construction: CircleFixedRadius (missing tkz macro: <name>)`
 
 ## SegmentMark
 
@@ -163,7 +181,7 @@ Fail-closed rules:
 End-arrow overlay (supported):
 
 ```tex
-\tkzDrawSegment[arrows=->,color=<color>,line width=<w>pt](A,B)
+\draw[color=<color>,line width=<w>pt,-{Stealth[scale=<s>]}] ($(A)!<t>!(B)$) -- (B);
 ```
 
 Mid-arrow policy:

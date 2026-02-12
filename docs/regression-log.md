@@ -64,6 +64,25 @@ Purpose: keep a durable record of high-risk bugs that must not reappear after re
     - `findExistingIntersectionPointId(...)`
     - `resolveLineCircleTarget(...)`
 
+### 2c) Multi-point branch stealing on same intersection pair
+
+- Symptom:
+  - Existing intersection point teleports when another intersection point on the same pair is added/updated.
+  - Seen on both line-circle and circle-circle pairs with two valid roots.
+- Root cause:
+  - Points were resolved independently, allowing sibling points to steal each other's root assignment.
+- Non-negotiable rules:
+  - Resolve all points for one object pair together per eval tick (pair-level ownership).
+  - Assignment priority must be deterministic:
+    1) `excludePointId` constraints
+    2) nearest to previous resolved world
+    3) deterministic fallback
+  - In 2-root regime, two distinct dependent points on the same pair must stay on distinct roots unless tangent/degenerate.
+- Main code:
+  - `src/scene/points.ts`
+    - `resolveCircleLinePairAssignments(...)`
+    - `resolveGenericIntersectionPairAssignments(...)`
+
 ### 3) Drag slowdown / freeze in dense intersection scenes
 
 - Symptom:
@@ -137,6 +156,7 @@ Run after geometry/export changes:
 ```bash
 npm run build
 npm run test:perf
+npm run test:scene
 npm run test:export
 ```
 

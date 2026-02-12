@@ -191,6 +191,17 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
+  if (kind === "angleBisector") {
+    return {
+      id: String(raw.id),
+      kind: "angleBisector",
+      aId: String(raw.aId),
+      bId: String(raw.bId),
+      cId: String(raw.cId),
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as LineStyle) ?? defaultLineStyle,
+    };
+  }
   return {
     id: String(raw.id),
     kind: "twoPoint",
@@ -304,6 +315,21 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("\\tkzDefLine[parallel=through")) {
       throw new Error("Expected parallel fixture to emit \\tkzDefLine[parallel=through ...].");
+    }
+  }
+
+  if (fileName === "angle-bisector-internal.json") {
+    if (exportError) {
+      if (!exportError.message.includes("Unsupported construction: AngleBisector")) {
+        throw exportError;
+      }
+      return;
+    }
+    if (!tikz.includes("\\tkzDefTriangleCenter[in]")) {
+      throw new Error("Expected angle bisector fixture to emit \\tkzDefTriangleCenter[in](A,B,C).");
+    }
+    if (!tikz.includes("\\tkzDrawLine")) {
+      throw new Error("Expected angle bisector fixture to draw the bisector line.");
     }
   }
 

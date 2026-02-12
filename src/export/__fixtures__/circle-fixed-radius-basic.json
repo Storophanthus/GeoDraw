@@ -1,0 +1,46 @@
+{
+  "points": [
+    {
+      "id": "p1",
+      "name": "O",
+      "definition": { "kind": "free", "x": 0, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p2",
+      "name": "A",
+      "definition": { "kind": "free", "x": -5, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p3",
+      "name": "B",
+      "definition": { "kind": "free", "x": 5, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p4",
+      "name": "X",
+      "definition": {
+        "kind": "circleLineIntersectionPoint",
+        "circleId": "c1",
+        "lineId": "l1",
+        "branchIndex": 1
+      },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "lines": [
+    { "id": "l1", "kind": "twoPoint", "aId": "p2", "bId": "p3", "visible": true }
+  ],
+  "segments": [],
+  "circles": [
+    { "id": "c1", "kind": "fixedRadius", "centerId": "p1", "radius": 3.5, "visible": true }
+  ],
+  "angles": [],
+  "numbers": []
+}

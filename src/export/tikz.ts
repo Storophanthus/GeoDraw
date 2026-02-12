@@ -45,6 +45,7 @@ export type TikzCommand =
   | { kind: "DefPointByRotation"; name: string; center: string; point: string; angleDeg: number; direction: "CCW" | "CW" }
   | { kind: "DefPerpendicularLine"; auxName: string; through: string; baseA: string; baseB: string }
   | { kind: "DefParallelLine"; auxName: string; through: string; baseA: string; baseB: string }
+  | { kind: "DefAngleBisectorLine"; auxName: string; a: string; b: string; c: string }
   | { kind: "DefCircleCircumCenter"; centerName: string; a: string; b: string; c: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
   | { kind: "DefMidPoint"; name: string; a: string; b: string }
@@ -93,6 +94,8 @@ type PointStyleDef = {
 type LabelPlacement = {
   xShiftPt: number;
   yShiftPt: number;
+  rawXShiftPt: number;
+  rawYShiftPt: number;
   scale: number;
   bubbleRadiusPt: number;
 };
@@ -219,7 +222,24 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (cached) return cached;
     const line = lineById.get(lineId);
     if (!line) throw new Error(`Missing line ${lineId}`);
-    if (line.kind === "perpendicular" || line.kind === "parallel") {
+    if (line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "angleBisector") {
+      if (line.kind === "angleBisector") {
+        resolvePoint(line.aId);
+        resolvePoint(line.bId);
+        resolvePoint(line.cId);
+        derivedAuxIndex += 1;
+        const auxName = `tkzBis_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefAngleBisectorLine",
+          auxName,
+          a: mustName(pointName, line.aId),
+          b: mustName(pointName, line.bId),
+          c: mustName(pointName, line.cId),
+        });
+        const anchors = { a: mustName(pointName, line.bId), b: auxName };
+        lineAnchorNames.set(lineId, anchors);
+        return anchors;
+      }
       resolvePoint(line.throughId);
       const base = resolveLineLikeNames(line.base);
       derivedAuxIndex += 1;
@@ -626,16 +646,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (!line.visible) continue;
     const lineNames = resolveLineAnchorsById(line.id);
     const ext = computeLineDrawPlacement(scene, line);
+    const lineAnchorId =
+      line.kind === "perpendicular" || line.kind === "parallel"
+        ? line.throughId
+        : line.kind === "angleBisector"
+          ? line.bId
+          : line.aId;
     const drawAName =
       ext.drawAId === line.id
         ? lineNames.b
-        : ext.drawAId === (line.kind === "perpendicular" || line.kind === "parallel" ? line.throughId : line.aId)
+        : ext.drawAId === lineAnchorId
         ? lineNames.a
         : pointName.get(ext.drawAId) ?? ext.drawAId;
     const drawBName =
       ext.drawBId === line.id
         ? lineNames.b
-        : ext.drawBId === (line.kind === "perpendicular" || line.kind === "parallel" ? line.throughId : line.aId)
+        : ext.drawBId === lineAnchorId
         ? lineNames.a
         : pointName.get(ext.drawBId) ?? ext.drawBId;
     draws.push({
@@ -887,6 +913,12 @@ export function renderTikz(cmds: TikzCommand[]): string {
       out.push(`\\tkzDefLine[parallel=through ${cmd.through}](${cmd.baseA},${cmd.baseB}) \\tkzGetPoint{${cmd.auxName}}`);
       continue;
     }
+    if (cmd.kind === "DefAngleBisectorLine") {
+      assertAngleBisectorMacro("tkzDefTriangleCenter");
+      assertTkzMacro("tkzGetPoint");
+      out.push(`\\tkzDefTriangleCenter[in](${cmd.a},${cmd.b},${cmd.c}) \\tkzGetPoint{${cmd.auxName}}`);
+      continue;
+    }
     if (cmd.kind === "DefCircleCircumCenter") {
       assertTkzMacro("tkzDefCircle");
       assertTkzMacro("tkzGetPoint");
@@ -1077,6 +1109,9 @@ function lineLikeNamesFromRef(
     if (!anchors) return null;
     if (line.kind === "perpendicular" || line.kind === "parallel") {
       return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId };
+    }
+    if (line.kind === "angleBisector") {
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.bId };
     }
     return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.aId, endpointBId: line.bId };
   }
@@ -1300,8 +1335,18 @@ function computeLineDrawPlacement(
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const dd = dx * dx + dy * dy;
-  const anchorAId = line.kind === "perpendicular" || line.kind === "parallel" ? line.throughId : line.aId;
-  const anchorBId = line.kind === "perpendicular" || line.kind === "parallel" ? line.id : line.bId;
+  const anchorAId =
+    line.kind === "perpendicular" || line.kind === "parallel"
+      ? line.throughId
+      : line.kind === "angleBisector"
+        ? line.bId
+        : line.aId;
+  const anchorBId =
+    line.kind === "perpendicular" || line.kind === "parallel"
+      ? line.id
+      : line.kind === "angleBisector"
+        ? line.id
+        : line.bId;
   if (dd <= 1e-12) return { drawAId: anchorAId, drawBId: anchorBId, addLeft: 1, addRight: 1 };
   const len = Math.sqrt(dd);
 
@@ -1384,6 +1429,9 @@ function collectLineRelevantPointIds(
   const anchors = getLineWorldAnchors(line, scene);
   if (line.kind === "perpendicular" || line.kind === "parallel") {
     pushPoint(line.throughId, getPointWorldPosCached(scene, line.throughId));
+    pushPoint(line.id, anchors?.b ?? null);
+  } else if (line.kind === "angleBisector") {
+    pushPoint(line.bId, getPointWorldPosCached(scene, line.bId));
     pushPoint(line.id, anchors?.b ?? null);
   } else {
     pushPoint(line.aId, getPointWorldPosCached(scene, line.aId));
@@ -1767,10 +1815,14 @@ function pointLabelOptionsToTikz(point: ScenePoint, placement: LabelPlacement | 
   const opts: string[] = [];
   const xShiftPt = placement?.xShiftPt ?? 12;
   const yShiftPt = placement?.yShiftPt ?? 12;
+  const rawXShiftPt = placement?.rawXShiftPt ?? xShiftPt;
+  const rawYShiftPt = placement?.rawYShiftPt ?? yShiftPt;
   const matchCanvas = exportOptions.matchCanvas ?? false;
   const fontPt = Math.max(6, Math.min(48, point.style.labelFontPx * (matchCanvas ? 0.75 : 1)));
   if (matchCanvas) {
-    opts.push(directionOptionFromShift(xShiftPt, yShiftPt));
+    // Keep quadrant stable from user drag offset, so labels don't flip due to
+    // collision-spread/min-clear post-processing.
+    opts.push(directionOptionFromShift(rawXShiftPt, rawYShiftPt));
   } else {
     // Placement solver computes label center directly; keep node anchored at center.
     opts.push("anchor=center");
@@ -1854,9 +1906,31 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
       dyPx = dir.y * minClearPx;
     }
 
+    let rawDxPx = point.style.labelOffsetPx.x;
+    let rawDyPx = point.style.labelOffsetPx.y;
+    if (point.showLabel === "caption") {
+      // Caption labels are rendered in canvas as top-left anchored HTML overlays.
+      // Convert stored top-left offset to an approximate label-center shift so
+      // anchor direction matches the visual quadrant.
+      const caption = point.captionTex || point.name || "";
+      const fontPx = Math.max(6, Math.min(48, point.style.labelFontPx));
+      const boxW = Math.max(18, caption.length * (fontPx * 0.58) + 8);
+      const boxH = Math.max(16, fontPx * 1.2);
+      rawDxPx += boxW * 0.5;
+      // KaTeX label overlay is top-left anchored; visual glyph center sits lower
+      // than geometric half-height. Subscripts/fractions lower perceived center
+      // further, so include a conservative TeX-descender bias.
+      const subscriptCount = (caption.match(/_/g) ?? []).length;
+      const hasFraction = /\\frac|\\dfrac|\\tfrac/.test(caption);
+      const texDescenderBiasPx = subscriptCount * fontPx * 0.55 + (hasFraction ? fontPx * 0.35 : 0);
+      rawDyPx += boxH * 0.95 + texDescenderBiasPx;
+    }
+
     result.set(point.id, {
       xShiftPt: dxPx * ptPerPxForShift,
       yShiftPt: -dyPx * ptPerPxForShift,
+      rawXShiftPt: rawDxPx * ptPerPxForShift,
+      rawYShiftPt: -rawDyPx * ptPerPxForShift,
       scale,
       bubbleRadiusPt: labelRpx * ptPerPxForShift,
     });
@@ -1965,6 +2039,11 @@ function assertPerpendicularMacro(name: string): void {
 function assertParallelMacro(name: string): void {
   if (TKZ_MACRO_SET.has(name)) return;
   throw new Error(`Unsupported construction: ParallelLine (missing tkz macro: ${name})`);
+}
+
+function assertAngleBisectorMacro(name: string): void {
+  if (TKZ_MACRO_SET.has(name)) return;
+  throw new Error(`Unsupported construction: AngleBisector (missing tkz macro: ${name})`);
 }
 
 function assertAngleMacro(name: string, context: string): void {

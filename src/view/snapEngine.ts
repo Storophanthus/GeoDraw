@@ -1,14 +1,19 @@
 import type { Vec2 } from "../geo/vec2";
 import {
   circleCircleIntersections,
-  distance,
   lineCircleIntersections,
   lineLineIntersection,
   projectPointToCircle,
   projectPointToLine,
   projectPointToSegment,
 } from "../geo/geometry";
-import { getLineWorldAnchors, getPointWorldPos, type GeometryObjectRef, type SceneModel } from "../scene/points";
+import {
+  getCircleWorldGeometry,
+  getLineWorldAnchors,
+  getPointWorldPos,
+  type GeometryObjectRef,
+  type SceneModel,
+} from "../scene/points";
 import type { Camera, Viewport } from "./camera";
 import { camera as camMath } from "./camera";
 
@@ -115,10 +120,10 @@ export function findBestSnap(
 
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
-    const center = getPointWorld(scene, circle.centerId);
-    const through = getPointWorld(scene, circle.throughId);
-    if (!center || !through) continue;
-    const radius = distance(center, through);
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (!geom) continue;
+    const center = geom.center;
+    const radius = geom.radius;
     const cScreen = camMath.worldToScreen(center, camera, vp);
     const rScreen = radius * camera.zoom;
     const dToBoundary = Math.abs(Math.hypot(screen.x - cScreen.x, screen.y - cScreen.y) - rScreen);

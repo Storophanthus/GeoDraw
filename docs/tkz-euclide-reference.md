@@ -34,6 +34,10 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 
 % Fixed angle point from base ray BA, CW 30 deg
 \tkzDefPointBy[rotation=center B angle -30](A) \tkzGetPoint{Cw}
+
+% Internal angle bisector of angle ABC (line through vertex B)
+\tkzDefTriangleCenter[in](A,B,C) \tkzGetPoint{I}
+\tkzDrawLine(B,I)
 \tkzDrawLine[add=5 and 5](B,Cw)
 ```
 
@@ -44,7 +48,7 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 \tkzMarkSegment[mark=||,pos=0.3,size=5.5pt,color=teal,line width=1pt](D,E)
 
 % End-arrow overlay on segment
-\tkzDrawSegment[arrows=->,color=teal,line width=1.2pt](D,E)
+\draw[color=teal,line width=1.2pt,-{Stealth[scale=1]}] ($(D)!0.94!(E)$) -- (E);
 
 % Mid-arrow overlay on segment (no segment redraw)
 \path[
@@ -57,6 +61,11 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
   postaction=decorate,
   decoration={markings,mark=between positions 0.45 and 0.55 step 0.05 with {\arrow[color=teal,line width=1.2pt]{>}}}
 ] (D) -- (E);
+
+% Fixed-radius circle (center O, radius 3.5)
+\tkzDefPoints{0/0/O}
+\tkzDefCircle[R](O,3.5) \tkzGetPoint{X}
+\tkzDrawCircle(O,X)
 ```
 
 ## User Cheat-Sheet (verbatim)
