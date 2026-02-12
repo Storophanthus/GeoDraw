@@ -50,6 +50,13 @@ import {
   resolveLineAnchorsInScene,
 } from "./eval/sceneGeometryAccess";
 import { evalNumberDefinitionInScene } from "./eval/numberSceneEval";
+export {
+  isNameUnique,
+  isPointDraggable,
+  isValidPointName,
+  movePoint,
+  nextLabelFromIndex,
+} from "./pointBasics";
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
@@ -501,30 +508,6 @@ export function getLastSceneEvalStats(scene: SceneModel): SceneEvalStats | null 
   return sceneLastEvalStats.get(scene) ?? null;
 }
 
-export function nextLabelFromIndex(index: number): string {
-  const letterIndex = index % 26;
-  const cycle = Math.floor(index / 26);
-  const letter = String.fromCharCode(65 + letterIndex);
-  if (cycle === 0) return letter;
-  return `${letter}_${cycle}`;
-}
-
-export function isNameUnique(
-  name: string,
-  existingNames: Iterable<string>,
-  ignoreName?: string
-): boolean {
-  for (const existing of existingNames) {
-    if (existing === ignoreName) continue;
-    if (existing === name) return false;
-  }
-  return true;
-}
-
-export function isValidPointName(name: string): boolean {
-  return /^[A-Za-z][A-Za-z0-9_]*$/.test(name);
-}
-
 export function getPointWorldPos(
   point: ScenePoint,
   scene: SceneModel,
@@ -535,22 +518,6 @@ export function getPointWorldPos(
   const value = evalPoint(point.id, scene, ctx);
   updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
   return value;
-}
-
-export function isPointDraggable(point: ScenePoint): boolean {
-  if (point.locked) return false;
-  return (
-    point.kind === "free" ||
-    point.kind === "pointOnLine" ||
-    point.kind === "pointOnSegment" ||
-    point.kind === "pointOnCircle"
-  );
-}
-
-export function movePoint(point: ScenePoint, world: Vec2): ScenePoint {
-  if (point.kind !== "free") return point;
-  if (point.locked) return point;
-  return { ...point, position: world };
 }
 
 function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {

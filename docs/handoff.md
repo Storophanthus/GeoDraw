@@ -430,6 +430,18 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: point basic helpers extraction):
+  - Added `src/scene/pointBasics.ts`:
+    - `nextLabelFromIndex(...)`
+    - `isNameUnique(...)`
+    - `isValidPointName(...)`
+    - `isPointDraggable(...)`
+    - `movePoint(...)`
+  - `points.ts` now re-exports these to preserve existing import paths.
+  - Structural extraction only; behavior preserved.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
