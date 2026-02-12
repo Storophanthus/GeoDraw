@@ -49,6 +49,9 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         if (line.base.type === "segment") return nextSegmentIds.has(line.base.id);
         return nextLineIds.has(line.base.id);
       }
+      if (line.kind === "tangent") {
+        return pointIds.has(line.throughId) && nextCircleIds.has(line.circleId);
+      }
       if (line.kind === "angleBisector") {
         return pointIds.has(line.aId) && pointIds.has(line.bId) && pointIds.has(line.cId);
       }

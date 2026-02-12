@@ -20,6 +20,40 @@ export function resolveLineAnchorsWithOps(
   if (ops.lineInProgress.has(line.id)) return null;
   ops.lineInProgress.add(line.id);
   try {
+    if (line.kind === "tangent") {
+      const through = ops.getPointWorldById(line.throughId);
+      const circle = ops.getCircleById(line.circleId);
+      if (!through || !circle) return null;
+      const geom = getCircleWorldGeometryWithOps(circle, ops);
+      if (!geom) return null;
+      const vx = through.x - geom.center.x;
+      const vy = through.y - geom.center.y;
+      const d2 = vx * vx + vy * vy;
+      const r2 = geom.radius * geom.radius;
+      if (d2 <= 1e-12) return null;
+      const eps = 1e-10;
+      if (d2 < r2 - eps) return null;
+      const k = r2 / d2;
+      const perp = { x: -vy, y: vx };
+      if (Math.abs(d2 - r2) <= eps) {
+        return {
+          a: through,
+          b: {
+            x: through.x + perp.x,
+            y: through.y + perp.y,
+          },
+        };
+      }
+      const h = (geom.radius * Math.sqrt(Math.max(0, d2 - r2))) / d2;
+      const sign = line.branchIndex === 0 ? 1 : -1;
+      const tx = geom.center.x + k * vx + sign * h * perp.x;
+      const ty = geom.center.y + k * vy + sign * h * perp.y;
+      return {
+        a: through,
+        b: { x: tx, y: ty },
+      };
+    }
+
     if (line.kind !== "perpendicular" && line.kind !== "parallel" && line.kind !== "angleBisector") {
       const a = ops.getPointWorldById(line.aId);
       const b = ops.getPointWorldById(line.bId);

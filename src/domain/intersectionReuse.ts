@@ -206,7 +206,7 @@ function sameObjectRef(a: GeometryObjectRef, b: GeometryObjectRef): boolean {
 }
 
 function getLineEndpointPointIds(line: SceneModel["lines"][number]): [string | null, string | null] {
-  if (line.kind === "perpendicular" || line.kind === "parallel") return [line.throughId, null];
+  if (line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent") return [line.throughId, null];
   if (line.kind === "angleBisector") return [line.bId, null];
   return [line.aId, line.bId];
 }

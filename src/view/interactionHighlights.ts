@@ -73,6 +73,17 @@ export function drawInteractionHighlights(
         "#22c55e",
         0.95
       );
+    } else if (pendingSelection.tool === "tangent_line" && pendingSelection.first.type === "circle") {
+      drawHitHighlight(
+        ctx,
+        { type: "circle", id: pendingSelection.first.id },
+        resolvedPoints,
+        scene,
+        camera,
+        vp,
+        "#22c55e",
+        0.95
+      );
     } else {
       if (pendingSelection.first.type !== "point") {
         return;

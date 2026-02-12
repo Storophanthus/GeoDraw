@@ -222,6 +222,25 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (cached) return cached;
     const line = lineById.get(lineId);
     if (!line) throw new Error(`Missing line ${lineId}`);
+    if (line.kind === "tangent") {
+      resolvePoint(line.throughId);
+      const anchorsWorld = getLineWorldAnchors(line, scene);
+      if (!anchorsWorld) {
+        throw new Error(`Cannot export undefined tangent geometry: ${line.id}`);
+      }
+      derivedAuxIndex += 1;
+      const auxName = `tkzTan_${derivedAuxIndex}`;
+      constructions.push({
+        kind: "DefPoint",
+        name: auxName,
+        x: anchorsWorld.b.x,
+        y: anchorsWorld.b.y,
+      });
+      const anchors = { a: mustName(pointName, line.throughId), b: auxName };
+      lineAnchorNames.set(lineId, anchors);
+      return anchors;
+    }
+
     if (line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "angleBisector") {
       if (line.kind === "angleBisector") {
         resolvePoint(line.aId);
@@ -647,7 +666,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const lineNames = resolveLineAnchorsById(line.id);
     const ext = computeLineDrawPlacement(scene, line);
     const lineAnchorId =
-      line.kind === "perpendicular" || line.kind === "parallel"
+      line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent"
         ? line.throughId
         : line.kind === "angleBisector"
           ? line.bId
@@ -1110,6 +1129,9 @@ function lineLikeNamesFromRef(
     if (line.kind === "perpendicular" || line.kind === "parallel") {
       return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId };
     }
+    if (line.kind === "tangent") {
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId };
+    }
     if (line.kind === "angleBisector") {
       return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.bId };
     }
@@ -1336,13 +1358,13 @@ function computeLineDrawPlacement(
   const dy = b.y - a.y;
   const dd = dx * dx + dy * dy;
   const anchorAId =
-    line.kind === "perpendicular" || line.kind === "parallel"
+    line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent"
       ? line.throughId
       : line.kind === "angleBisector"
         ? line.bId
         : line.aId;
   const anchorBId =
-    line.kind === "perpendicular" || line.kind === "parallel"
+    line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent"
       ? line.id
       : line.kind === "angleBisector"
         ? line.id
@@ -1427,7 +1449,7 @@ function collectLineRelevantPointIds(
   };
 
   const anchors = getLineWorldAnchors(line, scene);
-  if (line.kind === "perpendicular" || line.kind === "parallel") {
+  if (line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent") {
     pushPoint(line.throughId, getPointWorldPosCached(scene, line.throughId));
     pushPoint(line.id, anchors?.b ?? null);
   } else if (line.kind === "angleBisector") {

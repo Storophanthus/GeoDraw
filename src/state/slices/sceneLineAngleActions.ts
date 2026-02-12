@@ -18,7 +18,12 @@ export function createSceneLineAngleActions(
   ctx: SceneLineAngleContext
 ): Pick<
   GeoActions,
-  "createPerpendicularLine" | "createParallelLine" | "createAngleBisectorLine" | "createAngle" | "createAngleFixed"
+  | "createPerpendicularLine"
+  | "createParallelLine"
+  | "createTangentLines"
+  | "createAngleBisectorLine"
+  | "createAngle"
+  | "createAngleFixed"
 > {
   return {
     createPerpendicularLine(throughId, base) {
@@ -109,6 +114,82 @@ export function createSceneLineAngleActions(
         };
       });
       return id;
+    },
+
+    createTangentLines(throughId, circleId) {
+      const created: string[] = [];
+      ctx.setState((prev) => {
+        const through = prev.scene.points.find((p) => p.id === throughId);
+        const circle = prev.scene.circles.find((c) => c.id === circleId);
+        if (!through || !circle) return prev;
+
+        const temp0: SceneModel["lines"][number] = {
+          id: "__temp_tangent_0__",
+          kind: "tangent",
+          throughId,
+          circleId,
+          branchIndex: 0,
+          visible: true,
+          style: prev.lineDefaults,
+        };
+        const a0 = getLineWorldAnchors(temp0, prev.scene);
+        if (!a0) return prev;
+
+        const temp1: SceneModel["lines"][number] = {
+          id: "__temp_tangent_1__",
+          kind: "tangent",
+          throughId,
+          circleId,
+          branchIndex: 1,
+          visible: true,
+          style: prev.lineDefaults,
+        };
+        const a1 = getLineWorldAnchors(temp1, prev.scene);
+
+        const nextLines = [...prev.scene.lines];
+        let nextLineId = prev.nextLineId;
+
+        const id0 = `l_${nextLineId++}`;
+        nextLines.push({
+          id: id0,
+          kind: "tangent",
+          throughId,
+          circleId,
+          branchIndex: 0,
+          visible: true,
+          style: { ...prev.lineDefaults },
+        });
+        created.push(id0);
+
+        if (a1) {
+          const same =
+            Math.hypot(a0.a.x - a1.a.x, a0.a.y - a1.a.y) <= 1e-9 &&
+            Math.hypot(a0.b.x - a1.b.x, a0.b.y - a1.b.y) <= 1e-9;
+          if (!same) {
+            const id1 = `l_${nextLineId++}`;
+            nextLines.push({
+              id: id1,
+              kind: "tangent",
+              throughId,
+              circleId,
+              branchIndex: 1,
+              visible: true,
+              style: { ...prev.lineDefaults },
+            });
+            created.push(id1);
+          }
+        }
+
+        return {
+          ...prev,
+          scene: { ...prev.scene, lines: nextLines },
+          selectedObject: created.length > 0 ? { type: "line", id: created[created.length - 1] } : prev.selectedObject,
+          recentCreatedObject:
+            created.length > 0 ? { type: "line", id: created[created.length - 1] } : prev.recentCreatedObject,
+          nextLineId,
+        };
+      });
+      return created;
     },
 
     createAngleBisectorLine(aId, bId, cId) {

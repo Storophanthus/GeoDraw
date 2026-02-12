@@ -38,11 +38,13 @@ export type SnapshotPoint = {
 
 export type SnapshotLine = {
   id: string;
-  kind?: "twoPoint" | "perpendicular" | "parallel" | "angleBisector";
+  kind?: "twoPoint" | "perpendicular" | "parallel" | "tangent" | "angleBisector";
   aId?: string;
   bId?: string;
   cId?: string;
   throughId?: string;
+  circleId?: string;
+  branchIndex?: 0 | 1;
   base?: { type: "line" | "segment"; id: string };
   visible: boolean;
 };
@@ -119,6 +121,15 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
             base: line.base,
             visible: line.visible,
           }
+        : line.kind === "tangent"
+          ? {
+              id: line.id,
+              kind: "tangent" as const,
+              throughId: line.throughId,
+              circleId: line.circleId,
+              branchIndex: line.branchIndex,
+              visible: line.visible,
+            }
         : line.kind === "angleBisector"
           ? {
               id: line.id,

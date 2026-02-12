@@ -191,6 +191,17 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
+  if (kind === "tangent") {
+    return {
+      id: String(raw.id),
+      kind: "tangent",
+      throughId: String(raw.throughId),
+      circleId: String(raw.circleId),
+      branchIndex: Number(raw.branchIndex) === 1 ? 1 : 0,
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as LineStyle) ?? defaultLineStyle,
+    };
+  }
   if (kind === "angleBisector") {
     return {
       id: String(raw.id),
@@ -315,6 +326,16 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("\\tkzDefLine[parallel=through")) {
       throw new Error("Expected parallel fixture to emit \\tkzDefLine[parallel=through ...].");
+    }
+  }
+
+  if (fileName === "tangent-line-through-point.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefPoint(") || !tikz.includes("tkzTan_")) {
+      throw new Error("Expected tangent fixture to emit helper tangent point definition.");
+    }
+    if (!tikz.includes("\\tkzDrawLine")) {
+      throw new Error("Expected tangent fixture to draw tangent line.");
     }
   }
 

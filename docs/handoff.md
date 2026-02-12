@@ -21,6 +21,14 @@
 - All recent refactor checkpoints were validated with:
   - `npm run build`
   - `npm run test:export`
+- Tangent-line feature wiring is now integrated end-to-end:
+  - New line kind: `tangent` (model + eval + integrity + dependency graph)
+  - Tool id: `tangent_line` under `LINES` group
+  - Interaction flow supports point→circle and circle→point selection
+  - Pending preview draws tangent candidates (RAF-driven render path)
+  - Construction descriptions include tangent language
+  - Export handles tangent lines deterministically via computed tangent helper point + `\\tkzDrawLine`
+  - Regression fixture added: `src/export/__fixtures__/tangent-line-through-point.json`
 
 ## Active Work (Open)
 - No active bugfix from this handoff currently.

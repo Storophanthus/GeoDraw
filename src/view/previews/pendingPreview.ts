@@ -5,6 +5,7 @@ import {
   computeOrientedAngleRad,
   evaluateAngleExpressionDegrees,
   evaluateNumberExpression,
+  getCircleWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
   type LineLikeObjectRef,
@@ -58,6 +59,19 @@ export function drawPendingPreview(
   ctx.setLineDash([6, 5]);
   ctx.strokeStyle = "#0ea5e9";
   ctx.lineWidth = 1.3;
+
+  const drawInfinitePreviewLine = (through: Vec2, dirVec: Vec2): void => {
+    const len = Math.hypot(dirVec.x, dirVec.y);
+    if (len <= 1e-12) return;
+    const dir = { x: dirVec.x / len, y: dirVec.y / len };
+    const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 2;
+    const q1 = camMath.worldToScreen(add(through, mul(dir, -span)), camera, vp);
+    const q2 = camMath.worldToScreen(add(through, mul(dir, span)), camera, vp);
+    ctx.beginPath();
+    ctx.moveTo(q1.x, q1.y);
+    ctx.lineTo(q2.x, q2.y);
+    ctx.stroke();
+  };
 
   if (p1 && (pendingSelection.tool === "segment" || pendingSelection.tool === "midpoint") && cursorWorld) {
     const p2 = camMath.worldToScreen(cursorWorld, camera, vp);
@@ -189,19 +203,77 @@ export function drawPendingPreview(
       return;
     }
     const dirVec = pendingSelection.tool === "perp_line" ? { x: -d.y, y: d.x } : d;
-    const len = Math.hypot(dirVec.x, dirVec.y);
-    if (len <= 1e-12) {
+    drawInfinitePreviewLine(through, dirVec);
+  }
+
+  if (pendingSelection.tool === "tangent_line") {
+    let through: Vec2 | null = null;
+    let circleId: string | null = null;
+
+    if (pendingSelection.first.type === "point") {
+      const throughPoint = scene.points.find((p) => p.id === pendingSelection.first.id);
+      through = throughPoint ? getPointWorldPos(throughPoint, scene) : null;
+      circleId =
+        hoverSnap?.kind === "onCircle" && hoverSnap.circleId
+          ? hoverSnap.circleId
+          : hoveredHit?.type === "circle"
+            ? hoveredHit.id
+            : null;
+    } else {
+      circleId = pendingSelection.first.id;
+      if (hoverSnap?.kind === "point" && hoverSnap.pointId) {
+        const p = scene.points.find((pt) => pt.id === hoverSnap.pointId);
+        through = p ? getPointWorldPos(p, scene) : null;
+      } else if (hoveredHit?.type === "point") {
+        const p = scene.points.find((pt) => pt.id === hoveredHit.id);
+        through = p ? getPointWorldPos(p, scene) : null;
+      } else if (cursorWorld) {
+        through = cursorWorld;
+      }
+    }
+
+    if (!through || !circleId) {
       ctx.restore();
       return;
     }
-    const dir = { x: dirVec.x / len, y: dirVec.y / len };
-    const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 2;
-    const q1 = camMath.worldToScreen(add(through, mul(dir, -span)), camera, vp);
-    const q2 = camMath.worldToScreen(add(through, mul(dir, span)), camera, vp);
-    ctx.beginPath();
-    ctx.moveTo(q1.x, q1.y);
-    ctx.lineTo(q2.x, q2.y);
-    ctx.stroke();
+
+    const circle = scene.circles.find((c) => c.id === circleId);
+    if (!circle) {
+      ctx.restore();
+      return;
+    }
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (!geom) {
+      ctx.restore();
+      return;
+    }
+    const center = geom.center;
+    const radius = geom.radius;
+    if (!Number.isFinite(radius) || radius <= 1e-12) {
+      ctx.restore();
+      return;
+    }
+    const vx = through.x - center.x;
+    const vy = through.y - center.y;
+    const d2 = vx * vx + vy * vy;
+    const r2 = radius * radius;
+    const eps = 1e-10;
+    if (d2 <= 1e-12 || d2 < r2 - eps) {
+      ctx.restore();
+      return;
+    }
+    const perp = { x: -vy, y: vx };
+    if (Math.abs(d2 - r2) <= eps) {
+      drawInfinitePreviewLine(through, perp);
+      ctx.restore();
+      return;
+    }
+    const k = r2 / d2;
+    const h = (radius * Math.sqrt(Math.max(0, d2 - r2))) / d2;
+    const t0 = { x: center.x + k * vx + h * perp.x, y: center.y + k * vy + h * perp.y };
+    const t1 = { x: center.x + k * vx - h * perp.x, y: center.y + k * vy - h * perp.y };
+    drawInfinitePreviewLine(through, sub(t0, through));
+    drawInfinitePreviewLine(through, sub(t1, through));
   }
 
   if (pendingSelection.tool === "angle" && pendingSelection.step === 3) {

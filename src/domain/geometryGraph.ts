@@ -93,6 +93,9 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
     if (l.kind === "perpendicular" || l.kind === "parallel") {
       addDependency(graph, child, key("point", l.throughId));
       addDependency(graph, child, l.base.type === "line" ? key("line", l.base.id) : key("segment", l.base.id));
+    } else if (l.kind === "tangent") {
+      addDependency(graph, child, key("point", l.throughId));
+      addDependency(graph, child, key("circle", l.circleId));
     } else if (l.kind === "angleBisector") {
       addDependency(graph, child, key("point", l.aId));
       addDependency(graph, child, key("point", l.bId));

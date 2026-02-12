@@ -119,6 +119,9 @@ constructFromClick({
     createParallelLine() {
       return null;
     },
+    createTangentLines() {
+      return [];
+    },
     createAngleBisectorLine() {
       return null;
     },

@@ -23,6 +23,7 @@ export type ToolClickIO = {
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
+  createTangentLines: (throughId: string, circleId: string) => string[];
   createAngleBisectorLine: (aId: string, bId: string, cId: string) => string | null;
   createAngle: (aId: string, bId: string, cId: string) => string | null;
   createAngleFixed: (
@@ -331,6 +332,40 @@ export function handleToolClick(
     const throughId = resolveOrCreatePointAtCursor();
     io.createParallelLine(throughId, pendingSelection.first.ref);
     io.clearPendingSelection();
+    return;
+  }
+
+  if (activeTool === "tangent_line") {
+    const hitCircleId =
+      hits.snap?.kind === "onCircle" && hits.snap.circleId
+        ? hits.snap.circleId
+        : hits.hitObject?.type === "circle"
+          ? hits.hitObject.id
+          : null;
+
+    if (!pendingSelection || pendingSelection.tool !== "tangent_line") {
+      if (hits.hitPointId) {
+        io.setPendingSelection({ tool: "tangent_line", step: 2, first: { type: "point", id: hits.hitPointId } });
+        return;
+      }
+      if (hitCircleId) {
+        io.setPendingSelection({ tool: "tangent_line", step: 2, first: { type: "circle", id: hitCircleId } });
+        return;
+      }
+      io.setPendingSelection({ tool: "tangent_line", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+
+    if (pendingSelection.first.type === "point") {
+      if (!hitCircleId) return;
+      const created = io.createTangentLines(pendingSelection.first.id, hitCircleId);
+      if (created.length > 0) io.clearPendingSelection();
+      return;
+    }
+
+    const throughId = resolveOrCreatePointAtCursor();
+    const created = io.createTangentLines(throughId, pendingSelection.first.id);
+    if (created.length > 0) io.clearPendingSelection();
   }
 }
 
@@ -338,6 +373,10 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
   if (activeTool === "perp_line" || activeTool === "parallel_line") {
     if (!pendingSelection || (pendingSelection.tool !== "perp_line" && pendingSelection.tool !== "parallel_line")) return true;
     return pendingSelection.first.type === "lineLike";
+  }
+  if (activeTool === "tangent_line") {
+    if (!pendingSelection || pendingSelection.tool !== "tangent_line") return true;
+    return pendingSelection.first.type === "circle";
   }
   return (
     activeTool === "point" ||
@@ -386,6 +425,15 @@ export function isValidTarget(
     }
     if (pendingSelection.first.type === "point") {
       return hoveredHit.type === "line2p" || hoveredHit.type === "segment";
+    }
+    return hoveredHit.type === "point";
+  }
+  if (activeTool === "tangent_line") {
+    if (!pendingSelection || pendingSelection.tool !== "tangent_line") {
+      return hoveredHit.type === "point" || hoveredHit.type === "circle";
+    }
+    if (pendingSelection.first.type === "point") {
+      return hoveredHit.type === "circle";
     }
     return hoveredHit.type === "point";
   }

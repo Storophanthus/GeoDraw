@@ -46,7 +46,7 @@ function describeSelectedConstruction(
         line.base.type === "line"
           ? (() => {
             const baseLine = lineById.get(line.base.id);
-            return baseLine && baseLine.kind !== "perpendicular" && baseLine.kind !== "parallel"
+            return baseLine && baseLine.kind === "twoPoint"
               ? `line through ${pointLabel(baseLine.aId, pointNameById)} and ${pointLabel(baseLine.bId, pointNameById)}`
               : `line ${line.base.id}`;
           })()
@@ -58,6 +58,13 @@ function describeSelectedConstruction(
           })();
       const modeText = line.kind === "perpendicular" ? "Perpendicular" : "Parallel";
       return `${modeText} line through ${pointLabel(line.throughId, pointNameById)} to ${baseText}.`;
+    }
+    if (line.kind === "tangent") {
+      const circle = circleById.get(line.circleId);
+      const circleText = circle
+        ? describeCircleRef(circle, pointNameById)
+        : `circle ${line.circleId}`;
+      return `Tangent line through ${pointLabel(line.throughId, pointNameById)} to ${circleText}.`;
     }
     if (line.kind === "angleBisector") {
       return `Internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
@@ -158,27 +165,32 @@ function describePointConstruction(
     if (!seg) return `Midpoint of segment ${point.segId}.`;
     return `Midpoint of segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}.`;
   }
-  if (point.kind === "pointOnLine") {
-    const line = lineById.get(point.lineId);
-    if (!line) return `Point on line ${point.lineId}.`;
-    if (line.kind === "perpendicular" || line.kind === "parallel") {
-      const relation = line.kind === "perpendicular" ? "perpendicular to" : "parallel to";
-      return `Point on line through ${pointLabel(line.throughId, pointNameById)} ${relation} ${describeObjectRef(
-        line.base,
+    if (point.kind === "pointOnLine") {
+      const line = lineById.get(point.lineId);
+      if (!line) return `Point on line ${point.lineId}.`;
+      if (line.kind === "perpendicular" || line.kind === "parallel") {
+        const relation = line.kind === "perpendicular" ? "perpendicular to" : "parallel to";
+        return `Point on line through ${pointLabel(line.throughId, pointNameById)} ${relation} ${describeObjectRef(
+          line.base,
         pointNameById,
         lineById,
         segmentById,
         circleById
       )}.`;
     }
-    if (line.kind === "angleBisector") {
-      return `Point on internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
-        line.bId,
-        pointNameById
-      )}${pointLabel(line.cId, pointNameById)}.`;
+      if (line.kind === "angleBisector") {
+        return `Point on internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
+          line.bId,
+          pointNameById
+        )}${pointLabel(line.cId, pointNameById)}.`;
+      }
+      if (line.kind === "tangent") {
+        const circle = circleById.get(line.circleId);
+        const circleText = circle ? describeCircleRef(circle, pointNameById) : `circle ${line.circleId}`;
+        return `Point on tangent line through ${pointLabel(line.throughId, pointNameById)} to ${circleText}.`;
+      }
+      return `Point on line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
     }
-    return `Point on line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
-  }
   if (point.kind === "pointOnSegment") {
     const seg = segmentById.get(point.segId);
     if (!seg) return `Point on segment ${point.segId}.`;
@@ -217,6 +229,11 @@ function describePointConstruction(
           segmentById,
           circleById
         )}`
+        : line.kind === "tangent"
+          ? `tangent line through ${pointLabel(line.throughId, pointNameById)} to ${(() => {
+              const circle = circleById.get(line.circleId);
+              return circle ? describeCircleRef(circle, pointNameById) : `circle ${line.circleId}`;
+            })()}`
         : line.kind === "angleBisector"
           ? `internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
             line.bId,
@@ -253,6 +270,11 @@ function describeObjectRef(
           segmentById,
           circleById
         )}`;
+    }
+    if (line?.kind === "tangent") {
+      const circle = circleById.get(line.circleId);
+      const circleText = circle ? describeCircleRef(circle, pointNameById) : `circle ${line.circleId}`;
+      return `tangent line through ${pointLabel(line.throughId, pointNameById)} to ${circleText}`;
     }
     if (line?.kind === "angleBisector") {
       return `internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(

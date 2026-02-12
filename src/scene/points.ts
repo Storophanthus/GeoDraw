@@ -330,7 +330,17 @@ export type SceneLineAngleBisector = {
   style: LineStyle;
 };
 
-export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular | SceneLineParallel | SceneLineAngleBisector;
+export type SceneLineTangent = {
+  id: string;
+  kind: "tangent";
+  throughId: string;
+  circleId: string;
+  branchIndex: 0 | 1;
+  visible: boolean;
+  style: LineStyle;
+};
+
+export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular | SceneLineParallel | SceneLineAngleBisector | SceneLineTangent;
 
 export type SceneCircleTwoPoint = {
   id: string;

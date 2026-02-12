@@ -41,6 +41,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   line2p: { icon: Slash, tooltip: "Line Through 2 Points (L)", ariaLabel: "Line tool" },
   perp_line: { icon: PerpendicularIcon, tooltip: "Perpendicular Line", ariaLabel: "Perpendicular line tool" },
   parallel_line: { icon: ParallelIcon, tooltip: "Parallel Line", ariaLabel: "Parallel line tool" },
+  tangent_line: { icon: TangentIcon, tooltip: "Tangent Line", ariaLabel: "Tangent line tool" },
   angle: { icon: AngleIcon, tooltip: "Angle (deg)", ariaLabel: "Angle tool" },
   angle_fixed: { icon: AngleFixedIcon, tooltip: "Angle with Fixed Value (deg)", ariaLabel: "Fixed angle tool" },
   angle_bisector: { icon: AngleBisectorIcon, tooltip: "Internal Angle Bisector", ariaLabel: "Angle bisector tool" },
@@ -52,7 +53,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
   { id: "move", label: "MOVE", tools: ["move"] },
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
-  { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "angle_bisector"] },
+  { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "CIRCLES", tools: ["circle_cp", "circle_3p", "circle_fixed"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
@@ -324,6 +325,18 @@ function ParallelIcon({ size = 18, strokeWidth = 2 }: IconProps) {
     <svg viewBox="0 0 24 24" width={w} height={h} aria-hidden fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
       <path d="M4 8l14-4" strokeLinecap="round" />
       <path d="M6 16l14-4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TangentIcon({ size = 18, strokeWidth = 2 }: IconProps) {
+  const w = size;
+  const h = size;
+  return (
+    <svg viewBox="0 0 24 24" width={w} height={h} aria-hidden fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
+      <circle cx="10" cy="12" r="5.5" />
+      <path d="M15.5 6.5l4.5-4.5" strokeLinecap="round" />
+      <path d="M12.1 8.9l2.9-2.9" strokeLinecap="round" />
     </svg>
   );
 }
