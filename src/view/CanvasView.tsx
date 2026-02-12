@@ -75,6 +75,7 @@ export function CanvasView() {
   const pendingSelection = useGeoStore((store) => store.pendingSelection);
   const copyStyle = useGeoStore((store) => store.copyStyle);
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
+  const dependencyGlowEnabled = useGeoStore((store) => store.dependencyGlowEnabled);
 
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
   const setHoveredHit = useGeoStore((store) => store.setHoveredHit);
@@ -269,6 +270,7 @@ export function CanvasView() {
         selectedDrawableObject,
         recentDrawableObject,
         copySourceDrawable,
+        dependencyGlowEnabled,
         getAngleStrokeRenderWidth,
       });
     },
@@ -289,6 +291,7 @@ export function CanvasView() {
       resolvedAngles,
       scene,
       selectedObject,
+      dependencyGlowEnabled,
       vp,
     ]
   );

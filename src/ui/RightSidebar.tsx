@@ -23,6 +23,8 @@ export function RightSidebar({
   const scene = useGeoStore((store) => store.scene);
   const selectedObject = useGeoStore((store) => store.selectedObject);
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
+  const dependencyGlowEnabled = useGeoStore((store) => store.dependencyGlowEnabled);
+  const setDependencyGlowEnabled = useGeoStore((store) => store.setDependencyGlowEnabled);
   const [rightTab, setRightTab] = useState<RightTab>("algebra");
 
   return (
@@ -67,7 +69,17 @@ export function RightSidebar({
 
           {rightTab === "algebra" && (
             <section className="sidebarSection">
-              <h2 className="sectionTitle">Objects</h2>
+              <div className="sectionTitleRow">
+                <h2 className="sectionTitle">Objects</h2>
+                <label className="tinyToggle" title="Toggle dependency category glow on canvas">
+                  <input
+                    type="checkbox"
+                    checked={dependencyGlowEnabled}
+                    onChange={(e) => setDependencyGlowEnabled(e.target.checked)}
+                  />
+                  <span>Dependency Glow</span>
+                </label>
+              </div>
               <ObjectBrowser scene={scene} selectedObject={selectedObject} setSelectedObject={setSelectedObject} />
             </section>
           )}

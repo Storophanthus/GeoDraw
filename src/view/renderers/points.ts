@@ -5,13 +5,30 @@ import type { DrawableObjectSelection } from "./types";
 
 export type ResolvedPointForRender = { point: ScenePoint; world: { x: number; y: number } };
 
+type PointCategory = "free" | "constrained" | "dependent";
+
+function getPointCategory(point: ScenePoint): PointCategory {
+  if (point.kind === "free") return "free";
+  if (point.kind === "pointOnLine" || point.kind === "pointOnSegment" || point.kind === "pointOnCircle") {
+    return "constrained";
+  }
+  return "dependent";
+}
+
+function getPointCategoryGlowColor(category: PointCategory): string {
+  if (category === "free") return "rgba(59,130,246,0.35)";
+  if (category === "constrained") return "rgba(16,185,129,0.35)";
+  return "rgba(225,29,72,0.42)";
+}
+
 export function drawPoints(
   ctx: CanvasRenderingContext2D,
   resolvedPoints: ResolvedPointForRender[],
   selectedObject: DrawableObjectSelection,
   camera: Camera,
   vp: Viewport,
-  copySource: DrawableObjectSelection
+  copySource: DrawableObjectSelection,
+  dependencyGlowEnabled: boolean
 ): void {
   ctx.save();
   ctx.textAlign = "left";
@@ -22,6 +39,20 @@ export function drawPoints(
     if (!point.visible) continue;
     const p = camMath.worldToScreen(world, camera, vp);
     const selected = selectedObject?.type === "point" && selectedObject.id === point.id;
+    const category = getPointCategory(point);
+
+    if (dependencyGlowEnabled) {
+      // Canvas-only visual cue for point category.
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(point.style.sizePx + 3.5, 6.5), 0, Math.PI * 2);
+      ctx.strokeStyle = getPointCategoryGlowColor(category);
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = getPointCategoryGlowColor(category);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     drawPointSymbol(
       ctx,

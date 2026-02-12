@@ -11,6 +11,7 @@ export type UiSliceState = {
   circleFixedTool: {
     radius: string;
   };
+  dependencyGlowEnabled: boolean;
   copyStyle: {
     source: SelectedObject;
     pointStyle: import("../../scene/points").PointStyle | null;
@@ -32,6 +33,7 @@ export function createUiSliceState(): UiSliceState {
     circleFixedTool: {
       radius: "3",
     },
+    dependencyGlowEnabled: true,
     copyStyle: {
       source: null,
       pointStyle: null,

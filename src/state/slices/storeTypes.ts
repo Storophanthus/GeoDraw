@@ -147,6 +147,7 @@ export type GeoState = {
   circleFixedTool: {
     radius: string;
   };
+  dependencyGlowEnabled: boolean;
   copyStyle: {
     source: SelectedObject;
     pointStyle: PointStyle | null;
@@ -207,6 +208,7 @@ export type GeoActions = {
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
   setCircleFixedTool: (next: Partial<GeoState["circleFixedTool"]>) => void;
+  setDependencyGlowEnabled: (enabled: boolean) => void;
   updateSelectedPointStyle: (next: Partial<PointStyle>) => void;
   updateSelectedPointFields: (
     next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>

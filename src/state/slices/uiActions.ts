@@ -16,6 +16,7 @@ export function createUiActions(
   | "setAngleDefaults"
   | "setAngleFixedTool"
   | "setCircleFixedTool"
+  | "setDependencyGlowEnabled"
 > {
   return {
     setPointDefaults(next) {
@@ -85,6 +86,13 @@ export function createUiActions(
           ...prev.circleFixedTool,
           ...next,
         },
+      }));
+    },
+
+    setDependencyGlowEnabled(enabled) {
+      ctx.setState((prev) => ({
+        ...prev,
+        dependencyGlowEnabled: enabled,
       }));
     },
   };

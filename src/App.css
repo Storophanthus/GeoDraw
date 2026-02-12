@@ -304,6 +304,34 @@ textarea {
   font-weight: 700;
 }
 
+.sectionTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sectionTitleRow .sectionTitle {
+  margin: 0;
+}
+
+.tinyToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: #64748b;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tinyToggle input {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+}
+
 .rightTabs {
   display: flex;
   gap: 0;

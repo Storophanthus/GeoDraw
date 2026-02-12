@@ -44,6 +44,7 @@ type RenderFrameArgs = {
   selectedDrawableObject: DrawableObjectSelection;
   recentDrawableObject: DrawableObjectSelection;
   copySourceDrawable: DrawableObjectSelection;
+  dependencyGlowEnabled: boolean;
   getAngleStrokeRenderWidth: (rawStrokeWidth: number) => number;
 };
 
@@ -70,6 +71,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     selectedDrawableObject,
     recentDrawableObject,
     copySourceDrawable,
+    dependencyGlowEnabled,
     getAngleStrokeRenderWidth,
   } = args;
 
@@ -105,7 +107,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       circleFixedTool,
       pendingPreviewTolerances
     );
-    drawPoints(ctx, resolvedPoints, selectedDrawableObject, camera, vp, copySourceDrawable);
+    drawPoints(ctx, resolvedPoints, selectedDrawableObject, camera, vp, copySourceDrawable, dependencyGlowEnabled);
     drawInteractionHighlights(
       ctx,
       activeTool,
