@@ -383,6 +383,15 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: angle math extraction):
+  - Added `src/scene/eval/angleMath.ts`:
+    - `computeConvexAngleRad(...)`
+    - `computeOrientedAngleRad(...)`
+  - `points.ts` now imports/re-exports these math helpers; local implementations removed.
+  - Structural extraction only; formulas unchanged.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
