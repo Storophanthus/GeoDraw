@@ -12,6 +12,7 @@ import { useGeoStore } from "../state/geoStore";
 import { NumbersSection } from "./NumbersSection";
 import { ObjectStyleSections } from "./ObjectStyleSections";
 import { PointPropertiesSection } from "./PointPropertiesSection";
+import { ToolInfoSection } from "./ToolInfoSection";
 
 
 export function PropertiesPanel({ visible }: { visible: boolean }) {
@@ -184,95 +185,25 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     <div>{selectedConstructionText}</div>
   </div>
 )}
-{activeTool === "copyStyle" && (
-  <div className="toolInfo">
-    {copyStyle.source
-      ? "Copy Style: click targets to apply (Shift-click to change source)"
-      : "Copy Style: click an object to pick source (Shift-click anytime to change source)"}
-  </div>
-)}
-{activeTool === "angle_fixed" && (
-  <div className="toolInfo">
-    <div className="subSectionTitle">Fixed Angle Tool</div>
-    <div className="controlRow">
-      <label className="controlLabel">Angle Expr (deg)</label>
-      <input
-        className="renameInput"
-        type="text"
-        value={angleFixedTool.angleExpr}
-        onChange={(e) => setAngleFixedTool({ angleExpr: e.target.value })}
-        placeholder="e.g. 30, 2*gamma, (ABC+15)/2"
-      />
-    </div>
-    <div className="controlRow">
-      <label className="controlLabel">Direction</label>
-      <select
-        className="selectInput"
-        value={angleFixedTool.direction}
-        onChange={(e) => setAngleFixedTool({ direction: e.target.value as "CCW" | "CW" })}
-      >
-        <option value="CCW">CCW</option>
-        <option value="CW">CW</option>
-      </select>
-    </div>
-    <div className="statusText">
-      {angleFixedPreview.ok
-        ? `Resolved: ${angleFixedPreview.valueDeg.toFixed(3)}°`
-        : angleFixedPreview.error}
-    </div>
-    <div className="statusText">Click A (base point), then B (vertex), then click to confirm.</div>
-  </div>
-)}
-{activeTool === "circle_fixed" && (
-  <div className="toolInfo">
-    <div className="subSectionTitle">Circle with Fixed Radius</div>
-    <div className="controlRow">
-      <label className="controlLabel">Radius</label>
-      <input
-        className="renameInput"
-        type="text"
-        value={circleFixedTool.radius}
-        onChange={(e) => setCircleFixedTool({ radius: e.target.value })}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter") return;
-          if (!pendingSelection || pendingSelection.tool !== "circle_fixed") return;
-          const created = createCircleFixedRadius(pendingSelection.first.id, circleFixedTool.radius);
-          if (created) clearPendingSelection();
-        }}
-        placeholder="e.g. 3.5 or r_1/2"
-      />
-    </div>
-    <div className="actionsRow">
-      <button
-        className="actionButton secondary"
-        disabled={
-          !pendingSelection ||
-          pendingSelection.tool !== "circle_fixed" ||
-          !circleFixedPreview.ok ||
-          !Number.isFinite(circleFixedPreview.value) ||
-          circleFixedPreview.value <= 0
-        }
-        onClick={() => {
-          if (!pendingSelection || pendingSelection.tool !== "circle_fixed") return;
-          const created = createCircleFixedRadius(pendingSelection.first.id, circleFixedTool.radius);
-          if (created) clearPendingSelection();
-        }}
-      >
-        Create
-      </button>
-    </div>
-    <div className="statusText">
-      {pendingSelection && pendingSelection.tool === "circle_fixed"
-        ? `Center selected: ${pointLabel(pendingSelection.first.id, pointNameById)}`
-        : "Click center point first."}
-    </div>
-    <div className="statusText">
-      {circleFixedPreview.ok && Number.isFinite(circleFixedPreview.value) && circleFixedPreview.value > 0
-        ? `Resolved: r = ${circleFixedPreview.value.toFixed(6)}`
-        : "Radius must be > 0 (supports expressions like r_1/2)"}
-    </div>
-  </div>
-)}
+<ToolInfoSection
+  activeTool={activeTool}
+  copyStyleHasSource={Boolean(copyStyle.source)}
+  angleFixedExpr={angleFixedTool.angleExpr}
+  angleFixedDirection={angleFixedTool.direction}
+  setAngleFixedTool={setAngleFixedTool}
+  angleFixedPreview={angleFixedPreview}
+  circleFixedRadius={circleFixedTool.radius}
+  setCircleFixedTool={setCircleFixedTool}
+  circleFixedPreview={circleFixedPreview}
+  pendingSelection={pendingSelection}
+  pendingCircleFixedCenterLabel={
+    pendingSelection && pendingSelection.tool === "circle_fixed"
+      ? pointLabel(pendingSelection.first.id, pointNameById)
+      : null
+  }
+  createCircleFixedRadius={createCircleFixedRadius}
+  clearPendingSelection={clearPendingSelection}
+/>
 {selectedNumber && (
   <div className="toolInfo">
     <div className="subSectionTitle">Number</div>

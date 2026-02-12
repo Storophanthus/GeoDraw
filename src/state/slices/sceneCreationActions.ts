@@ -2,13 +2,14 @@ import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
 import type { GeometryObjectRef, SceneModel, SceneNumberDefinition, ScenePoint, ShowLabelMode } from "../../scene/points";
 import { evaluateNumberExpression } from "../../scene/points";
 import type { Vec2 } from "../../geo/vec2";
+import type { SceneCreationStateLike } from "../../domain/intersectionReuse";
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
 
 type SceneCreationContext = {
   setState: (updater: (prev: GeoState) => GeoState, options?: SetStateOptions) => void;
   findExistingIntersectionPointId: (
-    state: GeoState,
+    state: SceneCreationStateLike,
     objA: GeometryObjectRef,
     objB: GeometryObjectRef,
     preferredWorld: Vec2
@@ -19,7 +20,7 @@ type SceneCreationContext = {
     lineId: string,
     circleId: string,
     preferredWorld: Vec2,
-    state: GeoState
+    state: SceneCreationStateLike
   ) => ScenePoint | null;
   isValidNumberDefinition: (def: SceneNumberDefinition, scene: SceneModel) => boolean;
   numberPrefixForDefinition: (def: SceneNumberDefinition) => string;

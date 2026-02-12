@@ -5,6 +5,26 @@
 - Keep commits small and scoped.
 - Do not bundle unrelated files in feature commits.
 
+## Intersection Do-Not-Break Checklist (Read First)
+
+Before changing any intersection-related logic (creation, evaluation, export), read:
+
+- `docs/regression-log.md`
+
+Mandatory invariants to preserve:
+
+- Creation/evaluation branch ordering must stay identical (no alternate sorting).
+- No root stealing between sibling intersections on same pair in non-degenerate regimes.
+- `excludePointId` stabilization semantics must remain enforced.
+- Undefined handling must be deterministic (no arbitrary jumps).
+- Tangency is a degeneracy case only (see "Future-Proof Note: Tangent Tool Compatibility" in `docs/regression-log.md`).
+
+Required validation after such changes:
+
+- `npm run build`
+- `npm run test:export`
+- `npm run test:scene`
+
 ## Architecture Refactor Status (Current)
 - `handleToolClick` extraction is already done (`src/tools/toolClick.ts`).
 - Store slice scaffolding exists:
@@ -215,9 +235,64 @@
     - reduced to orchestration/composition for:
       - tool info blocks
       - object selection wiring
-      - default-style toggle
-      - composing `PointPropertiesSection`, `ObjectStyleSections`, `NumbersSection`
+    - default-style toggle
+    - composing `PointPropertiesSection`, `ObjectStyleSections`, `NumbersSection`
     - line count reduced substantially (~1415 -> ~442) with behavior preserved.
+- Store/domain decomposition (scene integrity extraction):
+  - Added `src/domain/sceneIntegrity.ts`
+    - `normalizeSceneIntegrity(scene)` moved out of `geoStore`.
+    - Includes object-reference liveness filtering and iterative dependency cleanup for:
+      - points/segments/lines/circles/angles
+      - circle/line intersection point validity
+      - number-definition integrity (including ratio references).
+  - `src/state/geoStore.ts`
+    - now imports `normalizeSceneIntegrity` from domain layer.
+    - reduced store-local orchestration size (~631 -> ~508 lines in this step).
+  - Behavior preserved; `build` + export fixture suite remain green.
+- Store/domain decomposition (intersection + number/history helper extraction):
+  - Added `src/domain/intersectionReuse.ts`
+    - moved stable intersection helper cluster out of store wiring:
+      - `getLineCircleRefs(...)`
+      - `findExistingIntersectionPointId(...)`
+      - `createStableLineCircleIntersectionPoint(...)`
+    - logic preserved (branch-order, `excludePointId`, target-root reuse behavior unchanged).
+  - Added `src/domain/numberDefinitions.ts`
+    - moved numeric-definition helper functions:
+      - `isValidNumberDefinition(...)`
+      - `numberPrefixForDefinition(...)`
+      - `nextAvailableNumberName(...)`
+  - Added `src/state/slices/historyRestore.ts`
+    - `restoreGeoStateFromSnapshot(...)` extracted from `geoStore`.
+  - `src/state/geoStore.ts`
+    - now primarily composes slices + imports pure helpers.
+    - reduced further (~508 -> ~235 lines in this step).
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
+- Store decomposition (rename action extraction):
+  - Added `src/state/slices/sceneRenameActions.ts`
+    - moved `renameSelectedPoint(...)` out of `geoStore`.
+    - validation/uniqueness/error behavior preserved.
+  - `src/state/geoStore.ts`
+    - now composes rename action via `createSceneRenameActions(...)`.
+    - reduced further (~235 -> ~190 lines in this step).
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
+- Store runtime extraction (state/listener/history plumbing):
+  - Added `src/state/slices/storeRuntime.ts`
+    - `createStoreRuntime(...)` now owns:
+      - mutable store state
+      - listener subscription/emit
+      - `setState(...)` pipeline with scene normalization + history bookkeeping
+      - history runtime fields (`undoStack`, `redoStack`, action key, restoring flag)
+  - `src/state/geoStore.ts`
+    - now composes runtime via `createStoreRuntime(...)`
+    - passes runtime hooks/stacks to action slices
+    - reduced further (~190 -> ~135 lines in this step).
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`

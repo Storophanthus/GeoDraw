@@ -182,6 +182,27 @@ This reports:
 
 If any of the above fails, treat as release-blocking regression.
 
+## Future-Proof Note: Tangent Tool Compatibility
+
+When tangent constructions are added later, they must be modeled as a strict degeneracy case and must not relax the stability rules above.
+
+Rules:
+
+- Tangency is `discriminant ~= 0` (line-circle or circle-circle), i.e. one world intersection point with multiplicity.
+- In tangent state only, two intersection identities may coincide at the same world point.
+- Outside tangent state (two-root regime), branch separation remains strict:
+  - no root stealing between sibling intersection points
+  - `excludePointId` constraints remain enforced
+  - `branchIndex` / branch ordering semantics remain unchanged.
+- If intersection regime changes continuously during drag, use epsilon hysteresis around tangent threshold to avoid flicker/teleport near the boundary.
+- Prefer introducing an explicit tangent construction type (do not fake tangent behavior via ad-hoc branch switching in generic intersection code).
+
+Why this is compatible with the "correct behavior" contract:
+
+- The current contract already allows coincidence only in true degeneracy.
+- Non-degenerate branch ownership stays deterministic and identity-stable.
+- Undefined handling remains deterministic (no arbitrary jump to unrelated roots).
+
 ## Related Files
 
 - `docs/eval-performance.md`
