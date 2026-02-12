@@ -1,6 +1,5 @@
 import type { Vec2 } from "../geo/vec2";
 import {
-  lineCircleIntersectionBranches,
 } from "../geo/geometry";
 import type { NumberExpressionEvalResult } from "./eval/numericExpression";
 import {
@@ -14,7 +13,6 @@ import {
   updateImplicitEvalStats,
 } from "./eval/evalContext";
 import {
-  circleLineStabilitySignature,
   genericIntersectionSignature,
 } from "./eval/intersectionUtils";
 import { objectIntersectionsWithOps } from "./eval/intersectionQueries";
@@ -46,6 +44,10 @@ import {
   evalPointOnLinePoint as evalPointOnLinePointCore,
   evalPointOnSegmentPoint as evalPointOnSegmentPointCore,
 } from "./eval/pointKindEvaluators";
+import {
+  evalCircleLineIntersectionPoint as evalCircleLineIntersectionPointCore,
+  evalGenericIntersectionPoint as evalGenericIntersectionPointCore,
+} from "./eval/pointIntersectionEvaluators";
 import {
   buildSceneEvalContextForScene,
   type SceneEvalContext,
@@ -575,51 +577,29 @@ function evalCircleLineIntersectionPoint(
   scene: SceneModel,
   ctx: SceneEvalContext
 ): Vec2 | null {
-  const circle = ctx.circleById.get(point.circleId);
-  const line = ctx.lineById.get(point.lineId);
-  if (!circle || !line) return null;
-  const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
-  const anchors = resolveLineAnchors(line, scene, ctx);
-  if (!geom || !anchors) return null;
-  const la = anchors.a;
-  const lb = anchors.b;
-  const center = geom.center;
-  const r = geom.radius;
-  const stabilitySignature = circleLineStabilitySignature(point.circleId, point.lineId, la, lb, center, r);
-  ctx.stats.circleLineCalls += 1;
-  const branches = lineCircleIntersectionBranches(la, lb, center, r);
-  if (branches.length === 0) return null;
-
-  const pairResolved = resolveCircleLinePairAssignments(
-    scene,
-    ctx,
-    point.circleId,
-    point.lineId,
-    branches,
-    stabilitySignature
-  );
-  if (!pairResolved.has(point.id)) return null;
-  const chosen = pairResolved.get(point.id) ?? null;
-  if (!chosen) return null;
-  rememberStableCircleLinePoint(point.id, stabilitySignature, chosen);
-  return chosen;
+  return evalCircleLineIntersectionPointCore(point, scene, ctx, {
+    getCircleWorldGeometryWithCtx: (circleId, s, c) => {
+      const circle = c.circleById.get(circleId);
+      if (!circle) return null;
+      return getCircleWorldGeometryWithCtx(circle, s, c);
+    },
+    resolveLineAnchors: (lineId, s, c) => {
+      const line = c.lineById.get(lineId);
+      if (!line) return null;
+      return resolveLineAnchors(line, s, c);
+    },
+    resolveCircleLinePairAssignments,
+    rememberStablePoint: rememberStableCircleLinePoint,
+  });
 }
 
 function evalGenericIntersectionPoint(point: IntersectionPoint, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  const intersections = objectIntersections(point.objA, point.objB, scene, ctx);
-  if (intersections.length === 0) return null;
-  const pairResolved = resolveGenericIntersectionPairAssignments(
-    scene,
-    ctx,
-    point.objA,
-    point.objB,
-    intersections
-  );
-  if (!pairResolved.has(point.id)) return null;
-  const chosen = pairResolved.get(point.id) ?? null;
-  if (!chosen) return null;
-  rememberStableGenericIntersectionPoint(point.id, point.objA, point.objB, chosen);
-  return chosen;
+  return evalGenericIntersectionPointCore(point, scene, ctx, {
+    objectIntersections,
+    resolveGenericIntersectionPairAssignments,
+    rememberStablePoint: (pointId, _signature, value) =>
+      rememberStableGenericIntersectionPoint(pointId, point.objA, point.objB, value),
+  });
 }
 
 function getPointWorldById(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {

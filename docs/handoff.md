@@ -594,6 +594,17 @@ Required validation after such changes:
      - owns `drawInteractionHighlights(...)` + internal `drawHitHighlight(...)`
      - behavior preserved; `CanvasView` now delegates this draw pass.
    - Next major stage (`scene`): extract generic/circle-line intersection assignment helpers from `src/scene/points.ts` into `src/scene/eval/intersections.ts` (pair-assignment logic), preserving stability behavior.
+   - Recent `scene` extractions completed (behavior-preserving, validated):
+     - `src/scene/eval/expressionRuntime.ts`
+     - `src/scene/eval/numberSceneEval.ts`
+     - `src/scene/pointBasics.ts` (with re-exports from `points.ts` for API stability)
+     - `src/scene/eval/sceneContextBuilder.ts`
+     - `src/scene/eval/intersectionPairResolution.ts`
+     - `src/scene/eval/geometryResolveRuntime.ts`
+     - `src/scene/eval/pointRuntime.ts`
+     - `src/scene/eval/pointKindEvaluators.ts`
+     - `src/scene/eval/pointIntersectionEvaluators.ts`
+   - `src/scene/points.ts` now primarily orchestrates runtime wiring/delegation; next step is continuing to peel remaining orchestration pieces into `src/scene/eval/*`.
    - Next major stage (`ui`): continue `PropertiesPanel` split by extracting tool-info blocks (Angle Fixed / Circle Fixed) and selected-object editors into dedicated subcomponents.
 4. Keep behavior identical (no geometry semantics change in same commit).
 5. Re-run:
