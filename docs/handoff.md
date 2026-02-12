@@ -4,6 +4,7 @@
 - Active branch: `refactor/stage2-app-decomposition`
 - Keep commits small and scoped.
 - Do not bundle unrelated files in feature commits.
+- Architecture map reference: `docs/architecture-snapshot.md`
 
 ## Done (Current Truth)
 - `PropertiesPanel` is already decomposed and **not** a monolith now:
