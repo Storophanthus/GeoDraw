@@ -141,20 +141,21 @@ function drawArcBarMarks(
   const start = Math.atan2(a.y - b.y, a.x - b.x);
   const p = Math.max(0.1, Math.min(0.9, Number.isFinite(pos) ? pos : 0.5));
   const mid = start - theta * p;
-  const nx = Math.cos(mid);
-  const ny = Math.sin(mid);
-  const tx = -ny;
-  const ty = nx;
+  const baseStep = Math.max(0.025, Math.min(0.18, (markSize * 1.15) / Math.max(1, radius)));
   ctx.save();
   ctx.strokeStyle = markColor;
-  const spacing = markSize * 1.25;
   for (let i = 0; i < count; i += 1) {
-    const offset = (i - (count - 1) * 0.5) * spacing;
-    const cx = b.x + nx * (radius + offset);
-    const cy = b.y + ny * (radius + offset);
+    // Bars are distributed along the arc (angle offset), not radially.
+    const phi = mid + (i - (count - 1) * 0.5) * baseStep;
+    const nx = Math.cos(phi);
+    const ny = Math.sin(phi);
+    const cx = b.x + nx * radius;
+    const cy = b.y + ny * radius;
+    const half = markSize * 0.72;
     ctx.beginPath();
-    ctx.moveTo(cx - tx * markSize, cy - ty * markSize);
-    ctx.lineTo(cx + tx * markSize, cy + ty * markSize);
+    // Tick orientation should cross the arc like tkz marks (radial stroke).
+    ctx.moveTo(cx - nx * half, cy - ny * half);
+    ctx.lineTo(cx + nx * half, cy + ny * half);
     ctx.stroke();
   }
   ctx.restore();
