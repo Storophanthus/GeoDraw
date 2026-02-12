@@ -581,95 +581,110 @@ function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): V
 function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
   if (point.kind === "free") return point.position;
 
-  if (point.kind === "midpointPoints") {
-    const pa = getPointWorldById(point.aId, scene, ctx);
-    const pb = getPointWorldById(point.bId, scene, ctx);
-    if (!pa || !pb) return null;
-    ctx.stats.allocationsEstimate += 1;
-    return evalMidpoint(pa, pb);
-  }
+  if (point.kind === "midpointPoints") return evalMidpointPointsPoint(point, scene, ctx);
+  if (point.kind === "midpointSegment") return evalMidpointSegmentPoint(point, scene, ctx);
+  if (point.kind === "pointOnLine") return evalPointOnLinePoint(point, scene, ctx);
+  if (point.kind === "pointOnSegment") return evalPointOnSegmentPoint(point, scene, ctx);
+  if (point.kind === "pointOnCircle") return evalPointOnCirclePoint(point, scene, ctx);
+  if (point.kind === "pointByRotation") return evalPointByRotationPoint(point, scene, ctx);
+  if (point.kind === "circleLineIntersectionPoint") return evalCircleLineIntersectionPoint(point, scene, ctx);
+  return evalGenericIntersectionPoint(point, scene, ctx);
+}
 
-  if (point.kind === "midpointSegment") {
-    const seg = ctx.segmentById.get(point.segId);
-    if (!seg) return null;
-    const pa = getPointWorldById(seg.aId, scene, ctx);
-    const pb = getPointWorldById(seg.bId, scene, ctx);
-    if (!pa || !pb) return null;
-    ctx.stats.allocationsEstimate += 1;
-    return evalMidpoint(pa, pb);
-  }
+function evalMidpointPointsPoint(point: MidpointFromPoints, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  const pa = getPointWorldById(point.aId, scene, ctx);
+  const pb = getPointWorldById(point.bId, scene, ctx);
+  if (!pa || !pb) return null;
+  ctx.stats.allocationsEstimate += 1;
+  return evalMidpoint(pa, pb);
+}
 
-  if (point.kind === "pointOnLine") {
-    const line = ctx.lineById.get(point.lineId);
-    if (!line) return null;
-    const anchors = resolveLineAnchors(line, scene, ctx);
-    if (!anchors) return null;
-    ctx.stats.allocationsEstimate += 1;
-    return evalPointOnLine(anchors, point.s);
-  }
+function evalMidpointSegmentPoint(point: MidpointFromSegment, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  const seg = ctx.segmentById.get(point.segId);
+  if (!seg) return null;
+  const pa = getPointWorldById(seg.aId, scene, ctx);
+  const pb = getPointWorldById(seg.bId, scene, ctx);
+  if (!pa || !pb) return null;
+  ctx.stats.allocationsEstimate += 1;
+  return evalMidpoint(pa, pb);
+}
 
-  if (point.kind === "pointOnSegment") {
-    const seg = ctx.segmentById.get(point.segId);
-    if (!seg) return null;
-    const a = getPointWorldById(seg.aId, scene, ctx);
-    const b = getPointWorldById(seg.bId, scene, ctx);
-    if (!a || !b) return null;
-    ctx.stats.allocationsEstimate += 1;
-    return evalPointOnSegment(a, b, point.u);
-  }
+function evalPointOnLinePoint(point: PointOnLine, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  const line = ctx.lineById.get(point.lineId);
+  if (!line) return null;
+  const anchors = resolveLineAnchors(line, scene, ctx);
+  if (!anchors) return null;
+  ctx.stats.allocationsEstimate += 1;
+  return evalPointOnLine(anchors, point.s);
+}
 
-  if (point.kind === "pointOnCircle") {
-    const circle = ctx.circleById.get(point.circleId);
-    if (!circle) return null;
-    const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
-    if (!geom) return null;
-    const { center, radius } = geom;
-    ctx.stats.allocationsEstimate += 1;
-    return evalPointOnCircle(center, radius, point.t);
-  }
+function evalPointOnSegmentPoint(point: PointOnSegment, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  const seg = ctx.segmentById.get(point.segId);
+  if (!seg) return null;
+  const a = getPointWorldById(seg.aId, scene, ctx);
+  const b = getPointWorldById(seg.bId, scene, ctx);
+  if (!a || !b) return null;
+  ctx.stats.allocationsEstimate += 1;
+  return evalPointOnSegment(a, b, point.u);
+}
 
-  if (point.kind === "pointByRotation") {
-    const center = getPointWorldById(point.centerId, scene, ctx);
-    const base = getPointWorldById(point.pointId, scene, ctx);
-    if (!center || !base) return null;
-    const expr = point.angleExpr ?? String(point.angleDeg ?? "");
-    const exprEval = evaluateAngleExpressionDegreesWithCtx(scene, expr, ctx);
-    if (!exprEval.ok) return null;
-    ctx.stats.allocationsEstimate += 1;
-    return evalPointByRotation(center, base, exprEval.valueDeg, point.direction);
-  }
+function evalPointOnCirclePoint(point: PointOnCircle, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  const circle = ctx.circleById.get(point.circleId);
+  if (!circle) return null;
+  const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
+  if (!geom) return null;
+  const { center, radius } = geom;
+  ctx.stats.allocationsEstimate += 1;
+  return evalPointOnCircle(center, radius, point.t);
+}
 
-  if (point.kind === "circleLineIntersectionPoint") {
-    const circle = ctx.circleById.get(point.circleId);
-    const line = ctx.lineById.get(point.lineId);
-    if (!circle || !line) return null;
-    const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
-    const anchors = resolveLineAnchors(line, scene, ctx);
-    if (!geom || !anchors) return null;
-    const la = anchors.a;
-    const lb = anchors.b;
-    const center = geom.center;
-    const r = geom.radius;
-    const stabilitySignature = circleLineStabilitySignature(point.circleId, point.lineId, la, lb, center, r);
-    ctx.stats.circleLineCalls += 1;
-    const branches = lineCircleIntersectionBranches(la, lb, center, r);
-    if (branches.length === 0) return null;
+function evalPointByRotationPoint(point: PointByRotation, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
+  const center = getPointWorldById(point.centerId, scene, ctx);
+  const base = getPointWorldById(point.pointId, scene, ctx);
+  if (!center || !base) return null;
+  const expr = point.angleExpr ?? String(point.angleDeg ?? "");
+  const exprEval = evaluateAngleExpressionDegreesWithCtx(scene, expr, ctx);
+  if (!exprEval.ok) return null;
+  ctx.stats.allocationsEstimate += 1;
+  return evalPointByRotation(center, base, exprEval.valueDeg, point.direction);
+}
 
-    const pairResolved = resolveCircleLinePairAssignments(
-      scene,
-      ctx,
-      point.circleId,
-      point.lineId,
-      branches,
-      stabilitySignature
-    );
-    if (!pairResolved.has(point.id)) return null;
-    const chosen = pairResolved.get(point.id) ?? null;
-    if (!chosen) return null;
-    rememberStableCircleLinePoint(point.id, stabilitySignature, chosen);
-    return chosen;
-  }
+function evalCircleLineIntersectionPoint(
+  point: CircleLineIntersectionPoint,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): Vec2 | null {
+  const circle = ctx.circleById.get(point.circleId);
+  const line = ctx.lineById.get(point.lineId);
+  if (!circle || !line) return null;
+  const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
+  const anchors = resolveLineAnchors(line, scene, ctx);
+  if (!geom || !anchors) return null;
+  const la = anchors.a;
+  const lb = anchors.b;
+  const center = geom.center;
+  const r = geom.radius;
+  const stabilitySignature = circleLineStabilitySignature(point.circleId, point.lineId, la, lb, center, r);
+  ctx.stats.circleLineCalls += 1;
+  const branches = lineCircleIntersectionBranches(la, lb, center, r);
+  if (branches.length === 0) return null;
 
+  const pairResolved = resolveCircleLinePairAssignments(
+    scene,
+    ctx,
+    point.circleId,
+    point.lineId,
+    branches,
+    stabilitySignature
+  );
+  if (!pairResolved.has(point.id)) return null;
+  const chosen = pairResolved.get(point.id) ?? null;
+  if (!chosen) return null;
+  rememberStableCircleLinePoint(point.id, stabilitySignature, chosen);
+  return chosen;
+}
+
+function evalGenericIntersectionPoint(point: IntersectionPoint, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
   const intersections = objectIntersections(point.objA, point.objB, scene, ctx);
   if (intersections.length === 0) return null;
   const pairResolved = resolveGenericIntersectionPairAssignments(
