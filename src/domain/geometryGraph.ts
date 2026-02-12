@@ -66,6 +66,8 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
       addDependency(graph, child, key("segment", p.segId));
     } else if (p.kind === "pointOnCircle") {
       addDependency(graph, child, key("circle", p.circleId));
+    } else if (p.kind === "circleCenter") {
+      addDependency(graph, child, key("circle", p.circleId));
     } else if (p.kind === "pointByRotation") {
       addDependency(graph, child, key("point", p.centerId));
       addDependency(graph, child, key("point", p.pointId));

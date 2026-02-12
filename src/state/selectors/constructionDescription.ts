@@ -204,6 +204,11 @@ function describePointConstruction(
     if (!circle) return `Point on circle ${point.circleId}.`;
     return `Point on ${describeCircleRef(circle, pointNameById)}.`;
   }
+  if (point.kind === "circleCenter") {
+    const circle = circleById.get(point.circleId);
+    if (!circle) return `Center of circle ${point.circleId}.`;
+    return `Center of ${describeCircleRef(circle, pointNameById)}.`;
+  }
   if (point.kind === "pointByRotation") {
     const angleText = point.angleExpr?.trim()
       ? point.angleExpr.trim()

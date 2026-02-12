@@ -77,6 +77,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         if (point.kind === "pointOnLine") return nextLineIdsAfter.has(point.lineId);
         if (point.kind === "pointOnSegment") return nextSegmentIds.has(point.segId);
         if (point.kind === "pointOnCircle") return nextCircleIds.has(point.circleId);
+        if (point.kind === "circleCenter") return nextCircleIds.has(point.circleId);
         if (point.kind === "pointByRotation") return pointIds.has(point.centerId) && pointIds.has(point.pointId);
         if (point.kind === "circleLineIntersectionPoint") {
           return nextCircleIds.has(point.circleId) && nextLineIdsAfter.has(point.lineId);

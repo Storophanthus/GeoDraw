@@ -39,6 +39,7 @@ export type ToolClickIO = {
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
+  createCircleCenterPoint: (circleId: string) => string | null;
   setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null) => void;
   setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
   applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
@@ -300,6 +301,14 @@ export function handleToolClick(
       return;
     }
 
+    if (hits.hitObject?.type === "circle") {
+      const centerId = io.createCircleCenterPoint(hits.hitObject.id);
+      if (!centerId) return;
+      io.setSelectedObject({ type: "point", id: centerId });
+      io.clearPendingSelection();
+      return;
+    }
+
     io.setPendingSelection({ tool: "midpoint", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
     return;
   }
@@ -477,7 +486,7 @@ export function isValidTarget(
 
   if (activeTool === "midpoint") {
     if (pendingSelection?.tool === "midpoint") return hoveredHit.type === "point";
-    return hoveredHit.type === "segment" || hoveredHit.type === "point";
+    return hoveredHit.type === "segment" || hoveredHit.type === "point" || hoveredHit.type === "circle";
   }
 
   return false;

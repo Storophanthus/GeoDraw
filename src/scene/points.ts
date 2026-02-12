@@ -234,6 +234,19 @@ export type PointByRotation = {
   style: PointStyle;
 };
 
+export type CircleCenterPoint = {
+  id: string;
+  kind: "circleCenter";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  circleId: string;
+  style: PointStyle;
+};
+
 export type GeometryObjectRef =
   | { type: "line"; id: string }
   | { type: "segment"; id: string }
@@ -281,6 +294,7 @@ export type ScenePoint =
   | PointOnSegment
   | PointOnCircle
   | PointByRotation
+  | CircleCenterPoint
   | IntersectionPoint
   | CircleLineIntersectionPoint;
 

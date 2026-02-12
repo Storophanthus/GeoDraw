@@ -207,6 +207,7 @@ export type GeoActions = {
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number) => string | null;
+  createCircleCenterPoint: (circleId: string) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createNumber: (definition: SceneNumberDefinition, preferredName?: string) => string | null;
 

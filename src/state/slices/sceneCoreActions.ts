@@ -20,7 +20,15 @@ function nextUnusedPointName(state: GeoState): string {
 
 export function createSceneCoreActions(
   ctx: SceneCoreContext
-): Pick<GeoActions, "createFreePoint" | "createMidpointFromPoints" | "createMidpointFromSegment" | "createSegment" | "createLine"> {
+): Pick<
+  GeoActions,
+  | "createFreePoint"
+  | "createMidpointFromPoints"
+  | "createMidpointFromSegment"
+  | "createSegment"
+  | "createLine"
+  | "createCircleCenterPoint"
+> {
   return {
     createFreePoint(world) {
       let createdId = "";
@@ -206,6 +214,67 @@ export function createSceneCoreActions(
         };
       });
       return id;
+    },
+
+    createCircleCenterPoint(circleId) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const circle = prev.scene.circles.find((c) => c.id === circleId);
+        if (!circle) return prev;
+
+        if (circle.kind !== "threePoint") {
+          const center = prev.scene.points.find((p) => p.id === circle.centerId);
+          if (!center) return prev;
+          createdId = center.id;
+          return {
+            ...prev,
+            selectedObject: { type: "point", id: center.id },
+          };
+        }
+
+        const existing = prev.scene.points.find(
+          (p) => p.kind === "circleCenter" && p.circleId === circleId
+        );
+        if (existing) {
+          createdId = existing.id;
+          return {
+            ...prev,
+            selectedObject: { type: "point", id: existing.id },
+          };
+        }
+
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "circleCenter",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: "name" as ShowLabelMode,
+                locked: true,
+                auxiliary: true,
+                circleId,
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
     },
   };
 }

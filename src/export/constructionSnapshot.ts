@@ -9,6 +9,7 @@ export type SnapshotPointDefinition =
   | { kind: "pointOnLine"; lineId: string; s: number }
   | { kind: "pointOnSegment"; segId: string; u: number }
   | { kind: "pointOnCircle"; circleId: string; t: number }
+  | { kind: "circleCenter"; circleId: string }
   | {
       kind: "pointByRotation";
       centerId: string;
@@ -237,6 +238,9 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
   if (point.kind === "pointOnCircle") {
     return { kind: "pointOnCircle", circleId: point.circleId, t: point.t };
   }
+  if (point.kind === "circleCenter") {
+    return { kind: "circleCenter", circleId: point.circleId };
+  }
   if (point.kind === "pointByRotation") {
     return {
       kind: "pointByRotation",
@@ -275,6 +279,7 @@ function pointDependsOn(point: ScenePoint): string[] {
   if (point.kind === "pointOnLine") return [point.lineId];
   if (point.kind === "pointOnSegment") return [point.segId];
   if (point.kind === "pointOnCircle") return [point.circleId];
+  if (point.kind === "circleCenter") return [point.circleId];
   if (point.kind === "pointByRotation") return [point.centerId, point.pointId];
   if (point.kind === "circleLineIntersectionPoint") {
     const refs = [point.circleId, point.lineId];

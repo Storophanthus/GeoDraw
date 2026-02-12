@@ -101,6 +101,7 @@ export function CanvasView() {
   const createPointOnLine = useGeoStore((store) => store.createPointOnLine);
   const createPointOnSegment = useGeoStore((store) => store.createPointOnSegment);
   const createPointOnCircle = useGeoStore((store) => store.createPointOnCircle);
+  const createCircleCenterPoint = useGeoStore((store) => store.createCircleCenterPoint);
   const createIntersectionPoint = useGeoStore((store) => store.createIntersectionPoint);
   const movePointTo = useGeoStore((store) => store.movePointTo);
   const movePointLabelBy = useGeoStore((store) => store.movePointLabelBy);
@@ -144,6 +145,7 @@ export function CanvasView() {
       createPointOnLine,
       createPointOnSegment,
       createPointOnCircle,
+      createCircleCenterPoint,
       createIntersectionPoint,
       setSelectedObject,
       setCopyStyleSource,
@@ -173,6 +175,7 @@ export function CanvasView() {
       createPointOnLine,
       createPointOnSegment,
       createPointOnCircle,
+      createCircleCenterPoint,
       createIntersectionPoint,
       setSelectedObject,
       setCopyStyleSource,

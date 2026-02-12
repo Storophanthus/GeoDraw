@@ -152,6 +152,9 @@ constructFromClick({
     createIntersectionPoint() {
       return null;
     },
+    createCircleCenterPoint() {
+      return null;
+    },
     setSelectedObject() {},
     setCopyStyleSource() {},
     applyCopyStyleTo() {},

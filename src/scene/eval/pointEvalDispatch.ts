@@ -1,5 +1,6 @@
 import type { Vec2 } from "../../geo/vec2";
 import type {
+  CircleCenterPoint,
   CircleLineIntersectionPoint,
   GeometryObjectRef,
   IntersectionPoint,
@@ -19,6 +20,7 @@ import {
   evalGenericIntersectionPoint,
 } from "./pointIntersectionEvaluators";
 import {
+  evalCircleCenterPointPoint,
   evalMidpointPointsPoint,
   evalMidpointSegmentPoint,
   evalPointByRotationPoint,
@@ -84,6 +86,7 @@ export function evalPointUnchecked(
   if (point.kind === "pointOnSegment") return evalPointOnSegment(point, scene, ctx, ops);
   if (point.kind === "pointOnCircle") return evalPointOnCircle(point, scene, ctx, ops);
   if (point.kind === "pointByRotation") return evalPointByRotation(point, scene, ctx, ops);
+  if (point.kind === "circleCenter") return evalCircleCenterPoint(point, scene, ctx, ops);
   if (point.kind === "circleLineIntersectionPoint") return evalCircleLineIntersection(point, scene, ctx, ops);
   return evalGenericIntersection(point, scene, ctx, ops);
 }
@@ -146,6 +149,17 @@ function evalPointByRotation(
   return evalPointByRotationPoint(point, scene, ctx, {
     getPointWorldById: ops.getPointWorldById,
     evaluateAngleExpressionDegreesWithCtx: ops.evaluateAngleExpressionDegreesWithCtx,
+  });
+}
+
+function evalCircleCenterPoint(
+  point: CircleCenterPoint,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalCircleCenterPointPoint(point, scene, ctx, {
+    getCircleWorldGeometryWithCtx: ops.getCircleWorldGeometryById,
   });
 }
 
