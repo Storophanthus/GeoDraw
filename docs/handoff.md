@@ -442,6 +442,15 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: eval-context builder extraction):
+  - Added `src/scene/eval/sceneContextBuilder.ts`:
+    - `buildSceneEvalContextForScene(...)`
+    - exported scene `SceneEvalContext` alias
+  - `points.ts` now delegates context map/tick construction to this helper.
+  - Behavior unchanged; context lifecycle API remains the same.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`

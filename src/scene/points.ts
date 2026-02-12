@@ -8,10 +8,8 @@ import {
 } from "./eval/expressionEval";
 import {
   beginSceneEvalTick as beginSceneEvalTickCore,
-  buildSceneEvalContext as buildSceneEvalContextCore,
   endSceneEvalTick as endSceneEvalTickCore,
   getOrCreateSceneEvalContext as getOrCreateSceneEvalContextCore,
-  type SceneEvalContext as CoreSceneEvalContext,
   type SceneEvalStats,
   updateImplicitEvalStats,
 } from "./eval/evalContext";
@@ -50,6 +48,10 @@ import {
   resolveLineAnchorsInScene,
 } from "./eval/sceneGeometryAccess";
 import { evalNumberDefinitionInScene } from "./eval/numberSceneEval";
+import {
+  buildSceneEvalContextForScene,
+  type SceneEvalContext,
+} from "./eval/sceneContextBuilder";
 export {
   isNameUnique,
   isPointDraggable,
@@ -451,45 +453,13 @@ export type SceneModel = {
   numbers: SceneNumber[];
 };
 
-type SceneEvalContext = CoreSceneEvalContext<
-  ScenePoint,
-  SceneLine,
-  SceneSegment,
-  SceneCircle,
-  SceneAngle,
-  SceneNumber
->;
-
 const sceneEvalContexts = new WeakMap<SceneModel, SceneEvalContext>();
 const sceneLastEvalStats = new WeakMap<SceneModel, SceneEvalStats>();
 let sceneEvalTick = 0;
 
 function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalContext {
-  const pointById = new Map<string, ScenePoint>();
-  for (const point of scene.points) pointById.set(point.id, point);
-  const lineById = new Map<string, SceneLine>();
-  for (const line of scene.lines) lineById.set(line.id, line);
-  const segmentById = new Map<string, SceneSegment>();
-  for (const seg of scene.segments) segmentById.set(seg.id, seg);
-  const circleById = new Map<string, SceneCircle>();
-  for (const circle of scene.circles) circleById.set(circle.id, circle);
-  const angleById = new Map<string, SceneAngle>();
-  for (const angle of scene.angles) angleById.set(angle.id, angle);
-  const numberById = new Map<string, SceneNumber>();
-  for (const num of scene.numbers) numberById.set(num.id, num);
   const tick = ++sceneEvalTick;
-  return buildSceneEvalContextCore({
-    tick,
-    startedAt: performance.now(),
-    explicit,
-    pointById,
-    lineById,
-    segmentById,
-    circleById,
-    angleById,
-    numberById,
-    dirtyNodes: scene.points.length + scene.numbers.length,
-  });
+  return buildSceneEvalContextForScene(scene, explicit, tick, performance.now());
 }
 
 function getOrCreateSceneEvalContext(scene: SceneModel): SceneEvalContext {
