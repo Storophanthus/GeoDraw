@@ -451,6 +451,15 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: intersection pair-resolution orchestration extraction):
+  - Added `src/scene/eval/intersectionPairResolution.ts`:
+    - `resolveCircleLinePairAssignmentsInScene(...)`
+    - `resolveGenericIntersectionPairAssignmentsInScene(...)`
+  - `points.ts` now delegates pair-candidate scan/caching orchestration to this module.
+  - Branch ownership and stable-point rules unchanged (still delegated to existing assignment helpers).
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`

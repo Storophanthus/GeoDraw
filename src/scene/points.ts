@@ -14,18 +14,9 @@ import {
   updateImplicitEvalStats,
 } from "./eval/evalContext";
 import {
-  circleLinePairAssignmentKey,
   circleLineStabilitySignature,
-  genericIntersectionPairKey,
   genericIntersectionSignature,
-  sameObjectPair,
 } from "./eval/intersectionUtils";
-import {
-  assignCircleLinePairPoints,
-  assignGenericIntersectionPairPoints,
-  type CircleLineAssignmentPoint,
-  type GenericAssignmentPoint,
-} from "./eval/intersectionAssignments";
 import { objectIntersectionsWithOps } from "./eval/intersectionQueries";
 import {
   evalMidpoint,
@@ -48,6 +39,10 @@ import {
   resolveLineAnchorsInScene,
 } from "./eval/sceneGeometryAccess";
 import { evalNumberDefinitionInScene } from "./eval/numberSceneEval";
+import {
+  resolveCircleLinePairAssignmentsInScene,
+  resolveGenericIntersectionPairAssignmentsInScene,
+} from "./eval/intersectionPairResolution";
 import {
   buildSceneEvalContextForScene,
   type SceneEvalContext,
@@ -738,23 +733,15 @@ function resolveCircleLinePairAssignments(
   branches: Array<{ point: Vec2; t: number }>,
   stabilitySignature: string
 ): Map<string, Vec2 | null> {
-  const key = circleLinePairAssignmentKey(circleId, lineId);
-  const cached = ctx.circleLinePairAssignments.get(key);
-  if (cached) return cached;
-
-  const pairPoints: CircleLineAssignmentPoint[] = [];
-  for (const item of scene.points) {
-    if (item.kind !== "circleLineIntersectionPoint") continue;
-    if (item.circleId !== circleId || item.lineId !== lineId) continue;
-    pairPoints.push(item);
-  }
-  const out = assignCircleLinePairPoints(pairPoints, branches, {
+  return resolveCircleLinePairAssignmentsInScene(scene.points, circleId, lineId, branches, {
+    getCached: (key) => ctx.circleLinePairAssignments.get(key),
+    setCached: (key, value) => {
+      ctx.circleLinePairAssignments.set(key, value);
+    },
     getExcludedPointWorld: (pointId) => getPointWorldById(pointId, scene, ctx),
     getPreviousStablePoint: (pointId) => getPreviousStableCircleLinePoint(pointId, stabilitySignature),
     rememberStablePoint: (pointId, value) => rememberStableCircleLinePoint(pointId, stabilitySignature, value),
   });
-  ctx.circleLinePairAssignments.set(key, out);
-  return out;
 }
 
 function getPreviousStableGenericIntersectionPoint(
@@ -781,23 +768,15 @@ function resolveGenericIntersectionPairAssignments(
   objB: GeometryObjectRef,
   intersections: Vec2[]
 ): Map<string, Vec2 | null> {
-  const key = genericIntersectionPairKey(objA, objB);
-  const cached = ctx.genericIntersectionPairAssignments.get(key);
-  if (cached) return cached;
-
-  const pairPoints: GenericAssignmentPoint[] = [];
-  for (const item of scene.points) {
-    if (item.kind !== "intersectionPoint") continue;
-    if (!sameObjectPair(item.objA, item.objB, objA, objB)) continue;
-    pairPoints.push(item);
-  }
-  const out = assignGenericIntersectionPairPoints(pairPoints, intersections, {
+  return resolveGenericIntersectionPairAssignmentsInScene(scene.points, objA, objB, intersections, {
+    getCached: (key) => ctx.genericIntersectionPairAssignments.get(key),
+    setCached: (key, value) => {
+      ctx.genericIntersectionPairAssignments.set(key, value);
+    },
     getExcludedPointWorld: (pointId) => getPointWorldById(pointId, scene, ctx),
     getPreviousStablePoint: (pointId) => getPreviousStableGenericIntersectionPoint(pointId, objA, objB),
     rememberStablePoint: (pointId, value) => rememberStableGenericIntersectionPoint(pointId, objA, objB, value),
   });
-  ctx.genericIntersectionPairAssignments.set(key, out);
-  return out;
 }
 
 function getPreviousStableCircleLinePoint(pointId: string, signature: string): Vec2 | null {
