@@ -5,6 +5,32 @@
 - Keep commits small and scoped.
 - Do not bundle unrelated files in feature commits.
 
+## Done (Current Truth)
+- `PropertiesPanel` is already decomposed and **not** a monolith now:
+  - `src/ui/PropertiesPanel.tsx` (~373 lines, orchestration/composition)
+  - `src/ui/ToolInfoSection.tsx`
+  - `src/ui/PointPropertiesSection.tsx`
+  - `src/ui/ObjectStyleSections.tsx`
+  - `src/ui/NumbersSection.tsx`
+- `App.tsx` and `CanvasView` decomposition work is in place (controller/shell + extracted interaction/render helpers).
+- `geoStore` has action/domain extraction in place (scene/interaction/ui/history actions, domain helpers).
+- `scene` eval decomposition is in place under `src/scene/eval/*` with consolidation pass done.
+- All recent refactor checkpoints were validated with:
+  - `npm run build`
+  - `npm run test:export`
+
+## Active Work (Open)
+- No active bugfix from this handoff currently.
+- Current focus (if continuing refactor): incremental polish only, no behavior changes.
+
+## Historical (Do Not Reopen Automatically)
+- Items below are historical progress logs and rationale.
+- Do **not** treat them as pending tasks unless explicitly re-added under **Active Work**.
+- In particular, do not reopen resolved items like:
+  - “PropertiesPanel is monolithic”
+  - old `I_C` label anchor discussion
+  - angle preview/copy-style regressions already marked fixed
+
 ## Intersection Do-Not-Break Checklist (Read First)
 
 Before changing any intersection-related logic (creation, evaluation, export), read:
