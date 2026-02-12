@@ -7,6 +7,7 @@ import {
   beginSceneEvalTick,
   computeOrientedAngleRad,
   evaluateAngleExpressionDegrees,
+  evaluateNumberExpression,
   endSceneEvalTick,
   type GeometryObjectRef,
   type LineLikeObjectRef,
@@ -102,6 +103,7 @@ export function CanvasView() {
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
   const createCircle = useGeoStore((store) => store.createCircle);
+  const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createAngle = useGeoStore((store) => store.createAngle);
@@ -118,6 +120,7 @@ export function CanvasView() {
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
+  const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
 
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
@@ -273,7 +276,19 @@ export function CanvasView() {
         drawLines(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
         drawSegments(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
         drawAngles(ctx, resolvedAngles, camera, vp, selectedDrawableObject, recentDrawableObject);
-        drawPendingPreview(ctx, pendingSelection, cursorWorld, hoverScreen, hoverSnap, hoveredHit, scene, camera, vp, angleFixedTool);
+        drawPendingPreview(
+          ctx,
+          pendingSelection,
+          cursorWorld,
+          hoverScreen,
+          hoverSnap,
+          hoveredHit,
+          scene,
+          camera,
+          vp,
+          angleFixedTool,
+          circleFixedTool
+        );
         drawPoints(ctx, resolvedPoints, selectedDrawableObject, camera, vp, copySourceDrawable);
         drawInteractionHighlights(
           ctx,
@@ -618,6 +633,7 @@ export function CanvasView() {
           createSegment,
           createLine,
           createCircle,
+          createCircleThreePoint,
           createPerpendicularLine,
           createParallelLine,
           createAngle,
@@ -700,6 +716,7 @@ export function CanvasView() {
     createFreePoint,
     createLine,
     createCircle,
+    createCircleThreePoint,
     createPerpendicularLine,
     createParallelLine,
     createAngle,
@@ -713,6 +730,7 @@ export function CanvasView() {
     createIntersectionPoint,
     applyCopyStyleTo,
     angleFixedTool,
+    circleFixedTool,
     createSegment,
     movePointLabelBy,
     moveAngleLabelTo,
@@ -791,6 +809,7 @@ function handleToolClick(
     createSegment: (aId: string, bId: string) => string | null;
     createLine: (aId: string, bId: string) => string | null;
     createCircle: (centerId: string, throughId: string) => string | null;
+    createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
     createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
     createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
     createAngle: (aId: string, bId: string, cId: string) => string | null;
@@ -910,6 +929,35 @@ function handleToolClick(
     const throughId = resolveOrCreatePointAtCursor();
     io.createCircle(pendingSelection.first.id, throughId);
     io.clearPendingSelection();
+    return;
+  }
+
+  if (activeTool === "circle_3p") {
+    if (!pendingSelection || pendingSelection.tool !== "circle_3p") {
+      io.setPendingSelection({ tool: "circle_3p", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+    if (pendingSelection.step === 2) {
+      const bId = resolveOrCreatePointAtCursor();
+      io.setPendingSelection({
+        tool: "circle_3p",
+        step: 3,
+        first: pendingSelection.first,
+        second: { type: "point", id: bId },
+      });
+      return;
+    }
+    const cId = resolveOrCreatePointAtCursor();
+    const created = io.createCircleThreePoint(pendingSelection.first.id, pendingSelection.second.id, cId);
+    if (!created) return;
+    io.clearPendingSelection();
+    return;
+  }
+
+  if (activeTool === "circle_fixed") {
+    if (!pendingSelection || pendingSelection.tool !== "circle_fixed") {
+      io.setPendingSelection({ tool: "circle_fixed", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+    }
     return;
   }
 
@@ -1055,6 +1103,8 @@ function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSelection: 
     activeTool === "segment" ||
     activeTool === "line2p" ||
     activeTool === "circle_cp" ||
+    activeTool === "circle_3p" ||
+    activeTool === "circle_fixed" ||
     activeTool === "midpoint" ||
     activeTool === "angle" ||
     activeTool === "angle_fixed"
@@ -1071,6 +1121,8 @@ function isValidTarget(
   if (activeTool === "segment") return hoveredHit.type === "point";
   if (activeTool === "line2p") return hoveredHit.type === "point";
   if (activeTool === "circle_cp") return hoveredHit.type === "point";
+  if (activeTool === "circle_3p") return hoveredHit.type === "point";
+  if (activeTool === "circle_fixed") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";
   if (activeTool === "angle_fixed") {
     if (pendingSelection?.tool === "angle_fixed" && pendingSelection.step === 3) return false;
@@ -1101,6 +1153,21 @@ function isValidTarget(
   }
 
   return false;
+}
+
+function circumcircleFromThreePoints(a: Vec2, b: Vec2, c: Vec2): { center: Vec2; radius: number } | null {
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  if (Math.abs(d) <= 1e-12) return null;
+  const a2 = a.x * a.x + a.y * a.y;
+  const b2 = b.x * b.x + b.y * b.y;
+  const c2 = c.x * c.x + c.y * c.y;
+  const center = {
+    x: (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d,
+    y: (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d,
+  };
+  const radius = Math.hypot(center.x - a.x, center.y - a.y);
+  if (!Number.isFinite(radius) || radius <= 1e-12) return null;
+  return { center, radius };
 }
 
 function hitTestTopObject(
@@ -1226,12 +1293,11 @@ function hitTestCircle(
   for (let i = scene.circles.length - 1; i >= 0; i -= 1) {
     const circle = scene.circles[i];
     if (!circle.visible) continue;
-    const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-    const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
-    if (!center || !through) continue;
+    const geom = geoStoreHelpers.getCircleWorldGeometryById(scene, circle.id);
+    if (!geom) continue;
+    const center = geom.center;
     const centerScreen = camMath.worldToScreen(center, camera, vp);
-    const throughScreen = camMath.worldToScreen(through, camera, vp);
-    const radiusPx = Math.hypot(throughScreen.x - centerScreen.x, throughScreen.y - centerScreen.y);
+    const radiusPx = geom.radius * camera.zoom;
     const d = Math.abs(Math.hypot(screenPoint.x - centerScreen.x, screenPoint.y - centerScreen.y) - radiusPx);
     if (d <= best) {
       best = d;
@@ -1253,12 +1319,11 @@ function drawCircles(
   ctx.save();
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
-    const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-    const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
-    if (!center || !through) continue;
+    const geom = geoStoreHelpers.getCircleWorldGeometryById(scene, circle.id);
+    if (!geom) continue;
+    const center = geom.center;
     const c = camMath.worldToScreen(center, camera, vp);
-    const t = camMath.worldToScreen(through, camera, vp);
-    const r = Math.hypot(t.x - c.x, t.y - c.y);
+    const r = geom.radius * camera.zoom;
     applyStrokeDash(ctx, circle.style.strokeDash, circle.style.strokeWidth);
     if ((circle.style.fillOpacity ?? 0) > 0 && circle.style.fillColor) {
       ctx.globalAlpha = circle.style.fillOpacity ?? 0;
@@ -1308,7 +1373,8 @@ function drawPendingPreview(
   scene: SceneModel,
   camera: Camera,
   vp: Viewport,
-  angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" }
+  angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" },
+  circleFixedTool: { radius: string }
 ) {
   if (!pendingSelection) return;
   const firstPointId = pendingSelection.first.type === "point" ? pendingSelection.first.id : null;
@@ -1357,6 +1423,41 @@ function drawPendingPreview(
     ctx.beginPath();
     ctx.arc(p1.x, p1.y, radiusPx, 0, Math.PI * 2);
     ctx.stroke();
+  }
+
+  if (
+    pendingSelection.tool === "circle_3p" &&
+    pendingSelection.step === 3 &&
+    p1 &&
+    pendingSelection.second &&
+    cursorScreen
+  ) {
+    const p2World = geoStoreHelpers.getPointWorldById(scene, pendingSelection.second.id);
+    const p3World = camMath.screenToWorld(cursorScreen, camera, vp);
+    if (firstWorld && p2World) {
+      const geom = circumcircleFromThreePoints(firstWorld, p2World, p3World);
+      if (geom) {
+        const c = camMath.worldToScreen(geom.center, camera, vp);
+        ctx.globalAlpha = 0.45;
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, geom.radius * camera.zoom, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  if (p1 && pendingSelection.tool === "circle_fixed") {
+    const evaluated = evaluateNumberExpression(scene, circleFixedTool.radius);
+    if (evaluated.ok && Number.isFinite(evaluated.value) && evaluated.value > 0) {
+      const radiusWorld = evaluated.value;
+      const radiusPx = radiusWorld * camera.zoom;
+      ctx.globalAlpha = 0.45;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.arc(p1.x, p1.y, radiusPx, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 
   if (pendingSelection.tool === "perp_line" || pendingSelection.tool === "parallel_line") {
@@ -1680,12 +1781,11 @@ function drawHitHighlight(
 
   const circle = scene.circles.find((item) => item.id === hit.id);
   if (!circle || !circle.visible) return;
-  const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-  const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
-  if (!center || !through) return;
+  const geom = geoStoreHelpers.getCircleWorldGeometryById(scene, circle.id);
+  if (!geom) return;
+  const center = geom.center;
   const c = camMath.worldToScreen(center, camera, vp);
-  const t = camMath.worldToScreen(through, camera, vp);
-  const r = Math.hypot(t.x - c.x, t.y - c.y);
+  const r = geom.radius * camera.zoom;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.setLineDash([]);
@@ -2278,15 +2378,14 @@ function highlightSnapObject(
     ctx.restore();
     return;
   }
-  const center = geoStoreHelpers.getPointWorldById(scene, circle.centerId);
-  const through = geoStoreHelpers.getPointWorldById(scene, circle.throughId);
-  if (!center || !through) {
+  const geom = geoStoreHelpers.getCircleWorldGeometryById(scene, circle.id);
+  if (!geom) {
     ctx.restore();
     return;
   }
+  const center = geom.center;
   const c = camMath.worldToScreen(center, camera, vp);
-  const t = camMath.worldToScreen(through, camera, vp);
-  const r = Math.hypot(t.x - c.x, t.y - c.y);
+  const r = geom.radius * camera.zoom;
   ctx.beginPath();
   ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
   ctx.stroke();

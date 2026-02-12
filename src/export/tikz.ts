@@ -2,6 +2,7 @@ import { circleCircleIntersections, distance, lineCircleIntersectionBranches } f
 import {
   computeOrientedAngleRad,
   evaluateAngleExpressionDegrees,
+  getCircleWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
   type GeometryObjectRef,
@@ -44,6 +45,7 @@ export type TikzCommand =
   | { kind: "DefPointByRotation"; name: string; center: string; point: string; angleDeg: number; direction: "CCW" | "CW" }
   | { kind: "DefPerpendicularLine"; auxName: string; through: string; baseA: string; baseB: string }
   | { kind: "DefParallelLine"; auxName: string; through: string; baseA: string; baseB: string }
+  | { kind: "DefCircleCircumCenter"; centerName: string; a: string; b: string; c: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
   | { kind: "DefMidPoint"; name: string; a: string; b: string }
   | { kind: "InterLL"; name: string; a1: string; a2: string; b1: string; b2: string }
@@ -74,6 +76,7 @@ export type TikzCommand =
   | { kind: "DrawRaw"; tex: string }
   | { kind: "DrawLine"; a: string; b: string; addLeft: number; addRight: number; style?: string }
   | { kind: "DrawCircle"; o: string; x: string; style?: string }
+  | { kind: "DrawCircleRadius"; o: string; radius: number; style?: string }
   | { kind: "FillAngle"; a: string; b: string; c: string; style?: string }
   | { kind: "MarkAngle"; a: string; b: string; c: string; style?: string }
   | { kind: "MarkRightAngle"; a: string; b: string; c: string; style?: string }
@@ -133,10 +136,82 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const lineAnchorNames = new Map<string, { a: string; b: string }>();
   let selectorIndex = 0;
   let derivedAuxIndex = 0;
+  const circleThroughNameById = new Map<string, string>();
+  const circleCenterNameById = new Map<string, string>();
 
   const newSelectorName = (kind: "LC" | "CC"): string => {
     selectorIndex += 1;
     return `tkzSel${kind}_${selectorIndex}`;
+  };
+
+  const circleGeomById = (circleId: string): { center: { x: number; y: number }; radius: number } => {
+    const circle = circleById.get(circleId);
+    if (!circle) throw new Error(`Missing circle ${circleId}`);
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (!geom) throw new Error(`Undefined circle geometry for ${circleId}`);
+    return geom;
+  };
+
+  const ensureCircleCenterName = (circleId: string): string => {
+    const cached = circleCenterNameById.get(circleId);
+    if (cached) return cached;
+    const circle = circleById.get(circleId);
+    if (!circle) throw new Error(`Missing circle ${circleId}`);
+    if (circle.kind !== "threePoint") {
+      resolvePoint(circle.centerId);
+      const centerName = mustName(pointName, circle.centerId);
+      circleCenterNameById.set(circleId, centerName);
+      return centerName;
+    }
+    resolvePoint(circle.aId);
+    resolvePoint(circle.bId);
+    resolvePoint(circle.cId);
+    derivedAuxIndex += 1;
+    const centerName = `tkzCircum_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefCircleCircumCenter",
+      centerName,
+      a: mustName(pointName, circle.aId),
+      b: mustName(pointName, circle.bId),
+      c: mustName(pointName, circle.cId),
+    });
+    circleCenterNameById.set(circleId, centerName);
+    return centerName;
+  };
+
+  const ensureCircleThroughName = (circleId: string): string => {
+    const cached = circleThroughNameById.get(circleId);
+    if (cached) return cached;
+    const circle = circleById.get(circleId);
+    if (!circle) throw new Error(`Missing circle ${circleId}`);
+    ensureCircleCenterName(circleId);
+    if (circle.kind === "threePoint") {
+      resolvePoint(circle.aId);
+      const name = mustName(pointName, circle.aId);
+      circleThroughNameById.set(circleId, name);
+      return name;
+    }
+    if (circle.kind !== "fixedRadius") {
+      resolvePoint(circle.throughId);
+      const name = mustName(pointName, circle.throughId);
+      circleThroughNameById.set(circleId, name);
+      return name;
+    }
+    const geom = circleGeomById(circle.id);
+    const center = geom.center;
+    if (!Number.isFinite(geom.radius) || geom.radius <= 0) {
+      throw new Error(`Unsupported construction: CircleFixedRadius (invalid radius for ${circleId})`);
+    }
+    derivedAuxIndex += 1;
+    const helperName = `tkzCircleR_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPoint",
+      name: helperName,
+      x: center.x + geom.radius,
+      y: center.y,
+    });
+    circleThroughNameById.set(circleId, helperName);
+    return helperName;
   };
 
   const resolveLineAnchorsById = (lineId: string): { a: string; b: string } => {
@@ -261,13 +336,13 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     } else if (point.kind === "pointOnCircle") {
       const circle = circleById.get(point.circleId);
       if (!circle) throw new Error(`Missing circle ${point.circleId}`);
-      resolvePoint(circle.centerId);
-      resolvePoint(circle.throughId);
+      const circleCenterName = ensureCircleCenterName(circle.id);
+      const throughName = ensureCircleThroughName(circle.id);
       constructions.push({
         kind: "DefPointOnCircle",
         name,
-        center: mustName(pointName, circle.centerId),
-        through: mustName(pointName, circle.throughId),
+        center: circleCenterName,
+        through: throughName,
         theta: point.t,
       });
       definedPointIds.add(point.id);
@@ -293,13 +368,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const line = lineById.get(point.lineId);
       if (!circle || !line) throw new Error(`Missing circle/line for ${point.id}`);
       const lineAnchors = resolveLineAnchorsById(point.lineId);
-      resolvePoint(circle.centerId);
-      resolvePoint(circle.throughId);
+      const circleCenterName = ensureCircleCenterName(circle.id);
+      const circleThroughName = ensureCircleThroughName(circle.id);
       const lineWorld = getLineWorldAnchors(line, scene);
-      const center = getPointWorldPosCached(scene, circle.centerId);
-      const through = getPointWorldPosCached(scene, circle.throughId);
-      if (!lineWorld || !center || !through) throw new Error(`Undefined line/circle geometry for ${point.name}`);
-      const roots = lineCircleIntersectionBranches(lineWorld.a, lineWorld.b, center, distance(center, through));
+      const geom = circleGeomById(circle.id);
+      const center = geom.center;
+      const through = { x: center.x + geom.radius, y: center.y };
+      if (!lineWorld) throw new Error(`Undefined line/circle geometry for ${point.name}`);
+      const roots = lineCircleIntersectionBranches(lineWorld.a, lineWorld.b, center, geom.radius);
       if (roots.length === 0) {
         visiting.delete(pointId);
         visited.add(pointId);
@@ -318,7 +394,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             lineWorld.a,
             lineWorld.b,
             center,
-            through,
+            { x: center.x + geom.radius, y: center.y },
             excluded,
             point.branchIndex
           );
@@ -366,8 +442,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         name,
         lineA: lineAnchors.a,
         lineB: lineAnchors.b,
-        circleO: mustName(pointName, circle.centerId),
-        circleX: mustName(pointName, circle.throughId),
+        circleO: circleCenterName,
+        circleX: circleThroughName,
         branch,
         common: commonName,
         selector,
@@ -392,11 +468,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       } else {
         const mixed = llA && cB ? { ll: llA, c: cB } : llB && cA ? { ll: llB, c: cA } : null;
         if (!mixed && cA && cB) {
-          resolvePoint(cA.centerId);
-          resolvePoint(cA.throughId);
-          resolvePoint(cB.centerId);
-          resolvePoint(cB.throughId);
-          const branch = inferCircleCircleBranch(scene, point, cA.centerId, cA.throughId, cB.centerId, cB.throughId);
+          const cACenterName = ensureCircleCenterName(cA.id);
+          const cBCenterName = ensureCircleCenterName(cB.id);
+          const cAThroughName = ensureCircleThroughName(cA.id);
+          const cBThroughName = ensureCircleThroughName(cB.id);
+          const cAGeom = circleGeomById(cA.id);
+          const cBGeom = circleGeomById(cB.id);
+          const cAThrough = { x: cAGeom.center.x + cAGeom.radius, y: cAGeom.center.y };
+          const cBThrough = { x: cBGeom.center.x + cBGeom.radius, y: cBGeom.center.y };
+          const branch = inferCircleCircleBranch(point, cAGeom.center, cAThrough, cBGeom.center, cBThrough);
           let commonName: string | undefined;
           if (branch === 1) {
             const sibling = scene.points.find((p) => {
@@ -410,7 +490,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           }
           let selector: { name: string; x: number; y: number } | undefined;
           if (!commonName) {
-            const other = inferOtherCircleCircleBranchPoint(scene, cA.centerId, cA.throughId, cB.centerId, cB.throughId, branch);
+            const other = inferOtherCircleCircleBranchPoint(cAGeom.center, cAThrough, cBGeom.center, cBThrough, branch);
             if (other) {
               selector = { name: newSelectorName("CC"), x: other.x, y: other.y };
               commonName = selector.name;
@@ -419,10 +499,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           constructions.push({
             kind: "InterCC",
             name,
-            circleAO: mustName(pointName, cA.centerId),
-            circleAX: mustName(pointName, cA.throughId),
-            circleBO: mustName(pointName, cB.centerId),
-            circleBX: mustName(pointName, cB.throughId),
+            circleAO: cACenterName,
+            circleAX: cAThroughName,
+            circleBO: cBCenterName,
+            circleBX: cBThroughName,
             branch,
             common: commonName,
             selector,
@@ -434,11 +514,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
               `Unsupported intersection construction for point ${point.name}: ${point.objA.type}-${point.objB.type}`
             );
           }
-          resolvePoint(mixed.c.centerId);
-          resolvePoint(mixed.c.throughId);
-          const center = getPointWorldPosCached(scene, mixed.c.centerId);
-          const through = getPointWorldPosCached(scene, mixed.c.throughId);
-          if (!center || !through) throw new Error(`Undefined circle geometry for ${point.name}`);
+          const mixedCenterName = ensureCircleCenterName(mixed.c.id);
+          const circleThroughName = ensureCircleThroughName(mixed.c.id);
+          const geom = circleGeomById(mixed.c.id);
+          const center = geom.center;
+          const through = { x: center.x + geom.radius, y: center.y };
           const branch = inferLineCircleBranchFromWorld(point, mixed.ll.worldA, mixed.ll.worldB, center, through);
           let commonName: string | undefined;
           if (branch === 1) {
@@ -476,8 +556,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             name,
             lineA: mixed.ll.a,
             lineB: mixed.ll.b,
-            circleO: mustName(pointName, mixed.c.centerId),
-            circleX: mustName(pointName, mixed.c.throughId),
+            circleO: mixedCenterName,
+            circleX: circleThroughName,
             branch,
             common: commonName,
             selector,
@@ -569,15 +649,39 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   }
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
-    if (!definedPointIds.has(circle.centerId) || !definedPointIds.has(circle.throughId)) {
-      throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
+    const centerName = ensureCircleCenterName(circle.id);
+    if (circle.kind === "fixedRadius") {
+      const geom = circleGeomById(circle.id);
+      if (!Number.isFinite(geom.radius) || geom.radius <= 0) {
+        throw new Error(`Unsupported construction: CircleFixedRadius (invalid radius for ${circle.id})`);
+      }
+      draws.push({
+        kind: "DrawCircleRadius",
+        o: centerName,
+        radius: geom.radius,
+        style: circleStyleToTikz(circle.style, options),
+      });
+    } else if (circle.kind === "threePoint") {
+      if (!definedPointIds.has(circle.aId) || !definedPointIds.has(circle.bId) || !definedPointIds.has(circle.cId)) {
+        throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
+      }
+      draws.push({
+        kind: "DrawCircle",
+        o: centerName,
+        x: mustName(pointName, circle.aId),
+        style: circleStyleToTikz(circle.style, options),
+      });
+    } else {
+      if (!definedPointIds.has(circle.throughId)) {
+        throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
+      }
+      draws.push({
+        kind: "DrawCircle",
+        o: centerName,
+        x: mustName(pointName, circle.throughId),
+        style: circleStyleToTikz(circle.style, options),
+      });
     }
-    draws.push({
-      kind: "DrawCircle",
-      o: mustName(pointName, circle.centerId),
-      x: mustName(pointName, circle.throughId),
-      style: circleStyleToTikz(circle.style, options),
-    });
   }
   for (const angle of scene.angles) {
     if (!angle.visible) continue;
@@ -692,6 +796,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
       c.kind === "DrawRaw" ||
       c.kind === "DrawLine" ||
       c.kind === "DrawCircle" ||
+      c.kind === "DrawCircleRadius" ||
       c.kind === "FillAngle" ||
       c.kind === "MarkAngle" ||
       c.kind === "MarkRightAngle" ||
@@ -782,6 +887,12 @@ export function renderTikz(cmds: TikzCommand[]): string {
       out.push(`\\tkzDefLine[parallel=through ${cmd.through}](${cmd.baseA},${cmd.baseB}) \\tkzGetPoint{${cmd.auxName}}`);
       continue;
     }
+    if (cmd.kind === "DefCircleCircumCenter") {
+      assertTkzMacro("tkzDefCircle");
+      assertTkzMacro("tkzGetPoint");
+      out.push(`\\tkzDefCircle[circum](${cmd.a},${cmd.b},${cmd.c}) \\tkzGetPoint{${cmd.centerName}}`);
+      continue;
+    }
     if (cmd.kind === "DefPointOnCircle") {
       assertTkzMacro("tkzDefPointOnCircle");
       assertTkzMacro("tkzGetPoint");
@@ -834,6 +945,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
   }
 
   out.push("% Draw objects");
+  let drawCircleRadiusTmpIdx = 0;
   for (const cmd of drawObjects) {
     if (cmd.kind === "DrawSegment") {
       assertTkzMacro("tkzDrawSegment");
@@ -852,6 +964,15 @@ export function renderTikz(cmds: TikzCommand[]): string {
       assertTkzMacro("tkzDrawCircle");
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzDrawCircle${opts}(${cmd.o},${cmd.x})`);
+    } else if (cmd.kind === "DrawCircleRadius") {
+      assertCircleFixedMacro("tkzDefCircle");
+      assertCircleFixedMacro("tkzGetPoint");
+      assertCircleFixedMacro("tkzDrawCircle");
+      drawCircleRadiusTmpIdx += 1;
+      const tmpThrough = `tkzCircleRDraw_${drawCircleRadiusTmpIdx}`;
+      out.push(`\\tkzDefCircle[R](${cmd.o},${fmt(cmd.radius)}) \\tkzGetPoint{${tmpThrough}}`);
+      const opts = cmd.style ? `[${cmd.style}]` : "";
+      out.push(`\\tkzDrawCircle${opts}(${cmd.o},${tmpThrough})`);
     } else if (cmd.kind === "FillAngle") {
       assertAngleMacro("tkzFillAngle", "Angle.fill");
       const opts = cmd.style ? `[${cmd.style}]` : "";
@@ -1024,19 +1145,12 @@ function inferLineCircleBranchFromExcludedWorld(
 }
 
 function inferCircleCircleBranch(
-  scene: SceneModel,
   point: Extract<ScenePoint, { kind: "intersectionPoint" }>,
-  aCenterId: string,
-  aThroughId: string,
-  bCenterId: string,
-  bThroughId: string
+  aCenter: { x: number; y: number },
+  aThrough: { x: number; y: number },
+  bCenter: { x: number; y: number },
+  bThrough: { x: number; y: number }
 ): 0 | 1 {
-  const aCenter = getPointWorldPosCached(scene, aCenterId);
-  const aThrough = getPointWorldPosCached(scene, aThroughId);
-  const bCenter = getPointWorldPosCached(scene, bCenterId);
-  const bThrough = getPointWorldPosCached(scene, bThroughId);
-  if (!aCenter || !aThrough || !bCenter || !bThrough) return 0;
-
   const ra = distance(aCenter, aThrough);
   const rb = distance(bCenter, bThrough);
   const intersections = circleCircleIntersections(aCenter, ra, bCenter, rb);
@@ -1107,10 +1221,10 @@ function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number;
   }
 
   for (const circle of scene.circles) {
-    const center = getPointWorldPosCached(scene, circle.centerId);
-    const through = getPointWorldPosCached(scene, circle.throughId);
-    if (!center || !through) continue;
-    const r = distance(center, through);
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (!geom) continue;
+    const center = geom.center;
+    const r = geom.radius;
     if (!Number.isFinite(r)) continue;
     add(center.x - r, center.y - r);
     add(center.x + r, center.y + r);
@@ -1160,19 +1274,12 @@ function inferOtherLineCircleBranchPointFromWorld(
 }
 
 function inferOtherCircleCircleBranchPoint(
-  scene: SceneModel,
-  aCenterId: string,
-  aThroughId: string,
-  bCenterId: string,
-  bThroughId: string,
+  aCenter: { x: number; y: number },
+  aThrough: { x: number; y: number },
+  bCenter: { x: number; y: number },
+  bThrough: { x: number; y: number },
   selectedBranch: 0 | 1
 ): { x: number; y: number } | null {
-  const aCenter = getPointWorldPosCached(scene, aCenterId);
-  const aThrough = getPointWorldPosCached(scene, aThroughId);
-  const bCenter = getPointWorldPosCached(scene, bCenterId);
-  const bThrough = getPointWorldPosCached(scene, bThroughId);
-  if (!aCenter || !aThrough || !bCenter || !bThrough) return null;
-
   const ra = distance(aCenter, aThrough);
   const rb = distance(bCenter, bThrough);
   const intersections = circleCircleIntersections(aCenter, ra, bCenter, rb);
@@ -1868,6 +1975,11 @@ function assertAngleMacro(name: string, context: string): void {
 function assertAngleFixedMacro(name: string): void {
   if (TKZ_MACRO_SET.has(name)) return;
   throw new Error(`Unsupported construction: AngleFixed (missing tkz macro: ${name})`);
+}
+
+function assertCircleFixedMacro(name: string): void {
+  if (TKZ_MACRO_SET.has(name)) return;
+  throw new Error(`Unsupported construction: CircleFixedRadius (missing tkz macro: ${name})`);
 }
 
 function buildAngleLabelTex(labelTextRaw: string, showLabel: boolean, showValue: boolean, thetaRad: number): string | null {

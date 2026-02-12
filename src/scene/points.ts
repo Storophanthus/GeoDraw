@@ -282,13 +282,36 @@ export type SceneLineParallel = {
 
 export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular | SceneLineParallel;
 
-export type SceneCircle = {
+export type SceneCircleTwoPoint = {
   id: string;
+  kind?: "twoPoint";
   centerId: string;
   throughId: string;
   visible: boolean;
   style: CircleStyle;
 };
+
+export type SceneCircleThreePoint = {
+  id: string;
+  kind: "threePoint";
+  aId: string;
+  bId: string;
+  cId: string;
+  visible: boolean;
+  style: CircleStyle;
+};
+
+export type SceneCircleFixedRadius = {
+  id: string;
+  kind: "fixedRadius";
+  centerId: string;
+  radius: number;
+  radiusExpr?: string;
+  visible: boolean;
+  style: CircleStyle;
+};
+
+export type SceneCircle = SceneCircleTwoPoint | SceneCircleThreePoint | SceneCircleFixedRadius;
 
 export type SceneAngle = {
   id: string;
@@ -393,6 +416,8 @@ type SceneEvalContext = {
   numberCache: Map<string, number>;
   numberInProgress: Set<string>;
   lineInProgress: Set<string>;
+  circleLinePairAssignments: Map<string, Map<string, Vec2 | null>>;
+  genericIntersectionPairAssignments: Map<string, Map<string, Vec2 | null>>;
   stats: SceneEvalStats;
   explicit: boolean;
 };
@@ -443,6 +468,8 @@ function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalC
     numberCache: new Map<string, number>(),
     numberInProgress: new Set<string>(),
     lineInProgress: new Set<string>(),
+    circleLinePairAssignments: new Map<string, Map<string, Vec2 | null>>(),
+    genericIntersectionPairAssignments: new Map<string, Map<string, Vec2 | null>>(),
     stats: {
       tick: sceneEvalTick,
       dirtyNodes: scene.points.length + scene.numbers.length,
@@ -611,10 +638,9 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
   if (point.kind === "pointOnCircle") {
     const circle = ctx.circleById.get(point.circleId);
     if (!circle) return null;
-    const center = getPointWorldById(circle.centerId, scene, ctx);
-    const through = getPointWorldById(circle.throughId, scene, ctx);
-    if (!center || !through) return null;
-    const radius = distance(center, through);
+    const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
+    if (!geom) return null;
+    const { center, radius } = geom;
     ctx.stats.allocationsEstimate += 1;
     return {
       x: center.x + Math.cos(point.t) * radius,
@@ -648,103 +674,47 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
     const circle = ctx.circleById.get(point.circleId);
     const line = ctx.lineById.get(point.lineId);
     if (!circle || !line) return null;
-    const center = getPointWorldById(circle.centerId, scene, ctx);
-    const through = getPointWorldById(circle.throughId, scene, ctx);
+    const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
     const anchors = resolveLineAnchors(line, scene, ctx);
-    if (!center || !through || !anchors) return null;
+    if (!geom || !anchors) return null;
     const la = anchors.a;
     const lb = anchors.b;
-    const r = distance(center, through);
+    const center = geom.center;
+    const r = geom.radius;
     const stabilitySignature = circleLineStabilitySignature(point.circleId, point.lineId, la, lb, center, r);
     ctx.stats.circleLineCalls += 1;
     const branches = lineCircleIntersectionBranches(la, lb, center, r);
     if (branches.length === 0) return null;
 
-    if (point.excludePointId) {
-      const excluded = getPointWorldById(point.excludePointId, scene, ctx);
-      if (excluded) {
-        const ROOT_EPS = 1e-6;
-        let chosenOther: Vec2 | null = null;
-        let excludedHits = 0;
-        for (let i = 0; i < branches.length; i += 1) {
-          const p = branches[i].point;
-          if (distance(p, excluded) <= ROOT_EPS) {
-            excludedHits += 1;
-            continue;
-          }
-          chosenOther = p;
-          break;
-        }
-        if (chosenOther) {
-          rememberStableCircleLinePoint(point.id, stabilitySignature, chosenOther);
-          return chosenOther;
-        }
-        if (branches.length === 1 || excludedHits === branches.length) return null;
-      }
-    }
-
-    if (branches.length === 1) {
-      rememberStableCircleLinePoint(point.id, stabilitySignature, branches[0].point);
-      return branches[0].point;
-    }
-    // IMPORTANT: branchIndex semantics must match creation-time semantics.
-    // lineCircleIntersectionBranches returns roots ordered by line parameter t (t1 <= t2),
-    // so we must use that exact ordering here too (not x/y ordering).
-    const root0 = branches[0].point;
-    const root1 = branches[1].point;
-    let chosen = point.branchIndex === 1 ? root1 : root0;
-    let other = point.branchIndex === 1 ? root0 : root1;
-    const prevWorld = getPreviousStableCircleLinePoint(point.id, stabilitySignature);
-    if (prevWorld) {
-      const d0 = distance(root0, prevWorld);
-      const d1 = distance(root1, prevWorld);
-      if (Math.abs(d0 - d1) > 1e-9) {
-        chosen = d0 <= d1 ? root0 : root1;
-        other = chosen === root0 ? root1 : root0;
-      }
-    }
-    const ROOT_EPS = 1e-6;
-
-    for (const item of scene.points) {
-      if (item.id === point.id || item.kind !== "circleLineIntersectionPoint") continue;
-      if (item.circleId !== point.circleId || item.lineId !== point.lineId) continue;
-      const siblingWorld = evalPoint(item.id, scene, ctx);
-      if (!siblingWorld) continue;
-      const siblingNearChosen = distance(siblingWorld, chosen) <= ROOT_EPS;
-      const siblingNearOther = distance(siblingWorld, other) <= ROOT_EPS;
-      if (siblingNearChosen && !siblingNearOther) {
-        rememberStableCircleLinePoint(point.id, stabilitySignature, other);
-        return other;
-      }
-    }
+    const pairResolved = resolveCircleLinePairAssignments(
+      scene,
+      ctx,
+      point.circleId,
+      point.lineId,
+      branches,
+      stabilitySignature
+    );
+    if (!pairResolved.has(point.id)) return null;
+    const chosen = pairResolved.get(point.id) ?? null;
+    if (!chosen) return null;
     rememberStableCircleLinePoint(point.id, stabilitySignature, chosen);
     return chosen;
   }
 
   const intersections = objectIntersections(point.objA, point.objB, scene, ctx);
   if (intersections.length === 0) return null;
-  if (point.excludePointId) {
-    const excluded = getPointWorldById(point.excludePointId, scene, ctx);
-    if (excluded) {
-      const ROOT_EPS = 1e-6;
-      let candidateCount = 0;
-      let candidateA: Vec2 | null = null;
-      let candidateB: Vec2 | null = null;
-      for (let i = 0; i < intersections.length; i += 1) {
-        const candidate = intersections[i];
-        if (distance(candidate, excluded) <= ROOT_EPS) continue;
-        if (candidateCount === 0) candidateA = candidate;
-        else if (candidateCount === 1) candidateB = candidate;
-        candidateCount += 1;
-      }
-      if (candidateCount === 1 && candidateA) return candidateA;
-      if (candidateCount >= 2 && candidateA && candidateB) {
-        return chooseClosestToPreferredPair(candidateA, candidateB, point.preferredWorld);
-      }
-      if (intersections.length === 1) return null;
-    }
-  }
-  return chooseStableIntersection(intersections, point.preferredWorld, scene, point.id, ctx);
+  const pairResolved = resolveGenericIntersectionPairAssignments(
+    scene,
+    ctx,
+    point.objA,
+    point.objB,
+    intersections
+  );
+  if (!pairResolved.has(point.id)) return null;
+  const chosen = pairResolved.get(point.id) ?? null;
+  if (!chosen) return null;
+  rememberStableGenericIntersectionPoint(point.id, point.objA, point.objB, chosen);
+  return chosen;
 }
 
 function getPointWorldById(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
@@ -895,74 +865,357 @@ function asCircle(
   if (ref.type !== "circle") return null;
   const circle = ctx.circleById.get(ref.id);
   if (!circle) return null;
+  return getCircleWorldGeometryWithCtx(circle, scene, ctx);
+}
+
+function getCircleWorldGeometryWithCtx(
+  circle: SceneCircle,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): { center: Vec2; radius: number } | null {
+  if (circle.kind === "threePoint") {
+    const a = getPointWorldById(circle.aId, scene, ctx);
+    const b = getPointWorldById(circle.bId, scene, ctx);
+    const c = getPointWorldById(circle.cId, scene, ctx);
+    if (!a || !b || !c) return null;
+    const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+    if (Math.abs(d) <= 1e-12) return null;
+    const a2 = a.x * a.x + a.y * a.y;
+    const b2 = b.x * b.x + b.y * b.y;
+    const c2 = c.x * c.x + c.y * c.y;
+    const center = {
+      x: (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d,
+      y: (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d,
+    };
+    const radius = distance(center, a);
+    if (!Number.isFinite(radius) || radius <= 1e-12) return null;
+    return { center, radius };
+  }
+
   const center = getPointWorldById(circle.centerId, scene, ctx);
+  if (!center) return null;
+  if (circle.kind === "fixedRadius") {
+    let radius = circle.radius;
+    if (circle.radiusExpr && circle.radiusExpr.trim().length > 0) {
+      const evaluated = evaluateNumberExpressionWithCtx(scene, circle.radiusExpr.trim(), ctx);
+      if (!evaluated.ok || !Number.isFinite(evaluated.value) || evaluated.value <= 1e-12) return null;
+      radius = evaluated.value;
+    }
+    if (!Number.isFinite(radius) || radius <= 1e-12) return null;
+    return { center, radius };
+  }
   const through = getPointWorldById(circle.throughId, scene, ctx);
-  if (!center || !through) return null;
-  return { center, radius: distance(center, through) };
+  if (!through) return null;
+  const radius = distance(center, through);
+  if (!Number.isFinite(radius) || radius <= 1e-12) return null;
+  return { center, radius };
+}
+
+export function getCircleWorldGeometry(circle: SceneCircle, scene: SceneModel): { center: Vec2; radius: number } | null {
+  const ctx = getOrCreateSceneEvalContext(scene);
+  const value = getCircleWorldGeometryWithCtx(circle, scene, ctx);
+  if (!ctx.explicit) {
+    ctx.stats.ms = performance.now() - ctx.startedAt;
+    sceneLastEvalStats.set(scene, { ...ctx.stats });
+  }
+  return value;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-function chooseClosestToPreferred(points: Vec2[], preferredWorld: Vec2): Vec2 {
-  let best = points[0];
-  let bestDist = distance(best, preferredWorld);
-  for (let i = 1; i < points.length; i += 1) {
-    const d = distance(points[i], preferredWorld);
-    if (d < bestDist) {
-      best = points[i];
-      bestDist = d;
-    }
-  }
-  return best;
-}
-
-function chooseClosestToPreferredPair(a: Vec2, b: Vec2, preferredWorld: Vec2): Vec2 {
-  return distance(a, preferredWorld) <= distance(b, preferredWorld) ? a : b;
-}
-
-function chooseStableIntersection(
-  intersections: Vec2[],
-  preferredWorld: Vec2,
-  scene: SceneModel,
-  selfPointId: string,
-  ctx: SceneEvalContext
-): Vec2 {
-  if (intersections.length >= 2) {
-    const ROOT_EPS = 1e-6;
-    const occupied = [false, false];
-    for (const scenePoint of scene.points) {
-      if (scenePoint.id === selfPointId) continue;
-      if (scenePoint.kind !== "intersectionPoint" && scenePoint.kind !== "circleLineIntersectionPoint") continue;
-      const world = evalPoint(scenePoint.id, scene, ctx);
-      if (!world) continue;
-      if (!occupied[0] && distance(world, intersections[0]) <= ROOT_EPS) occupied[0] = true;
-      if (!occupied[1] && distance(world, intersections[1]) <= ROOT_EPS) occupied[1] = true;
-      if (occupied[0] && occupied[1]) break;
-    }
-    if (occupied[0] !== occupied[1]) {
-      return occupied[0] ? intersections[1] : intersections[0];
-    }
-  }
-  return chooseClosestToPreferred(intersections, preferredWorld);
-}
-
-function roundSig(value: number): string {
-  return value.toFixed(6);
-}
-
 function circleLineStabilitySignature(
   circleId: string,
   lineId: string,
-  la: Vec2,
-  lb: Vec2,
-  center: Vec2,
-  radius: number
+  _la: Vec2,
+  _lb: Vec2,
+  _center: Vec2,
+  _radius: number
 ): string {
-  return `cli:${circleId}:${lineId}:${roundSig(la.x)}:${roundSig(la.y)}:${roundSig(lb.x)}:${roundSig(
-    lb.y
-  )}:${roundSig(center.x)}:${roundSig(center.y)}:${roundSig(radius)}`;
+  // Keep branch continuity stable across drags. Geometry snapshots in the key
+  // caused frequent cache misses and root flips ("teleporting") while parents moved.
+  return `cli:${circleId}:${lineId}`;
+}
+
+function circleLinePairKey(circleId: string, lineId: string): string {
+  return `${circleId}:${lineId}`;
+}
+
+function objectRefKey(ref: GeometryObjectRef): string {
+  return `${ref.type}:${ref.id}`;
+}
+
+function genericIntersectionPairKey(a: GeometryObjectRef, b: GeometryObjectRef): string {
+  const ak = objectRefKey(a);
+  const bk = objectRefKey(b);
+  return ak <= bk ? `${ak}|${bk}` : `${bk}|${ak}`;
+}
+
+function resolveCircleLinePairAssignments(
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  circleId: string,
+  lineId: string,
+  branches: Array<{ point: Vec2; t: number }>,
+  stabilitySignature: string
+): Map<string, Vec2 | null> {
+  const key = circleLinePairKey(circleId, lineId);
+  const cached = ctx.circleLinePairAssignments.get(key);
+  if (cached) return cached;
+
+  const out = new Map<string, Vec2 | null>();
+  const pairPoints: CircleLineIntersectionPoint[] = [];
+  for (const item of scene.points) {
+    if (item.kind !== "circleLineIntersectionPoint") continue;
+    if (item.circleId !== circleId || item.lineId !== lineId) continue;
+    pairPoints.push(item);
+  }
+  if (pairPoints.length === 0) {
+    ctx.circleLinePairAssignments.set(key, out);
+    return out;
+  }
+
+  if (branches.length === 0) {
+    for (const item of pairPoints) out.set(item.id, null);
+    ctx.circleLinePairAssignments.set(key, out);
+    return out;
+  }
+
+  const ROOT_EPS = 1e-6;
+  if (branches.length === 1) {
+    const root = branches[0].point;
+    for (const item of pairPoints) {
+      let result: Vec2 | null = root;
+      if (item.excludePointId) {
+        const excluded = getPointWorldById(item.excludePointId, scene, ctx);
+        if (excluded && distance(excluded, root) <= ROOT_EPS) {
+          result = null;
+        }
+      }
+      if (result) rememberStableCircleLinePoint(item.id, stabilitySignature, result);
+      out.set(item.id, result);
+    }
+    ctx.circleLinePairAssignments.set(key, out);
+    return out;
+  }
+
+  const root0 = branches[0].point;
+  const root1 = branches[1].point;
+  type AssignmentRequest = {
+    point: CircleLineIntersectionPoint;
+    candidates: [0 | 1, 0 | 1];
+    forced: boolean;
+    hasPrev: boolean;
+    order: number;
+  };
+  const requests: AssignmentRequest[] = [];
+  for (let i = 0; i < pairPoints.length; i += 1) {
+    const item = pairPoints[i];
+    let forcedCandidate: 0 | 1 | null = null;
+    if (item.excludePointId) {
+      const excluded = getPointWorldById(item.excludePointId, scene, ctx);
+      if (excluded) {
+        const d0 = distance(root0, excluded);
+        const d1 = distance(root1, excluded);
+        if (d0 <= ROOT_EPS && d1 > ROOT_EPS) forcedCandidate = 1;
+        else if (d1 <= ROOT_EPS && d0 > ROOT_EPS) forcedCandidate = 0;
+        else if (d0 <= ROOT_EPS && d1 <= ROOT_EPS) {
+          out.set(item.id, null);
+          continue;
+        }
+      }
+    }
+
+    const prev = getPreviousStableCircleLinePoint(item.id, stabilitySignature);
+    let primary: 0 | 1 = item.branchIndex === 1 ? 1 : 0;
+    if (forcedCandidate !== null) {
+      primary = forcedCandidate;
+    } else if (prev) {
+      const d0 = distance(root0, prev);
+      const d1 = distance(root1, prev);
+      if (Math.abs(d0 - d1) > 1e-9) primary = d0 <= d1 ? 0 : 1;
+    }
+    const secondary: 0 | 1 = primary === 0 ? 1 : 0;
+    requests.push({
+      point: item,
+      candidates: [primary, secondary],
+      forced: forcedCandidate !== null,
+      hasPrev: prev !== null,
+      order: i,
+    });
+  }
+
+  requests.sort((a, b) => {
+    if (a.forced !== b.forced) return a.forced ? -1 : 1;
+    if (a.hasPrev !== b.hasPrev) return a.hasPrev ? -1 : 1;
+    return a.order - b.order;
+  });
+
+  const used = new Set<0 | 1>();
+  for (const req of requests) {
+    let chosenIdx: 0 | 1 | null = null;
+    if (!used.has(req.candidates[0])) {
+      chosenIdx = req.candidates[0];
+    } else if (!used.has(req.candidates[1])) {
+      chosenIdx = req.candidates[1];
+    } else {
+      // More than two points may legitimately exist on the same pair.
+      // Keep deterministic fallback to primary candidate.
+      chosenIdx = req.candidates[0];
+    }
+    if (!used.has(chosenIdx)) used.add(chosenIdx);
+    out.set(req.point.id, chosenIdx === 0 ? root0 : root1);
+  }
+
+  ctx.circleLinePairAssignments.set(key, out);
+  return out;
+}
+
+function genericIntersectionSignature(a: GeometryObjectRef, b: GeometryObjectRef): string {
+  return `gix:${genericIntersectionPairKey(a, b)}`;
+}
+
+function getPreviousStableGenericIntersectionPoint(
+  pointId: string,
+  a: GeometryObjectRef,
+  b: GeometryObjectRef
+): Vec2 | null {
+  return getPreviousStableCircleLinePoint(pointId, genericIntersectionSignature(a, b));
+}
+
+function rememberStableGenericIntersectionPoint(
+  pointId: string,
+  a: GeometryObjectRef,
+  b: GeometryObjectRef,
+  value: Vec2
+): void {
+  rememberStableCircleLinePoint(pointId, genericIntersectionSignature(a, b), value);
+}
+
+function sameObjectRef(a: GeometryObjectRef, b: GeometryObjectRef): boolean {
+  return a.type === b.type && a.id === b.id;
+}
+
+function sameObjectPair(a1: GeometryObjectRef, b1: GeometryObjectRef, a2: GeometryObjectRef, b2: GeometryObjectRef): boolean {
+  return (sameObjectRef(a1, a2) && sameObjectRef(b1, b2)) || (sameObjectRef(a1, b2) && sameObjectRef(b1, a2));
+}
+
+function resolveGenericIntersectionPairAssignments(
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  objA: GeometryObjectRef,
+  objB: GeometryObjectRef,
+  intersections: Vec2[]
+): Map<string, Vec2 | null> {
+  const key = genericIntersectionPairKey(objA, objB);
+  const cached = ctx.genericIntersectionPairAssignments.get(key);
+  if (cached) return cached;
+
+  const out = new Map<string, Vec2 | null>();
+  const pairPoints: IntersectionPoint[] = [];
+  for (const item of scene.points) {
+    if (item.kind !== "intersectionPoint") continue;
+    if (!sameObjectPair(item.objA, item.objB, objA, objB)) continue;
+    pairPoints.push(item);
+  }
+  if (pairPoints.length === 0) {
+    ctx.genericIntersectionPairAssignments.set(key, out);
+    return out;
+  }
+
+  if (intersections.length === 0) {
+    for (const item of pairPoints) out.set(item.id, null);
+    ctx.genericIntersectionPairAssignments.set(key, out);
+    return out;
+  }
+
+  const ROOT_EPS = 1e-6;
+  if (intersections.length === 1) {
+    const root = intersections[0];
+    for (const item of pairPoints) {
+      let result: Vec2 | null = root;
+      if (item.excludePointId) {
+        const excluded = getPointWorldById(item.excludePointId, scene, ctx);
+        if (excluded && distance(excluded, root) <= ROOT_EPS) {
+          result = null;
+        }
+      }
+      out.set(item.id, result);
+      if (result) rememberStableGenericIntersectionPoint(item.id, objA, objB, result);
+    }
+    ctx.genericIntersectionPairAssignments.set(key, out);
+    return out;
+  }
+
+  // Two-root ownership assignment.
+  const root0 = intersections[0];
+  const root1 = intersections[1];
+  type AssignmentRequest = {
+    point: IntersectionPoint;
+    candidates: [0 | 1, 0 | 1];
+    forced: boolean;
+    hasPrev: boolean;
+    order: number;
+  };
+  const requests: AssignmentRequest[] = [];
+  for (let i = 0; i < pairPoints.length; i += 1) {
+    const item = pairPoints[i];
+    let forcedCandidate: 0 | 1 | null = null;
+    if (item.excludePointId) {
+      const excluded = getPointWorldById(item.excludePointId, scene, ctx);
+      if (excluded) {
+        const d0 = distance(root0, excluded);
+        const d1 = distance(root1, excluded);
+        if (d0 <= ROOT_EPS && d1 > ROOT_EPS) forcedCandidate = 1;
+        else if (d1 <= ROOT_EPS && d0 > ROOT_EPS) forcedCandidate = 0;
+        else if (d0 <= ROOT_EPS && d1 <= ROOT_EPS) {
+          out.set(item.id, null);
+          continue;
+        }
+      }
+    }
+    let primary: 0 | 1;
+    const prev = getPreviousStableGenericIntersectionPoint(item.id, objA, objB);
+    if (forcedCandidate !== null) {
+      primary = forcedCandidate;
+    } else if (prev) {
+      const d0 = distance(root0, prev);
+      const d1 = distance(root1, prev);
+      primary = d0 <= d1 ? 0 : 1;
+    } else {
+      primary = distance(root0, item.preferredWorld) <= distance(root1, item.preferredWorld) ? 0 : 1;
+    }
+    const secondary: 0 | 1 = primary === 0 ? 1 : 0;
+    requests.push({
+      point: item,
+      candidates: [primary, secondary],
+      forced: forcedCandidate !== null,
+      hasPrev: prev !== null,
+      order: i,
+    });
+  }
+
+  requests.sort((a, b) => {
+    if (a.forced !== b.forced) return a.forced ? -1 : 1;
+    if (a.hasPrev !== b.hasPrev) return a.hasPrev ? -1 : 1;
+    return a.order - b.order;
+  });
+
+  const used = new Set<0 | 1>();
+  for (const req of requests) {
+    let chosenIdx: 0 | 1;
+    if (!used.has(req.candidates[0])) chosenIdx = req.candidates[0];
+    else if (!used.has(req.candidates[1])) chosenIdx = req.candidates[1];
+    else chosenIdx = req.candidates[0];
+    if (!used.has(chosenIdx)) used.add(chosenIdx);
+    const chosen = chosenIdx === 0 ? root0 : root1;
+    out.set(req.point.id, chosen);
+    rememberStableGenericIntersectionPoint(req.point.id, objA, objB, chosen);
+  }
+
+  ctx.genericIntersectionPairAssignments.set(key, out);
+  return out;
 }
 
 function getPreviousStableCircleLinePoint(pointId: string, signature: string): Vec2 | null {
@@ -1050,10 +1303,9 @@ function evalNumberDefinition(
   if (def.kind === "circleRadius" || def.kind === "circleArea") {
     const circle = ctx.circleById.get(def.circleId);
     if (!circle) return null;
-    const center = getPointWorldById(circle.centerId, scene, ctx);
-    const through = getPointWorldById(circle.throughId, scene, ctx);
-    if (!center || !through) return null;
-    const r = distance(center, through);
+    const geom = getCircleWorldGeometryWithCtx(circle, scene, ctx);
+    if (!geom) return null;
+    const r = geom.radius;
     if (def.kind === "circleRadius") return r;
     return Math.PI * r * r;
   }

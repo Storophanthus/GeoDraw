@@ -55,8 +55,14 @@ export type SnapshotSegment = {
 
 export type SnapshotCircle = {
   id: string;
-  centerId: string;
-  throughId: string;
+  kind?: "twoPoint" | "fixedRadius" | "threePoint";
+  centerId?: string;
+  throughId?: string;
+  aId?: string;
+  bId?: string;
+  cId?: string;
+  radius?: number;
+  radiusExpr?: string;
   visible: boolean;
 };
 
@@ -132,12 +138,33 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
     .sort((a, b) => a.id.localeCompare(b.id));
 
   const circles = scene.circles
-    .map((circle) => ({
-      id: circle.id,
-      centerId: circle.centerId,
-      throughId: circle.throughId,
-      visible: circle.visible,
-    }))
+    .map((circle) =>
+      circle.kind === "fixedRadius"
+        ? {
+            id: circle.id,
+            kind: "fixedRadius" as const,
+            centerId: circle.centerId,
+            radius: circle.radius,
+            radiusExpr: circle.radiusExpr,
+            visible: circle.visible,
+          }
+        : circle.kind === "threePoint"
+          ? {
+              id: circle.id,
+              kind: "threePoint" as const,
+              aId: circle.aId,
+              bId: circle.bId,
+              cId: circle.cId,
+              visible: circle.visible,
+            }
+        : {
+            id: circle.id,
+            kind: "twoPoint" as const,
+            centerId: circle.centerId,
+            throughId: circle.throughId,
+            visible: circle.visible,
+          }
+    )
     .sort((a, b) => a.id.localeCompare(b.id));
 
   const angles = scene.angles

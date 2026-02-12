@@ -213,8 +213,32 @@ function hydrateSegment(raw: Record<string, unknown>): SceneSegment {
 }
 
 function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
+  const kind = String(raw.kind ?? "twoPoint");
+  if (kind === "fixedRadius") {
+    return {
+      id: String(raw.id),
+      kind: "fixedRadius",
+      centerId: String(raw.centerId),
+      radius: Number(raw.radius),
+      radiusExpr: typeof raw.radiusExpr === "string" ? raw.radiusExpr : undefined,
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as CircleStyle) ?? defaultCircleStyle,
+    };
+  }
+  if (kind === "threePoint") {
+    return {
+      id: String(raw.id),
+      kind: "threePoint",
+      aId: String(raw.aId),
+      bId: String(raw.bId),
+      cId: String(raw.cId),
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as CircleStyle) ?? defaultCircleStyle,
+    };
+  }
   return {
     id: String(raw.id),
+    kind: "twoPoint",
     centerId: String(raw.centerId),
     throughId: String(raw.throughId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
@@ -435,8 +459,11 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "segment-mark-arrow-end.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\tkzDrawSegment[arrows=->")) {
-      throw new Error("Expected segment end-arrow fixture to emit tkzDrawSegment[arrows=->].");
+    if (!tikz.includes("-{Stealth")) {
+      throw new Error("Expected segment end-arrow fixture to emit Stealth end-arrow draw.");
+    }
+    if (!tikz.includes("-- (E);")) {
+      throw new Error("Expected segment end-arrow fixture to draw to endpoint.");
     }
   }
 
@@ -458,6 +485,22 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("step 0.05")) {
       throw new Error("Expected segment multi mid-arrow fixture to emit step 0.05.");
+    }
+  }
+
+  if (fileName === "circle-fixed-radius-basic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefCircle[R](O,3.5)")) {
+      throw new Error("Expected fixed-radius circle fixture to emit \\tkzDefCircle[R](O,3.5).");
+    }
+  }
+
+  if (fileName === "circle-three-point-basic.json") {
+    if (!tikz.includes("\\tkzDefCircle[circum]")) {
+      throw new Error("Expected three-point circle fixture to emit \\tkzDefCircle[circum].");
+    }
+    if (!tikz.includes("\\tkzDrawCircle")) {
+      throw new Error("Expected three-point circle fixture to emit \\tkzDrawCircle.");
     }
   }
 }

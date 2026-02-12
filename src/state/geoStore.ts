@@ -6,6 +6,7 @@ import {
   type CircleStyle,
   evaluateAngleExpressionDegrees,
   evaluateNumberExpression,
+  getCircleWorldGeometry,
   getNumberValue,
   type LineLikeObjectRef,
   getLineWorldAnchors,
@@ -39,6 +40,8 @@ export type ActiveTool =
   | "segment"
   | "line2p"
   | "circle_cp"
+  | "circle_3p"
+  | "circle_fixed"
   | "perp_line"
   | "parallel_line"
   | "angle"
@@ -71,6 +74,22 @@ export type PendingSelection =
     }
   | {
       tool: "segment" | "line2p" | "circle_cp" | "midpoint";
+      step: 2;
+      first: { type: "point"; id: string };
+    }
+  | {
+      tool: "circle_3p";
+      step: 2;
+      first: { type: "point"; id: string };
+    }
+  | {
+      tool: "circle_3p";
+      step: 3;
+      first: { type: "point"; id: string };
+      second: { type: "point"; id: string };
+    }
+  | {
+      tool: "circle_fixed";
       step: 2;
       first: { type: "point"; id: string };
     }
@@ -124,6 +143,9 @@ type GeoState = {
     angleExpr: string;
     direction: AngleFixedDirection;
   };
+  circleFixedTool: {
+    radius: string;
+  };
   copyStyle: {
     source: SelectedObject;
     pointStyle: PointStyle | null;
@@ -163,6 +185,8 @@ type GeoActions = {
     direction: AngleFixedDirection
   ) => { pointId: string; lineId: string; angleId: string } | null;
   createCircle: (centerId: string, throughId: string) => string | null;
+  createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
+  createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number) => string | null;
@@ -179,6 +203,7 @@ type GeoActions = {
   setCircleDefaults: (next: Partial<CircleStyle>) => void;
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
+  setCircleFixedTool: (next: Partial<GeoState["circleFixedTool"]>) => void;
   updateSelectedPointStyle: (next: Partial<PointStyle>) => void;
   updateSelectedPointFields: (
     next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>
@@ -238,6 +263,8 @@ const defaultSegStyle: LineStyle = {
     startPos: 0.45,
     endPos: 0.55,
     step: 0.05,
+    sizeScale: 1,
+    lineWidthPt: 8,
   },
 };
 
@@ -304,6 +331,9 @@ const initialState: GeoState = {
     angleExpr: "30",
     direction: "CCW",
   },
+  circleFixedTool: {
+    radius: "3",
+  },
   copyStyle: {
     source: null,
     pointStyle: null,
@@ -337,6 +367,7 @@ type HistorySnapshot = {
   circleDefaults: CircleStyle;
   angleDefaults: AngleStyle;
   angleFixedTool: GeoState["angleFixedTool"];
+  circleFixedTool: GeoState["circleFixedTool"];
   copyStyle: GeoState["copyStyle"];
 };
 
@@ -407,6 +438,7 @@ const actions: GeoActions = {
               angleStyle: null,
               showLabel: null,
             },
+      circleFixedTool: prev.circleFixedTool,
     }));
   },
 
@@ -926,8 +958,84 @@ const actions: GeoActions = {
             ...prev.scene.circles,
             {
               id,
+              kind: "twoPoint",
               centerId,
               throughId,
+              visible: true,
+              style: { ...prev.circleDefaults },
+            },
+          ],
+        },
+        selectedObject: { type: "circle", id },
+        recentCreatedObject: { type: "circle", id },
+        nextCircleId: prev.nextCircleId + 1,
+      };
+    });
+    return id;
+  },
+
+  createCircleThreePoint(aId, bId, cId) {
+    if (aId === bId || aId === cId || bId === cId) return null;
+    let id: string | null = null;
+    setState((prev) => {
+      const a = prev.scene.points.find((p) => p.id === aId);
+      const b = prev.scene.points.find((p) => p.id === bId);
+      const c = prev.scene.points.find((p) => p.id === cId);
+      if (!a || !b || !c) return prev;
+      const aw = getPointWorldPos(a, prev.scene);
+      const bw = getPointWorldPos(b, prev.scene);
+      const cw = getPointWorldPos(c, prev.scene);
+      if (!aw || !bw || !cw) return prev;
+      const area2 = (bw.x - aw.x) * (cw.y - aw.y) - (bw.y - aw.y) * (cw.x - aw.x);
+      if (Math.abs(area2) <= 1e-9) return prev;
+      id = `c_${prev.nextCircleId}`;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          circles: [
+            ...prev.scene.circles,
+            {
+              id,
+              kind: "threePoint",
+              aId,
+              bId,
+              cId,
+              visible: true,
+              style: { ...prev.circleDefaults },
+            },
+          ],
+        },
+        selectedObject: { type: "circle", id },
+        recentCreatedObject: { type: "circle", id },
+        nextCircleId: prev.nextCircleId + 1,
+      };
+    });
+    return id;
+  },
+
+  createCircleFixedRadius(centerId, radiusExpr) {
+    const expr = radiusExpr.trim();
+    if (!expr) return null;
+    let id: string | null = null;
+    setState((prev) => {
+      const c = prev.scene.points.find((p) => p.id === centerId);
+      if (!c) return prev;
+      const evaluated = evaluateNumberExpression(prev.scene, expr);
+      if (!evaluated.ok || !Number.isFinite(evaluated.value) || evaluated.value <= 0) return prev;
+      id = `c_${prev.nextCircleId}`;
+      return {
+        ...prev,
+        scene: {
+          ...prev.scene,
+          circles: [
+            ...prev.scene.circles,
+            {
+              id,
+              kind: "fixedRadius",
+              centerId,
+              radius: evaluated.value,
+              radiusExpr: expr,
               visible: true,
               style: { ...prev.circleDefaults },
             },
@@ -1203,11 +1311,9 @@ const actions: GeoActions = {
         if (point.kind === "pointOnCircle") {
           const circle = prev.scene.circles.find((item) => item.id === point.circleId);
           if (!circle) return point;
-          const center = geoStoreHelpers.getPointWorldById(prev.scene, circle.centerId);
-          const through = geoStoreHelpers.getPointWorldById(prev.scene, circle.throughId);
-          if (!center || !through) return point;
-          const r = Math.hypot(through.x - center.x, through.y - center.y);
-          const pr = projectPointToCircle(world, center, r);
+          const geom = getCircleWorldGeometry(circle, prev.scene);
+          if (!geom) return point;
+          const pr = projectPointToCircle(world, geom.center, geom.radius);
           return { ...point, t: pr.t };
         }
 
@@ -1324,6 +1430,16 @@ const actions: GeoActions = {
       ...prev,
       angleFixedTool: {
         ...prev.angleFixedTool,
+        ...next,
+      },
+    }));
+  },
+
+  setCircleFixedTool(next) {
+    setState((prev) => ({
+      ...prev,
+      circleFixedTool: {
+        ...prev.circleFixedTool,
         ...next,
       },
     }));
@@ -1557,12 +1673,24 @@ const actions: GeoActions = {
           if (line.base.type === "line" && removedLineIds.has(line.base.id)) return false;
           return true;
         });
-        const keptCircles = prev.scene.circles.filter(
-          (circle) => circle.centerId !== deletedPointId && circle.throughId !== deletedPointId
-        );
+        const keptCircles = prev.scene.circles.filter((circle) => {
+          if (circle.kind === "threePoint") {
+            return circle.aId !== deletedPointId && circle.bId !== deletedPointId && circle.cId !== deletedPointId;
+          }
+          if (circle.centerId === deletedPointId) return false;
+          if (circle.kind === "fixedRadius") return true;
+          return circle.throughId !== deletedPointId;
+        });
         const deletedCircleIds = new Set(
           prev.scene.circles
-            .filter((circle) => circle.centerId === deletedPointId || circle.throughId === deletedPointId)
+            .filter((circle) => {
+              if (circle.kind === "threePoint") {
+                return circle.aId === deletedPointId || circle.bId === deletedPointId || circle.cId === deletedPointId;
+              }
+              if (circle.centerId === deletedPointId) return true;
+              if (circle.kind === "fixedRadius") return false;
+              return circle.throughId === deletedPointId;
+            })
             .map((circle) => circle.id)
         );
         const deletedSegmentIds = new Set(
@@ -2060,6 +2188,11 @@ export const geoStoreHelpers = {
     if (!line) return null;
     return getLineWorldAnchors(line, scene);
   },
+  getCircleWorldGeometryById(scene: SceneModel, circleId: string): { center: Vec2; radius: number } | null {
+    const circle = scene.circles.find((item) => item.id === circleId);
+    if (!circle) return null;
+    return getCircleWorldGeometry(circle, scene);
+  },
   getNumberValueById(scene: SceneModel, numberId: string): number | null {
     return getNumberValue(numberId, scene);
   },
@@ -2254,11 +2387,10 @@ function createStableLineCircleIntersectionPoint(
   const anchors = getLineWorldAnchors(line, state.scene);
   const a = anchors?.a ?? null;
   const b = anchors?.b ?? null;
-  const center = geoStoreHelpers.getPointWorldById(state.scene, circle.centerId);
-  const through = geoStoreHelpers.getPointWorldById(state.scene, circle.throughId);
-  if (!a || !b || !center || !through) return null;
-
-  const radius = distance(center, through);
+  const geom = getCircleWorldGeometry(circle, state.scene);
+  if (!a || !b || !geom) return null;
+  const center = geom.center;
+  const radius = geom.radius;
   const branches = lineCircleIntersectionBranches(a, b, center, radius);
   if (branches.length === 0) return null;
 
@@ -2392,11 +2524,10 @@ function resolveLineCircleTarget(
   const anchors = getLineWorldAnchors(line, state.scene);
   const a = anchors?.a ?? null;
   const b = anchors?.b ?? null;
-  const center = geoStoreHelpers.getPointWorldById(state.scene, circle.centerId);
-  const through = geoStoreHelpers.getPointWorldById(state.scene, circle.throughId);
-  if (!a || !b || !center || !through) return null;
-
-  const radius = distance(center, through);
+  const geom = getCircleWorldGeometry(circle, state.scene);
+  if (!a || !b || !geom) return null;
+  const center = geom.center;
+  const radius = geom.radius;
   const branches = lineCircleIntersectionBranches(a, b, center, radius);
   if (branches.length === 0) return null;
 
@@ -2468,6 +2599,7 @@ function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     circleDefaults: prev.circleDefaults,
     angleDefaults: prev.angleDefaults,
     angleFixedTool: prev.angleFixedTool,
+    circleFixedTool: prev.circleFixedTool,
     copyStyle: prev.copyStyle,
   };
 }
@@ -2516,6 +2648,7 @@ function restoreFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoStat
     circleDefaults: snapshot.circleDefaults,
     angleDefaults: snapshot.angleDefaults,
     angleFixedTool: snapshot.angleFixedTool,
+    circleFixedTool: snapshot.circleFixedTool,
     copyStyle: snapshot.copyStyle,
   };
 }
@@ -2536,7 +2669,14 @@ function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     const pointIds = new Set(points.map((p) => p.id));
 
     const nextSegments = segments.filter((seg) => pointIds.has(seg.aId) && pointIds.has(seg.bId));
-    const nextCircles = circles.filter((circle) => pointIds.has(circle.centerId) && pointIds.has(circle.throughId));
+    const nextCircles = circles.filter((circle) => {
+      if (circle.kind === "threePoint") {
+        return pointIds.has(circle.aId) && pointIds.has(circle.bId) && pointIds.has(circle.cId);
+      }
+      if (!pointIds.has(circle.centerId)) return false;
+      if (circle.kind === "fixedRadius") return Number.isFinite(circle.radius) && circle.radius > 0;
+      return pointIds.has(circle.throughId);
+    });
     const nextAngles = angles.filter((angle) => pointIds.has(angle.aId) && pointIds.has(angle.bId) && pointIds.has(angle.cId));
 
     const nextSegmentIds = new Set(nextSegments.map((s) => s.id));

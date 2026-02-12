@@ -1,0 +1,25 @@
+{
+  "points": [
+    { "id": "p1", "kind": "free", "name": "A", "position": { "x": -2, "y": 0 }, "visible": true, "showLabel": "name" },
+    { "id": "p2", "kind": "free", "name": "B", "position": { "x": 1, "y": 2 }, "visible": true, "showLabel": "name" },
+    { "id": "p3", "kind": "free", "name": "C", "position": { "x": 3, "y": -1 }, "visible": true, "showLabel": "name" },
+    {
+      "id": "p4",
+      "kind": "pointOnCircle",
+      "name": "D",
+      "circleId": "c1",
+      "t": 1.1,
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "lines": [
+    { "id": "l1", "kind": "twoPoint", "aId": "p1", "bId": "p4", "visible": true }
+  ],
+  "segments": [],
+  "circles": [
+    { "id": "c1", "kind": "threePoint", "aId": "p1", "bId": "p2", "cId": "p3", "visible": true }
+  ],
+  "angles": [],
+  "numbers": []
+}

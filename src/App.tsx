@@ -24,6 +24,7 @@ import { exportConstructionSnapshot } from "./export/constructionSnapshot";
 import { exportTikzWithOptions } from "./export/tikz";
 import {
   evaluateAngleExpressionDegrees,
+  evaluateNumberExpression,
   getNumberValue,
   getPointWorldPos,
   type GeometryObjectRef,
@@ -70,6 +71,8 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   angle: { icon: AngleIcon, tooltip: "Angle (deg)", ariaLabel: "Angle tool" },
   angle_fixed: { icon: AngleFixedIcon, tooltip: "Angle with Fixed Value (deg)", ariaLabel: "Fixed angle tool" },
   circle_cp: { icon: Circle, tooltip: "Circle Center + Point (O)", ariaLabel: "Circle center-through-point tool" },
+  circle_3p: { icon: CircleThreePointIcon, tooltip: "Circle through 3 Points", ariaLabel: "Circle through three points tool" },
+  circle_fixed: { icon: CircleRadiusIcon, tooltip: "Circle with Fixed Radius", ariaLabel: "Circle with fixed radius tool" },
 };
 
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
@@ -77,7 +80,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
-  { id: "circles", label: "CIRCLES", tools: ["circle_cp"] },
+  { id: "circles", label: "CIRCLES", tools: ["circle_cp", "circle_3p", "circle_fixed"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
 ];
 
@@ -127,12 +130,17 @@ export default function App() {
   const circleDefaults = useGeoStore((store) => store.circleDefaults);
   const angleDefaults = useGeoStore((store) => store.angleDefaults);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
+  const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
+  const pendingSelection = useGeoStore((store) => store.pendingSelection);
   const setPointDefaults = useGeoStore((store) => store.setPointDefaults);
   const setSegmentDefaults = useGeoStore((store) => store.setSegmentDefaults);
   const setLineDefaults = useGeoStore((store) => store.setLineDefaults);
   const setCircleDefaults = useGeoStore((store) => store.setCircleDefaults);
   const setAngleDefaults = useGeoStore((store) => store.setAngleDefaults);
   const setAngleFixedTool = useGeoStore((store) => store.setAngleFixedTool);
+  const setCircleFixedTool = useGeoStore((store) => store.setCircleFixedTool);
+  const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
+  const clearPendingSelection = useGeoStore((store) => store.clearPendingSelection);
   const updateSelectedPointStyle = useGeoStore((store) => store.updateSelectedPointStyle);
   const updateSelectedPointFields = useGeoStore((store) => store.updateSelectedPointFields);
   const updateSelectedSegmentStyle = useGeoStore((store) => store.updateSelectedSegmentStyle);
@@ -177,6 +185,10 @@ export default function App() {
   const angleFixedPreview = useMemo(
     () => evaluateAngleExpressionDegrees(scene, angleFixedTool.angleExpr),
     [scene, angleFixedTool.angleExpr]
+  );
+  const circleFixedPreview = useMemo(
+    () => evaluateNumberExpression(scene, circleFixedTool.radius),
+    [scene, circleFixedTool.radius]
   );
   const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "angle" | null>(() => {
     if (selectedPoint) return "point";
@@ -862,6 +874,56 @@ export default function App() {
                       : angleFixedPreview.error}
                   </div>
                   <div className="statusText">Click A (base point), then B (vertex), then click to confirm.</div>
+                </div>
+              )}
+              {activeTool === "circle_fixed" && (
+                <div className="toolInfo">
+                  <div className="subSectionTitle">Circle with Fixed Radius</div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Radius</label>
+                    <input
+                      className="renameInput"
+                      type="text"
+                      value={circleFixedTool.radius}
+                      onChange={(e) => setCircleFixedTool({ radius: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        if (!pendingSelection || pendingSelection.tool !== "circle_fixed") return;
+                        const created = createCircleFixedRadius(pendingSelection.first.id, circleFixedTool.radius);
+                        if (created) clearPendingSelection();
+                      }}
+                      placeholder="e.g. 3.5 or r_1/2"
+                    />
+                  </div>
+                  <div className="actionsRow">
+                    <button
+                      className="actionButton secondary"
+                      disabled={
+                        !pendingSelection ||
+                        pendingSelection.tool !== "circle_fixed" ||
+                        !circleFixedPreview.ok ||
+                        !Number.isFinite(circleFixedPreview.value) ||
+                        circleFixedPreview.value <= 0
+                      }
+                      onClick={() => {
+                        if (!pendingSelection || pendingSelection.tool !== "circle_fixed") return;
+                        const created = createCircleFixedRadius(pendingSelection.first.id, circleFixedTool.radius);
+                        if (created) clearPendingSelection();
+                      }}
+                    >
+                      Create
+                    </button>
+                  </div>
+                  <div className="statusText">
+                    {pendingSelection && pendingSelection.tool === "circle_fixed"
+                      ? `Center selected: ${pointLabel(pendingSelection.first.id, pointNameById)}`
+                      : "Click center point first."}
+                  </div>
+                  <div className="statusText">
+                    {circleFixedPreview.ok && Number.isFinite(circleFixedPreview.value) && circleFixedPreview.value > 0
+                      ? `Resolved: r = ${circleFixedPreview.value.toFixed(6)}`
+                      : "Radius must be > 0 (supports expressions like r_1/2)"}
+                  </div>
                 </div>
               )}
               <div className="toolInfo">
@@ -2064,7 +2126,7 @@ function describeSelectedConstruction(
   if (selectedObject.type === "circle") {
     const circle = circleById.get(selectedObject.id);
     if (!circle) return `Circle ${selectedObject.id}`;
-    return `Circle with center ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(circle.throughId, pointNameById)}.`;
+    return describeCircleForConstruction(circle, pointNameById);
   }
   if (selectedObject.type === "angle") {
     const angle = angleById.get(selectedObject.id);
@@ -2106,21 +2168,13 @@ function describeNumberConstruction(
   }
   if (def.kind === "circleRadius") {
     const circle = circleById.get(def.circleId);
-    return circle
-      ? `Radius of circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(
-          circle.throughId,
-          pointNameById
-        )}.`
-      : `Radius of circle ${def.circleId}.`;
+    if (!circle) return `Radius of circle ${def.circleId}.`;
+    return `Radius of ${describeCircleRef(circle, pointNameById)}.`;
   }
   if (def.kind === "circleArea") {
     const circle = circleById.get(def.circleId);
-    return circle
-      ? `Area of circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(
-          circle.throughId,
-          pointNameById
-        )}.`
-      : `Area of circle ${def.circleId}.`;
+    if (!circle) return `Area of circle ${def.circleId}.`;
+    return `Area of ${describeCircleRef(circle, pointNameById)}.`;
   }
   if (def.kind === "angleDegrees") {
     const angle = angleById.get(def.angleId);
@@ -2178,10 +2232,7 @@ function describePointConstruction(
   if (point.kind === "pointOnCircle") {
     const circle = circleById.get(point.circleId);
     if (!circle) return `Point on circle ${point.circleId}.`;
-    return `Point on circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(
-      circle.throughId,
-      pointNameById
-    )}.`;
+    return `Point on ${describeCircleRef(circle, pointNameById)}.`;
   }
   if (point.kind === "pointByRotation") {
     const angleText = point.angleExpr?.trim()
@@ -2199,10 +2250,7 @@ function describePointConstruction(
     const circle = circleById.get(point.circleId);
     const line = lineById.get(point.lineId);
     const circleText = circle
-      ? `circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(
-          circle.throughId,
-          pointNameById
-        )}`
+      ? describeCircleRef(circle, pointNameById)
       : `circle ${point.circleId}`;
     const lineText = line
       ? line.kind === "perpendicular" || line.kind === "parallel"
@@ -2260,8 +2308,34 @@ function describeObjectRef(
   }
   const circle = circleById.get(ref.id);
   return circle
-    ? `circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(circle.throughId, pointNameById)}`
+    ? describeCircleRef(circle, pointNameById)
     : `circle ${ref.id}`;
+}
+
+function describeCircleRef(circle: SceneModel["circles"][number], pointNameById: Map<string, string>): string {
+  if (circle.kind === "fixedRadius") {
+    return `circle centered at ${pointLabel(circle.centerId, pointNameById)}`;
+  }
+  if (circle.kind === "threePoint") {
+    return `circle through ${pointLabel(circle.aId, pointNameById)}, ${pointLabel(circle.bId, pointNameById)}, ${pointLabel(
+      circle.cId,
+      pointNameById
+    )}`;
+  }
+  return `circle centered at ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(circle.throughId, pointNameById)}`;
+}
+
+function describeCircleForConstruction(circle: SceneModel["circles"][number], pointNameById: Map<string, string>): string {
+  if (circle.kind === "fixedRadius") {
+    return `Circle with center ${pointLabel(circle.centerId, pointNameById)} and radius ${circle.radiusExpr ?? circle.radius}.`;
+  }
+  if (circle.kind === "threePoint") {
+    return `Circle through ${pointLabel(circle.aId, pointNameById)}, ${pointLabel(circle.bId, pointNameById)}, ${pointLabel(
+      circle.cId,
+      pointNameById
+    )}.`;
+  }
+  return `Circle with center ${pointLabel(circle.centerId, pointNameById)} through ${pointLabel(circle.throughId, pointNameById)}.`;
 }
 
 function pointLabel(pointId: string, pointNameById: Map<string, string>): string {
@@ -2544,6 +2618,27 @@ function AngleFixedIcon({ size = 18, strokeWidth = 2 }: IconProps) {
       <text x="15.6" y="9.6" fontSize="7.2" fill="currentColor" stroke="none">
         θ
       </text>
+    </svg>
+  );
+}
+
+function CircleRadiusIcon({ size = 18, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth={strokeWidth} />
+      <path d="M12 12 L19 12" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+function CircleThreePointIcon({ size = 18, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth={strokeWidth} />
+      <circle cx="8" cy="7" r="1.2" fill="currentColor" />
+      <circle cx="6.5" cy="14.5" r="1.2" fill="currentColor" />
+      <circle cx="16.5" cy="14.5" r="1.2" fill="currentColor" />
     </svg>
   );
 }
