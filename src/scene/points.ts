@@ -5,10 +5,6 @@ import {
 } from "../geo/geometry";
 import type { NumberExpressionEvalResult } from "./eval/numericExpression";
 import {
-  buildAngleSymbolTable,
-  buildNumberSymbolTable,
-  evaluateAngleExpressionDegreesWithSymbols,
-  evaluateNumberExpressionWithSymbols,
   type AngleExpressionEvalResult,
 } from "./eval/expressionEval";
 import {
@@ -50,6 +46,10 @@ import {
 } from "./eval/pointGeometryEval";
 import { getPreviousStablePoint, rememberStablePoint } from "./eval/stablePointMemory";
 import { computeOrientedAngleRad } from "./eval/angleMath";
+import {
+  evaluateAngleExpressionWithRuntime,
+  evaluateNumberExpressionWithRuntime,
+} from "./eval/expressionRuntime";
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
@@ -956,7 +956,7 @@ function evaluateAngleExpressionDegreesWithCtx(
   exprRaw: string,
   ctx: SceneEvalContext
 ): AngleExpressionEvalResult {
-  const symbols = buildAngleSymbolTable({
+  return evaluateAngleExpressionWithRuntime(exprRaw, {
     angles: scene.angles.map((angle) => ({
       id: angle.id,
       aId: angle.aId,
@@ -987,7 +987,6 @@ function evaluateAngleExpressionDegreesWithCtx(
     },
     getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
   });
-  return evaluateAngleExpressionDegreesWithSymbols(exprRaw, symbols);
 }
 
 function evaluateNumberExpressionWithCtx(
@@ -996,10 +995,9 @@ function evaluateNumberExpressionWithCtx(
   ctx: SceneEvalContext,
   excludeNumberId?: string
 ): NumberExpressionEvalResult {
-  const symbols = buildNumberSymbolTable({
+  return evaluateNumberExpressionWithRuntime(exprRaw, {
     numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
     getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
     excludeNumberId,
   });
-  return evaluateNumberExpressionWithSymbols(exprRaw, symbols);
 }

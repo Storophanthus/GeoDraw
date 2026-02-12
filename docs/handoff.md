@@ -392,6 +392,17 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: expression runtime extraction):
+  - Added `src/scene/eval/expressionRuntime.ts`:
+    - `evaluateAngleExpressionWithRuntime(...)`
+    - `evaluateNumberExpressionWithRuntime(...)`
+  - `points.ts` now delegates symbol-table orchestration to this module from:
+    - `evaluateAngleExpressionDegreesWithCtx(...)`
+    - `evaluateNumberExpressionWithCtx(...)`
+  - All callbacks and math remain unchanged.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
