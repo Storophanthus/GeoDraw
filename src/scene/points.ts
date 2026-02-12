@@ -1,6 +1,5 @@
 import type { Vec2 } from "../geo/vec2";
 import {
-  distance,
   lineCircleIntersectionBranches,
 } from "../geo/geometry";
 import type { NumberExpressionEvalResult } from "./eval/numericExpression";
@@ -16,7 +15,6 @@ import {
   type SceneEvalStats,
   updateImplicitEvalStats,
 } from "./eval/evalContext";
-import { evalNumberDefinitionWithOps } from "./eval/numberDefinitions";
 import {
   circleLinePairAssignmentKey,
   circleLineStabilitySignature,
@@ -51,6 +49,7 @@ import {
   getCircleWorldGeometryInScene,
   resolveLineAnchorsInScene,
 } from "./eval/sceneGeometryAccess";
+import { evalNumberDefinitionInScene } from "./eval/numberSceneEval";
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
@@ -911,7 +910,7 @@ function evalNumberDefinition(
   ctx: SceneEvalContext,
   selfNumberId?: string
 ): number | null {
-  return evalNumberDefinitionWithOps(
+  return evalNumberDefinitionInScene(
     def,
     {
       getPointWorldById: (id) => getPointWorldById(id, scene, ctx),
@@ -934,8 +933,6 @@ function evalNumberDefinition(
         return result.ok ? result.value : null;
       },
       evalNumberById: (id) => evalNumberById(id, scene, ctx),
-      computeOrientedAngleRad,
-      distance,
     },
     selfNumberId
   );

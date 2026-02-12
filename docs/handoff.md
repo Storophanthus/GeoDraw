@@ -422,6 +422,14 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: number-definition scene wiring extraction):
+  - Added `src/scene/eval/numberSceneEval.ts`:
+    - `evalNumberDefinitionInScene(...)`
+  - `points.ts` now delegates number-definition callback wiring to this helper.
+  - Core number math and expression semantics unchanged.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
