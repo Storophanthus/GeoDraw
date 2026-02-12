@@ -1,11 +1,8 @@
 import type { Vec2 } from "../geo/vec2";
 import {
   add,
-  circleCircleIntersections,
   distance,
   lineCircleIntersectionBranches,
-  lineCircleIntersections,
-  lineLineIntersection,
   mul,
   sub,
 } from "../geo/geometry";
@@ -39,7 +36,6 @@ import {
   clamp,
   genericIntersectionPairKey,
   genericIntersectionSignature,
-  lineLikeContainsPoint,
   sameObjectPair,
 } from "./eval/intersectionUtils";
 import {
@@ -48,6 +44,7 @@ import {
   type CircleLineAssignmentPoint,
   type GenericAssignmentPoint,
 } from "./eval/intersectionAssignments";
+import { objectIntersectionsWithOps } from "./eval/intersectionQueries";
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
@@ -710,38 +707,22 @@ function objectIntersections(
   scene: SceneModel,
   ctx: SceneEvalContext
 ): Vec2[] {
-  const la = asLineLike(a, scene, ctx);
-  const lb = asLineLike(b, scene, ctx);
-  if (la && lb) {
-    ctx.stats.lineLineCalls += 1;
-    const p = lineLineIntersection(la.a, la.b, lb.a, lb.b);
-    if (!p) return [];
-    if (!lineLikeContainsPoint(la, p)) return [];
-    if (!lineLikeContainsPoint(lb, p)) return [];
-    ctx.stats.allocationsEstimate += 1;
-    return [p];
-  }
-
-  const circleA = asCircle(a, scene, ctx);
-  const circleB = asCircle(b, scene, ctx);
-
-  if (la && circleB) {
-    ctx.stats.circleLineCalls += 1;
-    return lineCircleIntersections(la.a, la.b, circleB.center, circleB.radius).filter((p) =>
-      lineLikeContainsPoint(la, p)
-    );
-  }
-  if (lb && circleA) {
-    ctx.stats.circleLineCalls += 1;
-    return lineCircleIntersections(lb.a, lb.b, circleA.center, circleA.radius).filter((p) =>
-      lineLikeContainsPoint(lb, p)
-    );
-  }
-  if (circleA && circleB) {
-    ctx.stats.circleCircleCalls += 1;
-    return circleCircleIntersections(circleA.center, circleA.radius, circleB.center, circleB.radius);
-  }
-  return [];
+  return objectIntersectionsWithOps(a, b, {
+    asLineLike: (ref) => asLineLike(ref, scene, ctx),
+    asCircle: (ref) => asCircle(ref, scene, ctx),
+    onLineLineCall: () => {
+      ctx.stats.lineLineCalls += 1;
+    },
+    onCircleLineCall: () => {
+      ctx.stats.circleLineCalls += 1;
+    },
+    onCircleCircleCall: () => {
+      ctx.stats.circleCircleCalls += 1;
+    },
+    onAllocation: (count) => {
+      ctx.stats.allocationsEstimate += count;
+    },
+  });
 }
 
 function asLineLike(

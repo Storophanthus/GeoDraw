@@ -326,6 +326,16 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: object intersection query extraction):
+  - Added `src/scene/eval/intersectionQueries.ts`:
+    - `objectIntersectionsWithOps(...)`
+  - Moved line-line / line-circle / circle-circle query branching from
+    `points.ts` into the new module.
+  - `points.ts` now provides adapter callbacks (asLineLike/asCircle + stats counters),
+    preserving existing behavior.
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
