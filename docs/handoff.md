@@ -175,8 +175,36 @@
   - `src/scene/eval/numberDefinitions.ts`
     - `evalNumberDefinitionWithOps(...)`
   - `src/scene/points.ts`
-    - `evalNumberDefinition(...)` now delegates to `evalNumberDefinitionWithOps(...)`
-    - context/cache-aware callbacks are injected from `points.ts` (no behavior change).
+  - `evalNumberDefinition(...)` now delegates to `evalNumberDefinitionWithOps(...)`
+  - context/cache-aware callbacks are injected from `points.ts` (no behavior change).
+- Scene eval-context management extraction (slice 16):
+  - `src/scene/eval/evalContext.ts`
+    - `SceneEvalStats`
+    - generic `SceneEvalContext<...>`
+    - `buildSceneEvalContext(...)`
+    - `getOrCreateSceneEvalContext(...)`
+    - `beginSceneEvalTick(...)`
+    - `endSceneEvalTick(...)`
+    - `updateImplicitEvalStats(...)`
+    - debug helpers (`isEvalDebugEnabled`, `formatEvalStats`)
+  - `src/scene/points.ts`
+    - now uses eval-context helpers for tick/context lifecycle and implicit stats updates
+    - preserves public API by re-exporting `SceneEvalStats`
+    - local context-map/index-map ownership unchanged (behavior-preserving split).
+- Scene geometry-resolve extraction (slice 17):
+  - `src/scene/eval/geometryResolve.ts`
+    - `resolveLineAnchorsWithOps(...)`
+    - `resolveLineLikeRefAnchorsWithOps(...)`
+    - `getCircleWorldGeometryWithOps(...)`
+    - `asLineLikeWithOps(...)`
+    - `asCircleWithOps(...)`
+  - `src/scene/points.ts`
+    - `resolveLineAnchors`, `getCircleWorldGeometryWithCtx`, `asLineLike`, `asCircle` now delegate to injected-op helpers.
+    - behavior preserved (including line recursion guard and fixed-radius expression evaluation).
+- Properties panel decomposition start (UI monolith mitigation step 1):
+  - Added `src/ui/NumbersSection.tsx`
+  - `src/ui/PropertiesPanel.tsx` now delegates full Numbers block rendering/handlers to `NumbersSection`.
+  - No behavior change; just structural extraction.
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
@@ -281,7 +309,8 @@
      - `src/view/interactionHighlights.ts`
      - owns `drawInteractionHighlights(...)` + internal `drawHitHighlight(...)`
      - behavior preserved; `CanvasView` now delegates this draw pass.
-   - Next major stage: continue reducing `src/scene/points.ts` by extracting scene-eval-context management (`getOrCreateSceneEvalContext`, stats/finalization helpers) into a dedicated module while preserving tick accounting behavior.
+   - Next major stage (`scene`): extract generic/circle-line intersection assignment helpers from `src/scene/points.ts` into `src/scene/eval/intersections.ts` (pair-assignment logic), preserving stability behavior.
+   - Next major stage (`ui`): continue `PropertiesPanel` split by extracting tool-info blocks (Angle Fixed / Circle Fixed) and selected-object editors into dedicated subcomponents.
 4. Keep behavior identical (no geometry semantics change in same commit).
 5. Re-run:
    - `npm run build`

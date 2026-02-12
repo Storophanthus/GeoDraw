@@ -10,6 +10,7 @@ import {
 } from "../scene/points";
 import { selectConstructionDescription } from "../state/selectors/constructionDescription";
 import { useGeoStore } from "../state/geoStore";
+import { NumbersSection } from "./NumbersSection";
 
 const SHAPES: PointShape[] = [
   "circle",
@@ -1312,132 +1313,21 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   </label>
 </div>
 
-<div className="toolInfo">
-  <div className="subSectionTitle">Numbers</div>
-  <div className="controlRow">
-    <label className="controlLabel">Constant</label>
-    <input
-      className="renameInput"
-      type="text"
-      value={newNumberValue}
-      onChange={(e) => setNewNumberValue(e.target.value)}
-      placeholder="e.g. 2.5"
-    />
-  </div>
-  <div className="actionsRow">
-    <button
-      className="actionButton secondary"
-      onClick={() => {
-        const v = Number(newNumberValue);
-        if (!Number.isFinite(v)) return;
-        createNumber({ kind: "constant", value: v });
-      }}
-    >
-      Add Constant
-    </button>
-    {selectedSegment && (
-      <button
-        className="actionButton secondary"
-        onClick={() => createNumber({ kind: "segmentLength", segId: selectedSegment.id })}
-      >
-        Store Length
-      </button>
-    )}
-    {selectedCircle && (
-      <button
-        className="actionButton secondary"
-        onClick={() => createNumber({ kind: "circleRadius", circleId: selectedCircle.id })}
-      >
-        Store Radius
-      </button>
-    )}
-    {selectedCircle && (
-      <button
-        className="actionButton secondary"
-        onClick={() => createNumber({ kind: "circleArea", circleId: selectedCircle.id })}
-      >
-        Store Area
-      </button>
-    )}
-    {selectedAngle && (
-      <button
-        className="actionButton secondary"
-        onClick={() => createNumber({ kind: "angleDegrees", angleId: selectedAngle.id })}
-      >
-        Store Angle
-      </button>
-    )}
-  </div>
-  <div className="controlRow">
-    <label className="controlLabel">Formula</label>
-    <input
-      className="renameInput"
-      type="text"
-      value={newNumberExpr}
-      onChange={(e) => setNewNumberExpr(e.target.value)}
-      placeholder="e.g. n_1+n_2^2"
-    />
-  </div>
-  <div className="actionsRow">
-    <button
-      className="actionButton secondary"
-      onClick={() => {
-        const expr = newNumberExpr.trim();
-        if (!expr) return;
-        createNumber({ kind: "expression", expr });
-      }}
-    >
-      Add Formula
-    </button>
-  </div>
-  {scene.numbers.length >= 2 && (
-    <>
-      <div className="controlRow">
-        <label className="controlLabel">Ratio Num</label>
-        <select
-          className="selectInput"
-          value={ratioNumeratorId}
-          onChange={(e) => setRatioNumeratorId(e.target.value)}
-        >
-                        {scene.numbers.map((num: any) => (
-            <option key={num.id} value={num.id}>
-              {num.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="controlRow">
-        <label className="controlLabel">Ratio Den</label>
-        <select
-          className="selectInput"
-          value={ratioDenominatorId}
-          onChange={(e) => setRatioDenominatorId(e.target.value)}
-        >
-                        {scene.numbers.map((num: any) => (
-            <option key={num.id} value={num.id}>
-              {num.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="actionsRow">
-        <button
-          className="actionButton secondary"
-          onClick={() => {
-            if (!ratioNumeratorId || !ratioDenominatorId || ratioNumeratorId === ratioDenominatorId) return;
-            createNumber({
-              kind: "ratio",
-              numeratorId: ratioNumeratorId,
-              denominatorId: ratioDenominatorId,
-            });
-          }}
-        >
-          Add Ratio
-        </button>
-      </div>
-    </>
-  )}
-</div>
+<NumbersSection
+  newNumberValue={newNumberValue}
+  setNewNumberValue={setNewNumberValue}
+  newNumberExpr={newNumberExpr}
+  setNewNumberExpr={setNewNumberExpr}
+  ratioNumeratorId={ratioNumeratorId}
+  setRatioNumeratorId={setRatioNumeratorId}
+  ratioDenominatorId={ratioDenominatorId}
+  setRatioDenominatorId={setRatioDenominatorId}
+  numbers={scene.numbers}
+  selectedSegmentId={selectedSegment?.id ?? null}
+  selectedCircleId={selectedCircle?.id ?? null}
+  selectedAngleId={selectedAngle?.id ?? null}
+  createNumber={createNumber}
+/>
     </section>
   );
 }
