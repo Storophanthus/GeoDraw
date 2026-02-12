@@ -476,6 +476,19 @@ Required validation after such changes:
   - Validation:
     - `npm run build` ✅
     - `npm run test:export` ✅ (22/22)
+- Scene decomposition (`points.ts` slice: non-intersection point-kind evaluators extraction):
+  - Added `src/scene/eval/pointKindEvaluators.ts`:
+    - `evalMidpointPointsPoint(...)`
+    - `evalMidpointSegmentPoint(...)`
+    - `evalPointOnLinePoint(...)`
+    - `evalPointOnSegmentPoint(...)`
+    - `evalPointOnCirclePoint(...)`
+    - `evalPointByRotationPoint(...)`
+  - `points.ts` now delegates these non-intersection point kind evaluators to the module.
+  - Circle-line and generic intersection evaluators remain in `points.ts` (unchanged logic).
+  - Validation:
+    - `npm run build` ✅
+    - `npm run test:export` ✅ (22/22)
 - Label hit-testing extracted from `CanvasView` into:
   - `src/view/labelHit.ts`
   - `hitTestPointLabel`
