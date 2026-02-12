@@ -35,7 +35,7 @@ import {
 import {
   evalPointUnchecked as evalPointUncheckedCore,
 } from "./eval/pointEvalDispatch";
-import { evalPointWithCtxInScene } from "./eval/pointValueRuntime";
+import { evalPointWithCtxInScene } from "./eval/pointRuntime";
 import {
   buildSceneEvalContextForScene,
   type SceneEvalContext,
