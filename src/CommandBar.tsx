@@ -163,7 +163,7 @@ export function CommandBar() {
         return;
       }
       if (cmd.type === "CreateCircleCenterRadius") {
-        const id = commandBarApi.createCircleCenterRadiusWithLabel(cmd.centerId, cmd.r, name);
+        const id = commandBarApi.createCircleCenterRadiusWithLabel(cmd.centerId, cmd.r, name, cmd.rExpr);
         if (!id) {
           setStatus({ kind: "error", text: "Cannot construct circle" });
           return;
@@ -233,7 +233,8 @@ export function CommandBar() {
     }
 
     if (cmd.type === "CreateCircleCenterRadius") {
-      const circleId = createCircleFixedRadius(cmd.centerId, String(cmd.r));
+      const radiusExpr = cmd.rExpr && cmd.rExpr.trim() ? cmd.rExpr : String(cmd.r);
+      const circleId = createCircleFixedRadius(cmd.centerId, radiusExpr);
       if (!circleId) {
         setStatus({ kind: "error", text: "Cannot construct circle" });
         return;

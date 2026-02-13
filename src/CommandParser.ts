@@ -25,7 +25,7 @@ export type Command =
   | { type: "CreateLineByPoints"; aId: string; bId: string }
   | { type: "CreateSegmentByPoints"; aId: string; bId: string }
   | { type: "CreateCircleXYR"; x: number; y: number; r: number }
-  | { type: "CreateCircleCenterRadius"; centerId: string; r: number }
+  | { type: "CreateCircleCenterRadius"; centerId: string; r: number; rExpr?: string }
   | { type: "CreateCircleCenterThrough"; centerId: string; throughId: string };
 
 export type ParseResult =
@@ -437,13 +437,19 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
         const scalar = resolveScalarIdentifier(secondIdent, ctx);
         if (!scalar.ok) return err(scalar.message);
         if (!(scalar.value > 0)) return err("Circle radius must be > 0");
-        return { kind: "cmd", cmd: { type: "CreateCircleCenterRadius", centerId: center.id, r: scalar.value } };
+        return {
+          kind: "cmd",
+          cmd: { type: "CreateCircleCenterRadius", centerId: center.id, r: scalar.value, rExpr: secondIdent },
+        };
       }
 
       const rEval = evaluateExpression(args[1], ctx);
       if (!rEval.ok) return err("Circle radius must be a finite number");
       if (!(rEval.value > 0)) return err("Circle radius must be > 0");
-      return { kind: "cmd", cmd: { type: "CreateCircleCenterRadius", centerId: center.id, r: rEval.value } };
+      return {
+        kind: "cmd",
+        cmd: { type: "CreateCircleCenterRadius", centerId: center.id, r: rEval.value, rExpr: args[1].trim() },
+      };
     }
 
     return err("Circle expects Circle(x,y,r), Circle(O,A), or Circle(O,r)");

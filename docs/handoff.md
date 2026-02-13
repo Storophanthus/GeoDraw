@@ -102,6 +102,10 @@
   - Snapshot semantics are explicit:
     - scalar vars are evaluated at command execution time
     - existing objects do not auto-update on scalar reassignment
+- Command Bar Phase 3 (minimal dynamic dependency step):
+  - `Circle(O, rExpr)` from Command Bar now preserves the radius expression string (`rExpr`) through parse/execute.
+  - Creation path now calls fixed-radius circle creation with the original expression when available, not only frozen numeric text.
+  - Practical effect: circles created from scalar names/expressions can update when referenced scene numbers change.
 - Export now auto-emits optional TikZ pattern libraries only when needed:
   - no pattern styles => no `\\usetikzlibrary{patterns}` line emitted
   - classic pattern styles (`pattern=...`, `pattern color=...`) => emits exactly `\\usetikzlibrary{patterns}`
@@ -181,6 +185,9 @@
   - Generic assignment now handles `N` roots deterministically (not truncated to first two roots).
   - Scene normalization/restore now treat any non-negative integer `branchIndex` as explicit.
   - Snapshot/test hydration updated to preserve non-binary branch indices.
+- Export hardening aligned with generalized branch indexing:
+  - Export branch inference now treats any non-negative integer `intersectionPoint.branchIndex` as explicit (not only `0|1`).
+  - `preferredWorld` remains fallback-only when explicit branch index is absent.
 - Scene regression coverage (semantic kinds):
   - Added semantic drag/persistence tests in `src/scene/__tests__/intersection-ownership-regression.test.ts`:
     - `testCircleSegmentSemanticBranchPersistenceUnderDrag`

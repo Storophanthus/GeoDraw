@@ -227,14 +227,15 @@ export const commandBarApi = {
     commandBarObjectAliases.set(name, { type: "circle", id: circleId });
     return circleId;
   },
-  createCircleCenterRadiusWithLabel(centerId: string, r: number, label: string): string | null {
+  createCircleCenterRadiusWithLabel(centerId: string, r: number, label: string, rExpr?: string): string | null {
     const name = label.trim();
     if (!name || !Number.isFinite(r) || r <= 0) return null;
     const state = runtime.getState();
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
-    const circleId = actions.createCircleFixedRadius(centerId, String(r));
+    const expr = rExpr && rExpr.trim() ? rExpr.trim() : String(r);
+    const circleId = actions.createCircleFixedRadius(centerId, expr);
     if (!circleId) return null;
     commandBarObjectAliases.set(name, { type: "circle", id: circleId });
     return circleId;

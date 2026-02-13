@@ -1388,7 +1388,9 @@ function inferLineCircleBranchFromWorld(
   center: { x: number; y: number },
   through: { x: number; y: number }
 ): 0 | 1 {
-  if (point.branchIndex === 0 || point.branchIndex === 1) return point.branchIndex;
+  if (Number.isInteger(point.branchIndex) && (point.branchIndex as number) >= 0) {
+    return (point.branchIndex as number) === 1 ? 1 : 0;
+  }
   const radius = distance(center, through);
   const branches = lineCircleIntersectionBranches(a, b, center, radius);
   if (branches.length < 2) return 0;
@@ -1425,7 +1427,9 @@ function inferCircleCircleBranch(
   bCenter: { x: number; y: number },
   bThrough: { x: number; y: number }
 ): 0 | 1 {
-  if (point.branchIndex === 0 || point.branchIndex === 1) return point.branchIndex;
+  if (Number.isInteger(point.branchIndex) && (point.branchIndex as number) >= 0) {
+    return (point.branchIndex as number) === 1 ? 1 : 0;
+  }
   const ra = distance(aCenter, aThrough);
   const rb = distance(bCenter, bThrough);
   const intersections = circleCircleIntersections(aCenter, ra, bCenter, rb);

@@ -76,7 +76,7 @@ if (circleOA.type !== "CreateCircleCenterThrough" || circleOA.centerId !== "pO" 
 }
 
 const circleOR = mustCmd("Circle(O,5)", baseCtx, "CreateCircleCenterRadius");
-if (circleOR.type !== "CreateCircleCenterRadius" || circleOR.centerId !== "pO" || circleOR.r !== 5) {
+if (circleOR.type !== "CreateCircleCenterRadius" || circleOR.centerId !== "pO" || circleOR.r !== 5 || circleOR.rExpr !== "5") {
   throw new Error("Circle(O,5) mismatch");
 }
 
@@ -113,7 +113,7 @@ const withScalarR: ParseContext = {
 const assignCircleThrough = mustAssignObject("c_1 = Circle(O,A)", withScalarR, "c_1", "CreateCircleCenterThrough");
 if (assignCircleThrough.type !== "CreateCircleCenterThrough") throw new Error("c_1=Circle(O,A) type mismatch");
 const assignCircleRadius = mustAssignObject("c_2 = Circle(O,r)", withScalarR, "c_2", "CreateCircleCenterRadius");
-if (assignCircleRadius.type !== "CreateCircleCenterRadius" || assignCircleRadius.r !== 5) {
+if (assignCircleRadius.type !== "CreateCircleCenterRadius" || assignCircleRadius.r !== 5 || assignCircleRadius.rExpr !== "r") {
   throw new Error("c_2=Circle(O,r) mismatch");
 }
 
