@@ -52,6 +52,7 @@ export function CanvasView() {
     pid: -1,
     mode: "idle",
     pointId: null,
+    exportClipStartedOnDown: false,
     lastX: 0,
     lastY: 0,
     startX: 0,
@@ -76,6 +77,7 @@ export function CanvasView() {
   const copyStyle = useGeoStore((store) => store.copyStyle);
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
   const dependencyGlowEnabled = useGeoStore((store) => store.dependencyGlowEnabled);
+  const exportClipRectWorld = useGeoStore((store) => store.exportClipRectWorld);
 
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
   const setHoveredHit = useGeoStore((store) => store.setHoveredHit);
@@ -108,6 +110,7 @@ export function CanvasView() {
   const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
+  const setExportClipRectWorld = useGeoStore((store) => store.setExportClipRectWorld);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
 
@@ -150,6 +153,7 @@ export function CanvasView() {
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
+      setExportClipRectWorld,
       getPointWorldById: (id) => {
         const point = scene.points.find((p) => p.id === id);
         return point ? getPointWorldPos(point, scene) : null;
@@ -180,6 +184,7 @@ export function CanvasView() {
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
+      setExportClipRectWorld,
       scene,
     ]
   );
@@ -282,6 +287,7 @@ export function CanvasView() {
         recentDrawableObject,
         copySourceDrawable,
         dependencyGlowEnabled,
+        exportClipRectWorld,
         getAngleStrokeRenderWidth,
       });
     },
@@ -303,6 +309,7 @@ export function CanvasView() {
       scene,
       selectedObject,
       dependencyGlowEnabled,
+      exportClipRectWorld,
       vp,
     ]
   );

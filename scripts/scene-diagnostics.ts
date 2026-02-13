@@ -4,9 +4,11 @@ import type {
   GeometryObjectRef,
   LineStyle,
   PointStyle,
+  SceneAngle,
   SceneCircle,
   SceneLine,
   SceneModel,
+  SceneNumber,
   ScenePoint,
   SceneSegment,
   ShowLabelMode,
@@ -45,11 +47,19 @@ const defaultCircleStyle: CircleStyle = {
 async function main(): Promise<void> {
   const filePath = process.argv[2];
   const eps = Number(process.argv[3] ?? "1e-6");
+  const ticks = Number(process.argv[4] ?? "1");
+  const warmup = Number(process.argv[5] ?? "20");
   if (!filePath) {
-    throw new Error("Usage: npm run diag:scene -- <path-to-scene.json> [eps]");
+    throw new Error("Usage: npm run diag:scene -- <path-to-scene.json> [eps] [ticks] [warmup]");
   }
   if (!Number.isFinite(eps) || eps <= 0) {
     throw new Error(`Invalid eps: ${process.argv[3]}`);
+  }
+  if (!Number.isFinite(ticks) || ticks < 1) {
+    throw new Error(`Invalid ticks: ${process.argv[4]}`);
+  }
+  if (!Number.isFinite(warmup) || warmup < 0) {
+    throw new Error(`Invalid warmup: ${process.argv[5]}`);
   }
 
   const raw = JSON.parse(await readFile(filePath, "utf8")) as {
@@ -61,9 +71,41 @@ async function main(): Promise<void> {
   };
   const scene = hydrateScene((raw.scene ?? raw) as Record<string, unknown>);
 
+  for (let i = 0; i < warmup; i += 1) {
+    beginSceneEvalTick(scene);
+    for (const point of scene.points) {
+      getPointWorldPos(point, scene);
+    }
+    endSceneEvalTick(scene);
+  }
+  let stats = null as ReturnType<typeof endSceneEvalTick>;
+  let totalMs = 0;
+  let totalEvalCalls = 0;
+  let totalCacheHits = 0;
+  let totalCircleLine = 0;
+  let totalCircleCircle = 0;
+  let totalLineLine = 0;
+  const wallStart = performance.now();
+  for (let i = 0; i < ticks; i += 1) {
+    beginSceneEvalTick(scene);
+    for (const point of scene.points) {
+      getPointWorldPos(point, scene);
+    }
+    const tickStats = endSceneEvalTick(scene);
+    if (tickStats) {
+      stats = tickStats;
+      totalMs += tickStats.ms;
+      totalEvalCalls += tickStats.totalNodeEvalCalls;
+      totalCacheHits += tickStats.cacheHits;
+      totalCircleLine += tickStats.circleLineCalls;
+      totalCircleCircle += tickStats.circleCircleCalls;
+      totalLineLine += tickStats.lineLineCalls;
+    }
+  }
+  const wallMs = performance.now() - wallStart;
   beginSceneEvalTick(scene);
   const evaluated = scene.points.map((point) => ({ point, world: getPointWorldPos(point, scene) }));
-  const stats = endSceneEvalTick(scene);
+  endSceneEvalTick(scene);
 
   const undefinedPoints = evaluated.filter((entry) => !entry.world).map((entry) => entry.point);
   const coincidentGroups = groupCoincidentPoints(
@@ -80,6 +122,17 @@ async function main(): Promise<void> {
         2
       )}`
     );
+    if (ticks > 1) {
+      console.log(
+        `bench ticks=${ticks} warmup=${warmup} avgMs=${(totalMs / ticks).toFixed(4)} wallAvgMs=${(wallMs / ticks).toFixed(
+          4
+        )} avgEvalCalls=${(totalEvalCalls / ticks).toFixed(2)} avgCacheHits=${(totalCacheHits / ticks).toFixed(
+          2
+        )} avgCircleLine=${(totalCircleLine / ticks).toFixed(2)} avgCircleCircle=${(totalCircleCircle / ticks).toFixed(
+          2
+        )} avgLineLine=${(totalLineLine / ticks).toFixed(2)}`
+      );
+    }
   }
   console.log("");
 
@@ -119,10 +172,11 @@ async function main(): Promise<void> {
 function hydrateScene(raw: Record<string, unknown>): SceneModel {
   return {
     points: ((raw.points as Array<Record<string, unknown>> | undefined) ?? []).map(hydratePoint),
+    numbers: ((raw.numbers as Array<Record<string, unknown>> | undefined) ?? []).map(hydrateNumber),
     lines: ((raw.lines as Array<Record<string, unknown>> | undefined) ?? []).map(hydrateLine),
     segments: ((raw.segments as Array<Record<string, unknown>> | undefined) ?? []).map(hydrateSegment),
     circles: ((raw.circles as Array<Record<string, unknown>> | undefined) ?? []).map(hydrateCircle),
-    angles: [],
+    angles: ((raw.angles as Array<Record<string, unknown>> | undefined) ?? []).map(hydrateAngle),
   };
 }
 
@@ -163,6 +217,35 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
       excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
     };
   }
+  if (kind === "circleSegmentIntersectionPoint") {
+    return {
+      ...base,
+      kind: "circleSegmentIntersectionPoint",
+      circleId: String(def.circleId),
+      segId: String(def.segId),
+      branchIndex: Number(def.branchIndex) === 1 ? 1 : 0,
+      excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
+    };
+  }
+  if (kind === "circleCircleIntersectionPoint") {
+    return {
+      ...base,
+      kind: "circleCircleIntersectionPoint",
+      circleAId: String(def.circleAId),
+      circleBId: String(def.circleBId),
+      branchIndex: Number(def.branchIndex) === 1 ? 1 : 0,
+      excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
+    };
+  }
+  if (kind === "lineLikeIntersectionPoint") {
+    return {
+      ...base,
+      kind: "lineLikeIntersectionPoint",
+      objA: def.objA as { type: "line" | "segment"; id: string },
+      objB: def.objB as { type: "line" | "segment"; id: string },
+      preferredWorld: def.preferredWorld as { x: number; y: number },
+    };
+  }
   if (kind === "intersectionPoint") {
     return {
       ...base,
@@ -178,8 +261,44 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
 }
 
 function hydrateLine(raw: Record<string, unknown>): SceneLine {
+  const kind = String(raw.kind ?? "twoPoint");
+  if (kind === "perpendicular" || kind === "parallel") {
+    const base = raw.base as { type: "line" | "segment"; id: string } | undefined;
+    if (!base) throw new Error(`Invalid ${kind} line: missing base`);
+    return {
+      id: String(raw.id),
+      kind,
+      throughId: String(raw.throughId),
+      base,
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as LineStyle) ?? defaultLineStyle,
+    };
+  }
+  if (kind === "tangent") {
+    return {
+      id: String(raw.id),
+      kind: "tangent",
+      throughId: String(raw.throughId),
+      circleId: String(raw.circleId),
+      branchIndex: Number(raw.branchIndex) === 1 ? 1 : 0,
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as LineStyle) ?? defaultLineStyle,
+    };
+  }
+  if (kind === "angleBisector") {
+    return {
+      id: String(raw.id),
+      kind: "angleBisector",
+      aId: String(raw.aId),
+      bId: String(raw.bId),
+      cId: String(raw.cId),
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as LineStyle) ?? defaultLineStyle,
+    };
+  }
   return {
     id: String(raw.id),
+    kind: "twoPoint",
     aId: String(raw.aId),
     bId: String(raw.bId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
@@ -199,12 +318,58 @@ function hydrateSegment(raw: Record<string, unknown>): SceneSegment {
 }
 
 function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
+  const kind = String(raw.kind ?? "twoPoint");
+  if (kind === "fixedRadius") {
+    return {
+      id: String(raw.id),
+      kind: "fixedRadius",
+      centerId: String(raw.centerId),
+      radius: Number(raw.radius),
+      radiusExpr: typeof raw.radiusExpr === "string" ? raw.radiusExpr : undefined,
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as CircleStyle) ?? defaultCircleStyle,
+    };
+  }
+  if (kind === "threePoint") {
+    return {
+      id: String(raw.id),
+      kind: "threePoint",
+      aId: String(raw.aId),
+      bId: String(raw.bId),
+      cId: String(raw.cId),
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as CircleStyle) ?? defaultCircleStyle,
+    };
+  }
   return {
     id: String(raw.id),
+    kind: "twoPoint",
     centerId: String(raw.centerId),
     throughId: String(raw.throughId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
     style: (raw.style as CircleStyle) ?? defaultCircleStyle,
+  };
+}
+
+function hydrateNumber(raw: Record<string, unknown>): SceneNumber {
+  return {
+    id: String(raw.id),
+    name: String(raw.name ?? raw.id ?? "n"),
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    definition: raw.definition as SceneNumber["definition"],
+  };
+}
+
+function hydrateAngle(raw: Record<string, unknown>): SceneAngle {
+  const kind = String(raw.kind ?? "angle");
+  return {
+    id: String(raw.id),
+    kind: kind === "sector" ? "sector" : "angle",
+    aId: String(raw.aId),
+    bId: String(raw.bId),
+    cId: String(raw.cId),
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    style: raw.style as SceneAngle["style"],
   };
 }
 

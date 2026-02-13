@@ -40,6 +40,7 @@ export type ToolClickIO = {
   createPointOnCircle: (circleId: string, t: number) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
+  setExportClipRectWorld: (rect: { xmin: number; xmax: number; ymin: number; ymax: number } | null) => void;
   setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null) => void;
   setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
   applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
@@ -119,6 +120,27 @@ export function handleToolClick(
       return;
     }
     io.applyCopyStyleTo(hits.hitObject);
+    return;
+  }
+
+  if (activeTool === "export_clip") {
+    const snap = hits.shiftKey ? null : hits.snap;
+    const world =
+      snap?.world
+      ?? (hits.hitPointId ? io.getPointWorldById(hits.hitPointId) : null)
+      ?? camMath.screenToWorld(screen, io.camera, io.vp);
+    if (!pendingSelection || pendingSelection.tool !== "export_clip") {
+      io.setPendingSelection({ tool: "export_clip", step: 2, first: { type: "world", world } });
+      return;
+    }
+    const first = pendingSelection.first.world;
+    io.setExportClipRectWorld({
+      xmin: Math.min(first.x, world.x),
+      xmax: Math.max(first.x, world.x),
+      ymin: Math.min(first.y, world.y),
+      ymax: Math.max(first.y, world.y),
+    });
+    io.clearPendingSelection();
     return;
   }
 
@@ -433,7 +455,8 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     activeTool === "midpoint" ||
     activeTool === "angle_bisector" ||
     activeTool === "angle" ||
-    activeTool === "angle_fixed"
+    activeTool === "angle_fixed" ||
+    activeTool === "export_clip"
   );
 }
 
@@ -456,6 +479,7 @@ export function isValidTarget(
     if (pendingSelection?.tool === "angle_fixed" && pendingSelection.step === 3) return false;
     return hoveredHit.type === "point";
   }
+  if (activeTool === "export_clip") return false;
   if (activeTool === "perp_line") {
     if (!pendingSelection || pendingSelection.tool !== "perp_line") {
       return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";

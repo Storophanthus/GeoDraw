@@ -29,7 +29,8 @@ export type ActiveTool =
   | "tangent_line"
   | "angle_bisector"
   | "angle"
-  | "angle_fixed";
+  | "angle_fixed"
+  | "export_clip";
 
 export type SelectedObject =
   | { type: "point"; id: string }
@@ -50,84 +51,89 @@ export type HoveredHit =
 
 export type PendingSelection =
   | {
-      tool: "perp_line" | "parallel_line";
-      step: 2;
-      first:
-        | { type: "point"; id: string }
-        | { type: "lineLike"; ref: LineLikeObjectRef };
-    }
+    tool: "perp_line" | "parallel_line";
+    step: 2;
+    first:
+    | { type: "point"; id: string }
+    | { type: "lineLike"; ref: LineLikeObjectRef };
+  }
   | {
-      tool: "tangent_line";
-      step: 2;
-      first:
-        | { type: "point"; id: string }
-        | { type: "circle"; id: string };
-    }
+    tool: "tangent_line";
+    step: 2;
+    first:
+    | { type: "point"; id: string }
+    | { type: "circle"; id: string };
+  }
   | {
-      tool: "angle_bisector";
-      step: 2;
-      first: { type: "point"; id: string };
-    }
+    tool: "angle_bisector";
+    step: 2;
+    first: { type: "point"; id: string };
+  }
   | {
-      tool: "angle_bisector";
-      step: 3;
-      first: { type: "point"; id: string };
-      second: { type: "point"; id: string };
-    }
+    tool: "angle_bisector";
+    step: 3;
+    first: { type: "point"; id: string };
+    second: { type: "point"; id: string };
+  }
   | {
-      tool: "segment" | "line2p" | "circle_cp" | "midpoint";
-      step: 2;
-      first: { type: "point"; id: string };
-    }
+    tool: "segment" | "line2p" | "circle_cp" | "midpoint";
+    step: 2;
+    first: { type: "point"; id: string };
+  }
   | {
-      tool: "circle_3p";
-      step: 2;
-      first: { type: "point"; id: string };
-    }
+    tool: "circle_3p";
+    step: 2;
+    first: { type: "point"; id: string };
+  }
   | {
-      tool: "circle_3p";
-      step: 3;
-      first: { type: "point"; id: string };
-      second: { type: "point"; id: string };
-    }
+    tool: "circle_3p";
+    step: 3;
+    first: { type: "point"; id: string };
+    second: { type: "point"; id: string };
+  }
   | {
-      tool: "circle_fixed";
-      step: 2;
-      first: { type: "point"; id: string };
-    }
+    tool: "circle_fixed";
+    step: 2;
+    first: { type: "point"; id: string };
+  }
   | {
-      tool: "sector";
-      step: 2;
-      first: { type: "point"; id: string };
-    }
+    tool: "sector";
+    step: 2;
+    first: { type: "point"; id: string };
+  }
   | {
-      tool: "sector";
-      step: 3;
-      first: { type: "point"; id: string };
-      second: { type: "point"; id: string };
-    }
+    tool: "sector";
+    step: 3;
+    first: { type: "point"; id: string };
+    second: { type: "point"; id: string };
+  }
   | {
-      tool: "angle";
-      step: 2;
-      first: { type: "point"; id: string };
-    }
+    tool: "angle";
+    step: 2;
+    first: { type: "point"; id: string };
+  }
   | {
-      tool: "angle";
-      step: 3;
-      first: { type: "point"; id: string };
-      second: { type: "point"; id: string };
-    }
+    tool: "angle";
+    step: 3;
+    first: { type: "point"; id: string };
+    second: { type: "point"; id: string };
+  }
   | {
-      tool: "angle_fixed";
-      step: 2;
-      first: { type: "point"; id: string };
-    }
+    tool: "angle_fixed";
+    step: 2;
+    first: { type: "point"; id: string };
+  }
   | {
-      tool: "angle_fixed";
-      step: 3;
-      first: { type: "point"; id: string };
-      second: { type: "point"; id: string };
-    }
+    tool: "angle_fixed";
+    step: 3;
+    first: { type: "point"; id: string };
+    second: { type: "point"; id: string };
+  }
+  | {
+    tool: "export_clip";
+    step: 2;
+    first: { type: "world"; world: Vec2 };
+  }
   | null;
 
 export type AngleFixedDirection = "CCW" | "CW";
@@ -160,6 +166,7 @@ export type GeoState = {
     radius: string;
   };
   dependencyGlowEnabled: boolean;
+  exportClipRectWorld: { xmin: number; xmax: number; ymin: number; ymax: number } | null;
   copyStyle: {
     source: SelectedObject;
     pointStyle: PointStyle | null;
@@ -223,6 +230,8 @@ export type GeoActions = {
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
   setCircleFixedTool: (next: Partial<GeoState["circleFixedTool"]>) => void;
   setDependencyGlowEnabled: (enabled: boolean) => void;
+  setExportClipRectWorld: (rect: { xmin: number; xmax: number; ymin: number; ymax: number } | null) => void;
+  clearExportClipRectWorld: () => void;
   updateSelectedPointStyle: (next: Partial<PointStyle>) => void;
   updateSelectedPointFields: (
     next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>
@@ -243,6 +252,7 @@ export type GeoActions = {
   clearCopyStyle: () => void;
   undo: () => void;
   redo: () => void;
+  loadSnapshot: (snapshot: import("./historySlice").HistorySnapshot) => void;
 };
 
 export type GeoStore = GeoState & GeoActions;

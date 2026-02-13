@@ -45,6 +45,7 @@ type RenderFrameArgs = {
   recentDrawableObject: DrawableObjectSelection;
   copySourceDrawable: DrawableObjectSelection;
   dependencyGlowEnabled: boolean;
+  exportClipRectWorld: { xmin: number; xmax: number; ymin: number; ymax: number } | null;
   getAngleStrokeRenderWidth: (rawStrokeWidth: number) => number;
 };
 
@@ -72,6 +73,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     recentDrawableObject,
     copySourceDrawable,
     dependencyGlowEnabled,
+    exportClipRectWorld,
     getAngleStrokeRenderWidth,
   } = args;
 
@@ -119,6 +121,24 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       camera,
       vp
     );
+    if (exportClipRectWorld) {
+      const pMin = camMath.worldToScreen({ x: exportClipRectWorld.xmin, y: exportClipRectWorld.ymin }, camera, vp);
+      const pMax = camMath.worldToScreen({ x: exportClipRectWorld.xmax, y: exportClipRectWorld.ymax }, camera, vp);
+      const x = Math.min(pMin.x, pMax.x);
+      const y = Math.min(pMin.y, pMax.y);
+      const w = Math.abs(pMax.x - pMin.x);
+      const h = Math.abs(pMax.y - pMin.y);
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = "rgba(14,165,233,0.95)";
+      ctx.fillStyle = "rgba(14,165,233,0.05)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
 
     if (hoverSnap && (activeTool === "point" || activeTool === "move")) {
       const s = camMath.worldToScreen(hoverSnap.world, camera, vp);

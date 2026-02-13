@@ -174,3 +174,11 @@ export const IconCopyStyle = createIcon(() => (
         <path d="M5 11 V 20 H 14" strokeDasharray="3 3" strokeWidth={2} />
     </>
 ), "IconCopyStyle");
+
+export const IconExportClip = createIcon(() => (
+    <>
+        <rect x="2" y="2" width="20" height="20" rx="2" strokeWidth={2} strokeDasharray="3 2" />
+        <path d="M7 7 H17 V17" strokeWidth={2.5} />
+        <path d="M17 17 L17 13 M17 17 L13 17" strokeWidth={2.5} />
+    </>
+), "IconExportClip");

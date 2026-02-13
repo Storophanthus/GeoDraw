@@ -16,6 +16,7 @@ import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
 export type TikzExportViewport = { xmin: number; xmax: number; ymin: number; ymax: number };
 export type TikzExportOptions = {
   viewport?: TikzExportViewport;
+  clipRectWorld?: TikzExportViewport;
   clipSpace?: number;
   globalLineAdd?: number;
   pointScale?: number;
@@ -34,11 +35,13 @@ export type TikzExportOptions = {
   angleArcSizeScale?: number;
   rightAngleStrokeScale?: number;
   rightAngleSizeScale?: number;
+  autoScaleToFitCm?: { maxWidthCm: number; maxHeightCm: number };
 };
 
 export type TikzCommand =
   | { kind: "SetupUnits"; scale: number }
   | { kind: "SetupViewport"; xmin: number; xmax: number; ymin: number; ymax: number; space: number }
+  | { kind: "ClipRect"; xmin: number; xmax: number; ymin: number; ymax: number }
   | { kind: "SetupLine"; addLeft: number; addRight: number }
   | { kind: "DefPoints"; items: { name: string; x: number; y: number }[] }
   | { kind: "DefPoint"; name: string; x: number; y: number }
@@ -121,10 +124,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const draws: TikzCommand[] = [];
   const definedPointIds = new Set<string>();
 
-  const coordScale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
-
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
   const viewport = options.viewport ?? computeExportViewport(scene);
+  let coordScale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
+  // Auto-fit large scenes for document embedding when canvas-match export is enabled.
+  // Keep scale unchanged for already-reasonable extents, and only shrink when needed.
+  if (options.matchCanvas) {
+    const maxWidthCm = clampPositive(options.autoScaleToFitCm?.maxWidthCm ?? 14, 1, 200);
+    const maxHeightCm = clampPositive(options.autoScaleToFitCm?.maxHeightCm ?? 9, 1, 200);
+    const worldWidth = Math.max(1e-9, Math.abs(viewport.xmax - viewport.xmin));
+    const worldHeight = Math.max(1e-9, Math.abs(viewport.ymax - viewport.ymin));
+    const fitScale = Math.min(1, maxWidthCm / worldWidth, maxHeightCm / worldHeight);
+    coordScale = clampPositive(coordScale * fitScale, 0.01, 100);
+  }
   defs.push({ kind: "SetupUnits", scale: coordScale });
   defs.push({
     kind: "SetupViewport",
@@ -136,6 +148,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   });
   const globalAdd = options.globalLineAdd ?? 5;
   defs.push({ kind: "SetupLine", addLeft: globalAdd, addRight: globalAdd });
+  if (options.clipRectWorld) {
+    defs.push({
+      kind: "ClipRect",
+      xmin: Math.min(options.clipRectWorld.xmin, options.clipRectWorld.xmax),
+      xmax: Math.max(options.clipRectWorld.xmin, options.clipRectWorld.xmax),
+      ymin: Math.min(options.clipRectWorld.ymin, options.clipRectWorld.ymax),
+      ymax: Math.max(options.clipRectWorld.ymin, options.clipRectWorld.ymax),
+    });
+  }
 
   const visiting = new Set<string>();
   const visited = new Set<string>();
@@ -491,6 +512,141 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         selector,
       });
       definedPointIds.add(point.id);
+    } else if (point.kind === "circleSegmentIntersectionPoint") {
+      const circle = circleById.get(point.circleId);
+      const seg = segById.get(point.segId);
+      if (!circle || !seg) throw new Error(`Missing circle/segment for ${point.id}`);
+      resolvePoint(seg.aId);
+      resolvePoint(seg.bId);
+      const segAName = mustName(pointName, seg.aId);
+      const segBName = mustName(pointName, seg.bId);
+      const wa = getPointWorldPosCached(scene, seg.aId);
+      const wb = getPointWorldPosCached(scene, seg.bId);
+      if (!wa || !wb) throw new Error(`Undefined segment geometry for ${point.name}`);
+      const circleCenterName = ensureCircleCenterName(circle.id);
+      const circleThroughName = ensureCircleThroughName(circle.id);
+      const geom = circleGeomById(circle.id);
+      const center = geom.center;
+      const through = { x: center.x + geom.radius, y: center.y };
+      const roots = lineCircleIntersectionBranches(wa, wb, center, geom.radius);
+      if (roots.length === 0) {
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
+      if (!point.excludePointId && point.branchIndex === 1 && roots.length < 2) {
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
+      let branch: 0 | 1 = point.branchIndex;
+      if (point.excludePointId) {
+        const excluded = getPointWorldPosCached(scene, point.excludePointId);
+        if (excluded) {
+          branch = inferLineCircleBranchFromExcludedWorld(wa, wb, center, through, excluded, point.branchIndex);
+        }
+      }
+      let commonName: string | undefined;
+      if (point.excludePointId) {
+        commonName = mustName(pointName, point.excludePointId);
+      } else if (point.branchIndex === 1) {
+        const sibling = scene.points.find(
+          (p) =>
+            p.kind === "circleSegmentIntersectionPoint" &&
+            p.id !== point.id &&
+            p.circleId === point.circleId &&
+            p.segId === point.segId &&
+            p.branchIndex === 0
+        );
+        if (sibling) {
+          resolvePoint(sibling.id);
+          if (definedPointIds.has(sibling.id)) commonName = mustName(pointName, sibling.id);
+        }
+      }
+      let selector: { name: string; x: number; y: number } | undefined;
+      if (!commonName) {
+        const other = inferOtherLineCircleBranchPointFromWorld(wa, wb, center, through, branch);
+        if (other) {
+          selector = { name: newSelectorName("LC"), x: other.x, y: other.y };
+          commonName = selector.name;
+        }
+      }
+      constructions.push({
+        kind: "InterLC",
+        name,
+        lineA: segAName,
+        lineB: segBName,
+        circleO: circleCenterName,
+        circleX: circleThroughName,
+        branch,
+        common: commonName,
+        selector,
+      });
+      definedPointIds.add(point.id);
+    } else if (point.kind === "circleCircleIntersectionPoint") {
+      const cA = circleById.get(point.circleAId);
+      const cB = circleById.get(point.circleBId);
+      if (!cA || !cB) throw new Error(`Missing circles for ${point.id}`);
+      const cACenterName = ensureCircleCenterName(cA.id);
+      const cBCenterName = ensureCircleCenterName(cB.id);
+      const cAThroughName = ensureCircleThroughName(cA.id);
+      const cBThroughName = ensureCircleThroughName(cB.id);
+      const cAGeom = circleGeomById(cA.id);
+      const cBGeom = circleGeomById(cB.id);
+      const cAThrough = { x: cAGeom.center.x + cAGeom.radius, y: cAGeom.center.y };
+      const cBThrough = { x: cBGeom.center.x + cBGeom.radius, y: cBGeom.center.y };
+      const branch: 0 | 1 = point.branchIndex;
+      let commonName: string | undefined;
+      if (point.excludePointId) {
+        commonName = mustName(pointName, point.excludePointId);
+      } else if (branch === 1) {
+        const sibling = scene.points.find((p) => {
+          if (p.id === point.id || p.kind !== "circleCircleIntersectionPoint") return false;
+          return (
+            ((p.circleAId === point.circleAId && p.circleBId === point.circleBId) ||
+              (p.circleAId === point.circleBId && p.circleBId === point.circleAId)) &&
+            definedPointIds.has(p.id)
+          );
+        });
+        if (sibling) commonName = mustName(pointName, sibling.id);
+      }
+      let selector: { name: string; x: number; y: number } | undefined;
+      if (!commonName) {
+        const other = inferOtherCircleCircleBranchPoint(cAGeom.center, cAThrough, cBGeom.center, cBThrough, branch);
+        if (other) {
+          selector = { name: newSelectorName("CC"), x: other.x, y: other.y };
+          commonName = selector.name;
+        }
+      }
+      constructions.push({
+        kind: "InterCC",
+        name,
+        circleAO: cACenterName,
+        circleAX: cAThroughName,
+        circleBO: cBCenterName,
+        circleBX: cBThroughName,
+        branch,
+        common: commonName,
+        selector,
+      });
+      definedPointIds.add(point.id);
+    } else if (point.kind === "lineLikeIntersectionPoint") {
+      const llA = lineLikeNamesFromRef(point.objA, resolveLineAnchorsById, scene, lineById, segById, pointName, resolvePoint);
+      const llB = lineLikeNamesFromRef(point.objB, resolveLineAnchorsById, scene, lineById, segById, pointName, resolvePoint);
+      if (!llA || !llB) {
+        throw new Error(
+          `Unsupported intersection construction for point ${point.name}: ${point.objA.type}-${point.objB.type}`
+        );
+      }
+      constructions.push({
+        kind: "InterLL",
+        name,
+        a1: llA.a,
+        a2: llA.b,
+        b1: llB.a,
+        b2: llB.b,
+      });
+      definedPointIds.add(point.id);
     } else if (point.kind === "intersectionPoint") {
       const llA = lineLikeNamesFromRef(point.objA, resolveLineAnchorsById, scene, lineById, segById, pointName, resolvePoint);
       const llB = lineLikeNamesFromRef(point.objB, resolveLineAnchorsById, scene, lineById, segById, pointName, resolvePoint);
@@ -836,6 +992,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
   const setupUnits = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupUnits" }> => c.kind === "SetupUnits");
   const setupViewport = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupViewport" }> => c.kind === "SetupViewport");
   const setupLine = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLine" }> => c.kind === "SetupLine");
+  const clipRect = cmds.find((c): c is Extract<TikzCommand, { kind: "ClipRect" }> => c.kind === "ClipRect");
   const pointsDefs = cmds.filter((c) => c.kind === "DefPoints");
   const pointDefs = cmds.filter((c) => c.kind === "DefPoint");
   const constructions = cmds.filter(
@@ -844,6 +1001,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
       c.kind !== "SetupUnits" &&
       c.kind !== "SetupViewport" &&
       c.kind !== "SetupLine" &&
+      c.kind !== "ClipRect" &&
       c.kind !== "DrawSegment" &&
       c.kind !== "MarkSegment" &&
       c.kind !== "DrawRaw" &&
@@ -900,6 +1058,9 @@ export function renderTikz(cmds: TikzCommand[]): string {
   if (setupLine) {
     assertTkzMacro("tkzSetUpLine");
     out.push(`\\tkzSetUpLine[add=${fmt(setupLine.addLeft)} and ${fmt(setupLine.addRight)}]`);
+  }
+  if (clipRect) {
+    out.push(`\\clip (${fmt(clipRect.xmin)},${fmt(clipRect.ymin)}) rectangle (${fmt(clipRect.xmax)},${fmt(clipRect.ymax)});`);
   }
 
   // Emit predefined styles used by tkzDrawPoints[...] commands.
@@ -1208,6 +1369,7 @@ function inferLineCircleBranchFromWorld(
   center: { x: number; y: number },
   through: { x: number; y: number }
 ): 0 | 1 {
+  if (point.branchIndex === 0 || point.branchIndex === 1) return point.branchIndex;
   const radius = distance(center, through);
   const branches = lineCircleIntersectionBranches(a, b, center, radius);
   if (branches.length < 2) return 0;
@@ -1244,6 +1406,7 @@ function inferCircleCircleBranch(
   bCenter: { x: number; y: number },
   bThrough: { x: number; y: number }
 ): 0 | 1 {
+  if (point.branchIndex === 0 || point.branchIndex === 1) return point.branchIndex;
   const ra = distance(aCenter, aThrough);
   const rb = distance(bCenter, bThrough);
   const intersections = circleCircleIntersections(aCenter, ra, bCenter, rb);
@@ -1507,6 +1670,13 @@ function collectLineRelevantPointIds(
     }
     if (
       point.kind === "intersectionPoint" &&
+      ((point.objA.type === "line" && point.objA.id === line.id) || (point.objB.type === "line" && point.objB.id === line.id))
+    ) {
+      pushPoint(point.id, getPointWorldPosCached(scene, point.id));
+      continue;
+    }
+    if (
+      point.kind === "lineLikeIntersectionPoint" &&
       ((point.objA.type === "line" && point.objA.id === line.id) || (point.objB.type === "line" && point.objB.id === line.id))
     ) {
       pushPoint(point.id, getPointWorldPosCached(scene, point.id));

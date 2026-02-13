@@ -12,6 +12,8 @@ type ExportPanelProps = {
 export function ExportPanel({ visible }: ExportPanelProps) {
   const scene = useGeoStore((store) => store.scene);
   const camera = useGeoStore((store) => store.camera);
+  const exportClipRectWorld = useGeoStore((store) => store.exportClipRectWorld);
+  const clearExportClipRectWorld = useGeoStore((store) => store.clearExportClipRectWorld);
 
   const [tikzText, setTikzText] = useState("");
   const [jsonText, setJsonText] = useState("");
@@ -19,6 +21,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [jsonCopied, setJsonCopied] = useState(false);
   const [includeWorldInJson, setIncludeWorldInJson] = useState(false);
   const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
+  const [exportUseClipSelection, setExportUseClipSelection] = useState(false);
   const [exportMatchCanvas, setExportMatchCanvas] = useState(true);
   const [exportLabelGlow, setExportLabelGlow] = useState(true);
   const [exportGlobalScale, setExportGlobalScale] = useState("1");
@@ -28,7 +31,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [lastTikzOptionSig, setLastTikzOptionSig] = useState("");
   const [lastTikzGeneratedAt, setLastTikzGeneratedAt] = useState<number | null>(null);
 
-  const currentTikzOptionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
+  const currentTikzOptionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${exportClipRectWorld ? `${exportClipRectWorld.xmin},${exportClipRectWorld.xmax},${exportClipRectWorld.ymin},${exportClipRectWorld.ymax}` : "none"}`;
   const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
   const tikzStatusText = useMemo(
     () =>
@@ -45,11 +48,13 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       const pointScale = Number(exportPointScale);
       const lineScale = Number(exportLineScale);
       const globalScale = Number(exportGlobalScale);
-      const optionSig = `${exportUseCurrentView}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}`;
+      const optionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${exportClipRectWorld ? `${exportClipRectWorld.xmin},${exportClipRectWorld.xmax},${exportClipRectWorld.ymin},${exportClipRectWorld.ymax}` : "none"}`;
       const viewport = exportUseCurrentView ? getViewportFromCanvas(camera) : undefined;
+      const clipRect = exportUseClipSelection ? exportClipRectWorld ?? undefined : undefined;
       setTikzText(
         exportTikzWithOptions(scene, {
           viewport,
+          clipRectWorld: clipRect,
           worldToTikzScale: Number.isFinite(globalScale) ? globalScale : 1,
           pointScale: Number.isFinite(pointScale) ? pointScale : 1,
           lineScale: (Number.isFinite(lineScale) ? lineScale : 1) * (0.5 / 1.2),
@@ -66,6 +71,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
           angleArcSizeScale: 1,
           rightAngleStrokeScale: 0.5 / 1.1,
           rightAngleSizeScale: 0.5 / 0.65,
+          autoScaleToFitCm: { maxWidthCm: 14, maxHeightCm: 9 },
         })
       );
       setLastTikzSceneRef(scene);
@@ -129,6 +135,22 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             />
             Use current camera viewport
           </label>
+          <label className="checkboxRow">
+            <input
+              type="checkbox"
+              checked={exportUseClipSelection}
+              onChange={(e) => setExportUseClipSelection(e.target.checked)}
+              disabled={!exportClipRectWorld}
+            />
+            Use Export Clip selection
+          </label>
+          {exportClipRectWorld && (
+            <div className="actionsRow">
+              <button className="actionButton secondary" onClick={clearExportClipRectWorld}>
+                Clear clip selection
+              </button>
+            </div>
+          )}
           <label className="checkboxRow">
             <input
               type="checkbox"

@@ -17,6 +17,8 @@ export function createUiActions(
   | "setAngleFixedTool"
   | "setCircleFixedTool"
   | "setDependencyGlowEnabled"
+  | "setExportClipRectWorld"
+  | "clearExportClipRectWorld"
 > {
   return {
     setPointDefaults(next) {
@@ -93,6 +95,20 @@ export function createUiActions(
       ctx.setState((prev) => ({
         ...prev,
         dependencyGlowEnabled: enabled,
+      }));
+    },
+
+    setExportClipRectWorld(rect) {
+      ctx.setState((prev) => ({
+        ...prev,
+        exportClipRectWorld: rect,
+      }));
+    },
+
+    clearExportClipRectWorld() {
+      ctx.setState((prev) => ({
+        ...prev,
+        exportClipRectWorld: null,
       }));
     },
   };

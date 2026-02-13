@@ -1,5 +1,5 @@
 import { normalizeSceneIntegrity } from "../../domain/sceneIntegrity";
-import { resolveIntersectionBranchIndex } from "../../domain/intersectionReuse";
+import { resolveIntersectionBranchIndexInScene } from "../../domain/intersectionReuse";
 import type { GeoState } from "./storeTypes";
 import type { HistorySnapshot } from "./historySlice";
 
@@ -11,12 +11,7 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
       if (point.kind !== "intersectionPoint" || point.branchIndex === 0 || point.branchIndex === 1) {
         return point;
       }
-      const branchIndex = resolveIntersectionBranchIndex(
-        { scene: normalizedScene, pointDefaults: prev.pointDefaults },
-        point.objA,
-        point.objB,
-        point.preferredWorld
-      );
+      const branchIndex = resolveIntersectionBranchIndexInScene(normalizedScene, point.objA, point.objB, point.preferredWorld);
       if (branchIndex === null) return point;
       return { ...point, branchIndex };
     }),
@@ -43,6 +38,7 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     angleDefaults: snapshot.angleDefaults,
     angleFixedTool: snapshot.angleFixedTool,
     circleFixedTool: snapshot.circleFixedTool,
+    exportClipRectWorld: snapshot.exportClipRectWorld ?? null,
     copyStyle: snapshot.copyStyle,
   };
 }

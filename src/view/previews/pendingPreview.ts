@@ -73,6 +73,30 @@ export function drawPendingPreview(
     ctx.stroke();
   };
 
+  if (pendingSelection.tool === "export_clip" && pendingSelection.step === 2 && cursorWorld) {
+    const a = pendingSelection.first.world;
+    const minX = Math.min(a.x, cursorWorld.x);
+    const maxX = Math.max(a.x, cursorWorld.x);
+    const minY = Math.min(a.y, cursorWorld.y);
+    const maxY = Math.max(a.y, cursorWorld.y);
+    const pMin = camMath.worldToScreen({ x: minX, y: minY }, camera, vp);
+    const pMax = camMath.worldToScreen({ x: maxX, y: maxY }, camera, vp);
+    const x = Math.min(pMin.x, pMax.x);
+    const y = Math.min(pMin.y, pMax.y);
+    const w = Math.abs(pMax.x - pMin.x);
+    const h = Math.abs(pMax.y - pMin.y);
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = "#0ea5e9";
+    ctx.fillStyle = "rgba(14,165,233,0.08)";
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
   if (p1 && (pendingSelection.tool === "segment" || pendingSelection.tool === "midpoint") && cursorWorld) {
     const p2 = camMath.worldToScreen(cursorWorld, camera, vp);
     ctx.beginPath();
@@ -308,7 +332,7 @@ export function drawPendingPreview(
         ctx.fillStyle = "#0284c7";
         ctx.font = "12px system-ui";
         const deg = (theta * 180) / Math.PI;
-        ctx.fillText(`${deg.toFixed(2)}°`, lx, ly);
+        ctx.fillText(`${formatPreviewAngleDegrees(deg)}°`, lx, ly);
         ctx.restore();
       }
     }
@@ -462,4 +486,12 @@ export function drawPendingPreview(
   }
 
   ctx.restore();
+}
+
+function formatPreviewAngleDegrees(degRaw: number): string {
+  if (!Number.isFinite(degRaw)) return "0";
+  const deg = ((degRaw % 360) + 360) % 360;
+  const nearest5 = Math.round(deg / 5) * 5;
+  if (Math.abs(deg - nearest5) <= 1e-3) return String(nearest5);
+  return deg.toFixed(2);
 }

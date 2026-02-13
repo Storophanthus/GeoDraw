@@ -7,6 +7,7 @@ type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
+  exportClipStartedOnDown: boolean;
   lastX: number;
   lastY: number;
   startX: number;
@@ -42,6 +43,7 @@ type MoveDecision = {
 type CreatePointerHandlersDeps = {
   canvas: HTMLCanvasElement;
   activeTool: string;
+  pendingSelection: { tool: string } | null;
   pointerRef: PointerStateRef;
   dragFrameRef: DragFrameRef;
   dragBuffers: DragBufferAccess;
@@ -73,7 +75,38 @@ type CreatePointerHandlersDeps = {
 };
 
 export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
+  let hoverRafId: number | null = null;
+  let pendingHover: { screen: Vec2; shiftKey: boolean } | null = null;
+
+  const flushHoverUpdate = () => {
+    hoverRafId = null;
+    if (!pendingHover) return;
+    const { screen, shiftKey } = pendingHover;
+    pendingHover = null;
+    deps.setHoverScreen(screen);
+    deps.setSnapDisabled(shiftKey);
+    deps.setCursorWorldFromScreen(screen);
+    const hovered = deps.computeHoveredHit(screen);
+    deps.setHoveredHit(hovered);
+    deps.applyCursor(hovered);
+  };
+
+  const scheduleHoverUpdate = (screen: Vec2, shiftKey: boolean) => {
+    pendingHover = { screen, shiftKey };
+    if (hoverRafId !== null) return;
+    hoverRafId = window.requestAnimationFrame(flushHoverUpdate);
+  };
+
+  const cancelPendingHoverUpdate = () => {
+    pendingHover = null;
+    if (hoverRafId !== null) {
+      cancelAnimationFrame(hoverRafId);
+      hoverRafId = null;
+    }
+  };
+
   const onDown = (e: PointerEvent) => {
+    cancelPendingHoverUpdate();
     const screen = deps.readScreen(e);
     deps.setHoverScreen(screen);
     deps.setSnapDisabled(e.shiftKey);
@@ -84,6 +117,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
 
     let mode: PointerMode = "idle";
     let pointId: string | null = null;
+    let exportClipStartedOnDown = false;
 
     if (deps.activeTool === "move") {
       const decision = deps.decideMovePointerDown(hits);
@@ -92,6 +126,10 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       deps.setSelectedObject(decision.selectedObject);
     } else {
       mode = "tool-click";
+      if (deps.activeTool === "export_clip" && (!deps.pendingSelection || deps.pendingSelection.tool !== "export_clip")) {
+        deps.onToolClickRelease(screen, e);
+        exportClipStartedOnDown = true;
+      }
     }
 
     deps.canvas.setPointerCapture(e.pointerId);
@@ -100,6 +138,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pid: e.pointerId,
       mode,
       pointId,
+      exportClipStartedOnDown,
       lastX: e.clientX,
       lastY: e.clientY,
       startX: e.clientX,
@@ -130,12 +169,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       return;
     }
 
-    deps.setHoverScreen(screen);
-    deps.setSnapDisabled(e.shiftKey);
-    deps.setCursorWorldFromScreen(screen);
-    const hovered = deps.computeHoveredHit(screen);
-    deps.setHoveredHit(hovered);
-    deps.applyCursor(hovered);
+    scheduleHoverUpdate(screen, e.shiftKey);
 
     if (!st.active || st.pid !== e.pointerId) return;
 
@@ -162,9 +196,19 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
     }
     deps.flushDragUpdate();
 
-    if (st.mode === "tool-click" && !st.moved) {
-      const screen = deps.readScreen(e);
-      deps.onToolClickRelease(screen, e);
+    if (st.mode === "tool-click" && (!st.moved || deps.activeTool === "export_clip")) {
+      if (deps.activeTool === "export_clip") {
+        const shouldFinalize =
+          (!st.exportClipStartedOnDown && deps.pendingSelection?.tool === "export_clip")
+          || (st.exportClipStartedOnDown && st.moved);
+        if (shouldFinalize) {
+          const screen = deps.readScreen(e);
+          deps.onToolClickRelease(screen, e);
+        }
+      } else {
+        const screen = deps.readScreen(e);
+        deps.onToolClickRelease(screen, e);
+      }
     }
 
     deps.pointerRef.current = {
@@ -172,6 +216,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pid: -1,
       mode: "idle",
       pointId: null,
+      exportClipStartedOnDown: false,
       lastX: 0,
       lastY: 0,
       startX: 0,
@@ -179,6 +224,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       moved: false,
     };
     resetDragBuffers(deps.dragBuffers);
+    cancelPendingHoverUpdate();
     deps.setSnapDisabled(e.shiftKey);
     const screen = deps.readScreen(e);
     const hovered = deps.computeHoveredHit(screen);
@@ -186,7 +232,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
     deps.applyCursor(hovered);
   };
 
-  return { onDown, onMove, finish };
+  return { onDown, onMove, finish, cancelPendingHoverUpdate };
 }
 
 type CreateCanvasAuxHandlersDeps = {

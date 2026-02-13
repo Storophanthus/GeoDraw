@@ -31,6 +31,7 @@ export type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
+  exportClipStartedOnDown: boolean;
   lastX: number;
   lastY: number;
   startX: number;
@@ -178,9 +179,10 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       dragAngleLabelScreenRef: dragBuffers.dragAngleLabelScreenRef,
     });
 
-    const { onDown, onMove, finish } = createPointerHandlers({
+    const { onDown, onMove, finish, cancelPendingHoverUpdate } = createPointerHandlers({
       canvas,
       activeTool,
+      pendingSelection,
       pointerRef,
       dragFrameRef: dragBuffers.dragFrameRef,
       dragBuffers: dragBufferAccess,
@@ -247,6 +249,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     });
 
     return () => {
+      cancelPendingHoverUpdate();
       if (dragBuffers.dragFrameRef.current !== null) {
         cancelAnimationFrame(dragBuffers.dragFrameRef.current);
         dragBuffers.dragFrameRef.current = null;

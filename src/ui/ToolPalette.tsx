@@ -15,6 +15,7 @@ import {
   IconCircleCenterPoint,
   IconCircleRadius,
   IconCopyStyle,
+  IconExportClip,
   IconLine,
   IconMidpoint,
   IconMove,
@@ -43,6 +44,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   move: { icon: IconMove, tooltip: "Move / Select (V)", ariaLabel: "Move tool" },
   point: { icon: IconPoint, tooltip: "Point (P)", ariaLabel: "Point tool" },
   copyStyle: { icon: IconCopyStyle, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
+  export_clip: { icon: IconExportClip, tooltip: "Export Clip Rectangle", ariaLabel: "Export clip tool" },
   midpoint: { icon: IconMidpoint, tooltip: "Midpoint (M)", ariaLabel: "Midpoint tool" },
   segment: { icon: IconSegment, tooltip: "Segment (S)", ariaLabel: "Segment tool" },
   line2p: { icon: IconLine, tooltip: "Line Through 2 Points (L)", ariaLabel: "Line tool" },
@@ -64,7 +66,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "CIRCLES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector"] },
-  { id: "styles", label: "STYLES", tools: ["copyStyle"] },
+  { id: "styles", label: "STYLES", tools: ["copyStyle", "export_clip"] },
 ];
 
 const LONG_PRESS_MS = 250;
