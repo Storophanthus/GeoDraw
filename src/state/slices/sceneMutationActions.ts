@@ -2,6 +2,7 @@ import type { Vec2 } from "../../geo/vec2";
 import { projectPointToCircle, projectPointToLine, projectPointToSegment } from "../../geo/geometry";
 import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos, type AngleStyle, type CircleStyle, type LineStyle, type PointStyle, type SceneModel } from "../../scene/points";
 import { applyDeletion, collectCascadeDelete, isSelectedObjectAlive } from "../../domain/geometryGraph";
+import { rebuildRightAngleProvenance } from "../../domain/rightAngleProvenance";
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
 
@@ -216,16 +217,17 @@ export function createSceneMutationActions({
     updateSelectedAngleStyle(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "angle") return prev;
+        const selectedAngleId = prev.selectedObject.id;
         return {
           ...prev,
           scene: {
             ...prev.scene,
             angles: prev.scene.angles.map((angle) =>
-              angle.id === prev.selectedObject!.id ? { ...angle, style: { ...angle.style, ...next } } : angle
+              angle.id === selectedAngleId ? { ...angle, style: { ...angle.style, ...next } } : angle
             ),
           },
         };
-      });
+      }, { history: "coalesce", actionKey: "updateSelectedAngleStyle" });
     },
 
     updateSelectedSegmentFields(next) {
@@ -293,6 +295,7 @@ export function createSceneMutationActions({
         if (!prev.selectedObject) return prev;
         const deleted = collectCascadeDelete(prev.scene, prev.selectedObject);
         const nextScene = applyDeletion(prev.scene, deleted);
+        rebuildRightAngleProvenance(nextScene);
         return {
           ...prev,
           scene: nextScene,

@@ -147,6 +147,9 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
   if (kind === "pointOnSegment") {
     return { ...base, kind: "pointOnSegment", segId: String(def.segId), u: Number(def.u) };
   }
+  if (kind === "circleCenter") {
+    return { ...base, kind: "circleCenter", circleId: String(def.circleId) };
+  }
   if (kind === "midpointPoints") {
     return { ...base, kind: "midpointPoints", aId: String(def.aId), bId: String(def.bId) };
   }
@@ -161,6 +164,35 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
       lineId: String(def.lineId),
       branchIndex: Number(def.branchIndex) === 1 ? 1 : 0,
       excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
+    };
+  }
+  if (kind === "circleSegmentIntersectionPoint") {
+    return {
+      ...base,
+      kind: "circleSegmentIntersectionPoint",
+      circleId: String(def.circleId),
+      segId: String(def.segId),
+      branchIndex: Number(def.branchIndex) === 1 ? 1 : 0,
+      excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
+    };
+  }
+  if (kind === "circleCircleIntersectionPoint") {
+    return {
+      ...base,
+      kind: "circleCircleIntersectionPoint",
+      circleAId: String(def.circleAId),
+      circleBId: String(def.circleBId),
+      branchIndex: Number(def.branchIndex) === 1 ? 1 : 0,
+      excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
+    };
+  }
+  if (kind === "lineLikeIntersectionPoint") {
+    return {
+      ...base,
+      kind: "lineLikeIntersectionPoint",
+      objA: def.objA as { type: "line" | "segment"; id: string },
+      objB: def.objB as { type: "line" | "segment"; id: string },
+      preferredWorld: def.preferredWorld as { x: number; y: number },
     };
   }
   if (kind === "intersectionPoint") {
@@ -492,6 +524,20 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (exportError) throw exportError;
     if (!tikz.includes("\\tkzMarkRightAngles")) {
       throw new Error("Expected intersection-vertex right-angle fixture to emit \\tkzMarkRightAngles.");
+    }
+  }
+
+  if (fileName === "angle-right-exact-linelike-vertex.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected lineLike-vertex right-angle fixture to emit \\tkzMarkRightAngles.");
+    }
+  }
+
+  if (fileName === "angle-right-exact-tangent-centerpoint.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected tangent-centerpoint right-angle fixture to emit \\tkzMarkRightAngles.");
     }
   }
 

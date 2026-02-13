@@ -13,13 +13,13 @@ type PairEntry = {
   segmentId?: string;
 };
 
+// Map<"minId|maxId", PairEntry>
 const pairIndex = new Map<string, PairEntry>();
 const reverseLinePair = new Map<string, string>();
 const reverseSegmentPair = new Map<string, string>();
+// Map<"type:id", Set<"type:id">>
 const perpendicularAdj = new Map<string, Set<string>>();
-// Approx-right is a visual hint only; keep this practical so
-// construction-derived near-right angles can be classified as "approx".
-// Exact-right still requires explicit provenance.
+// Use practical epsilon for visual hints (approx-right), not machine epsilon.
 const APPROX_RIGHT_EPS = 1e-2;
 
 export type AngleRightStatus = "none" | "approx" | "exact";
@@ -148,38 +148,56 @@ export function arePerpendicularByProvenance(a: LineLikeObjectRef, b: LineLikeOb
 }
 
 function resolveRaySupport(scene: SceneModel, vertexId: string, otherId: string): LineLikeObjectRef | null {
-  const other = scene.points.find((point) => point.id === otherId) as ScenePoint | undefined;
-  if (other?.kind === "pointOnLine") return { type: "line", id: other.lineId };
-  if (other?.kind === "pointOnSegment") return { type: "segment", id: other.segId };
   const vertex = scene.points.find((point) => point.id === vertexId) as ScenePoint | undefined;
-  if (vertex?.kind === "intersectionPoint") {
+  if (vertex && (vertex.kind === "intersectionPoint" || vertex.kind === "lineLikeIntersectionPoint")) {
     const refs: LineLikeObjectRef[] = [];
     if (vertex.objA.type === "line" || vertex.objA.type === "segment") refs.push(vertex.objA);
     if (vertex.objB.type === "line" || vertex.objB.type === "segment") refs.push(vertex.objB);
+
+    // Optimization: Check isPointOnLineLike directly for candidates
     for (const ref of refs) {
       if (isPointOnLineLike(scene, otherId, ref)) return ref;
     }
   }
+
+  // Prefer explicit support defined by the selected angle ray (vertex, other).
+  // This avoids picking an unrelated host line from pointOnLine/pointOnSegment.
   const entry = pairIndex.get(pairKey(vertexId, otherId));
-  if (!entry) return null;
-  if (entry.lineId) return { type: "line", id: entry.lineId };
-  if (entry.segmentId) return { type: "segment", id: entry.segmentId };
+  if (entry?.lineId) return { type: "line", id: entry.lineId };
+  if (entry?.segmentId) return { type: "segment", id: entry.segmentId };
+
+  const other = scene.points.find((point) => point.id === otherId) as ScenePoint | undefined;
+  if (other?.kind === "pointOnLine") return { type: "line", id: other.lineId };
+  if (other?.kind === "pointOnSegment") return { type: "segment", id: other.segId };
+
   return null;
 }
 
 export function isRightExactByProvenance(scene: SceneModel, aId: string, bId: string, cId: string): boolean {
-  // Tangent-radius exact right at a tangency point:
-  // if vertex B is a circle-line intersection on a tangent line to that circle,
-  // and one ray goes to the circle center while the other ray follows tangent line,
-  // then the angle is exact right by construction.
+  const isCenterPointForCircle = (pointId: string, circleId: string): boolean =>
+    getCanonicalCircleCenterPointIds(scene, circleId).has(pointId);
+
+  // Tangent-radius exact right at a tangency point: vertex is tangent's through-point.
+  // Works for twoPoint/fixedRadius circles and threePoint circles when a circle-center point is used.
+  for (const line of scene.lines) {
+    if (line.kind !== "tangent" || line.throughId !== bId) continue;
+    const aIsCenter = isCenterPointForCircle(aId, line.circleId);
+    const cIsCenter = isCenterPointForCircle(cId, line.circleId);
+    if (!aIsCenter && !cIsCenter) continue;
+    const tangentRayPointId = aIsCenter ? cId : aId;
+    if (isPointOnLineLike(scene, tangentRayPointId, { type: "line", id: line.id })) {
+      return true;
+    }
+  }
+
+  // Backward-compatible tangent-radius exact rule for circle-line intersection vertices.
+  // Uses the same canonical center-point resolver across all circle kinds.
   const vertex = scene.points.find((p) => p.id === bId);
   if (vertex?.kind === "circleLineIntersectionPoint") {
     const tangentLine = scene.lines.find((line) => line.id === vertex.lineId);
-    const circle = scene.circles.find((item) => item.id === vertex.circleId);
-    if (tangentLine?.kind === "tangent" && circle && circle.kind !== "threePoint") {
-      const centerId = circle.centerId;
-      const aIsCenter = aId === centerId;
-      const cIsCenter = cId === centerId;
+    if (tangentLine?.kind === "tangent") {
+      const aIsCenter = isCenterPointForCircle(aId, vertex.circleId);
+      const cIsCenter = isCenterPointForCircle(cId, vertex.circleId);
       if (aIsCenter || cIsCenter) {
         const tangentRayPointId = aIsCenter ? cId : aId;
         if (isPointOnLineLike(scene, tangentRayPointId, { type: "line", id: tangentLine.id })) {
@@ -292,4 +310,16 @@ function lineLikePointPair(scene: SceneModel, ref: LineLikeObjectRef): { aId: st
   const line = scene.lines.find((item) => item.id === ref.id);
   if (!line || line.kind !== "twoPoint") return null;
   return { aId: line.aId, bId: line.bId };
+}
+
+function getCanonicalCircleCenterPointIds(scene: SceneModel, circleId: string): Set<string> {
+  const ids = new Set<string>();
+  const circle = scene.circles.find((item) => item.id === circleId);
+  if (!circle) return ids;
+  if (circle.kind === "twoPoint" || circle.kind === "fixedRadius") ids.add(circle.centerId);
+  for (let i = 0; i < scene.points.length; i += 1) {
+    const point = scene.points[i];
+    if (point.kind === "circleCenter" && point.circleId === circleId) ids.add(point.id);
+  }
+  return ids;
 }

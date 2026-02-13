@@ -1,7 +1,13 @@
 import type { Vec2 } from "../../geo/vec2";
 import type { SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
-import { drawAngleArcPreview, drawAngleSector, drawRightAngleMark, drawRightAngleSquareFill } from "../angleRender";
+import {
+  computeRightMarkSizePx,
+  drawAngleArcPreview,
+  drawAngleSector,
+  drawRightAngleMark,
+  drawRightAngleSquareFill,
+} from "../angleRender";
 import { resolveCanvasFillStyle } from "../patternFill";
 import type { DrawableObjectSelection } from "./types";
 
@@ -41,6 +47,7 @@ export function drawAngles(
       | "rightSquare"
       | "rightArcDot";
     const markSizePx = Math.max(3, (angle.style.markSize ?? 4) * camera.zoom * 0.06);
+    const rightMarkSizePx = computeRightMarkSizePx(radiusPx, mapStrokeWidth(angle.style.strokeWidth));
 
     ctx.save();
     if (angle.style.fillEnabled && angle.style.fillOpacity > 0) {
@@ -52,7 +59,7 @@ export function drawAngles(
         angle.style.patternColor
       );
       if (rightSolid && resolvedMarkStyle === "rightSquare") {
-        drawRightAngleSquareFill(ctx, as, bs, cs, radiusPx * 0.55);
+        drawRightAngleSquareFill(ctx, as, bs, cs, rightMarkSizePx);
       } else {
         drawAngleSector(ctx, as, bs, entry.theta, radiusPx);
       }
@@ -75,7 +82,7 @@ export function drawAngles(
       ctx.stroke();
     } else if (resolvedMarkStyle !== "none") {
       if (rightLike && resolvedMarkStyle === "rightSquare") {
-        drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.55);
+        drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx);
         ctx.stroke();
       } else {
         drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
@@ -115,7 +122,7 @@ export function drawAngles(
         ctx.stroke();
       } else if (resolvedMarkStyle !== "none") {
         if (rightLike && resolvedMarkStyle === "rightSquare") {
-          drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.63);
+          drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx + 2);
           ctx.stroke();
         } else {
           drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);

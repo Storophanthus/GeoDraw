@@ -9,6 +9,7 @@ import {
   type ScenePoint,
 } from "../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
+import { computeRightMarkSizePx } from "../view/angleRender";
 import type { Vec2 } from "../geo/vec2";
 
 export type EngineHit =
@@ -195,7 +196,10 @@ export function hitTestAngleId(
     const arcDistance = distanceToAngleArc(screenPoint, as, bs, entry.theta, r, sectorPickupRatio);
     const d =
       right && markStyle === "rightSquare"
-        ? Math.min(distanceToRightAngleMark(screenPoint, as, bs, cs, r * 0.55), arcDistance)
+        ? Math.min(
+            distanceToRightAngleMark(screenPoint, as, bs, cs, computeRightMarkSizePx(r, entry.angle.style.strokeWidth)),
+            arcDistance
+          )
         : arcDistance;
     if (d <= best) {
       best = d;

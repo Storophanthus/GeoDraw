@@ -10,7 +10,7 @@ import { geoStoreHelpers } from "../state/geoStore";
 import type { ActiveTool, HoveredHit, PendingSelection } from "../state/geoStore";
 import type { Camera } from "./camera";
 import { camera as camMath, type Viewport } from "./camera";
-import { drawAngleArcPreview } from "./angleRender";
+import { computeRightMarkSizePx, drawAngleArcPreview } from "./angleRender";
 
 const ANGLE_STROKE_RENDER_SCALE = 3.25 / 1.8;
 
@@ -208,7 +208,8 @@ function drawHitHighlight(
     const rawMarkStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
     const markStyle = right && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle;
     if (right && markStyle === "rightSquare") {
-      drawRightAngleHighlight(ctx, as, bs, camMath.worldToScreen(c, camera, vp), radiusPx * 0.55);
+      const markSize = computeRightMarkSizePx(radiusPx, getAngleStrokeRenderWidth(angle.style.strokeWidth));
+      drawRightAngleHighlight(ctx, as, bs, camMath.worldToScreen(c, camera, vp), markSize);
     } else {
       drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
     }
