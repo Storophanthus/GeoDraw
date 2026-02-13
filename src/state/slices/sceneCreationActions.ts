@@ -54,6 +54,7 @@ export function createSceneCreationActions(
   | "createPointOnLine"
   | "createPointOnSegment"
   | "createPointOnCircle"
+  | "createPointByRotation"
   | "createIntersectionPoint"
   | "createNumber"
 > {
@@ -285,6 +286,56 @@ export function createSceneCreationActions(
       return createdId;
     },
 
+    createPointByRotation(centerId, basePointId, angleDeg, direction, angleExpr) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        if (!Number.isFinite(angleDeg)) return prev;
+        const center = prev.scene.points.find((item) => item.id === centerId);
+        const base = prev.scene.points.find((item) => item.id === basePointId);
+        if (!center || !base) return prev;
+        const centerWorld = getPointWorldPos(center, prev.scene);
+        const baseWorld = getPointWorldPos(base, prev.scene);
+        if (!centerWorld || !baseWorld) return prev;
+        if (Math.hypot(baseWorld.x - centerWorld.x, baseWorld.y - centerWorld.y) <= 1e-12) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "pointByRotation",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: "name" as ShowLabelMode,
+                locked: false,
+                auxiliary: false,
+                centerId,
+                pointId: basePointId,
+                angleDeg,
+                angleExpr,
+                direction,
+                radiusMode: "keep",
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
     createIntersectionPoint(objA, objB, preferredWorld) {
       let createdId: string | null = null;
       ctx.setState((prev) => {
@@ -301,19 +352,91 @@ export function createSceneCreationActions(
         const id = `p_${prev.nextPointId}`;
         createdId = id;
         const lineCircle = ctx.getLineCircleRefs(objA, objB);
+        const segmentCircle =
+          (objA.type === "segment" && objB.type === "circle")
+            ? { segId: objA.id, circleId: objB.id }
+            : (objA.type === "circle" && objB.type === "segment")
+              ? { segId: objB.id, circleId: objA.id }
+              : null;
+        const circleCircle =
+          (objA.type === "circle" && objB.type === "circle")
+            ? { circleAId: objA.id, circleBId: objB.id }
+            : null;
+        const lineLikeLike =
+          ((objA.type === "line" || objA.type === "segment") && (objB.type === "line" || objB.type === "segment"))
+            ? { objA, objB }
+            : null;
         const lineCirclePoint =
           lineCircle &&
           ctx.createStableLineCircleIntersectionPoint(id, lineCircle.lineId, lineCircle.circleId, preferredWorld, prev);
         const genericBranchIndex = lineCirclePoint
           ? undefined
           : ctx.resolveIntersectionBranchIndex(prev, objA, objB, preferredWorld) ?? undefined;
+        const segmentCircleBranch: 0 | 1 = genericBranchIndex === 1 ? 1 : 0;
+        const segmentCirclePoint = !lineCirclePoint && segmentCircle
+          ? {
+              id,
+              kind: "circleSegmentIntersectionPoint" as const,
+              name,
+              captionTex: name,
+              visible: true,
+              showLabel: "name" as ShowLabelMode,
+              locked: true,
+              auxiliary: true,
+              circleId: segmentCircle.circleId,
+              segId: segmentCircle.segId,
+              branchIndex: segmentCircleBranch,
+              style: {
+                ...prev.pointDefaults,
+                labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+              },
+            }
+          : null;
+        const circleCirclePoint = !lineCirclePoint && !segmentCirclePoint && circleCircle
+          ? {
+              id,
+              kind: "circleCircleIntersectionPoint" as const,
+              name,
+              captionTex: name,
+              visible: true,
+              showLabel: "name" as ShowLabelMode,
+              locked: true,
+              auxiliary: true,
+              circleAId: circleCircle.circleAId,
+              circleBId: circleCircle.circleBId,
+              branchIndex: segmentCircleBranch,
+              style: {
+                ...prev.pointDefaults,
+                labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+              },
+            }
+          : null;
+        const lineLikePoint = !lineCirclePoint && !segmentCirclePoint && !circleCirclePoint && lineLikeLike
+          ? {
+              id,
+              kind: "lineLikeIntersectionPoint" as const,
+              name,
+              captionTex: name,
+              visible: true,
+              showLabel: "name" as ShowLabelMode,
+              locked: true,
+              auxiliary: true,
+              objA: lineLikeLike.objA,
+              objB: lineLikeLike.objB,
+              preferredWorld,
+              style: {
+                ...prev.pointDefaults,
+                labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+              },
+            }
+          : null;
         return {
           ...prev,
           scene: {
             ...prev.scene,
             points: [
               ...prev.scene.points,
-              lineCirclePoint ?? {
+              lineCirclePoint ?? segmentCirclePoint ?? circleCirclePoint ?? lineLikePoint ?? {
                 id,
                 kind: "intersectionPoint",
                 name,

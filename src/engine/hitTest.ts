@@ -189,7 +189,10 @@ export function hitTestAngleId(
     const as = camMath.worldToScreen(entry.a, camera, vp);
     const bs = camMath.worldToScreen(entry.b, camera, vp);
     const cs = camMath.worldToScreen(entry.c, camera, vp);
-    const r = Math.max(12, entry.angle.style.arcRadius * camera.zoom);
+    const r =
+      entry.angle.kind === "sector"
+        ? Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y))
+        : Math.max(12, entry.angle.style.arcRadius * camera.zoom);
     const right = Boolean(entry.angle.isRightExact) || Boolean(entry.angle.isRightApprox);
     const rawMarkStyle = entry.angle.style.markStyle === "right" ? "rightSquare" : entry.angle.style.markStyle;
     const markStyle = right && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle;

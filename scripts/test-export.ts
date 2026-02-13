@@ -439,6 +439,13 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "sector-constrained-endpoint.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefPointBy[rotation=center")) {
+      throw new Error("Expected sector constrained-endpoint fixture to emit pointByRotation construction.");
+    }
+  }
+
   if (fileName === "regression-line-coverage-j-o.json") {
     if (!/\\tkzInterLL\(F,G\)\(E,D\)\s+\\tkzGetPoint\{J\}/.test(tikz)) {
       throw new Error("Regression: expected J to be defined from InterLL(F,G)(E,D).");

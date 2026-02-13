@@ -34,8 +34,10 @@ export function drawAngles(
     const as = camMath.worldToScreen(a, camera, vp);
     const bs = camMath.worldToScreen(b, camera, vp);
     const cs = camMath.worldToScreen(c, camera, vp);
-    const radiusPx = Math.max(12, angle.style.arcRadius * camera.zoom);
     const isSector = angle.kind === "sector";
+    const radiusPx = isSector
+      ? Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y))
+      : Math.max(12, angle.style.arcRadius * camera.zoom);
     const rightExact = Boolean(angle.isRightExact);
     const rightApprox = !rightExact && Boolean(angle.isRightApprox);
     const rightLike = rightExact || rightApprox;

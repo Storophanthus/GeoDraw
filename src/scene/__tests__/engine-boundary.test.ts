@@ -149,6 +149,9 @@ constructFromClick({
     createPointOnCircle() {
       return null;
     },
+    createPointByRotation() {
+      return null;
+    },
     createIntersectionPoint() {
       return null;
     },

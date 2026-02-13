@@ -193,7 +193,10 @@ function drawHitHighlight(
     if (!a || !b || !c) return;
     const as = camMath.worldToScreen(a, camera, vp);
     const bs = camMath.worldToScreen(b, camera, vp);
-    const radiusPx = Math.max(16, angle.style.arcRadius * camera.zoom);
+    const radiusPx =
+      angle.kind === "sector"
+        ? Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y))
+        : Math.max(16, angle.style.arcRadius * camera.zoom);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;

@@ -38,6 +38,13 @@ export type ToolClickIO = {
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number) => string | null;
+  createPointByRotation: (
+    centerId: string,
+    basePointId: string,
+    angleDeg: number,
+    direction: "CCW" | "CW",
+    angleExpr?: string
+  ) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipRectWorld: (rect: { xmin: number; xmax: number; ymin: number; ymax: number } | null) => void;
@@ -233,21 +240,27 @@ export function handleToolClick(
       io.setPendingSelection({ tool: "sector", step: 3, first: pendingSelection.first, second: { type: "point", id: aId } });
       return;
     }
-    let endId: string | null = hits.hitPointId;
-    if (!endId) {
-      const center = io.getPointWorldById(pendingSelection.first.id);
-      const start = io.getPointWorldById(pendingSelection.second.id);
-      const cursorWorld = camMath.screenToWorld(screen, io.camera, io.vp);
-      if (!center || !start) return;
-      const vx = cursorWorld.x - center.x;
-      const vy = cursorWorld.y - center.y;
-      const d = Math.hypot(vx, vy);
-      const r = Math.hypot(start.x - center.x, start.y - center.y);
-      if (!Number.isFinite(r) || r <= 1e-12) return;
-      const ux = d <= 1e-12 ? (start.x - center.x) / r : vx / d;
-      const uy = d <= 1e-12 ? (start.y - center.y) / r : vy / d;
-      endId = io.createFreePoint({ x: center.x + ux * r, y: center.y + uy * r });
-    }
+    const center = io.getPointWorldById(pendingSelection.first.id);
+    const start = io.getPointWorldById(pendingSelection.second.id);
+    if (!center || !start) return;
+    const pickedWorld =
+      (hits.hitPointId ? io.getPointWorldById(hits.hitPointId) : null) ?? camMath.screenToWorld(screen, io.camera, io.vp);
+    if (!pickedWorld) return;
+    const vx = pickedWorld.x - center.x;
+    const vy = pickedWorld.y - center.y;
+    const d = Math.hypot(vx, vy);
+    const r = Math.hypot(start.x - center.x, start.y - center.y);
+    if (!Number.isFinite(r) || r <= 1e-12) return;
+    const ux = d <= 1e-12 ? (start.x - center.x) / r : vx / d;
+    const uy = d <= 1e-12 ? (start.y - center.y) / r : vy / d;
+    const endOnCircle = { x: center.x + ux * r, y: center.y + uy * r };
+    const startAng = Math.atan2(start.y - center.y, start.x - center.x);
+    const endAng = Math.atan2(endOnCircle.y - center.y, endOnCircle.x - center.x);
+    let delta = endAng - startAng;
+    while (delta < 0) delta += Math.PI * 2;
+    while (delta >= Math.PI * 2) delta -= Math.PI * 2;
+    const angleDeg = (delta * 180) / Math.PI;
+    const endId = io.createPointByRotation(pendingSelection.first.id, pendingSelection.second.id, angleDeg, "CCW");
     if (!endId) return;
     const created = io.createSector(pendingSelection.first.id, pendingSelection.second.id, endId);
     if (!created) return;
