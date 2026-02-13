@@ -25,6 +25,9 @@
   - Snapshot export includes `intersectionPoint.definition.branchIndex`.
   - Restore path backfills missing `branchIndex` where deterministically resolvable.
   - Added regression test: branch index must override misleading preferred seed for generic two-root intersections.
+  - Added mixed-scene regression coverage to enforce branch persistence (`0/1`) under drag for:
+    - segment-circle generic two-root intersections
+    - circle-circle generic two-root intersections
 - Debug visibility track added:
   - Export panel has `Include evaluated world coords (debug)` for Model JSON.
   - New export path emits `debugPointWorld` with runtime-evaluated coordinates per point.
@@ -126,13 +129,77 @@
 - Current right-angle fallback policy:
   - provenance first (exact construction relation),
   - then deterministic numeric fallback at high precision (`eps=1e-16`) for unresolved legacy/imported cases.
+- Performance optimization and handoff integrity fixes (Completed):
+  - `rightAngleProvenance.ts` now uses `Map`/`Set` for O(1) lookups (linear scan removed).
+  - `SceneEvalContext` now caches resolved line anchors and circle geometry per-tick.
+  - Geometry adapters (`resolveLineAnchors`, `getCircleWorldGeometry`) use this cache to eliminate redundant ops.
+  - Verified benchmarks: ~0.47ms/tick on dense 52-node scene.
+  - `APPROX_RIGHT_EPS` reverted to `1e-2` (visual/practical hints) to fix strictness regression.
+  - `FileControls.tsx` now enforces structural validation on import (fail-closed).
+  - `historyActions.ts` `loadSnapshot` fixed to prevent double-undo entry creation.
+- Semantic intersection hardening (checkpoint):
+  - Added `resolveIntersectionBranchIndexInScene(scene, objA, objB, preferredWorld)` in `src/domain/intersectionReuse.ts`.
+  - `normalizeSceneIntegrity` now backfills missing `intersectionPoint.branchIndex` for two-root generic intersections.
+  - Export branch inference now prefers explicit `intersectionPoint.branchIndex` when present (line-circle and circle-circle), using `preferredWorld` only as fallback.
+  - Added regression: `testNormalizeBackfillsMissingGenericBranchIndex` in `src/scene/__tests__/intersection-ownership-regression.test.ts`.
+- Semantic intersections (checkpoint 3):
+  - New point kind: `circleSegmentIntersectionPoint` for deterministic segment-circle intersections.
+  - `createIntersectionPoint` now emits `circleSegmentIntersectionPoint` for `(segment,circle)` object pairs.
+  - Eval pipeline supports the new kind (`pointEvalDispatch` + pair assignment resolution).
+  - Integrity/dependency layers now track the new kind:
+    - `normalizeSceneIntegrity` validates circle/segment refs and exclude-point refs.
+    - `geometryGraph` dependency edges include circle+segment parents.
+  - Export supports the new semantic kind directly (mapped to `InterLC` with segment endpoints as line anchors).
+  - Model snapshot export supports new definition kind:
+    - `circleSegmentIntersectionPoint` in `constructionSnapshot`.
+  - Added export regression fixture:
+    - `src/export/__fixtures__/circle-segment-intersection-semantic.json`.
+- Semantic intersections (checkpoint 4):
+  - New point kind: `circleCircleIntersectionPoint` for deterministic circle-circle intersections.
+  - `createIntersectionPoint` now emits this semantic kind for `(circle,circle)` object pairs.
+  - Eval pipeline supports the new kind (`pointEvalDispatch` + generic pair assignment resolution by explicit circle IDs).
+  - Integrity/dependency layers now track the new kind:
+    - `normalizeSceneIntegrity` validates both circle refs + exclude-point refs.
+    - `geometryGraph` dependency edges include both circles.
+  - Export supports the new semantic kind directly (mapped to `InterCC` with explicit `branchIndex` semantics).
+  - Snapshot export + diagnostics/test fixture hydration support the new kind.
+  - Added export regression fixture:
+    - `src/export/__fixtures__/circle-circle-intersection-semantic.json`.
+- Semantic intersections (checkpoint 5):
+  - New point kind: `lineLikeIntersectionPoint` for deterministic intersections between:
+    - line-line
+    - line-segment
+    - segment-segment
+  - `createIntersectionPoint` now emits this semantic kind for line-like pairs instead of generic `intersectionPoint`.
+  - Eval pipeline supports the new kind via generic pair assignment with explicit line-like refs.
+  - Integrity/dependency/export/snapshot/diagnostics support added.
+  - Added export regression fixture:
+    - `src/export/__fixtures__/line-like-intersection-semantic.json`.
+- Semantic branch indexing generalized for generic intersections:
+  - `intersectionPoint.branchIndex` now supports non-binary indices (`number`), not just `0|1`.
+  - `resolveIntersectionBranchIndexInScene` now selects nearest branch across **all** resolved roots.
+  - Generic assignment now handles `N` roots deterministically (not truncated to first two roots).
+  - Scene normalization/restore now treat any non-negative integer `branchIndex` as explicit.
+  - Snapshot/test hydration updated to preserve non-binary branch indices.
+- Scene regression coverage (semantic kinds):
+  - Added semantic drag/persistence tests in `src/scene/__tests__/intersection-ownership-regression.test.ts`:
+    - `testCircleSegmentSemanticBranchPersistenceUnderDrag`
+    - `testCircleCircleSemanticBranchPersistenceUnderDrag`
+    - `testLineLikeSemanticIntersectionTracksGeometryUnderDrag`
+  - Note: `npm run test:scene` remains blocked in this sandbox due `tsx` IPC `EPERM`, but code compiles and export harness remains green.
+
 
 ## Active Work (Open)
 - Active homework focus (correctness-first):
-  1. Complete semantic branch coverage for all relevant two-root intersection workflows.
-  2. Keep `preferredWorld` as seed only; rely on explicit branch semantics where available.
-  3. Validate on dense construction scenes and guard against regressions.
+  1. Keep `preferredWorld` as seed only; rely on explicit branch semantics where available.
+  2. Validate on dense construction scenes and guard against regressions.
 - Performance track is secondary and must not alter intersection semantics.
+- Closed decision (do not reopen unless concrete failing file is provided):
+  - Legacy migration/backfill for pre-branchIndex snapshots is already implemented and active.
+  - Implementation locations:
+    - `src/domain/sceneIntegrity.ts` (normalization backfill)
+    - `src/state/slices/historyRestore.ts` (restore/load backfill)
+  - Policy: do not re-discuss or re-scope this item without a reproducible failing scene file.
 - Command Bar Phase 2 candidates:
   - optional overwrite semantics (`set`, `:=`, `let`, `del`) if desired.
   - parametric dependencies (Phase 3) where objects depend on scalars dynamically.
@@ -895,3 +962,27 @@ When starting a new chat, provide:
 ## Risks / Constraints
 - “Real perpendicular” is provenance-based only. Visually perpendicular free-point angles are intentionally not certified.
 - Pair-index relies on explicit constructions (`line/segment` endpoints or constrained point-on-line/segment).
+
+## Latest Done (Sector Arc Intersections)
+- Added sector as a valid `GeometryObjectRef` (`{ type: "angle", id }`) for intersection workflows.
+- Implemented boundary-only sector support in intersection evaluation:
+  - supported now: `line/segment ∩ sector-arc`
+  - explicitly not supported: sector interior intersections.
+- Wired sector-arc into runtime geometry adapters/resolvers:
+  - `asSectorArcWithOps` / `asSectorArcWithCtx` / `asSectorArcInScene`
+  - intersection query path now filters line-circle roots by sector sweep.
+- Wired sector-arc into snap intersection candidates:
+  - point tool can now create intersection points between line-like objects and sector arcs.
+- Added dependency/integrity support for intersection points referencing sectors:
+  - graph key mapping for `GeometryObjectRef.type === "angle"`
+  - integrity liveness check for sector refs.
+- Added scene regression coverage:
+  - `testLineSectorArcIntersectionTracksBoundary` in `src/scene/__tests__/intersection-ownership-regression.test.ts`.
+
+## Sector Intersection Notes
+- Sector intersection semantics are boundary-only and currently arc-focused.
+- Radial-edge boundary intersections (with BA/BC rays/segments) are not included in this phase.
+- Sector tool endpoint constraint fix:
+  - Step-3 no longer creates `pointByRotation` for the third sector point.
+  - It now creates a `pointOnCircle` constrained to a hidden auxiliary two-point circle `(center=startVertex, through=sectorStartPoint)`.
+  - This keeps the endpoint draggable on the locus and preserves radius coupling when the start point moves.

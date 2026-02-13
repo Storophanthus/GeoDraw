@@ -11,6 +11,7 @@ import {
   getLineWorldAnchors,
   getPointWorldPos,
   nextLabelFromIndex,
+  computeOrientedAngleRad,
   type GeometryObjectRef,
   type SceneModel,
   type ScenePoint,
@@ -24,6 +25,7 @@ export type SceneCreationStateLike = {
 
 type LineLikeGeom = { a: Vec2; b: Vec2; finite: boolean };
 type CircleGeom = { center: Vec2; radius: number };
+type SectorArcGeom = { center: Vec2; radius: number; start: number; sweep: number };
 
 export function getLineCircleRefs(
   objA: GeometryObjectRef,
@@ -34,6 +36,19 @@ export function getLineCircleRefs(
   }
   if (objA.type === "circle" && objB.type === "line") {
     return { lineId: objB.id, circleId: objA.id };
+  }
+  return null;
+}
+
+export function getSegmentCircleRefs(
+  objA: GeometryObjectRef,
+  objB: GeometryObjectRef
+): { segId: string; circleId: string } | null {
+  if (objA.type === "segment" && objB.type === "circle") {
+    return { segId: objA.id, circleId: objB.id };
+  }
+  if (objA.type === "circle" && objB.type === "segment") {
+    return { segId: objB.id, circleId: objA.id };
   }
   return null;
 }
@@ -141,6 +156,28 @@ export function findExistingIntersectionPointId(
     if (!world) continue;
     if (distance(world, preferredWorld) > EPS) continue;
 
+    if (!lineCircle && point.kind === "circleSegmentIntersectionPoint") {
+      if (
+        (objA.type === "segment" && objB.type === "circle" && point.segId === objA.id && point.circleId === objB.id) ||
+        (objA.type === "circle" && objB.type === "segment" && point.segId === objB.id && point.circleId === objA.id)
+      ) {
+        return point.id;
+      }
+    }
+    if (!lineCircle && point.kind === "circleCircleIntersectionPoint") {
+      if (
+        objA.type === "circle" &&
+        objB.type === "circle" &&
+        ((point.circleAId === objA.id && point.circleBId === objB.id) ||
+          (point.circleAId === objB.id && point.circleBId === objA.id))
+      ) {
+        return point.id;
+      }
+    }
+    if (!lineCircle && point.kind === "lineLikeIntersectionPoint") {
+      if (sameObjectPair(point.objA, point.objB, objA, objB)) return point.id;
+    }
+
     if (lineCircle && point.kind === "circleLineIntersectionPoint") {
       if (point.lineId === lineCircle.lineId && point.circleId === lineCircle.circleId) {
         return point.id;
@@ -164,12 +201,28 @@ export function resolveIntersectionBranchIndex(
   objA: GeometryObjectRef,
   objB: GeometryObjectRef,
   preferredWorld: Vec2
-): 0 | 1 | null {
-  const intersections = resolveObjectIntersections(state, objA, objB);
+): number | null {
+  return resolveIntersectionBranchIndexInScene(state.scene, objA, objB, preferredWorld);
+}
+
+export function resolveIntersectionBranchIndexInScene(
+  scene: SceneModel,
+  objA: GeometryObjectRef,
+  objB: GeometryObjectRef,
+  preferredWorld: Vec2
+): number | null {
+  const intersections = resolveObjectIntersections(scene, objA, objB);
   if (intersections.length < 2) return null;
-  const d0 = distance(intersections[0], preferredWorld);
-  const d1 = distance(intersections[1], preferredWorld);
-  return d1 < d0 ? 1 : 0;
+  let best = 0;
+  let bestD = distance(intersections[0], preferredWorld);
+  for (let i = 1; i < intersections.length; i += 1) {
+    const d = distance(intersections[i], preferredWorld);
+    if (d < bestD) {
+      best = i;
+      bestD = d;
+    }
+  }
+  return best;
 }
 
 function resolveLineCircleTarget(
@@ -239,12 +292,12 @@ function getLineEndpointPointIds(line: SceneModel["lines"][number]): [string | n
 }
 
 function resolveObjectIntersections(
-  state: SceneCreationStateLike,
+  scene: SceneModel,
   objA: GeometryObjectRef,
   objB: GeometryObjectRef
 ): Vec2[] {
-  const la = asLineLike(state, objA);
-  const lb = asLineLike(state, objB);
+  const la = asLineLike(scene, objA);
+  const lb = asLineLike(scene, objB);
   if (la && lb) {
     const p = lineLineIntersection(la.a, la.b, lb.a, lb.b);
     if (!p) return [];
@@ -252,56 +305,145 @@ function resolveObjectIntersections(
     return [p];
   }
 
-  const ca = asCircle(state, objA);
-  const cb = asCircle(state, objB);
+  const ca = asCircle(scene, objA);
+  const cb = asCircle(scene, objB);
+  const sa = asSectorArc(scene, objA);
+  const sb = asSectorArc(scene, objB);
   if (la && cb) {
     return lineCircleIntersections(la.a, la.b, cb.center, cb.radius).filter((p) => lineLikeContainsPoint(la, p));
   }
   if (lb && ca) {
     return lineCircleIntersections(lb.a, lb.b, ca.center, ca.radius).filter((p) => lineLikeContainsPoint(lb, p));
   }
+  if (la && sb) {
+    return lineSectorBoundaryIntersections(la, sb);
+  }
+  if (lb && sa) {
+    return lineSectorBoundaryIntersections(lb, sa);
+  }
   if (ca && cb) return circleCircleIntersections(ca.center, ca.radius, cb.center, cb.radius);
   return [];
 }
 
-function asLineLike(state: SceneCreationStateLike, ref: GeometryObjectRef): LineLikeGeom | null {
+function asLineLike(scene: SceneModel, ref: GeometryObjectRef): LineLikeGeom | null {
   if (ref.type === "line") {
-    const line = state.scene.lines.find((item) => item.id === ref.id);
+    const line = scene.lines.find((item) => item.id === ref.id);
     if (!line) return null;
-    const anchors = getLineWorldAnchors(line, state.scene);
+    const anchors = getLineWorldAnchors(line, scene);
     if (!anchors) return null;
     return { a: anchors.a, b: anchors.b, finite: false };
   }
   if (ref.type === "segment") {
-    const seg = state.scene.segments.find((item) => item.id === ref.id);
+    const seg = scene.segments.find((item) => item.id === ref.id);
     if (!seg) return null;
-    const aPoint = state.scene.points.find((item) => item.id === seg.aId);
-    const bPoint = state.scene.points.find((item) => item.id === seg.bId);
+    const aPoint = scene.points.find((item) => item.id === seg.aId);
+    const bPoint = scene.points.find((item) => item.id === seg.bId);
     if (!aPoint || !bPoint) return null;
-    const a = getPointWorldPos(aPoint, state.scene);
-    const b = getPointWorldPos(bPoint, state.scene);
+    const a = getPointWorldPos(aPoint, scene);
+    const b = getPointWorldPos(bPoint, scene);
     if (!a || !b) return null;
     return { a, b, finite: true };
   }
   return null;
 }
 
-function asCircle(state: SceneCreationStateLike, ref: GeometryObjectRef): CircleGeom | null {
+function asCircle(scene: SceneModel, ref: GeometryObjectRef): CircleGeom | null {
   if (ref.type !== "circle") return null;
-  const circle = state.scene.circles.find((item) => item.id === ref.id);
+  const circle = scene.circles.find((item) => item.id === ref.id);
   if (!circle) return null;
-  return getCircleWorldGeometry(circle, state.scene);
+  return getCircleWorldGeometry(circle, scene);
+}
+
+function asSectorArc(scene: SceneModel, ref: GeometryObjectRef): SectorArcGeom | null {
+  if (ref.type !== "angle") return null;
+  const angle = scene.angles.find((item) => item.id === ref.id);
+  if (!angle || angle.kind !== "sector") return null;
+  const aPoint = scene.points.find((item) => item.id === angle.aId);
+  const bPoint = scene.points.find((item) => item.id === angle.bId);
+  const cPoint = scene.points.find((item) => item.id === angle.cId);
+  if (!aPoint || !bPoint || !cPoint) return null;
+  const a = getPointWorldPos(aPoint, scene);
+  const b = getPointWorldPos(bPoint, scene);
+  const c = getPointWorldPos(cPoint, scene);
+  if (!a || !b || !c) return null;
+  const radius = distance(a, b);
+  if (!Number.isFinite(radius) || radius <= 1e-12) return null;
+  const sweep = computeOrientedAngleRad(a, b, c);
+  if (sweep === null) return null;
+  return {
+    center: b,
+    radius,
+    start: Math.atan2(a.y - b.y, a.x - b.x),
+    sweep,
+  };
 }
 
 function lineLikeContainsPoint(lineLike: LineLikeGeom, p: Vec2): boolean {
   if (!lineLike.finite) return true;
+  return pointWithinSegmentDomain(p, lineLike.a, lineLike.b);
+}
+
+function pointWithinSegmentDomain(p: Vec2, a: Vec2, b: Vec2): boolean {
   const EPS = 1e-6;
-  const dx = lineLike.b.x - lineLike.a.x;
-  const dy = lineLike.b.y - lineLike.a.y;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
   const dd = dx * dx + dy * dy;
-  if (dd <= EPS * EPS) return distance(p, lineLike.a) <= EPS;
-  const ux = p.x - lineLike.a.x;
-  const uy = p.y - lineLike.a.y;
+  if (dd <= EPS * EPS) return distance(p, a) <= EPS;
+  const ux = p.x - a.x;
+  const uy = p.y - a.y;
   const u = (ux * dx + uy * dy) / dd;
   return u >= -EPS && u <= 1 + EPS;
+}
+
+function pointOnSectorArc(p: Vec2, arc: SectorArcGeom): boolean {
+  const full = Math.PI * 2;
+  const normalize = (v: number) => {
+    let out = v % full;
+    if (out < 0) out += full;
+    return out;
+  };
+  const theta = Math.atan2(p.y - arc.center.y, p.x - arc.center.x);
+  const d = normalize(theta - arc.start);
+  const sweep = normalize(arc.sweep);
+  const eps = 1e-6;
+  return d <= sweep + eps;
+}
+
+function lineSectorBoundaryIntersections(line: LineLikeGeom, sector: SectorArcGeom): Vec2[] {
+  const out: Vec2[] = [];
+  const pushUnique = (p: Vec2) => {
+    const eps = 1e-6;
+    for (const q of out) {
+      if (distance(p, q) <= eps) return;
+    }
+    out.push(p);
+  };
+
+  const arcHits = lineCircleIntersections(line.a, line.b, sector.center, sector.radius);
+  for (const p of arcHits) {
+    if (!lineLikeContainsPoint(line, p) || !pointOnSectorArc(p, sector)) continue;
+    pushUnique(p);
+  }
+
+  const startPoint = {
+    x: sector.center.x + sector.radius * Math.cos(sector.start),
+    y: sector.center.y + sector.radius * Math.sin(sector.start),
+  };
+  const endAngle = sector.start + sector.sweep;
+  const endPoint = {
+    x: sector.center.x + sector.radius * Math.cos(endAngle),
+    y: sector.center.y + sector.radius * Math.sin(endAngle),
+  };
+
+  const sideStartHit = lineLineIntersection(line.a, line.b, sector.center, startPoint);
+  if (sideStartHit && lineLikeContainsPoint(line, sideStartHit) && pointWithinSegmentDomain(sideStartHit, sector.center, startPoint)) {
+    pushUnique(sideStartHit);
+  }
+
+  const sideEndHit = lineLineIntersection(line.a, line.b, sector.center, endPoint);
+  if (sideEndHit && lineLikeContainsPoint(line, sideEndHit) && pointWithinSegmentDomain(sideEndHit, sector.center, endPoint)) {
+    pushUnique(sideEndHit);
+  }
+
+  return out;
 }

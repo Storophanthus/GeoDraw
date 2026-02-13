@@ -196,12 +196,13 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
     };
   }
   if (kind === "intersectionPoint") {
+    const parsedBranch = Number(def.branchIndex);
     return {
       ...base,
       kind: "intersectionPoint",
       objA: def.objA as GeometryObjectRef,
       objB: def.objB as GeometryObjectRef,
-      branchIndex: Number(def.branchIndex) === 1 ? 1 : Number(def.branchIndex) === 0 ? 0 : undefined,
+      branchIndex: Number.isInteger(parsedBranch) && parsedBranch >= 0 ? parsedBranch : undefined,
       preferredWorld: def.preferredWorld as { x: number; y: number },
       excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
     };
@@ -441,8 +442,22 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "sector-constrained-endpoint.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\tkzDefPointBy[rotation=center")) {
-      throw new Error("Expected sector constrained-endpoint fixture to emit pointByRotation construction.");
+    if (!tikz.includes("\\tkzDefPointOnCircle")) {
+      throw new Error("Expected sector constrained-endpoint fixture to emit pointOnCircle construction.");
+    }
+  }
+
+  if (fileName === "sector-line-intersection-export.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefPoint")) {
+      throw new Error("Expected sector-line intersection fixture to define explicit point coordinates.");
+    }
+    const hasNamedPointI =
+      /\\tkzDefPoint\([^)]*\)\{I\}/.test(tikz) ||
+      /\\tkzDefPoints\{[^}]*\/I(?:,|})/.test(tikz) ||
+      /\\tkzGetPoint\{I\}/.test(tikz);
+    if (!hasNamedPointI) {
+      throw new Error("Expected sector-line intersection fixture to define point I (direct or via tkzGetPoint).");
     }
   }
 
@@ -708,6 +723,19 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("pattern={Lines[angle=45,distance=4pt]}")) {
       throw new Error("Expected patterns-meta fixture to emit pattern={...} style.");
+    }
+  }
+
+  if (fileName === "sector-pattern-fill.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\usetikzlibrary{patterns}")) {
+      throw new Error("Expected sector pattern fixture to emit \\usetikzlibrary{patterns}.");
+    }
+    if (!tikz.includes("pattern=north east lines")) {
+      throw new Error("Expected sector pattern fixture to emit pattern option.");
+    }
+    if (!tikz.includes("pattern color=")) {
+      throw new Error("Expected sector pattern fixture to emit pattern color option.");
     }
   }
 

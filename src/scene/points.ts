@@ -20,6 +20,7 @@ import { evalNumberByIdWithCtxInScene } from "./eval/numberEvaluators";
 import {
   asCircleWithCtx,
   asLineLikeWithCtx,
+  asSectorArcWithCtx,
   buildGeometryResolveOpsWithCtx,
   getCircleWorldGeometryWithCtxInScene,
   resolveLineAnchorsWithCtx,
@@ -268,7 +269,8 @@ export type CircleCenterPoint = {
 export type GeometryObjectRef =
   | { type: "line"; id: string }
   | { type: "segment"; id: string }
-  | { type: "circle"; id: string };
+  | { type: "circle"; id: string }
+  | { type: "angle"; id: string };
 
 export type LineLikeObjectRef = { type: "line"; id: string } | { type: "segment"; id: string };
 
@@ -283,11 +285,26 @@ export type IntersectionPoint = {
   auxiliary?: boolean;
   objA: GeometryObjectRef;
   objB: GeometryObjectRef;
-  // Optional explicit branch for two-root intersections. When set, evaluation
-  // uses this branch deterministically instead of preferredWorld heuristics.
-  branchIndex?: 0 | 1;
+  // Optional explicit branch index. When set, evaluation uses this branch
+  // deterministically instead of preferredWorld heuristics.
+  branchIndex?: number;
   preferredWorld: Vec2;
   excludePointId?: string;
+  style: PointStyle;
+};
+
+export type LineLikeIntersectionPoint = {
+  id: string;
+  kind: "lineLikeIntersectionPoint";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  objA: LineLikeObjectRef;
+  objB: LineLikeObjectRef;
+  preferredWorld: Vec2;
   style: PointStyle;
 };
 
@@ -307,6 +324,38 @@ export type CircleLineIntersectionPoint = {
   style: PointStyle;
 };
 
+export type CircleSegmentIntersectionPoint = {
+  id: string;
+  kind: "circleSegmentIntersectionPoint";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  circleId: string;
+  segId: string;
+  branchIndex: 0 | 1;
+  excludePointId?: string;
+  style: PointStyle;
+};
+
+export type CircleCircleIntersectionPoint = {
+  id: string;
+  kind: "circleCircleIntersectionPoint";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  circleAId: string;
+  circleBId: string;
+  branchIndex: 0 | 1;
+  excludePointId?: string;
+  style: PointStyle;
+};
+
 export type ScenePoint =
   | FreePoint
   | MidpointFromPoints
@@ -317,7 +366,10 @@ export type ScenePoint =
   | PointByRotation
   | CircleCenterPoint
   | IntersectionPoint
-  | CircleLineIntersectionPoint;
+  | LineLikeIntersectionPoint
+  | CircleLineIntersectionPoint
+  | CircleSegmentIntersectionPoint
+  | CircleCircleIntersectionPoint;
 
 export type SceneSegment = {
   id: string;
@@ -568,6 +620,7 @@ function objectIntersections(
   return objectIntersectionsWithOps(a, b, {
     asLineLike: (ref) => asLineLike(ref, scene, ctx),
     asCircle: (ref) => asCircle(ref, scene, ctx),
+    asSectorArc: (ref) => asSectorArc(ref, scene, ctx),
     onLineLineCall: () => {
       ctx.stats.lineLineCalls += 1;
     },
@@ -612,6 +665,14 @@ function asCircle(
   ctx: SceneEvalContext
 ): { center: Vec2; radius: number } | null {
   return asCircleWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
+}
+
+function asSectorArc(
+  ref: GeometryObjectRef,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): { center: Vec2; radius: number; start: number; sweep: number } | null {
+  return asSectorArcWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
 }
 
 function getCircleWorldGeometryWithCtx(

@@ -30,7 +30,7 @@ export type SnapshotPointDefinition =
       kind: "intersectionPoint";
       objA: SnapshotObjectRef;
       objB: SnapshotObjectRef;
-      branchIndex?: 0 | 1;
+      branchIndex?: number;
       preferredWorld: { x: number; y: number };
     }
   | {
@@ -39,6 +39,26 @@ export type SnapshotPointDefinition =
       lineId: string;
       branchIndex: 0 | 1;
       excludePointId?: string;
+    }
+  | {
+      kind: "circleSegmentIntersectionPoint";
+      circleId: string;
+      segId: string;
+      branchIndex: 0 | 1;
+      excludePointId?: string;
+    }
+  | {
+      kind: "circleCircleIntersectionPoint";
+      circleAId: string;
+      circleBId: string;
+      branchIndex: 0 | 1;
+      excludePointId?: string;
+    }
+  | {
+      kind: "lineLikeIntersectionPoint";
+      objA: { type: "line" | "segment"; id: string };
+      objB: { type: "line" | "segment"; id: string };
+      preferredWorld: { x: number; y: number };
     };
 
 export type SnapshotPoint = {
@@ -307,6 +327,35 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
       excludePointId: point.excludePointId,
     };
   }
+  if (point.kind === "circleSegmentIntersectionPoint") {
+    return {
+      kind: "circleSegmentIntersectionPoint",
+      circleId: point.circleId,
+      segId: point.segId,
+      branchIndex: point.branchIndex,
+      excludePointId: point.excludePointId,
+    };
+  }
+  if (point.kind === "circleCircleIntersectionPoint") {
+    return {
+      kind: "circleCircleIntersectionPoint",
+      circleAId: point.circleAId,
+      circleBId: point.circleBId,
+      branchIndex: point.branchIndex,
+      excludePointId: point.excludePointId,
+    };
+  }
+  if (point.kind === "lineLikeIntersectionPoint") {
+    return {
+      kind: "lineLikeIntersectionPoint",
+      objA: point.objA,
+      objB: point.objB,
+      preferredWorld: {
+        x: point.preferredWorld.x,
+        y: point.preferredWorld.y,
+      },
+    };
+  }
   return {
     kind: "intersectionPoint",
     objA: point.objA,
@@ -332,6 +381,19 @@ function pointDependsOn(point: ScenePoint): string[] {
     const refs = [point.circleId, point.lineId];
     if (point.excludePointId) refs.push(point.excludePointId);
     return refs;
+  }
+  if (point.kind === "circleSegmentIntersectionPoint") {
+    const refs = [point.circleId, point.segId];
+    if (point.excludePointId) refs.push(point.excludePointId);
+    return refs;
+  }
+  if (point.kind === "circleCircleIntersectionPoint") {
+    const refs = [point.circleAId, point.circleBId];
+    if (point.excludePointId) refs.push(point.excludePointId);
+    return refs;
+  }
+  if (point.kind === "lineLikeIntersectionPoint") {
+    return [objectRefKey(point.objA), objectRefKey(point.objB)];
   }
   return [objectRefKey(point.objA), objectRefKey(point.objB)];
 }

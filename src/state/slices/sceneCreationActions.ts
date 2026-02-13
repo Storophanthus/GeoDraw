@@ -27,7 +27,7 @@ type SceneCreationContext = {
     objA: GeometryObjectRef,
     objB: GeometryObjectRef,
     preferredWorld: Vec2
-  ) => 0 | 1 | null;
+  ) => number | null;
   isValidNumberDefinition: (def: SceneNumberDefinition, scene: SceneModel) => boolean;
   numberPrefixForDefinition: (def: SceneNumberDefinition) => string;
   nextAvailableNumberName: (usedNames: Set<string>, prefix: string) => string;
@@ -48,6 +48,7 @@ export function createSceneCreationActions(
   ctx: SceneCreationContext
 ): Pick<
   GeoActions,
+  | "createAuxiliaryCircle"
   | "createCircle"
   | "createCircleThreePoint"
   | "createCircleFixedRadius"
@@ -59,6 +60,47 @@ export function createSceneCreationActions(
   | "createNumber"
 > {
   return {
+    createAuxiliaryCircle(centerId, throughId) {
+      if (centerId === throughId) return null;
+      let id: string | null = null;
+      ctx.setState((prev) => {
+        const c = prev.scene.points.find((p) => p.id === centerId);
+        const t = prev.scene.points.find((p) => p.id === throughId);
+        if (!c || !t) return prev;
+        const existing = prev.scene.circles.find(
+          (circle) =>
+            circle.kind === "twoPoint" &&
+            circle.centerId === centerId &&
+            circle.throughId === throughId &&
+            circle.visible === false
+        );
+        if (existing) {
+          id = existing.id;
+          return prev;
+        }
+        id = `c_${prev.nextCircleId}`;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            circles: [
+              ...prev.scene.circles,
+              {
+                id,
+                kind: "twoPoint",
+                centerId,
+                throughId,
+                visible: false,
+                style: { ...prev.circleDefaults },
+              },
+            ],
+          },
+          nextCircleId: prev.nextCircleId + 1,
+        };
+      });
+      return id;
+    },
+
     createCircle(centerId, throughId) {
       if (centerId === throughId) return null;
       let id: string | null = null;

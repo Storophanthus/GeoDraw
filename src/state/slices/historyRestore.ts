@@ -8,7 +8,10 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
   const sceneWithBranches = {
     ...normalizedScene,
     points: normalizedScene.points.map((point) => {
-      if (point.kind !== "intersectionPoint" || point.branchIndex === 0 || point.branchIndex === 1) {
+      if (
+        point.kind !== "intersectionPoint" ||
+        (Number.isInteger(point.branchIndex) && (point.branchIndex as number) >= 0)
+      ) {
         return point;
       }
       const branchIndex = resolveIntersectionBranchIndexInScene(normalizedScene, point.objA, point.objB, point.preferredWorld);

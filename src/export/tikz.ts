@@ -648,6 +648,25 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       });
       definedPointIds.add(point.id);
     } else if (point.kind === "intersectionPoint") {
+      if (point.objA.type === "angle" || point.objB.type === "angle") {
+        const world = getPointWorldPos(point, scene);
+        if (!world) {
+          visiting.delete(pointId);
+          visited.add(pointId);
+          return;
+        }
+        constructions.push({
+          kind: "DefPoint",
+          name,
+          x: world.x,
+          y: world.y,
+        });
+        definedPointIds.add(point.id);
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
+
       const llA = lineLikeNamesFromRef(point.objA, resolveLineAnchorsById, scene, lineById, segById, pointName, resolvePoint);
       const llB = lineLikeNamesFromRef(point.objB, resolveLineAnchorsById, scene, lineById, segById, pointName, resolvePoint);
       const cA = circleFromRef(point.objA, circleById);
@@ -2068,7 +2087,13 @@ function sectorFillStyleToTikz(style: SceneModel["angles"][number]["style"]): st
   if (!Number.isFinite(style.fillOpacity)) {
     throw new Error("Unsupported Angle style: fillOpacity is not finite.");
   }
-  return [`fill=${rgbColorExpr(style.fillColor)}`, `fill opacity=${fmt(clamp01(style.fillOpacity))}`].join(", ");
+  const opts: string[] = [`fill=${rgbColorExpr(style.fillColor)}`, `fill opacity=${fmt(clamp01(style.fillOpacity))}`];
+  const pattern = readPatternOption(style);
+  if (pattern) {
+    opts.push(pattern.patternExpr);
+    if (pattern.patternColorExpr) opts.push(pattern.patternColorExpr);
+  }
+  return opts.join(", ");
 }
 
 function readPatternOption(style: unknown): { patternExpr: string; patternColorExpr?: string } | null {
@@ -2085,7 +2110,10 @@ function readPatternOption(style: unknown): { patternExpr: string; patternColorE
 
   const patternColorRaw = raw.patternColor;
   if (patternColorRaw === undefined || patternColorRaw === null || patternColorRaw === "") {
-    return { patternExpr };
+    const fallbackFillColor = typeof raw.fillColor === "string" && raw.fillColor.trim() ? raw.fillColor : undefined;
+    return fallbackFillColor
+      ? { patternExpr, patternColorExpr: `pattern color=${rgbColorExpr(fallbackFillColor)}` }
+      : { patternExpr };
   }
   if (typeof patternColorRaw !== "string") {
     throw new Error("Unsupported style option: patternColor");
