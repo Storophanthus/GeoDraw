@@ -16,6 +16,7 @@ import {
   createStableLineCircleIntersectionPoint,
   findExistingIntersectionPointId,
   getLineCircleRefs,
+  resolveIntersectionBranchIndex,
 } from "../domain/intersectionReuse";
 import {
   isValidNumberDefinition,
@@ -39,6 +40,7 @@ import { createSceneRenameActions } from "./slices/sceneRenameActions";
 import { createStoreRuntime } from "./slices/storeRuntime";
 import { geoStoreHelpers } from "./geoStoreHelpers";
 import { isNameUnique } from "../scene/pointBasics";
+import { rebuildRightAngleProvenance } from "../domain/rightAngleProvenance";
 
 export type {
   ActiveTool,
@@ -52,6 +54,7 @@ export type {
   SelectedObject,
 };
 const initialState: GeoState = createInitialGeoState();
+rebuildRightAngleProvenance(initialState.scene);
 const runtime = createStoreRuntime({
   initialState,
   normalizeScene: normalizeSceneIntegrity,
@@ -77,6 +80,7 @@ const actions: GeoActions = {
     getIsRestoringHistory: runtime.history.getIsRestoringHistory,
     setIsRestoringHistory: runtime.history.setIsRestoringHistory,
     restoreFromSnapshot: restoreGeoStateFromSnapshot,
+    onSceneRestored: rebuildRightAngleProvenance,
   }),
   ...createSceneCoreActions({
     setState,
@@ -89,6 +93,7 @@ const actions: GeoActions = {
     findExistingIntersectionPointId,
     getLineCircleRefs,
     createStableLineCircleIntersectionPoint,
+    resolveIntersectionBranchIndex,
     isValidNumberDefinition,
     numberPrefixForDefinition,
     nextAvailableNumberName,
@@ -236,12 +241,12 @@ export const commandBarApi = {
   },
 };
 
-function getStore(): GeoStore {
+export function getGeoStore(): GeoStore {
   return { ...runtime.getState(), ...actions };
 }
 
 export function useGeoStore<T>(selector: (store: GeoStore) => T): T {
-  return useSyncExternalStore(runtime.subscribe, () => selector(getStore()), () => selector(getStore()));
+  return useSyncExternalStore(runtime.subscribe, () => selector(getGeoStore()), () => selector(getGeoStore()));
 }
 
 export { geoStoreHelpers };

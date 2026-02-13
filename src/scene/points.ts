@@ -283,6 +283,9 @@ export type IntersectionPoint = {
   auxiliary?: boolean;
   objA: GeometryObjectRef;
   objB: GeometryObjectRef;
+  // Optional explicit branch for two-root intersections. When set, evaluation
+  // uses this branch deterministically instead of preferredWorld heuristics.
+  branchIndex?: 0 | 1;
   preferredWorld: Vec2;
   excludePointId?: string;
   style: PointStyle;

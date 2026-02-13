@@ -1,13 +1,30 @@
 import { normalizeSceneIntegrity } from "../../domain/sceneIntegrity";
+import { resolveIntersectionBranchIndex } from "../../domain/intersectionReuse";
 import type { GeoState } from "./storeTypes";
 import type { HistorySnapshot } from "./historySlice";
 
 export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoState {
   const normalizedScene = normalizeSceneIntegrity(snapshot.scene);
+  const sceneWithBranches = {
+    ...normalizedScene,
+    points: normalizedScene.points.map((point) => {
+      if (point.kind !== "intersectionPoint" || point.branchIndex === 0 || point.branchIndex === 1) {
+        return point;
+      }
+      const branchIndex = resolveIntersectionBranchIndex(
+        { scene: normalizedScene, pointDefaults: prev.pointDefaults },
+        point.objA,
+        point.objB,
+        point.preferredWorld
+      );
+      if (branchIndex === null) return point;
+      return { ...point, branchIndex };
+    }),
+  };
   return {
     ...prev,
     activeTool: snapshot.activeTool,
-    scene: normalizedScene,
+    scene: sceneWithBranches,
     selectedObject: snapshot.selectedObject,
     recentCreatedObject: snapshot.recentCreatedObject,
     pendingSelection: null,

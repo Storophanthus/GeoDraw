@@ -13,6 +13,7 @@ export type CircleLineAssignmentPoint = {
 
 export type GenericAssignmentPoint = {
   id: string;
+  branchIndex?: 0 | 1;
   preferredWorld: Vec2;
   excludePointId?: string;
 };
@@ -174,6 +175,8 @@ export function assignGenericIntersectionPairPoints(
     const prev = ops.getPreviousStablePoint(item.id);
     if (forcedCandidate !== null) {
       primary = forcedCandidate;
+    } else if (item.branchIndex === 0 || item.branchIndex === 1) {
+      primary = item.branchIndex;
     } else if (prev) {
       const d0 = distance(root0, prev);
       const d1 = distance(root1, prev);

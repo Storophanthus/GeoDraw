@@ -22,6 +22,12 @@ type SceneCreationContext = {
     preferredWorld: Vec2,
     state: SceneCreationStateLike
   ) => ScenePoint | null;
+  resolveIntersectionBranchIndex: (
+    state: SceneCreationStateLike,
+    objA: GeometryObjectRef,
+    objB: GeometryObjectRef,
+    preferredWorld: Vec2
+  ) => 0 | 1 | null;
   isValidNumberDefinition: (def: SceneNumberDefinition, scene: SceneModel) => boolean;
   numberPrefixForDefinition: (def: SceneNumberDefinition) => string;
   nextAvailableNumberName: (usedNames: Set<string>, prefix: string) => string;
@@ -298,6 +304,9 @@ export function createSceneCreationActions(
         const lineCirclePoint =
           lineCircle &&
           ctx.createStableLineCircleIntersectionPoint(id, lineCircle.lineId, lineCircle.circleId, preferredWorld, prev);
+        const genericBranchIndex = lineCirclePoint
+          ? undefined
+          : ctx.resolveIntersectionBranchIndex(prev, objA, objB, preferredWorld) ?? undefined;
         return {
           ...prev,
           scene: {
@@ -315,6 +324,7 @@ export function createSceneCreationActions(
                 auxiliary: true,
                 objA,
                 objB,
+                branchIndex: genericBranchIndex,
                 preferredWorld,
                 style: {
                   ...prev.pointDefaults,

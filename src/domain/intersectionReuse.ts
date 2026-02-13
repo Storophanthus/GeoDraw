@@ -1,4 +1,10 @@
-import { distance, lineCircleIntersectionBranches } from "../geo/geometry";
+import {
+  circleCircleIntersections,
+  distance,
+  lineCircleIntersectionBranches,
+  lineCircleIntersections,
+  lineLineIntersection,
+} from "../geo/geometry";
 import type { Vec2 } from "../geo/vec2";
 import {
   getCircleWorldGeometry,
@@ -15,6 +21,9 @@ export type SceneCreationStateLike = {
   scene: SceneModel;
   pointDefaults: ScenePoint["style"];
 };
+
+type LineLikeGeom = { a: Vec2; b: Vec2; finite: boolean };
+type CircleGeom = { center: Vec2; radius: number };
 
 export function getLineCircleRefs(
   objA: GeometryObjectRef,
@@ -111,6 +120,7 @@ export function findExistingIntersectionPointId(
 ): string | null {
   const EPS = 1e-6;
   const lineCircle = getLineCircleRefs(objA, objB);
+  const genericBranch = lineCircle ? null : resolveIntersectionBranchIndex(state, objA, objB, preferredWorld);
 
   if (lineCircle) {
     const target = resolveLineCircleTarget(state, lineCircle.lineId, lineCircle.circleId, preferredWorld);
@@ -139,10 +149,27 @@ export function findExistingIntersectionPointId(
     }
 
     if (point.kind === "intersectionPoint" && sameObjectPair(point.objA, point.objB, objA, objB)) {
+      if (genericBranch !== null) {
+        if (point.branchIndex === genericBranch) return point.id;
+        continue;
+      }
       return point.id;
     }
   }
   return null;
+}
+
+export function resolveIntersectionBranchIndex(
+  state: SceneCreationStateLike,
+  objA: GeometryObjectRef,
+  objB: GeometryObjectRef,
+  preferredWorld: Vec2
+): 0 | 1 | null {
+  const intersections = resolveObjectIntersections(state, objA, objB);
+  if (intersections.length < 2) return null;
+  const d0 = distance(intersections[0], preferredWorld);
+  const d1 = distance(intersections[1], preferredWorld);
+  return d1 < d0 ? 1 : 0;
 }
 
 function resolveLineCircleTarget(
@@ -209,4 +236,72 @@ function getLineEndpointPointIds(line: SceneModel["lines"][number]): [string | n
   if (line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent") return [line.throughId, null];
   if (line.kind === "angleBisector") return [line.bId, null];
   return [line.aId, line.bId];
+}
+
+function resolveObjectIntersections(
+  state: SceneCreationStateLike,
+  objA: GeometryObjectRef,
+  objB: GeometryObjectRef
+): Vec2[] {
+  const la = asLineLike(state, objA);
+  const lb = asLineLike(state, objB);
+  if (la && lb) {
+    const p = lineLineIntersection(la.a, la.b, lb.a, lb.b);
+    if (!p) return [];
+    if (!lineLikeContainsPoint(la, p) || !lineLikeContainsPoint(lb, p)) return [];
+    return [p];
+  }
+
+  const ca = asCircle(state, objA);
+  const cb = asCircle(state, objB);
+  if (la && cb) {
+    return lineCircleIntersections(la.a, la.b, cb.center, cb.radius).filter((p) => lineLikeContainsPoint(la, p));
+  }
+  if (lb && ca) {
+    return lineCircleIntersections(lb.a, lb.b, ca.center, ca.radius).filter((p) => lineLikeContainsPoint(lb, p));
+  }
+  if (ca && cb) return circleCircleIntersections(ca.center, ca.radius, cb.center, cb.radius);
+  return [];
+}
+
+function asLineLike(state: SceneCreationStateLike, ref: GeometryObjectRef): LineLikeGeom | null {
+  if (ref.type === "line") {
+    const line = state.scene.lines.find((item) => item.id === ref.id);
+    if (!line) return null;
+    const anchors = getLineWorldAnchors(line, state.scene);
+    if (!anchors) return null;
+    return { a: anchors.a, b: anchors.b, finite: false };
+  }
+  if (ref.type === "segment") {
+    const seg = state.scene.segments.find((item) => item.id === ref.id);
+    if (!seg) return null;
+    const aPoint = state.scene.points.find((item) => item.id === seg.aId);
+    const bPoint = state.scene.points.find((item) => item.id === seg.bId);
+    if (!aPoint || !bPoint) return null;
+    const a = getPointWorldPos(aPoint, state.scene);
+    const b = getPointWorldPos(bPoint, state.scene);
+    if (!a || !b) return null;
+    return { a, b, finite: true };
+  }
+  return null;
+}
+
+function asCircle(state: SceneCreationStateLike, ref: GeometryObjectRef): CircleGeom | null {
+  if (ref.type !== "circle") return null;
+  const circle = state.scene.circles.find((item) => item.id === ref.id);
+  if (!circle) return null;
+  return getCircleWorldGeometry(circle, state.scene);
+}
+
+function lineLikeContainsPoint(lineLike: LineLikeGeom, p: Vec2): boolean {
+  if (!lineLike.finite) return true;
+  const EPS = 1e-6;
+  const dx = lineLike.b.x - lineLike.a.x;
+  const dy = lineLike.b.y - lineLike.a.y;
+  const dd = dx * dx + dy * dy;
+  if (dd <= EPS * EPS) return distance(p, lineLike.a) <= EPS;
+  const ux = p.x - lineLike.a.x;
+  const uy = p.y - lineLike.a.y;
+  const u = (ux * dx + uy * dy) / dd;
+  return u >= -EPS && u <= 1 + EPS;
 }

@@ -169,6 +169,7 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
       kind: "intersectionPoint",
       objA: def.objA as GeometryObjectRef,
       objB: def.objB as GeometryObjectRef,
+      branchIndex: Number(def.branchIndex) === 1 ? 1 : Number(def.branchIndex) === 0 ? 0 : undefined,
       preferredWorld: def.preferredWorld as { x: number; y: number },
       excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
     };

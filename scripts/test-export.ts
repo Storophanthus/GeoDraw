@@ -169,6 +169,7 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
       kind: "intersectionPoint",
       objA: def.objA as GeometryObjectRef,
       objB: def.objB as GeometryObjectRef,
+      branchIndex: Number(def.branchIndex) === 1 ? 1 : Number(def.branchIndex) === 0 ? 0 : undefined,
       preferredWorld: def.preferredWorld as { x: number; y: number },
       excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
     };
@@ -296,6 +297,7 @@ function hydrateAngle(raw: Record<string, unknown>): SceneAngle {
     aId: String(raw.aId),
     bId: String(raw.bId),
     cId: String(raw.cId),
+    isRightExact: typeof raw.isRightExact === "boolean" ? raw.isRightExact : undefined,
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
     style,
   };
@@ -405,8 +407,6 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
-  if (exportError) throw exportError;
-
   if (fileName === "regression-line-coverage-j-o.json") {
     if (!/\\tkzInterLL\(F,G\)\(E,D\)\s+\\tkzGetPoint\{J\}/.test(tikz)) {
       throw new Error("Regression: expected J to be defined from InterLL(F,G)(E,D).");
@@ -479,6 +479,30 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("\\pi/2")) {
       throw new Error("Expected custom angle label text to be preserved as TeX.");
     }
+  }
+
+  if (fileName === "angle-right-exact-from-perp-tool.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected exact-right fixture to emit \\tkzMarkRightAngles.");
+    }
+  }
+
+  if (fileName === "angle-right-exact-intersection-vertex.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected intersection-vertex right-angle fixture to emit \\tkzMarkRightAngles.");
+    }
+  }
+
+  if (fileName === "angle-right-approx-only.json") {
+    if (!exportError) {
+      throw new Error("Expected approx-right fixture to fail-closed for right-angle mark.");
+    }
+    if (!exportError.message.includes("Unsupported construction: RightAngleMark on non-right angle")) {
+      throw exportError;
+    }
+    return;
   }
 
   if (fileName === "angle-nonright-vanilla.json") {
@@ -633,6 +657,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
       throw new Error("Expected patterns-meta fixture to emit pattern={...} style.");
     }
   }
+
+  if (exportError) throw exportError;
 }
 
 function parseDrawLines(

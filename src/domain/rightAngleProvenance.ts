@@ -17,7 +17,10 @@ const pairIndex = new Map<string, PairEntry>();
 const reverseLinePair = new Map<string, string>();
 const reverseSegmentPair = new Map<string, string>();
 const perpendicularAdj = new Map<string, Set<string>>();
-const APPROX_RIGHT_EPS = 1e-15;
+// Approx-right is a visual hint only; keep this practical so
+// construction-derived near-right angles can be classified as "approx".
+// Exact-right still requires explicit provenance.
+const APPROX_RIGHT_EPS = 1e-2;
 
 export type AngleRightStatus = "none" | "approx" | "exact";
 
@@ -165,6 +168,27 @@ function resolveRaySupport(scene: SceneModel, vertexId: string, otherId: string)
 }
 
 export function isRightExactByProvenance(scene: SceneModel, aId: string, bId: string, cId: string): boolean {
+  // Tangent-radius exact right at a tangency point:
+  // if vertex B is a circle-line intersection on a tangent line to that circle,
+  // and one ray goes to the circle center while the other ray follows tangent line,
+  // then the angle is exact right by construction.
+  const vertex = scene.points.find((p) => p.id === bId);
+  if (vertex?.kind === "circleLineIntersectionPoint") {
+    const tangentLine = scene.lines.find((line) => line.id === vertex.lineId);
+    const circle = scene.circles.find((item) => item.id === vertex.circleId);
+    if (tangentLine?.kind === "tangent" && circle && circle.kind !== "threePoint") {
+      const centerId = circle.centerId;
+      const aIsCenter = aId === centerId;
+      const cIsCenter = cId === centerId;
+      if (aIsCenter || cIsCenter) {
+        const tangentRayPointId = aIsCenter ? cId : aId;
+        if (isPointOnLineLike(scene, tangentRayPointId, { type: "line", id: tangentLine.id })) {
+          return true;
+        }
+      }
+    }
+  }
+
   const left = resolveRaySupport(scene, bId, aId);
   if (!left) return false;
   const right = resolveRaySupport(scene, bId, cId);
@@ -173,7 +197,7 @@ export function isRightExactByProvenance(scene: SceneModel, aId: string, bId: st
 }
 
 export function resolveAngleRightStatus(scene: SceneModel, angle: SceneAngle): AngleRightStatus {
-  if (typeof angle.isRightExact === "boolean") return angle.isRightExact ? "exact" : "none";
+  if (angle.isRightExact === true) return "exact";
   if (isRightExactByProvenance(scene, angle.aId, angle.bId, angle.cId)) return "exact";
   const aPoint = scene.points.find((p) => p.id === angle.aId);
   const bPoint = scene.points.find((p) => p.id === angle.bId);

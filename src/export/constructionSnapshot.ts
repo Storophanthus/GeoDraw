@@ -19,7 +19,13 @@ export type SnapshotPointDefinition =
       direction: "CCW" | "CW";
       radiusMode: "keep";
     }
-  | { kind: "intersectionPoint"; objA: SnapshotObjectRef; objB: SnapshotObjectRef; preferredWorld: { x: number; y: number } }
+  | {
+      kind: "intersectionPoint";
+      objA: SnapshotObjectRef;
+      objB: SnapshotObjectRef;
+      branchIndex?: 0 | 1;
+      preferredWorld: { x: number; y: number };
+    }
   | {
       kind: "circleLineIntersectionPoint";
       circleId: string;
@@ -265,6 +271,7 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
     kind: "intersectionPoint",
     objA: point.objA,
     objB: point.objB,
+    branchIndex: point.branchIndex,
     preferredWorld: {
       x: point.preferredWorld.x,
       y: point.preferredWorld.y,

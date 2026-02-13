@@ -257,6 +257,72 @@ function testCircleCirclePairOwnership(): void {
   }
 }
 
+function testGenericBranchIndexOverridesPreferredWorld(): void {
+  const scene: SceneModel = {
+    points: [
+      freePoint("a", "A", 0, 0),
+      freePoint("b", "B", 4, 0),
+      freePoint("c", "C", 2, 0),
+      freePoint("d", "D", 2, 3.2),
+      {
+        id: "i",
+        kind: "intersectionPoint",
+        name: "I",
+        captionTex: "I",
+        visible: true,
+        showLabel: "name",
+        objA: { type: "circle", id: "c1" },
+        objB: { type: "circle", id: "c2" },
+        // Intentionally biased toward the opposite branch; branchIndex must win.
+        branchIndex: 0,
+        preferredWorld: { x: 0, y: -10 },
+        style: pointStyle,
+      },
+      {
+        id: "j",
+        kind: "intersectionPoint",
+        name: "J",
+        captionTex: "J",
+        visible: true,
+        showLabel: "name",
+        objA: { type: "circle", id: "c1" },
+        objB: { type: "circle", id: "c2" },
+        branchIndex: 1,
+        preferredWorld: { x: 0, y: 10 },
+        style: pointStyle,
+      },
+    ],
+    numbers: [],
+    lines: [],
+    segments: [],
+    circles: [
+      { id: "c1", kind: "twoPoint", centerId: "a", throughId: "b", visible: true, style: circleStyle },
+      { id: "c2", kind: "twoPoint", centerId: "c", throughId: "d", visible: true, style: circleStyle },
+    ],
+    angles: [],
+  };
+
+  beginSceneEvalTick(scene);
+  const iw = getWorldOrThrow(scene, "i");
+  const jw = getWorldOrThrow(scene, "j");
+  const g1 = getCircleWorldGeometry(scene.circles[0], scene);
+  const g2 = getCircleWorldGeometry(scene.circles[1], scene);
+  if (!g1 || !g2) throw new Error("circle geometry unavailable");
+  const roots = circleCircleIntersections(g1.center, g1.radius, g2.center, g2.radius);
+  if (roots.length !== 2) throw new Error(`expected two roots, got ${roots.length}`);
+  const pair: [Vec2, Vec2] = [roots[0], roots[1]];
+  const idxI = closestRootIndex(iw, pair);
+  const idxJ = closestRootIndex(jw, pair);
+  endSceneEvalTick(scene);
+
+  if (idxI !== 0 || idxJ !== 1) {
+    throw new Error(
+      `Branch index regression: expected I->0, J->1, got I->${idxI}, J->${idxJ}`
+    );
+  }
+}
+
 testCircleLinePairOwnership();
 testCircleCirclePairOwnership();
+testGenericBranchIndexOverridesPreferredWorld();
 console.log("✓ intersection ownership regression tests passed");
