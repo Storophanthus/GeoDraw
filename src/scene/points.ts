@@ -147,6 +147,7 @@ export type AngleStyle = {
   labelPosWorld: Vec2;
   showLabel: boolean;
   showValue: boolean;
+  promoteToSolid?: boolean;
 };
 
 export type ShowLabelMode = "none" | "name" | "caption";
@@ -410,6 +411,10 @@ export type SceneAngle = {
   aId: string;
   bId: string;
   cId: string;
+  // True only when right-angle relation is proven by construction provenance.
+  isRightExact?: boolean;
+  // Runtime hint for UI/render; persisted scenes may omit it.
+  isRightApprox?: boolean;
   visible: boolean;
   style: AngleStyle;
 };

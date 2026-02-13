@@ -72,11 +72,12 @@ export const defaultAngleStyle: AngleStyle = {
   markPos: 0.5,
   markSize: 4,
   markColor: "#334155",
-  arcRadius: 1.2,
+  arcRadius: 0.85,
   labelText: "",
   labelPosWorld: { x: 0, y: 0 },
   showLabel: true,
   showValue: true,
+  promoteToSolid: false,
 };
 
 export function createSceneSliceState() {

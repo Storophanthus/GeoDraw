@@ -37,7 +37,7 @@ type ObjectStyleSectionsProps = {
   selectedLine: SceneLine | null;
   selectedCircle: SceneCircle | null;
   selectedAngle: SceneAngle | null;
-  selectedAngleIsRight: boolean;
+  selectedAngleRightStatus: "none" | "approx" | "exact";
   updateSelectedSegmentStyle: (style: Partial<LineStyle>) => void;
   updateSelectedLineStyle: (style: Partial<LineStyle>) => void;
   updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
@@ -55,7 +55,7 @@ export function ObjectStyleSections({
   selectedLine,
   selectedCircle,
   selectedAngle,
-  selectedAngleIsRight,
+  selectedAngleRightStatus,
   updateSelectedSegmentStyle,
   updateSelectedLineStyle,
   updateSelectedCircleStyle,
@@ -66,6 +66,8 @@ export function ObjectStyleSections({
   updateSelectedAngleFields,
   deleteSelectedObject,
 }: ObjectStyleSectionsProps) {
+  const selectedAngleIsRight = selectedAngleRightStatus !== "none";
+  const selectedAngleIsRightExact = selectedAngleRightStatus === "exact";
   const angleArcVariant =
     selectedAngle?.style.markStyle === "none"
       ? "none"
@@ -822,7 +824,7 @@ export function ObjectStyleSections({
                 value={
                   selectedAngle.style.markStyle === "none"
                     ? "none"
-                    : selectedAngle.style.markStyle === "right"
+                    : selectedAngle.style.markStyle === "right" || selectedAngle.style.markStyle === "arc"
                     ? "rightSquare"
                     : selectedAngle.style.markStyle
                 }
@@ -848,6 +850,17 @@ export function ObjectStyleSections({
               </select>
             )}
           </div>
+          {selectedAngleIsRight && (
+            <label className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={selectedAngleIsRightExact || Boolean(selectedAngle.style.promoteToSolid)}
+                disabled={selectedAngleIsRightExact}
+                onChange={(e) => updateSelectedAngleStyle({ promoteToSolid: e.target.checked })}
+              />
+              Promote to solid
+            </label>
+          )}
           <div className="controlRow">
             <label className="controlLabel">Arc Radius</label>
             <input

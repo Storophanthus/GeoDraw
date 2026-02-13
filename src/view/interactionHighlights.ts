@@ -1,8 +1,8 @@
 import type { Vec2 } from "../geo/vec2";
 import { add, mul, sub } from "../geo/geometry";
+import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import {
   computeOrientedAngleRad,
-  isRightAngle,
   type SceneModel,
   type ScenePoint,
 } from "../scene/points";
@@ -204,8 +204,9 @@ function drawHitHighlight(
       ctx.restore();
       return;
     }
-    const right = isRightAngle(a, b, c);
-    const markStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
+    const right = resolveAngleRightStatus(scene, angle) !== "none";
+    const rawMarkStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
+    const markStyle = right && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle;
     if (right && markStyle === "rightSquare") {
       drawRightAngleHighlight(ctx, as, bs, camMath.worldToScreen(c, camera, vp), radiusPx * 0.55);
     } else {

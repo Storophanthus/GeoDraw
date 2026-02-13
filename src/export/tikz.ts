@@ -1,7 +1,7 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
+import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import {
   computeOrientedAngleRad,
-  isRightAngle,
   evaluateAngleExpressionDegrees,
   getCircleWorldGeometry,
   getLineWorldAnchors,
@@ -763,15 +763,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       });
       continue;
     }
-    if (angle.style.fillEnabled) {
+    const rightStatus = resolveAngleRightStatus(scene, angle);
+    const exportAsRight = rightStatus === "exact" || (rightStatus === "approx" && Boolean(angle.style.promoteToSolid));
+    const markKind = resolveAngleMarkKind(angle.style.markStyle, exportAsRight);
+    const rightSquareFillStyle =
+      exportAsRight && markKind === "rightSquare" && angle.style.fillEnabled ? rightSquareFillStyleToTikz(angle.style) : null;
+    if (angle.style.fillEnabled && !rightSquareFillStyle) {
       const fillStyle = angleFillStyleToTikz(angle.style);
       draws.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
     }
-    const right = isRightAngle(aWorld, bWorld, cWorld);
-    const markKind = resolveAngleMarkKind(angle.style.markStyle, right);
     if (markKind === "rightSquare" || markKind === "rightArcDot") {
       const markStyle = angleMarkStyleToTikz(angle.style, true, options, markKind);
-      draws.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: markStyle });
+      const mergedStyle = rightSquareFillStyle ? [markStyle, rightSquareFillStyle].filter(Boolean).join(", ") : markStyle;
+      draws.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: mergedStyle });
     } else if (markKind === "arc") {
       const markStyle = angleMarkStyleToTikz(angle.style, false, options, markKind);
       draws.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
@@ -1807,7 +1811,7 @@ function angleMarkStyleToTikz(
 
 function resolveAngleMarkKind(
   markStyle: SceneModel["angles"][number]["style"]["markStyle"],
-  isRightAngle: boolean
+  isRightExact: boolean
 ): "none" | "arc" | "rightSquare" | "rightArcDot" {
   const normalized = markStyle === "right" ? "rightSquare" : markStyle;
   if (
@@ -1819,7 +1823,12 @@ function resolveAngleMarkKind(
     throw new Error(`Unsupported construction: angle mark style ${String(markStyle)}`);
   }
   if (normalized === "none") return "none";
-  if (!isRightAngle) return "arc";
+  if (!isRightExact) {
+    if (normalized === "rightSquare" || normalized === "rightArcDot") {
+      throw new Error("Unsupported construction: RightAngleMark on non-right angle");
+    }
+    return "arc";
+  }
   if (normalized === "rightArcDot") return "rightArcDot";
   if (normalized === "rightSquare") return "rightSquare";
   return "rightSquare";
@@ -1838,6 +1847,15 @@ function angleFillStyleToTikz(style: SceneModel["angles"][number]["style"]): str
     `size=${fmt(style.arcRadius)}`,
   ];
   return opts.join(", ");
+}
+
+function rightSquareFillStyleToTikz(style: SceneModel["angles"][number]["style"]): string {
+  if (!Number.isFinite(style.fillOpacity)) {
+    throw new Error("Unsupported Angle style: fillOpacity is not finite.");
+  }
+  const opacity = clamp01(style.fillOpacity);
+  if (opacity <= 0) return "";
+  return [`fill=${rgbColorExpr(style.fillColor)}`, `fill opacity=${fmt(opacity)}`].join(", ");
 }
 
 function angleLabelStyleToTikz(
@@ -2234,9 +2252,17 @@ function assertCircleFixedMacro(name: string): void {
 function buildAngleLabelTex(labelTextRaw: string, showLabel: boolean, showValue: boolean, thetaRad: number): string | null {
   const labelText = labelTextRaw.trim();
   const deg = (thetaRad * 180) / Math.PI;
-  const valueTex = `${deg.toFixed(2)}^{\\circ}`;
+  const valueTex = `${formatAngleDegreesValueForTex(deg)}^{\\circ}`;
   if (showLabel && labelText.length > 0 && showValue) return `${labelText}=${valueTex}`;
   if (showLabel && labelText.length > 0) return labelText;
   if (showValue) return valueTex;
   return null;
+}
+
+function formatAngleDegreesValueForTex(degRaw: number): string {
+  if (!Number.isFinite(degRaw)) return "0";
+  const deg = ((degRaw % 360) + 360) % 360;
+  const nearest5 = Math.round(deg / 5) * 5;
+  if (Math.abs(deg - nearest5) <= 1e-3) return String(nearest5);
+  return deg.toFixed(2);
 }

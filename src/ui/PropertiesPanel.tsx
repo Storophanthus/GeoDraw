@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import {
   evaluateAngleExpressionDegrees,
-  isRightAngle,
   evaluateNumberExpression,
   getNumberValue,
   getPointWorldPos,
@@ -105,18 +105,10 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     if (selectedAngle) return "angle";
     return null;
   }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedSegment]);
-  const selectedAngleIsRight = useMemo(() => {
-    if (!selectedAngle) return false;
-    const a = scene.points.find((p) => p.id === selectedAngle.aId);
-    const b = scene.points.find((p) => p.id === selectedAngle.bId);
-    const c = scene.points.find((p) => p.id === selectedAngle.cId);
-    if (!a || !b || !c) return false;
-    const wa = getPointWorldPos(a, scene);
-    const wb = getPointWorldPos(b, scene);
-    const wc = getPointWorldPos(c, scene);
-    if (!wa || !wb || !wc) return false;
-    return isRightAngle(wa, wb, wc);
-  }, [scene, selectedAngle]);
+  const selectedAngleRightStatus = useMemo<"none" | "approx" | "exact">(
+    () => (selectedAngle ? resolveAngleRightStatus(scene, selectedAngle) : "none"),
+    [scene, selectedAngle]
+  );
   const selectedStyleAsDefault = useMemo(() => {
     if (selectedPoint) return pointStyleEqual(pointDefaults, selectedPoint.style);
     if (selectedSegment) return lineStyleEqual(segmentDefaults, selectedSegment.style);
@@ -254,7 +246,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   selectedLine={selectedLine}
   selectedCircle={selectedCircle}
   selectedAngle={selectedAngle}
-  selectedAngleIsRight={selectedAngleIsRight}
+  selectedAngleRightStatus={selectedAngleRightStatus}
   updateSelectedSegmentStyle={updateSelectedSegmentStyle}
   updateSelectedLineStyle={updateSelectedLineStyle}
   updateSelectedCircleStyle={updateSelectedCircleStyle}
@@ -389,6 +381,7 @@ function angleStyleEqual(a: SceneModel["angles"][number]["style"], b: SceneModel
     a.arcRadius === b.arcRadius &&
     a.labelText === b.labelText &&
     a.showLabel === b.showLabel &&
-    a.showValue === b.showValue
+    a.showValue === b.showValue &&
+    Boolean(a.promoteToSolid) === Boolean(b.promoteToSolid)
   );
 }

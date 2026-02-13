@@ -1,8 +1,7 @@
 import type { Vec2 } from "../../geo/vec2";
 import type { SceneModel } from "../../scene/points";
-import { isRightAngle } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
-import { drawAngleArcPreview, drawAngleSector, drawRightAngleMark } from "../angleRender";
+import { drawAngleArcPreview, drawAngleSector, drawRightAngleMark, drawRightAngleSquareFill } from "../angleRender";
 import { resolveCanvasFillStyle } from "../patternFill";
 import type { DrawableObjectSelection } from "./types";
 
@@ -31,11 +30,16 @@ export function drawAngles(
     const cs = camMath.worldToScreen(c, camera, vp);
     const radiusPx = Math.max(12, angle.style.arcRadius * camera.zoom);
     const isSector = angle.kind === "sector";
-    const right = isRightAngle(a, b, c);
-    const resolvedMarkStyle =
-      angle.style.markStyle === "right"
-        ? "rightSquare"
-        : (angle.style.markStyle as "arc" | "none" | "rightSquare" | "rightArcDot");
+    const rightExact = Boolean(angle.isRightExact);
+    const rightApprox = !rightExact && Boolean(angle.isRightApprox);
+    const rightLike = rightExact || rightApprox;
+    const rightSolid = rightExact || (rightApprox && Boolean(angle.style.promoteToSolid));
+    const rawMarkStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
+    const resolvedMarkStyle = (rightLike && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle) as
+      | "arc"
+      | "none"
+      | "rightSquare"
+      | "rightArcDot";
     const markSizePx = Math.max(3, (angle.style.markSize ?? 4) * camera.zoom * 0.06);
 
     ctx.save();
@@ -47,12 +51,19 @@ export function drawAngles(
         angle.style.pattern,
         angle.style.patternColor
       );
-      drawAngleSector(ctx, as, bs, entry.theta, radiusPx);
+      if (rightSolid && resolvedMarkStyle === "rightSquare") {
+        drawRightAngleSquareFill(ctx, as, bs, cs, radiusPx * 0.55);
+      } else {
+        drawAngleSector(ctx, as, bs, entry.theta, radiusPx);
+      }
       ctx.fill();
     }
     ctx.globalAlpha = angle.style.strokeOpacity;
     ctx.strokeStyle = angle.style.strokeColor;
     ctx.lineWidth = mapStrokeWidth(angle.style.strokeWidth);
+    const approxDashed =
+      rightApprox && !rightSolid && (resolvedMarkStyle === "rightSquare" || resolvedMarkStyle === "rightArcDot");
+    if (approxDashed) ctx.setLineDash([6, 4]);
     if (isSector) {
       const start = Math.atan2(as.y - bs.y, as.x - bs.x);
       const end = start - entry.theta;
@@ -63,12 +74,12 @@ export function drawAngles(
       ctx.lineTo(bs.x, bs.y);
       ctx.stroke();
     } else if (resolvedMarkStyle !== "none") {
-      if (right && resolvedMarkStyle === "rightSquare") {
+      if (rightLike && resolvedMarkStyle === "rightSquare") {
         drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.55);
         ctx.stroke();
       } else {
         drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
-        if (!right) {
+        if (!rightLike) {
           if ((angle.style.arcMultiplicity ?? 1) >= 2) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 6);
           if ((angle.style.arcMultiplicity ?? 1) >= 3) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 12);
           drawArcBarMarks(
@@ -103,12 +114,12 @@ export function drawAngles(
         ctx.lineTo(bs.x, bs.y);
         ctx.stroke();
       } else if (resolvedMarkStyle !== "none") {
-        if (right && resolvedMarkStyle === "rightSquare") {
+        if (rightLike && resolvedMarkStyle === "rightSquare") {
           drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.63);
           ctx.stroke();
         } else {
           drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);
-          if (!right) {
+          if (!rightLike) {
             if ((angle.style.arcMultiplicity ?? 1) >= 2) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 8);
             if ((angle.style.arcMultiplicity ?? 1) >= 3) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 14);
           }

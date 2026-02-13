@@ -1,6 +1,6 @@
 import { projectPointToLine, projectPointToSegment } from "../geo/geometry";
+import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import {
-  isRightAngle,
   computeOrientedAngleRad,
   getCircleWorldGeometry,
   getLineWorldAnchors,
@@ -51,7 +51,9 @@ export function resolveVisibleAngles(scene: SceneModel): ResolvedAngle[] {
     if (!a || !b || !c) continue;
     const theta = computeOrientedAngleRad(a, b, c);
     if (theta === null) continue;
-    out.push({ angle, a, b, c, theta });
+    const status = resolveAngleRightStatus(scene, angle);
+    const resolvedAngle = { ...angle, isRightExact: status === "exact", isRightApprox: status === "approx" };
+    out.push({ angle: resolvedAngle, a, b, c, theta });
   }
   return out;
 }
@@ -177,6 +179,7 @@ export function hitTestAngleId(
   vp: Viewport,
   tolerancePx: number
 ): string | null {
+  const sectorPickupRatio = 0.45;
   let bestId: string | null = null;
   let best = tolerancePx;
   for (let i = resolvedAngles.length - 1; i >= 0; i -= 1) {
@@ -186,12 +189,14 @@ export function hitTestAngleId(
     const bs = camMath.worldToScreen(entry.b, camera, vp);
     const cs = camMath.worldToScreen(entry.c, camera, vp);
     const r = Math.max(12, entry.angle.style.arcRadius * camera.zoom);
-    const right = isRightAngle(entry.a, entry.b, entry.c);
-    const markStyle = entry.angle.style.markStyle === "right" ? "rightSquare" : entry.angle.style.markStyle;
+    const right = Boolean(entry.angle.isRightExact) || Boolean(entry.angle.isRightApprox);
+    const rawMarkStyle = entry.angle.style.markStyle === "right" ? "rightSquare" : entry.angle.style.markStyle;
+    const markStyle = right && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle;
+    const arcDistance = distanceToAngleArc(screenPoint, as, bs, entry.theta, r, sectorPickupRatio);
     const d =
       right && markStyle === "rightSquare"
-        ? distanceToRightAngleMark(screenPoint, as, bs, cs, r * 0.55)
-        : distanceToAngleArc(screenPoint, as, bs, entry.theta, r);
+        ? Math.min(distanceToRightAngleMark(screenPoint, as, bs, cs, r * 0.55), arcDistance)
+        : arcDistance;
     if (d <= best) {
       best = d;
       bestId = entry.angle.id;
@@ -241,13 +246,23 @@ function angleSweep(aScreen: Vec2, bScreen: Vec2, thetaRad: number): { start: nu
   return { start, sweep };
 }
 
-function distanceToAngleArc(p: Vec2, aScreen: Vec2, bScreen: Vec2, thetaRad: number, radiusPx: number): number {
+function distanceToAngleArc(
+  p: Vec2,
+  aScreen: Vec2,
+  bScreen: Vec2,
+  thetaRad: number,
+  radiusPx: number,
+  sectorPickupRatio: number
+): number {
   const sweep = angleSweep(aScreen, bScreen, thetaRad);
   const dx = p.x - bScreen.x;
   const dy = p.y - bScreen.y;
   const dist = Math.hypot(dx, dy);
   const theta = Math.atan2(dy, dx);
   const isWithin = isAngleOnArc(theta, sweep.start, sweep.sweep);
+  if (isWithin && dist <= radiusPx * Math.max(0, Math.min(1, sectorPickupRatio))) {
+    return 0;
+  }
   if (!isWithin) {
     const pStart = { x: bScreen.x + Math.cos(sweep.start) * radiusPx, y: bScreen.y + Math.sin(sweep.start) * radiusPx };
     const pEnd = {
