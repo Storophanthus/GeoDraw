@@ -322,7 +322,66 @@ function testGenericBranchIndexOverridesPreferredWorld(): void {
   }
 }
 
+function testGenericSegmentCircleBranchIndexOverridesPreferredWorld(): void {
+  const scene: SceneModel = {
+    points: [
+      freePoint("a", "A", 0, 0),
+      freePoint("b", "B", 4, 0),
+      freePoint("c", "C", -6, 0),
+      freePoint("d", "D", 6, 0),
+      {
+        id: "i",
+        kind: "intersectionPoint",
+        name: "I",
+        captionTex: "I",
+        visible: true,
+        showLabel: "name",
+        objA: { type: "segment", id: "s1" },
+        objB: { type: "circle", id: "c1" },
+        branchIndex: 0,
+        preferredWorld: { x: 100, y: 100 },
+        style: pointStyle,
+      },
+      {
+        id: "j",
+        kind: "intersectionPoint",
+        name: "J",
+        captionTex: "J",
+        visible: true,
+        showLabel: "name",
+        objA: { type: "segment", id: "s1" },
+        objB: { type: "circle", id: "c1" },
+        branchIndex: 1,
+        preferredWorld: { x: -100, y: -100 },
+        style: pointStyle,
+      },
+    ],
+    numbers: [],
+    lines: [],
+    segments: [{ id: "s1", aId: "c", bId: "d", visible: true, showLabel: false, style: lineStyle }],
+    circles: [{ id: "c1", kind: "twoPoint", centerId: "a", throughId: "b", visible: true, style: circleStyle }],
+    angles: [],
+  };
+
+  beginSceneEvalTick(scene);
+  const iw = getWorldOrThrow(scene, "i");
+  const jw = getWorldOrThrow(scene, "j");
+  const rootsRaw = lineCircleIntersectionBranches({ x: -6, y: 0 }, { x: 6, y: 0 }, { x: 0, y: 0 }, 4);
+  if (rootsRaw.length !== 2) throw new Error(`expected two roots, got ${rootsRaw.length}`);
+  const pair: [Vec2, Vec2] = [rootsRaw[0].point, rootsRaw[1].point];
+  const idxI = closestRootIndex(iw, pair);
+  const idxJ = closestRootIndex(jw, pair);
+  endSceneEvalTick(scene);
+
+  if (idxI !== 0 || idxJ !== 1) {
+    throw new Error(
+      `Segment-circle branch index regression: expected I->0, J->1, got I->${idxI}, J->${idxJ}`
+    );
+  }
+}
+
 testCircleLinePairOwnership();
 testCircleCirclePairOwnership();
 testGenericBranchIndexOverridesPreferredWorld();
+testGenericSegmentCircleBranchIndexOverridesPreferredWorld();
 console.log("✓ intersection ownership regression tests passed");

@@ -1,4 +1,11 @@
-import type { GeometryObjectRef, SceneModel, ScenePoint } from "../scene/points";
+import {
+  beginSceneEvalTick,
+  endSceneEvalTick,
+  getPointWorldPos,
+  type GeometryObjectRef,
+  type SceneModel,
+  type ScenePoint,
+} from "../scene/points";
 
 export type SnapshotObjectRef = GeometryObjectRef;
 
@@ -95,6 +102,13 @@ export type ConstructionSnapshot = {
     bId: string;
     cId: string;
     visible: boolean;
+  }>;
+};
+
+export type ConstructionSnapshotWithWorld = ConstructionSnapshot & {
+  debugPointWorld: Array<{
+    id: string;
+    world: { x: number; y: number } | null;
   }>;
 };
 
@@ -223,6 +237,32 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
 
 export function exportConstructionSnapshot(scene: SceneModel): string {
   return `${JSON.stringify(buildConstructionSnapshot(scene), null, 2)}\n`;
+}
+
+export function buildConstructionSnapshotWithWorld(scene: SceneModel): ConstructionSnapshotWithWorld {
+  const base = buildConstructionSnapshot(scene);
+  beginSceneEvalTick(scene);
+  try {
+    const debugPointWorld = scene.points
+      .map((point) => {
+        const world = getPointWorldPos(point, scene);
+        return {
+          id: point.id,
+          world: world ? { x: world.x, y: world.y } : null,
+        };
+      })
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return {
+      ...base,
+      debugPointWorld,
+    };
+  } finally {
+    endSceneEvalTick(scene);
+  }
+}
+
+export function exportConstructionSnapshotWithWorld(scene: SceneModel): string {
+  return `${JSON.stringify(buildConstructionSnapshotWithWorld(scene), null, 2)}\n`;
 }
 
 function pointDefinition(point: ScenePoint): SnapshotPointDefinition {

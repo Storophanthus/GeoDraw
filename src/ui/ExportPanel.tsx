@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { exportConstructionSnapshot } from "../export/constructionSnapshot";
+import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from "../export/constructionSnapshot";
 import { exportTikzWithOptions } from "../export/tikz";
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
@@ -17,6 +17,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [jsonText, setJsonText] = useState("");
   const [tikzCopied, setTikzCopied] = useState(false);
   const [jsonCopied, setJsonCopied] = useState(false);
+  const [includeWorldInJson, setIncludeWorldInJson] = useState(false);
   const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
   const [exportMatchCanvas, setExportMatchCanvas] = useState(true);
   const [exportLabelGlow, setExportLabelGlow] = useState(true);
@@ -80,7 +81,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
 
   const generateConstructionSnapshot = () => {
     try {
-      setJsonText(exportConstructionSnapshot(scene));
+      setJsonText(includeWorldInJson ? exportConstructionSnapshotWithWorld(scene) : exportConstructionSnapshot(scene));
       setJsonCopied(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown snapshot exporter error";
@@ -200,6 +201,14 @@ export function ExportPanel({ visible }: ExportPanelProps) {
 
       <section className="sidebarSection">
         <h2 className="sectionTitle">Model JSON</h2>
+        <label className="checkboxRow">
+          <input
+            type="checkbox"
+            checked={includeWorldInJson}
+            onChange={(e) => setIncludeWorldInJson(e.target.checked)}
+          />
+          Include evaluated world coords (debug)
+        </label>
         <div className="actionsRow">
           <button className="actionButton primary" onClick={generateConstructionSnapshot}>
             Generate JSON

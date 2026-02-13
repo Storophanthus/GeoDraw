@@ -18,6 +18,16 @@
   - resume from handoff state, not memory.
 
 ## Done (Current Truth)
+- Correctness track (intersection semantics) advanced:
+  - `intersectionPoint` now supports optional `branchIndex` and evaluation honors it for two-root generic intersections.
+  - Generic intersection creation records deterministic `branchIndex` when two roots exist.
+  - Existing generic intersection reuse now respects `branchIndex` (not just `preferredWorld` proximity).
+  - Snapshot export includes `intersectionPoint.definition.branchIndex`.
+  - Restore path backfills missing `branchIndex` where deterministically resolvable.
+  - Added regression test: branch index must override misleading preferred seed for generic two-root intersections.
+- Debug visibility track added:
+  - Export panel has `Include evaluated world coords (debug)` for Model JSON.
+  - New export path emits `debugPointWorld` with runtime-evaluated coordinates per point.
 - `PropertiesPanel` is already decomposed and **not** a monolith now:
   - `src/ui/PropertiesPanel.tsx` (~373 lines, orchestration/composition)
   - `src/ui/ToolInfoSection.tsx`
@@ -109,15 +119,27 @@
     - right square -> `\\tkzMarkRightAngles[...]`
     - right arc-dot -> `\\tkzMarkRightAngles[german,...]`
   - Added export regression fixtures for all mark variants.
+- Right-angle provenance fallback hardened for imported/saved scenes:
+  - `isRightExact` is now resolved from provenance when field is missing (not forced to `false`).
+  - Covers intersection-vertex case where angle rays lie on a perpendicular line and its base segment.
+  - Added regression fixture: `src/export/__fixtures__/angle-right-exact-intersection-vertex.json`.
+- Current right-angle fallback policy:
+  - provenance first (exact construction relation),
+  - then deterministic numeric fallback at high precision (`eps=1e-16`) for unresolved legacy/imported cases.
 
 ## Active Work (Open)
-- No active bugfix from this handoff currently.
-- Current focus (if continuing refactor): incremental polish only, no behavior changes.
+- Active homework focus (correctness-first):
+  1. Complete semantic branch coverage for all relevant two-root intersection workflows.
+  2. Keep `preferredWorld` as seed only; rely on explicit branch semantics where available.
+  3. Validate on dense construction scenes and guard against regressions.
+- Performance track is secondary and must not alter intersection semantics.
 - Command Bar Phase 2 candidates:
   - optional overwrite semantics (`set`, `:=`, `let`, `del`) if desired.
   - parametric dependencies (Phase 3) where objects depend on scalars dynamically.
 
 ## Risks / Notes
+- `preferredWorld` is a branch seed for `intersectionPoint`, not guaranteed solved world coordinate.
+- For geometric truth/debugging, use runtime-evaluated positions (or export JSON with `debugPointWorld`).
 - `mathjs` bundle size impact should be monitored (parser currently uses strict guards to keep scope safe).
 - `Circle(x,y,r)` currently constructs a center point and then uses existing fixed-radius-circle creation, which is deterministic and compatible with current scene model.
 - In current model `Circle(O,r)` maps directly to fixed-radius circle creation (`createCircleFixedRadius`), no synthetic through-point needed.
@@ -842,3 +864,34 @@ When starting a new chat, provide:
 - Build: `npm run build`
 - Export regressions: `npm run test:export`
 - Status check: `git status --short`
+
+## Latest Done (Angle Real Perpendicular)
+- Added deterministic right-angle provenance module: `src/domain/rightAngleProvenance.ts`.
+  - Maintains O(1) pair index for `(point,point) -> line/segment`.
+  - Maintains O(1) perpendicular adjacency between line-like refs.
+  - Exposes `isRightExactByProvenance(scene, aId, bId, cId)`.
+- Angle creation now stores `isRightExact` on created angles (from provenance, not numeric epsilon).
+  - `createAngle(...)` sets `isRightExact` and defaults mark style to `rightSquare` when exact and default style was `arc`.
+  - `createSector(...)` and `createAngleFixed(...)` set `isRightExact: false`.
+- Provenance lifecycle wired:
+  - Register line/segment pair indices on `createLine` / `createSegment`.
+  - Register perpendicular relation on `createPerpendicularLine`.
+  - Rebuild provenance on delete cascade (`deleteSelectedObject`) and on undo/redo restore.
+  - Initial store boot also rebuilds provenance from scene.
+- UI gating now uses `angle.isRightExact` (not numeric dot-product):
+  - Right-only mark options shown only for exact-right angles.
+- Renderer / hit-test / hover highlight right-angle behavior now keys off `angle.isRightExact`.
+- Exporter fail-closed right-angle gating:
+  - Right-angle marks emitted only when `isRightExact=true`.
+  - Otherwise throws: `Unsupported construction: RightAngleMark on non-right angle`.
+- New regression fixtures:
+  - `src/export/__fixtures__/angle-right-exact-from-perp-tool.json`
+  - `src/export/__fixtures__/angle-right-approx-only.json` (expected fail-closed)
+
+## Next
+- If needed later: add optional `isRightApprox` (numeric hint only) strictly for UI hints, never for export/certification.
+- Keep provenance manager as the only source of truth for “real right angle”.
+
+## Risks / Constraints
+- “Real perpendicular” is provenance-based only. Visually perpendicular free-point angles are intentionally not certified.
+- Pair-index relies on explicit constructions (`line/segment` endpoints or constrained point-on-line/segment).
