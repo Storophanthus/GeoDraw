@@ -43,7 +43,8 @@ export function drawAngles(
     const rightLike = rightExact || rightApprox;
     const rightSolid = rightExact || (rightApprox && Boolean(angle.style.promoteToSolid));
     const rawMarkStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
-    const resolvedMarkStyle = (rightLike && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle) as
+    const drawRightSquareShape = rawMarkStyle === "rightSquare" || (rightLike && rawMarkStyle === "arc");
+    const resolvedMarkStyle = (drawRightSquareShape ? "rightSquare" : rawMarkStyle) as
       | "arc"
       | "none"
       | "rightSquare"
@@ -60,7 +61,7 @@ export function drawAngles(
         angle.style.pattern,
         angle.style.patternColor
       );
-      if (rightSolid && resolvedMarkStyle === "rightSquare") {
+      if (resolvedMarkStyle === "rightSquare") {
         drawRightAngleSquareFill(ctx, as, bs, cs, rightMarkSizePx);
       } else {
         drawAngleSector(ctx, as, bs, entry.theta, radiusPx);
@@ -71,8 +72,13 @@ export function drawAngles(
     ctx.strokeStyle = angle.style.strokeColor;
     ctx.lineWidth = mapStrokeWidth(angle.style.strokeWidth);
     const approxDashed =
-      rightApprox && !rightSolid && (resolvedMarkStyle === "rightSquare" || resolvedMarkStyle === "rightArcDot");
+      !isSector && rightApprox && !rightSolid && (resolvedMarkStyle === "rightSquare" || resolvedMarkStyle === "rightArcDot");
     if (approxDashed) ctx.setLineDash([6, 4]);
+    if (isSector) {
+      const dash = angle.style.strokeDash ?? "solid";
+      if (dash === "dashed") ctx.setLineDash([7, 5]);
+      else if (dash === "dotted") ctx.setLineDash([2, 4]);
+    }
     if (isSector) {
       const start = Math.atan2(as.y - bs.y, as.x - bs.x);
       const end = start - entry.theta;

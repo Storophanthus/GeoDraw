@@ -911,6 +911,22 @@ export function ObjectStyleSections({
               onChange={(e) => updateSelectedAngleStyle({ strokeWidth: Number(e.target.value) })}
             />
           </div>
+          {selectedAngleIsSector && (
+            <div className="controlRow">
+              <label className="controlLabel">Dash</label>
+              <select
+                className="selectInput"
+                value={selectedAngle.style.strokeDash ?? "solid"}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({ strokeDash: e.target.value as "solid" | "dashed" | "dotted" })
+                }
+              >
+                <option value="solid">Solid</option>
+                <option value="dashed">Dashed</option>
+                <option value="dotted">Dotted</option>
+              </select>
+            </div>
+          )}
           <label className="checkboxRow">
             <input
               type="checkbox"

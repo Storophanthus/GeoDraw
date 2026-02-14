@@ -388,6 +388,7 @@ function angleStyleEqual(a: SceneModel["angles"][number]["style"], b: SceneModel
   return (
     a.strokeColor === b.strokeColor &&
     a.strokeWidth === b.strokeWidth &&
+    (a.strokeDash ?? "solid") === (b.strokeDash ?? "solid") &&
     a.strokeOpacity === b.strokeOpacity &&
     a.textColor === b.textColor &&
     a.textSize === b.textSize &&

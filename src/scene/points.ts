@@ -140,6 +140,7 @@ export type AngleMarkSymbol = "none" | "|" | "||" | "|||";
 export type AngleStyle = {
   strokeColor: string;
   strokeWidth: number;
+  strokeDash?: "solid" | "dashed" | "dotted";
   strokeOpacity: number;
   textColor: string;
   textSize: number;

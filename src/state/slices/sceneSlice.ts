@@ -69,6 +69,7 @@ export const defaultPolygonStyle: PolygonStyle = {
 export const defaultAngleStyle: AngleStyle = {
   strokeColor: "#334155",
   strokeWidth: 1.8,
+  strokeDash: "solid",
   strokeOpacity: 1,
   textColor: "#0f172a",
   textSize: 16,

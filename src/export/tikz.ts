@@ -2142,14 +2142,13 @@ function angleLabelStyleToTikz(
 }
 
 function sectorDrawStyleToTikz(style: SceneModel["angles"][number]["style"], options: TikzExportOptions): string {
-  const opacity = clamp01(style.strokeOpacity);
-  const strokeScale = clampPositive(options.angleArcStrokeScale ?? 1, 0.01, 100);
-  const opts: string[] = [
-    `color=${rgbColorExpr(style.strokeColor)}`,
-    `line width=${fmt(Math.max(0.1, style.strokeWidth * strokeScale))}pt`,
-  ];
-  if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
-  return opts.join(", ");
+  return lineLikeStyleToTikz(
+    style.strokeColor,
+    style.strokeWidth * clampPositive(options.angleArcStrokeScale ?? 1, 0.01, 100),
+    style.strokeDash ?? "solid",
+    style.strokeOpacity,
+    { ...options, lineScale: 1, matchCanvas: false }
+  );
 }
 
 function sectorFillStyleToTikz(style: SceneModel["angles"][number]["style"]): string {
