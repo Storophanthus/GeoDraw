@@ -845,7 +845,7 @@ export function ObjectStyleSections({
                   className="sizeSlider"
                   type="range"
                   min={0.2}
-                  max={4}
+                  max={5.5}
                   step={0.05}
                   value={selectedAngle.style.arcRadius}
                   onChange={(e) => updateSelectedAngleStyle({ arcRadius: Number(e.target.value) })}
@@ -871,7 +871,7 @@ export function ObjectStyleSections({
                       className="sizeSlider"
                       type="range"
                       min={1}
-                      max={12}
+                      max={20}
                       step={0.1}
                       value={selectedAngle.style.markSize ?? 4}
                       onChange={(e) => updateSelectedAngleStyle({ markSize: Number(e.target.value) })}
@@ -905,7 +905,7 @@ export function ObjectStyleSections({
               className="sizeSlider"
               type="range"
               min={0.5}
-              max={6}
+              max={2}
               step={0.1}
               value={selectedAngle.style.strokeWidth}
               onChange={(e) => updateSelectedAngleStyle({ strokeWidth: Number(e.target.value) })}
@@ -950,7 +950,7 @@ export function ObjectStyleSections({
               className="sizeSlider"
               type="range"
               min={0}
-              max={1}
+              max={0.6}
               step={0.01}
               value={selectedAngle.style.fillOpacity}
               onChange={(e) => updateSelectedAngleStyle({ fillOpacity: Number(e.target.value) })}
@@ -996,7 +996,7 @@ export function ObjectStyleSections({
               className="sizeSlider"
               type="range"
               min={8}
-              max={42}
+              max={32}
               step={1}
               value={selectedAngle.style.textSize}
               onChange={(e) => updateSelectedAngleStyle({ textSize: Number(e.target.value) })}

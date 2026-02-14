@@ -68,7 +68,7 @@ export const defaultPolygonStyle: PolygonStyle = {
 
 export const defaultAngleStyle: AngleStyle = {
   strokeColor: "#334155",
-  strokeWidth: 1.8,
+  strokeWidth: 1,
   strokeDash: "solid",
   strokeOpacity: 1,
   textColor: "#0f172a",
@@ -81,9 +81,9 @@ export const defaultAngleStyle: AngleStyle = {
   markSymbol: "none",
   arcMultiplicity: 1,
   markPos: 0.5,
-  markSize: 4,
+  markSize: 7.4,
   markColor: "#334155",
-  arcRadius: 0.85,
+  arcRadius: 1.95,
   labelText: "",
   labelPosWorld: { x: 0, y: 0 },
   showLabel: true,
