@@ -53,7 +53,6 @@ export function CanvasView() {
     pid: -1,
     mode: "idle",
     pointId: null,
-    exportClipStartedOnDown: false,
     lastX: 0,
     lastY: 0,
     startX: 0,
@@ -78,7 +77,7 @@ export function CanvasView() {
   const copyStyle = useGeoStore((store) => store.copyStyle);
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
   const dependencyGlowEnabled = useGeoStore((store) => store.dependencyGlowEnabled);
-  const exportClipRectWorld = useGeoStore((store) => store.exportClipRectWorld);
+  const exportClipWorld = useGeoStore((store) => store.exportClipWorld);
   const gridEnabled = useGeoStore((store) => store.gridEnabled);
   const axesEnabled = useGeoStore((store) => store.axesEnabled);
   const gridSnapEnabled = useGeoStore((store) => store.gridSnapEnabled);
@@ -117,7 +116,7 @@ export function CanvasView() {
   const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
-  const setExportClipRectWorld = useGeoStore((store) => store.setExportClipRectWorld);
+  const setExportClipWorld = useGeoStore((store) => store.setExportClipWorld);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
 
@@ -171,7 +170,7 @@ export function CanvasView() {
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
-      setExportClipRectWorld,
+      setExportClipWorld,
       getPointWorldById: (id) => {
         const point = scene.points.find((p) => p.id === id);
         return point ? getPointWorldPos(point, scene) : null;
@@ -207,7 +206,7 @@ export function CanvasView() {
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
-      setExportClipRectWorld,
+      setExportClipWorld,
       gridSnapEnabled,
       camera,
       gridSettings,
@@ -313,7 +312,7 @@ export function CanvasView() {
         recentDrawableObject,
         copySourceDrawable,
         dependencyGlowEnabled,
-        exportClipRectWorld,
+        exportClipWorld,
         getAngleStrokeRenderWidth,
       });
     },
@@ -335,7 +334,7 @@ export function CanvasView() {
       scene,
       selectedObject,
       dependencyGlowEnabled,
-      exportClipRectWorld,
+      exportClipWorld,
       gridSettings,
       vp,
     ]

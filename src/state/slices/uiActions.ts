@@ -21,8 +21,8 @@ export function createUiActions(
   | "setAxesEnabled"
   | "setGridSnapEnabled"
   | "setDependencyGlowEnabled"
-  | "setExportClipRectWorld"
-  | "clearExportClipRectWorld"
+  | "setExportClipWorld"
+  | "clearExportClipWorld"
 > {
   return {
     setPointDefaults(next) {
@@ -133,17 +133,17 @@ export function createUiActions(
       }));
     },
 
-    setExportClipRectWorld(rect) {
+    setExportClipWorld(clip) {
       ctx.setState((prev) => ({
         ...prev,
-        exportClipRectWorld: rect,
+        exportClipWorld: clip,
       }));
     },
 
-    clearExportClipRectWorld() {
+    clearExportClipWorld() {
       ctx.setState((prev) => ({
         ...prev,
-        exportClipRectWorld: null,
+        exportClipWorld: null,
       }));
     },
   };

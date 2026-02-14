@@ -32,7 +32,6 @@ export type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
-  exportClipStartedOnDown: boolean;
   lastX: number;
   lastY: number;
   startX: number;

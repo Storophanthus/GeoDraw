@@ -165,7 +165,7 @@ constructFromClick({
     createCircleCenterPoint() {
       return null;
     },
-    setExportClipRectWorld() {},
+    setExportClipWorld() {},
     setSelectedObject() {},
     setCopyStyleSource() {},
     applyCopyStyleTo() {},

@@ -15,7 +15,7 @@ export type UiSliceState = {
     radius: string;
   };
   dependencyGlowEnabled: boolean;
-  exportClipRectWorld: { xmin: number; xmax: number; ymin: number; ymax: number } | null;
+  exportClipWorld: import("./storeTypes").ExportClipWorld | null;
   copyStyle: {
     source: SelectedObject;
     pointStyle: import("../../scene/points").PointStyle | null;
@@ -43,7 +43,7 @@ export function createUiSliceState(): UiSliceState {
       radius: "3",
     },
     dependencyGlowEnabled: true,
-    exportClipRectWorld: null,
+    exportClipWorld: null,
     copyStyle: {
       source: null,
       pointStyle: null,

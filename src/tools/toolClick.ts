@@ -1,6 +1,7 @@
 import type { Vec2 } from "../geo/vec2";
 import type { GeometryObjectRef, LineLikeObjectRef } from "../scene/points";
 import type { ActiveTool, PendingSelection } from "../state/geoStore";
+import type { ExportClipWorld } from "../state/slices/storeTypes";
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
 import type { SnapCandidate } from "../view/snapEngine";
 
@@ -49,7 +50,7 @@ export type ToolClickIO = {
   ) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
-  setExportClipRectWorld: (rect: { xmin: number; xmax: number; ymin: number; ymax: number } | null) => void;
+  setExportClipWorld: (clip: ExportClipWorld | null) => void;
   setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null) => void;
   setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
@@ -144,17 +145,24 @@ export function handleToolClick(
       ?? (hits.hitPointId ? io.getPointWorldById(hits.hitPointId) : null)
       ?? camMath.screenToWorld(screen, io.camera, io.vp);
     if (!pendingSelection || pendingSelection.tool !== "export_clip") {
-      io.setPendingSelection({ tool: "export_clip", step: 2, first: { type: "world", world } });
+      io.setPendingSelection({ tool: "export_clip", step: 2, points: [{ type: "world", world }] });
       return;
     }
-    const first = pendingSelection.first.world;
-    io.setExportClipRectWorld({
-      xmin: Math.min(first.x, world.x),
-      xmax: Math.max(first.x, world.x),
-      ymin: Math.min(first.y, world.y),
-      ymax: Math.max(first.y, world.y),
+    const points = pendingSelection.points.map((p) => p.world);
+    const first = points[0];
+    const firstScreen = camMath.worldToScreen(first, io.camera, io.vp);
+    const closeThresholdPx = 14;
+    const nearFirst = Math.hypot(screen.x - firstScreen.x, screen.y - firstScreen.y) <= closeThresholdPx;
+    if (points.length >= 3 && nearFirst) {
+      io.setExportClipWorld({ kind: "polygon", points });
+      io.clearPendingSelection();
+      return;
+    }
+    io.setPendingSelection({
+      tool: "export_clip",
+      step: 2,
+      points: [...pendingSelection.points, { type: "world", world }],
     });
-    io.clearPendingSelection();
     return;
   }
 

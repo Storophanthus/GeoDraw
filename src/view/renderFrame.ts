@@ -3,6 +3,7 @@ import type { RectGridSettings } from "../render/rectGrid";
 import { drawRectGrid } from "../render/rectGrid";
 import { beginSceneEvalTick, endSceneEvalTick, type ScenePoint } from "../scene/points";
 import type { ActiveTool, HoveredHit, PendingSelection } from "../state/geoStore";
+import type { ExportClipWorld } from "../state/slices/storeTypes";
 import type { Camera, Viewport } from "./camera";
 import { camera as camMath } from "./camera";
 import type { SnapCandidate } from "./snapEngine";
@@ -45,7 +46,7 @@ type RenderFrameArgs = {
   recentDrawableObject: DrawableObjectSelection;
   copySourceDrawable: DrawableObjectSelection;
   dependencyGlowEnabled: boolean;
-  exportClipRectWorld: { xmin: number; xmax: number; ymin: number; ymax: number } | null;
+  exportClipWorld: ExportClipWorld | null;
   getAngleStrokeRenderWidth: (rawStrokeWidth: number) => number;
 };
 
@@ -73,7 +74,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     recentDrawableObject,
     copySourceDrawable,
     dependencyGlowEnabled,
-    exportClipRectWorld,
+    exportClipWorld,
     getAngleStrokeRenderWidth,
   } = args;
 
@@ -122,24 +123,11 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       camera,
       vp
     );
-    if (exportClipRectWorld) {
-      const pMin = camMath.worldToScreen({ x: exportClipRectWorld.xmin, y: exportClipRectWorld.ymin }, camera, vp);
-      const pMax = camMath.worldToScreen({ x: exportClipRectWorld.xmax, y: exportClipRectWorld.ymax }, camera, vp);
-      const x = Math.min(pMin.x, pMax.x);
-      const y = Math.min(pMin.y, pMax.y);
-      const w = Math.abs(pMax.x - pMin.x);
-      const h = Math.abs(pMax.y - pMin.y);
-      ctx.save();
-      ctx.setLineDash([5, 4]);
-      ctx.strokeStyle = "rgba(14,165,233,0.95)";
-      ctx.fillStyle = "rgba(14,165,233,0.05)";
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.rect(x, y, w, h);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    }
+    const clipPreviewPoints: Vec2[] =
+      pendingSelection && pendingSelection.tool === "export_clip"
+        ? pendingSelection.points.map((p) => p.world)
+        : [];
+    drawExportClipOverlay(ctx, exportClipWorld, clipPreviewPoints, cursorWorld, camera, vp);
 
     if (hoverSnap && (activeTool === "point" || activeTool === "move")) {
       const s = camMath.worldToScreen(hoverSnap.world, camera, vp);
@@ -159,4 +147,59 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
   } finally {
     endSceneEvalTick(scene);
   }
+}
+
+function drawExportClipOverlay(
+  ctx: CanvasRenderingContext2D,
+  clip: ExportClipWorld | null,
+  pendingPoints: Vec2[],
+  cursorWorld: Vec2 | null,
+  camera: Camera,
+  vp: Viewport
+): void {
+  ctx.save();
+  ctx.setLineDash([5, 4]);
+  ctx.strokeStyle = "rgba(14,165,233,0.95)";
+  ctx.fillStyle = "rgba(14,165,233,0.05)";
+  ctx.lineWidth = 1.2;
+
+  if (clip?.kind === "rect") {
+    const pMin = camMath.worldToScreen({ x: clip.xmin, y: clip.ymin }, camera, vp);
+    const pMax = camMath.worldToScreen({ x: clip.xmax, y: clip.ymax }, camera, vp);
+    const x = Math.min(pMin.x, pMax.x);
+    const y = Math.min(pMin.y, pMax.y);
+    const w = Math.abs(pMax.x - pMin.x);
+    const h = Math.abs(pMax.y - pMin.y);
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.stroke();
+  } else if (clip?.kind === "polygon" && clip.points.length >= 3) {
+    const first = camMath.worldToScreen(clip.points[0], camera, vp);
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    for (let i = 1; i < clip.points.length; i += 1) {
+      const p = camMath.worldToScreen(clip.points[i], camera, vp);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  if (pendingPoints.length >= 1) {
+    const first = camMath.worldToScreen(pendingPoints[0], camera, vp);
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    for (let i = 1; i < pendingPoints.length; i += 1) {
+      const p = camMath.worldToScreen(pendingPoints[i], camera, vp);
+      ctx.lineTo(p.x, p.y);
+    }
+    if (cursorWorld) {
+      const c = camMath.worldToScreen(cursorWorld, camera, vp);
+      ctx.lineTo(c.x, c.y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }

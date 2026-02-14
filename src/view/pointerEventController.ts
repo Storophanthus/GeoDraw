@@ -7,7 +7,6 @@ type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
-  exportClipStartedOnDown: boolean;
   lastX: number;
   lastY: number;
   startX: number;
@@ -120,7 +119,6 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
 
     let mode: PointerMode = "idle";
     let pointId: string | null = null;
-    let exportClipStartedOnDown = false;
 
     if (deps.activeTool === "move") {
       const decision = deps.decideMovePointerDown(hits);
@@ -129,10 +127,6 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       deps.setSelectedObject(decision.selectedObject);
     } else {
       mode = "tool-click";
-      if (deps.activeTool === "export_clip" && (!deps.pendingSelection || deps.pendingSelection.tool !== "export_clip")) {
-        deps.onToolClickRelease(screen, e);
-        exportClipStartedOnDown = true;
-      }
     }
 
     deps.canvas.setPointerCapture(e.pointerId);
@@ -141,7 +135,6 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pid: e.pointerId,
       mode,
       pointId,
-      exportClipStartedOnDown,
       lastX: e.clientX,
       lastY: e.clientY,
       startX: e.clientX,
@@ -199,19 +192,9 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
     }
     deps.flushDragUpdate();
 
-    if (st.mode === "tool-click" && (!st.moved || deps.activeTool === "export_clip")) {
-      if (deps.activeTool === "export_clip") {
-        const shouldFinalize =
-          (!st.exportClipStartedOnDown && deps.pendingSelection?.tool === "export_clip")
-          || (st.exportClipStartedOnDown && st.moved);
-        if (shouldFinalize) {
-          const screen = deps.readScreen(e);
-          deps.onToolClickRelease(screen, e);
-        }
-      } else {
-        const screen = deps.readScreen(e);
-        deps.onToolClickRelease(screen, e);
-      }
+    if (st.mode === "tool-click" && !st.moved) {
+      const screen = deps.readScreen(e);
+      deps.onToolClickRelease(screen, e);
     }
 
     deps.pointerRef.current = {
@@ -219,7 +202,6 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pid: -1,
       mode: "idle",
       pointId: null,
-      exportClipStartedOnDown: false,
       lastX: 0,
       lastY: 0,
       startX: 0,

@@ -29,7 +29,7 @@ export type HistorySnapshot = {
   angleDefaults: AngleStyle;
   angleFixedTool: GeoState["angleFixedTool"];
   circleFixedTool: GeoState["circleFixedTool"];
-  exportClipRectWorld?: GeoState["exportClipRectWorld"];
+  exportClipWorld?: GeoState["exportClipWorld"];
   copyStyle: GeoState["copyStyle"];
 };
 
@@ -71,7 +71,7 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     angleDefaults: prev.angleDefaults,
     angleFixedTool: prev.angleFixedTool,
     circleFixedTool: prev.circleFixedTool,
-    exportClipRectWorld: prev.exportClipRectWorld,
+    exportClipWorld: prev.exportClipWorld,
     copyStyle: prev.copyStyle,
   };
 }
@@ -96,6 +96,6 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.circleDefaults !== next.circleDefaults ||
     prev.polygonDefaults !== next.polygonDefaults ||
     prev.angleDefaults !== next.angleDefaults
-    || prev.exportClipRectWorld !== next.exportClipRectWorld
+    || prev.exportClipWorld !== next.exportClipWorld
   );
 }

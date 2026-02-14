@@ -26,6 +26,12 @@ export function drawInteractionHighlights(
   vp: Viewport
 ) {
   if (pendingSelection) {
+    if (pendingSelection.tool === "export_clip") {
+      if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
+        drawHitHighlight(ctx, hoveredHit, resolvedPoints, scene, camera, vp, "#0ea5e9", 0.9);
+      }
+      return;
+    }
     if (
       pendingSelection.tool === "angle" ||
       pendingSelection.tool === "sector" ||

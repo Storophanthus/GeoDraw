@@ -17,6 +17,7 @@ export type TikzExportViewport = { xmin: number; xmax: number; ymin: number; yma
 export type TikzExportOptions = {
   viewport?: TikzExportViewport;
   clipRectWorld?: TikzExportViewport;
+  clipPolygonWorld?: { x: number; y: number }[];
   clipSpace?: number;
   globalLineAdd?: number;
   pointScale?: number;
@@ -45,6 +46,7 @@ export type TikzCommand =
   | { kind: "SetupLabelScale"; scale: number }
   | { kind: "SetupViewport"; xmin: number; xmax: number; ymin: number; ymax: number; space: number }
   | { kind: "ClipRect"; xmin: number; xmax: number; ymin: number; ymax: number }
+  | { kind: "ClipPolygon"; points: { x: number; y: number }[] }
   | { kind: "SetupLine"; addLeft: number; addRight: number }
   | { kind: "DefPoints"; items: { name: string; x: number; y: number }[] }
   | { kind: "DefPoint"; name: string; x: number; y: number }
@@ -131,14 +133,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const viewport = options.viewport ?? computeExportViewport(scene);
   let coordScale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
   const labelScale = clampPositive(options.labelScale ?? 1, 0.1, 10);
-  // Auto-fit large scenes for document embedding when canvas-match export is enabled.
-  // Keep scale unchanged for already-reasonable extents, and only shrink when needed.
+  // Auto-fit viewport for document embedding when canvas-match export is enabled.
+  // Fit both down and up so exported framing matches the current canvas view density.
   if (options.matchCanvas) {
     const maxWidthCm = clampPositive(options.autoScaleToFitCm?.maxWidthCm ?? 14, 1, 200);
     const maxHeightCm = clampPositive(options.autoScaleToFitCm?.maxHeightCm ?? 9, 1, 200);
     const worldWidth = Math.max(1e-9, Math.abs(viewport.xmax - viewport.xmin));
     const worldHeight = Math.max(1e-9, Math.abs(viewport.ymax - viewport.ymin));
-    const fitScale = Math.min(1, maxWidthCm / worldWidth, maxHeightCm / worldHeight);
+    const fitScale = Math.min(maxWidthCm / worldWidth, maxHeightCm / worldHeight);
     coordScale = clampPositive(coordScale * fitScale, 0.01, 100);
   }
   defs.push({ kind: "SetupUnits", scale: coordScale });
@@ -154,13 +156,32 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const globalAdd = options.globalLineAdd ?? 5;
   defs.push({ kind: "SetupLine", addLeft: globalAdd, addRight: globalAdd });
   if (options.clipRectWorld) {
+    const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+    // Slightly expand explicit clip rectangle to avoid antialias/stroke edge shaving.
+    const clipPadWorld = 14 / pxPerWorld;
     defs.push({
       kind: "ClipRect",
-      xmin: Math.min(options.clipRectWorld.xmin, options.clipRectWorld.xmax),
-      xmax: Math.max(options.clipRectWorld.xmin, options.clipRectWorld.xmax),
-      ymin: Math.min(options.clipRectWorld.ymin, options.clipRectWorld.ymax),
-      ymax: Math.max(options.clipRectWorld.ymin, options.clipRectWorld.ymax),
+      xmin: Math.min(options.clipRectWorld.xmin, options.clipRectWorld.xmax) - clipPadWorld,
+      xmax: Math.max(options.clipRectWorld.xmin, options.clipRectWorld.xmax) + clipPadWorld,
+      ymin: Math.min(options.clipRectWorld.ymin, options.clipRectWorld.ymax) - clipPadWorld,
+      ymax: Math.max(options.clipRectWorld.ymin, options.clipRectWorld.ymax) + clipPadWorld,
     });
+  }
+  if (options.clipPolygonWorld && options.clipPolygonWorld.length >= 3) {
+    const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+    const clipPadWorld = 14 / pxPerWorld;
+    const points = options.clipPolygonWorld.map((p) => ({ x: p.x, y: p.y }));
+    const center = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
+    center.x /= points.length;
+    center.y /= points.length;
+    const expanded = points.map((p) => {
+      const dx = p.x - center.x;
+      const dy = p.y - center.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= 1e-12) return p;
+      return { x: p.x + (dx / d) * clipPadWorld, y: p.y + (dy / d) * clipPadWorld };
+    });
+    defs.push({ kind: "ClipPolygon", points: expanded });
   }
 
   const visiting = new Set<string>();
@@ -1036,6 +1057,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
   const setupViewport = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupViewport" }> => c.kind === "SetupViewport");
   const setupLine = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLine" }> => c.kind === "SetupLine");
   const clipRect = cmds.find((c): c is Extract<TikzCommand, { kind: "ClipRect" }> => c.kind === "ClipRect");
+  const clipPolygon = cmds.find((c): c is Extract<TikzCommand, { kind: "ClipPolygon" }> => c.kind === "ClipPolygon");
   const pointsDefs = cmds.filter((c) => c.kind === "DefPoints");
   const pointDefs = cmds.filter((c) => c.kind === "DefPoint");
   const constructions = cmds.filter(
@@ -1046,6 +1068,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
       c.kind !== "SetupViewport" &&
       c.kind !== "SetupLine" &&
       c.kind !== "ClipRect" &&
+      c.kind !== "ClipPolygon" &&
       c.kind !== "DrawSegment" &&
       c.kind !== "MarkSegment" &&
       c.kind !== "DrawRaw" &&
@@ -1089,7 +1112,9 @@ export function renderTikz(cmds: TikzCommand[]): string {
       "\\newcommand{\\gdLabelGlow}[1]{\\begingroup\\contourlength{0.42pt}\\ifcsname thepagecolor\\endcsname\\contour{\\thepagecolor}{#1}\\else\\contour{white}{#1}\\fi\\endgroup}"
     );
   }
-  if (setupViewport) {
+  // When explicit export clip rectangle is present, avoid tkz viewport clip to
+  // prevent extra outer whitespace from a larger bounding box.
+  if (setupViewport && !clipRect && !clipPolygon) {
     assertTkzMacro("tkzInit");
     assertTkzMacro("tkzClip");
     out.push(
@@ -1105,6 +1130,10 @@ export function renderTikz(cmds: TikzCommand[]): string {
   }
   if (clipRect) {
     out.push(`\\clip (${fmt(clipRect.xmin)},${fmt(clipRect.ymin)}) rectangle (${fmt(clipRect.xmax)},${fmt(clipRect.ymax)});`);
+  }
+  if (clipPolygon && clipPolygon.points.length >= 3) {
+    const path = clipPolygon.points.map((p) => `(${fmt(p.x)},${fmt(p.y)})`).join(" -- ");
+    out.push(`\\clip ${path} -- cycle;`);
   }
 
   // Emit predefined styles used by tkzDrawPoints[...] commands.
@@ -2037,10 +2066,13 @@ function angleMarkStyleToTikz(
   const sizeScale = isRightAngle
     ? clampPositive(options.rightAngleSizeScale ?? 1, 0.01, 100)
     : clampPositive(options.angleArcSizeScale ?? 1, 0.01, 100);
+  const baseSizeWorld = isRightAngle
+    ? rightAngleMarkSizeWorldFromStyle(style, options)
+    : nonSectorAngleRadiusWorldFromStyle(style, options);
   const opts: string[] = [
     `color=${rgbColorExpr(style.strokeColor)}`,
     `line width=${fmt(Math.max(0.1, style.strokeWidth * strokeScale))}pt`,
-    `size=${fmt(style.arcRadius * sizeScale)}`,
+    `size=${fmt(baseSizeWorld * sizeScale)}`,
   ];
   if (isRightAngle && markKind === "rightArcDot") {
     opts.push("german");
@@ -2102,7 +2134,7 @@ function angleFillStyleToTikz(style: SceneModel["angles"][number]["style"], opti
   const opts: string[] = [
     `fill=${rgbColorExpr(style.fillColor)}`,
     `fill opacity=${fmt(clamp01(style.fillOpacity))}`,
-    `size=${fmt(style.arcRadius * sizeScale)}`,
+    `size=${fmt(nonSectorAngleRadiusWorldFromStyle(style, options) * sizeScale)}`,
   ];
   return opts.join(", ");
 }
@@ -2149,6 +2181,30 @@ function sectorDrawStyleToTikz(style: SceneModel["angles"][number]["style"], opt
     style.strokeOpacity,
     { ...options, lineScale: 1, matchCanvas: false }
   );
+}
+
+function nonSectorAngleRadiusWorldFromStyle(
+  style: SceneModel["angles"][number]["style"],
+  options: TikzExportOptions
+): number {
+  const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  // Keep exporter consistent with canvas non-sector angle rendering:
+  // canvas radiusPx = clamp(arcRadius * 34, 18, 120).
+  const radiusPx = Math.max(18, Math.min(120, style.arcRadius * 34));
+  return Math.max(1e-6, radiusPx / pxPerWorld);
+}
+
+function rightAngleMarkSizeWorldFromStyle(
+  style: SceneModel["angles"][number]["style"],
+  options: TikzExportOptions
+): number {
+  const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const radiusPx = Math.max(18, Math.min(120, style.arcRadius * 34));
+  const strokePx = Math.max(0.1, style.strokeWidth);
+  // Keep exporter consistent with canvas right-angle square sizing:
+  // sizePx = max(7, radiusPx * 0.34 + strokePx * 0.3).
+  const sizePx = Math.max(7, radiusPx * 0.34 + strokePx * 0.3);
+  return Math.max(1e-6, sizePx / pxPerWorld);
 }
 
 function sectorFillStyleToTikz(style: SceneModel["angles"][number]["style"]): string {

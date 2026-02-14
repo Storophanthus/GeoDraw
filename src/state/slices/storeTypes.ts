@@ -141,9 +141,13 @@ export type PendingSelection =
   | {
     tool: "export_clip";
     step: 2;
-    first: { type: "world"; world: Vec2 };
+    points: Array<{ type: "world"; world: Vec2 }>;
   }
   | null;
+
+export type ExportClipWorld =
+  | { kind: "rect"; xmin: number; xmax: number; ymin: number; ymax: number }
+  | { kind: "polygon"; points: Vec2[] };
 
 export type AngleFixedDirection = "CCW" | "CW";
 
@@ -180,7 +184,7 @@ export type GeoState = {
     radius: string;
   };
   dependencyGlowEnabled: boolean;
-  exportClipRectWorld: { xmin: number; xmax: number; ymin: number; ymax: number } | null;
+  exportClipWorld: ExportClipWorld | null;
   copyStyle: {
     source: SelectedObject;
     pointStyle: PointStyle | null;
@@ -259,8 +263,8 @@ export type GeoActions = {
   setAxesEnabled: (enabled: boolean) => void;
   setGridSnapEnabled: (enabled: boolean) => void;
   setDependencyGlowEnabled: (enabled: boolean) => void;
-  setExportClipRectWorld: (rect: { xmin: number; xmax: number; ymin: number; ymax: number } | null) => void;
-  clearExportClipRectWorld: () => void;
+  setExportClipWorld: (clip: ExportClipWorld | null) => void;
+  clearExportClipWorld: () => void;
   updateSelectedPointStyle: (next: Partial<PointStyle>) => void;
   updateSelectedPointFields: (
     next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>

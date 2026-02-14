@@ -12,8 +12,8 @@ type ExportPanelProps = {
 export function ExportPanel({ visible }: ExportPanelProps) {
   const scene = useGeoStore((store) => store.scene);
   const camera = useGeoStore((store) => store.camera);
-  const exportClipRectWorld = useGeoStore((store) => store.exportClipRectWorld);
-  const clearExportClipRectWorld = useGeoStore((store) => store.clearExportClipRectWorld);
+  const exportClipWorld = useGeoStore((store) => store.exportClipWorld);
+  const clearExportClipWorld = useGeoStore((store) => store.clearExportClipWorld);
 
   const [tikzText, setTikzText] = useState("");
   const [jsonText, setJsonText] = useState("");
@@ -32,7 +32,12 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [lastTikzOptionSig, setLastTikzOptionSig] = useState("");
   const [lastTikzGeneratedAt, setLastTikzGeneratedAt] = useState<number | null>(null);
 
-  const currentTikzOptionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${exportClipRectWorld ? `${exportClipRectWorld.xmin},${exportClipRectWorld.xmax},${exportClipRectWorld.ymin},${exportClipRectWorld.ymax}` : "none"}`;
+  const clipSig = exportClipWorld
+    ? exportClipWorld.kind === "rect"
+      ? `rect:${exportClipWorld.xmin},${exportClipWorld.xmax},${exportClipWorld.ymin},${exportClipWorld.ymax}`
+      : `poly:${exportClipWorld.points.map((p) => `${p.x},${p.y}`).join(";")}`
+    : "none";
+  const currentTikzOptionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
   const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
   const tikzStatusText = useMemo(
     () =>
@@ -50,13 +55,17 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       const lineScale = Number(exportLineScale);
       const labelScale = Number(exportLabelScale);
       const globalScale = Number(exportGlobalScale);
-      const optionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${exportClipRectWorld ? `${exportClipRectWorld.xmin},${exportClipRectWorld.xmax},${exportClipRectWorld.ymin},${exportClipRectWorld.ymax}` : "none"}`;
+      const optionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
       const viewport = exportUseCurrentView ? getViewportFromCanvas(camera) : undefined;
-      const clipRect = exportUseClipSelection ? exportClipRectWorld ?? undefined : undefined;
+      const clipRect =
+        exportUseClipSelection && exportClipWorld?.kind === "rect" ? exportClipWorld : undefined;
+      const clipPolygon =
+        exportUseClipSelection && exportClipWorld?.kind === "polygon" ? exportClipWorld.points : undefined;
       setTikzText(
         exportTikzWithOptions(scene, {
           viewport,
           clipRectWorld: clipRect,
+          clipPolygonWorld: clipPolygon,
           worldToTikzScale: Number.isFinite(globalScale) ? globalScale : 1,
           pointScale: Number.isFinite(pointScale) ? pointScale : 1,
           lineScale: (Number.isFinite(lineScale) ? lineScale : 1) * (0.5 / 1.2),
@@ -71,10 +80,10 @@ export function ExportPanel({ visible }: ExportPanelProps) {
           segmentMarkLineWidthScale: 1 / 2.2,
           angleLabelFontScale: 9 / 16,
           angleArcStrokeScale: 0.5 / 1.8,
-          angleArcSizeScale: 0.4,
+          angleArcSizeScale: 1,
           angleMarkSizeScale: 0.5,
           rightAngleStrokeScale: 0.35 / 1.1,
-          rightAngleSizeScale: 0.12 / 0.65,
+          rightAngleSizeScale: 1,
           autoScaleToFitCm: { maxWidthCm: 14, maxHeightCm: 9 },
         })
       );
@@ -137,20 +146,20 @@ export function ExportPanel({ visible }: ExportPanelProps) {
               checked={exportUseCurrentView}
               onChange={(e) => setExportUseCurrentView(e.target.checked)}
             />
-            Use current camera viewport
+            Use Current View
           </label>
           <label className="checkboxRow">
             <input
               type="checkbox"
               checked={exportUseClipSelection}
               onChange={(e) => setExportUseClipSelection(e.target.checked)}
-              disabled={!exportClipRectWorld}
+              disabled={!exportClipWorld}
             />
             Use Export Clip selection
           </label>
-          {exportClipRectWorld && (
+          {exportClipWorld && (
             <div className="actionsRow">
-              <button className="actionButton secondary" onClick={clearExportClipRectWorld}>
+              <button className="actionButton secondary" onClick={clearExportClipWorld}>
                 Clear clip selection
               </button>
             </div>

@@ -76,26 +76,41 @@ export function drawPendingPreview(
     ctx.stroke();
   };
 
-  if (pendingSelection.tool === "export_clip" && pendingSelection.step === 2 && cursorWorld) {
-    const a = pendingSelection.first.world;
-    const minX = Math.min(a.x, cursorWorld.x);
-    const maxX = Math.max(a.x, cursorWorld.x);
-    const minY = Math.min(a.y, cursorWorld.y);
-    const maxY = Math.max(a.y, cursorWorld.y);
-    const pMin = camMath.worldToScreen({ x: minX, y: minY }, camera, vp);
-    const pMax = camMath.worldToScreen({ x: maxX, y: maxY }, camera, vp);
-    const x = Math.min(pMin.x, pMax.x);
-    const y = Math.min(pMin.y, pMax.y);
-    const w = Math.abs(pMax.x - pMin.x);
-    const h = Math.abs(pMax.y - pMin.y);
-    ctx.globalAlpha = 0.85;
-    ctx.strokeStyle = "#0ea5e9";
-    ctx.fillStyle = "rgba(14,165,233,0.08)";
-    ctx.lineWidth = 1.3;
-    ctx.beginPath();
-    ctx.rect(x, y, w, h);
-    ctx.fill();
-    ctx.stroke();
+  if (pendingSelection.tool === "export_clip" && pendingSelection.step === 2) {
+    const points = pendingSelection.points.map((entry) => entry.world);
+    if (points.length >= 1) {
+      const first = camMath.worldToScreen(points[0], camera, vp);
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = "#0ea5e9";
+      ctx.fillStyle = "rgba(14,165,233,0.08)";
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(first.x, first.y);
+      for (let i = 1; i < points.length; i += 1) {
+        const p = camMath.worldToScreen(points[i], camera, vp);
+        ctx.lineTo(p.x, p.y);
+      }
+      if (cursorWorld) {
+        const c = camMath.worldToScreen(cursorWorld, camera, vp);
+        ctx.lineTo(c.x, c.y);
+      }
+      ctx.stroke();
+
+      // Show the first vertex explicitly so users can close the clip path easily.
+      ctx.setLineDash([]);
+      const canClose = points.length >= 3 && cursorScreen && Math.hypot(cursorScreen.x - first.x, cursorScreen.y - first.y) <= 14;
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(14,165,233,0.95)";
+      ctx.arc(first.x, first.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      if (canClose) {
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(14,165,233,0.95)";
+        ctx.lineWidth = 1.4;
+        ctx.arc(first.x, first.y, 9, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
     ctx.restore();
     return;
   }
