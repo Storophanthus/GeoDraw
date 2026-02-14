@@ -21,6 +21,7 @@ export type TikzExportOptions = {
   globalLineAdd?: number;
   pointScale?: number;
   lineScale?: number;
+  labelScale?: number;
   worldToTikzScale?: number;
   screenPxPerWorld?: number;
   matchCanvas?: boolean;
@@ -33,6 +34,7 @@ export type TikzExportOptions = {
   angleLabelFontScale?: number;
   angleArcStrokeScale?: number;
   angleArcSizeScale?: number;
+  angleMarkSizeScale?: number;
   rightAngleStrokeScale?: number;
   rightAngleSizeScale?: number;
   autoScaleToFitCm?: { maxWidthCm: number; maxHeightCm: number };
@@ -40,6 +42,7 @@ export type TikzExportOptions = {
 
 export type TikzCommand =
   | { kind: "SetupUnits"; scale: number }
+  | { kind: "SetupLabelScale"; scale: number }
   | { kind: "SetupViewport"; xmin: number; xmax: number; ymin: number; ymax: number; space: number }
   | { kind: "ClipRect"; xmin: number; xmax: number; ymin: number; ymax: number }
   | { kind: "SetupLine"; addLeft: number; addRight: number }
@@ -127,6 +130,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
   const viewport = options.viewport ?? computeExportViewport(scene);
   let coordScale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
+  const labelScale = clampPositive(options.labelScale ?? 1, 0.1, 10);
   // Auto-fit large scenes for document embedding when canvas-match export is enabled.
   // Keep scale unchanged for already-reasonable extents, and only shrink when needed.
   if (options.matchCanvas) {
@@ -138,6 +142,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     coordScale = clampPositive(coordScale * fitScale, 0.01, 100);
   }
   defs.push({ kind: "SetupUnits", scale: coordScale });
+  defs.push({ kind: "SetupLabelScale", scale: labelScale });
   defs.push({
     kind: "SetupViewport",
     xmin: viewport.xmin,
@@ -810,7 +815,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       b: bName,
       style: segmentStyleToTikz(seg.style, options),
     });
-    const markStyle = segmentMarkToTikz(seg.style.segmentMark, options);
+    const markStyle = segmentMarkToTikz(seg.style.segmentMark, seg.style.strokeColor, seg.style.opacity, options);
     if (markStyle) {
       draws.push({
         kind: "MarkSegment",
@@ -822,6 +827,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const arrowOverlay = segmentArrowOverlayToTikz(seg.style.segmentArrowMark, aName, bName, {
       strokeColor: seg.style.strokeColor,
       strokeWidth: seg.style.strokeWidth,
+      opacity: seg.style.opacity,
     });
     if (arrowOverlay) {
       if (arrowOverlay.kind === "tkz") {
@@ -944,7 +950,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const rightSquareFillStyle =
       exportAsRight && markKind === "rightSquare" && angle.style.fillEnabled ? rightSquareFillStyleToTikz(angle.style) : null;
     if (angle.style.fillEnabled && !rightSquareFillStyle) {
-      const fillStyle = angleFillStyleToTikz(angle.style);
+      const fillStyle = angleFillStyleToTikz(angle.style, options);
       draws.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
     }
     if (markKind === "rightSquare" || markKind === "rightArcDot") {
@@ -1009,6 +1015,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
 export function renderTikz(cmds: TikzCommand[]): string {
   const setupUnits = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupUnits" }> => c.kind === "SetupUnits");
+  const setupLabelScale = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLabelScale" }> => c.kind === "SetupLabelScale");
   const setupViewport = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupViewport" }> => c.kind === "SetupViewport");
   const setupLine = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLine" }> => c.kind === "SetupLine");
   const clipRect = cmds.find((c): c is Extract<TikzCommand, { kind: "ClipRect" }> => c.kind === "ClipRect");
@@ -1018,6 +1025,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
     (c) =>
       c.kind !== "DefPoints" &&
       c.kind !== "SetupUnits" &&
+      c.kind !== "SetupLabelScale" &&
       c.kind !== "SetupViewport" &&
       c.kind !== "SetupLine" &&
       c.kind !== "ClipRect" &&
@@ -1048,9 +1056,9 @@ export function renderTikz(cmds: TikzCommand[]): string {
       c.kind === "DrawCircleRadius" ||
       c.kind === "FillAngle" ||
       c.kind === "MarkAngle" ||
-      c.kind === "MarkRightAngle" ||
-      c.kind === "LabelAngle"
+      c.kind === "MarkRightAngle"
   );
+  const drawAngleLabels = cmds.filter((c): c is Extract<TikzCommand, { kind: "LabelAngle" }> => c.kind === "LabelAngle");
   const drawPoints = cmds.filter((c) => c.kind === "DrawPoints");
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
   const hasGlowLabels = drawLabels.some((c) => c.kind === "LabelPoint" && Boolean(c.useGlow));
@@ -1251,10 +1259,6 @@ export function renderTikz(cmds: TikzCommand[]): string {
       assertAngleMacro("tkzMarkRightAngles", "Angle.markRight");
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzMarkRightAngles${opts}(${cmd.a},${cmd.b},${cmd.c})`);
-    } else if (cmd.kind === "LabelAngle") {
-      assertAngleMacro("tkzLabelAngle", "Angle.label");
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzLabelAngle${opts}(${cmd.a},${cmd.b},${cmd.c}){$${escapeTikzText(cmd.text)}$}`);
     }
   }
 
@@ -1266,6 +1270,15 @@ export function renderTikz(cmds: TikzCommand[]): string {
   }
 
   out.push("% Labels");
+  const shouldScaleLabels = Boolean(setupLabelScale && Math.abs(setupLabelScale.scale - 1) > 1e-9);
+  if (shouldScaleLabels) {
+    out.push(`\\begin{scope}[every node/.style={scale=${fmt(setupLabelScale!.scale)}}]`);
+  }
+  for (const cmd of drawAngleLabels) {
+    assertAngleMacro("tkzLabelAngle", "Angle.label");
+    const opts = cmd.style ? `[${cmd.style}]` : "";
+    out.push(`\\tkzLabelAngle${opts}(${cmd.a},${cmd.b},${cmd.c}){$${escapeTikzText(cmd.text)}$}`);
+  }
   for (const cmd of drawLabels) {
     if (cmd.kind === "LabelPoints") {
       if (cmd.points.length === 0) continue;
@@ -1279,6 +1292,9 @@ export function renderTikz(cmds: TikzCommand[]): string {
       ? `\\gdLabelGlow{$${escapeTikzText(cmd.text)}$}`
       : `$${escapeTikzText(cmd.text)}$`;
     out.push(`\\tkzLabelPoint${opts}(${cmd.name}){${labelText}}`);
+  }
+  if (shouldScaleLabels) {
+    out.push("\\end{scope}");
   }
 
   out.push("\\end{tikzpicture}");
@@ -1836,7 +1852,12 @@ function segmentStyleToTikz(style: SceneModel["segments"][number]["style"], opti
   return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth * segmentStrokeScale, style.dash, style.opacity, options);
 }
 
-function segmentMarkToTikz(mark: SceneModel["segments"][number]["style"]["segmentMark"], options: TikzExportOptions): string | null {
+function segmentMarkToTikz(
+  mark: SceneModel["segments"][number]["style"]["segmentMark"],
+  segmentStrokeColor: string,
+  segmentOpacity: number,
+  options: TikzExportOptions
+): string | null {
   if (!mark?.enabled || mark.mark === "none") return null;
   const allowedMarks = new Set(["|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"]);
   if (!allowedMarks.has(mark.mark)) {
@@ -1855,7 +1876,9 @@ function segmentMarkToTikz(mark: SceneModel["segments"][number]["style"]["segmen
     `pos=${fmt(mark.pos)}`,
     `size=${fmt(mark.sizePt * sizeScale)}pt`,
   ];
-  if (mark.color) opts.push(`color=${rgbColorExpr(mark.color)}`);
+  opts.push(`color=${rgbColorExpr(mark.color ?? segmentStrokeColor)}`);
+  const opacity = clamp01(segmentOpacity);
+  if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
   if (mark.lineWidthPt !== undefined) {
     if (!Number.isFinite(mark.lineWidthPt) || mark.lineWidthPt <= 0) {
       throw new Error("Unsupported SegmentMark: lineWidthPt");
@@ -1869,7 +1892,7 @@ function segmentArrowOverlayToTikz(
   arrow: SceneModel["segments"][number]["style"]["segmentArrowMark"],
   aName: string,
   bName: string,
-  base: { strokeColor: string; strokeWidth: number }
+  base: { strokeColor: string; strokeWidth: number; opacity: number }
 ): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
   if (!arrow?.enabled) return null;
   if (arrow.direction !== "->" && arrow.direction !== "<-" && arrow.direction !== "<->") {
@@ -1877,10 +1900,13 @@ function segmentArrowOverlayToTikz(
   }
   if (arrow.mode === "mid") {
     const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
+    const opacity = clamp01(base.opacity);
     const sourceWidth = arrow.lineWidthPt ?? base.strokeWidth;
     const arrowWidth = Math.max(0.1, sourceWidth * SEGMENT_ARROW_WIDTH_EXPORT_SCALE);
     const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
-    const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScale)}`;
+    const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScale)}${
+      opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
+    }`;
     const markCode =
       arrow.direction === "->"
         ? `{\\arrow[${arrowOpts}]{Stealth}}`
@@ -1903,6 +1929,7 @@ function segmentArrowOverlayToTikz(
           )} with ${markCode}}`
         : `decoration={markings,mark=at position ${fmt(clamp01(arrow.pos ?? 0.5))} with ${markCode}}`,
     ];
+    if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
     if (arrow.lineWidthPt !== undefined && (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0)) {
       throw new Error("Unsupported SegmentArrowMark: lineWidthPt");
     }
@@ -1911,12 +1938,15 @@ function segmentArrowOverlayToTikz(
   }
 
   const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
+  const opacity = clamp01(base.opacity);
   const sourceWidth = arrow.lineWidthPt ?? base.strokeWidth;
   const arrowWidth = Math.max(0.1, sourceWidth * SEGMENT_ARROW_WIDTH_EXPORT_SCALE);
   const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
   const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * arrowScale));
   const t = fmt(1 - tailFrac);
-  const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{Stealth[scale=${fmt(arrowScale)}]}`;
+  const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{Stealth[scale=${fmt(arrowScale)}]}${
+    opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
+  }`;
   if (arrow.direction === "->") {
     return {
       kind: "raw",
@@ -1992,7 +2022,9 @@ function angleMarkStyleToTikz(
     }
     opts.push(`mark=${markSymbol}`);
     const mkPos = Number.isFinite(style.markPos) ? Math.max(0, Math.min(1, style.markPos)) : 0.5;
-    const mkSize = Number.isFinite(style.markSize) ? Math.max(0.1, style.markSize) : 4;
+    const mkSizeBase = Number.isFinite(style.markSize) ? Math.max(0.1, style.markSize) : 4;
+    const mkSizeScale = clampPositive(options.angleMarkSizeScale ?? 1, 0.01, 100);
+    const mkSize = mkSizeBase * mkSizeScale;
     const mkColor = style.markColor && style.markColor.trim() ? style.markColor : style.strokeColor;
     opts.push(`mkpos=${fmt(mkPos)}`);
     opts.push(`mksize=${fmt(mkSize)}`);
@@ -2017,9 +2049,8 @@ function resolveAngleMarkKind(
   }
   if (normalized === "none") return "none";
   if (!isRightExact) {
-    if (normalized === "rightSquare" || normalized === "rightArcDot") {
-      throw new Error("Unsupported construction: RightAngleMark on non-right angle");
-    }
+    // Graceful fallback: if a right-only style is stored on a non-right angle
+    // (legacy/default drift), export as standard arc mark instead of failing export.
     return "arc";
   }
   if (normalized === "rightArcDot") return "rightArcDot";
@@ -2027,17 +2058,18 @@ function resolveAngleMarkKind(
   return "rightSquare";
 }
 
-function angleFillStyleToTikz(style: SceneModel["angles"][number]["style"]): string {
+function angleFillStyleToTikz(style: SceneModel["angles"][number]["style"], options: TikzExportOptions): string {
   if (!Number.isFinite(style.fillOpacity)) {
     throw new Error("Unsupported Angle style: fillOpacity is not finite.");
   }
   if (!Number.isFinite(style.arcRadius) || style.arcRadius <= 0) {
     throw new Error("Unsupported Angle style: arcRadius must be > 0.");
   }
+  const sizeScale = clampPositive(options.angleArcSizeScale ?? 1, 0.01, 100);
   const opts: string[] = [
     `fill=${rgbColorExpr(style.fillColor)}`,
     `fill opacity=${fmt(clamp01(style.fillOpacity))}`,
-    `size=${fmt(style.arcRadius)}`,
+    `size=${fmt(style.arcRadius * sizeScale)}`,
   ];
   return opts.join(", ");
 }
