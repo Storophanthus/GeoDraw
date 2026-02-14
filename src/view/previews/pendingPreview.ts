@@ -16,7 +16,13 @@ import type { HoveredHit, PendingSelection } from "../../state/geoStore";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import type { SnapCandidate } from "../snapEngine";
 import { isRightExactByProvenance } from "../../domain/rightAngleProvenance";
-import { computeRightMarkSizePx, drawAngleArcPreview, drawAngleSector, drawRightAngleMark } from "../angleRender";
+import {
+  computeRightMarkSizePx,
+  drawAngleArcPreview,
+  drawAngleSector,
+  drawRightAngleMark,
+  nonSectorAngleRadiusPx,
+} from "../angleRender";
 
 export type AngleFixedToolState = { angleExpr: string; direction: "CCW" | "CW" };
 export type CircleFixedToolState = { radius: string };
@@ -48,6 +54,7 @@ export function drawPendingPreview(
   vp: Viewport,
   angleFixedTool: AngleFixedToolState,
   circleFixedTool: CircleFixedToolState,
+  anglePreviewArcRadius: number,
   tolerances: { linePx: number; segmentPx: number }
 ): void {
   if (!pendingSelection) return;
@@ -368,8 +375,7 @@ export function drawPendingPreview(
         const as = camMath.worldToScreen(a, camera, vp);
         const bs = camMath.worldToScreen(b, camera, vp);
         const cs = camMath.worldToScreen(c, camera, vp);
-        // Keep preview cosmetics stable under camera zoom by using world distance.
-        const radiusPx = Math.max(24, Math.min(120, Math.hypot(a.x - b.x, a.y - b.y) * 0.34));
+        const radiusPx = nonSectorAngleRadiusPx(anglePreviewArcRadius);
         const rightStatus: "none" | "approx" | "exact" = cId
           ? isRightExactByProvenance(scene, pendingSelection.first.id, pendingSelection.second.id, cId)
             ? "exact"

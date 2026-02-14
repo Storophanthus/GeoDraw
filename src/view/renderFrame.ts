@@ -41,6 +41,7 @@ type RenderFrameArgs = {
   resolvedAngles: ResolvedAngle[];
   angleFixedTool: AngleFixedToolState;
   circleFixedTool: CircleFixedToolState;
+  anglePreviewArcRadius: number;
   pendingPreviewTolerances: PendingPreviewTolerances;
   selectedDrawableObject: DrawableObjectSelection;
   recentDrawableObject: DrawableObjectSelection;
@@ -69,6 +70,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     resolvedAngles,
     angleFixedTool,
     circleFixedTool,
+    anglePreviewArcRadius,
     pendingPreviewTolerances,
     selectedDrawableObject,
     recentDrawableObject,
@@ -109,6 +111,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       vp,
       angleFixedTool,
       circleFixedTool,
+      anglePreviewArcRadius,
       pendingPreviewTolerances
     );
     drawPoints(ctx, resolvedPoints, selectedDrawableObject, camera, vp, copySourceDrawable, dependencyGlowEnabled);

@@ -5,6 +5,7 @@ import {
   computeRightMarkSizePx,
   drawAngleArcPreview,
   drawAngleSector,
+  nonSectorAngleRadiusPx,
   drawRightAngleMark,
   drawRightAngleSquareFill,
 } from "../angleRender";
@@ -110,7 +111,7 @@ export function drawAngles(
             mapStrokeWidth(angle.style.strokeWidth)
           );
         } else if (resolvedMarkStyle === "rightArcDot") {
-          drawRightInnerDot(ctx, as, bs, entry.theta, radiusPx * 0.7, Math.max(2, ctx.lineWidth * 0.8));
+          drawRightInnerDot(ctx, as, bs, cs, rightMarkSizePx, Math.max(1.8, Math.min(4.5, rightMarkSizePx * 0.18)));
         }
       }
     }
@@ -150,12 +151,6 @@ export function drawAngles(
 
     ctx.restore();
   }
-}
-
-function nonSectorAngleRadiusPx(arcRadius: number): number {
-  // Keep angle cosmetics screen-stable: independent from camera zoom.
-  // UI arcRadius remains a compact scalar; map it into practical px range.
-  return Math.max(18, Math.min(120, arcRadius * 34));
 }
 
 function drawArcBarMarks(
@@ -201,14 +196,26 @@ function drawRightInnerDot(
   ctx: CanvasRenderingContext2D,
   a: Vec2,
   b: Vec2,
-  theta: number,
-  radius: number,
+  c: Vec2,
+  size: number,
   dotRadius: number
 ): void {
-  const start = Math.atan2(a.y - b.y, a.x - b.x);
-  const mid = start - theta * 0.5;
-  const cx = b.x + Math.cos(mid) * radius;
-  const cy = b.y + Math.sin(mid) * radius;
+  const ux = a.x - b.x;
+  const uy = a.y - b.y;
+  const vx = c.x - b.x;
+  const vy = c.y - b.y;
+  const uLen = Math.hypot(ux, uy);
+  const vLen = Math.hypot(vx, vy);
+  if (uLen <= 1e-9 || vLen <= 1e-9) return;
+  const unx = ux / uLen;
+  const uny = uy / uLen;
+  const vnx = vx / vLen;
+  const vny = vy / vLen;
+  // Anchor dot on the right-mark geometry, so it scales and stays centered
+  // consistently with the square counterpart.
+  const t = size * 0.55;
+  const cx = b.x + (unx + vnx) * t;
+  const cy = b.y + (uny + vny) * t;
   ctx.beginPath();
   ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
   ctx.fillStyle = ctx.strokeStyle;

@@ -2050,13 +2050,20 @@ function angleMarkStyleToTikz(
     throw new Error("Unsupported Angle style: arcRadius must be > 0.");
   }
   const opacity = clamp01(style.strokeOpacity);
-  const strokeScale = isRightAngle
+  const isRightArcDot = isRightAngle && markKind === "rightArcDot";
+  const strokeScale = isRightArcDot
+    ? clampPositive(options.angleArcStrokeScale ?? 1, 0.01, 100)
+    : isRightAngle
     ? clampPositive(options.rightAngleStrokeScale ?? 1, 0.01, 100)
     : clampPositive(options.angleArcStrokeScale ?? 1, 0.01, 100);
-  const sizeScale = isRightAngle
+  const sizeScale = isRightArcDot
+    ? clampPositive(options.angleArcSizeScale ?? 1, 0.01, 100)
+    : isRightAngle
     ? clampPositive(options.rightAngleSizeScale ?? 1, 0.01, 100)
     : clampPositive(options.angleArcSizeScale ?? 1, 0.01, 100);
-  const baseSizeWorld = isRightAngle
+  const baseSizeWorld = isRightArcDot
+    ? nonSectorAngleRadiusWorldFromStyle(style, options)
+    : isRightAngle
     ? rightAngleMarkSizeWorldFromStyle(style, options)
     : nonSectorAngleRadiusWorldFromStyle(style, options);
   const opts: string[] = [
@@ -2064,8 +2071,13 @@ function angleMarkStyleToTikz(
     `line width=${fmt(Math.max(0.1, style.strokeWidth * strokeScale))}pt`,
     `size=${fmt(baseSizeWorld * sizeScale)}`,
   ];
-  if (isRightAngle && markKind === "rightArcDot") {
+  if (isRightArcDot) {
     opts.push("german");
+    const exportedSize = baseSizeWorld * sizeScale;
+    // Keep german inner dot visually proportional to the right-arc size.
+    // Calibrated so size≈0.83 maps to dotsize≈3, matching expected tkz look.
+    const dotSize = Math.max(1, Math.min(6, exportedSize * 3.6));
+    opts.push(`dotsize=${fmt(dotSize)}`);
   }
   if (!isRightAngle && markKind === "arc") {
     const arcMultiplicity = style.arcMultiplicity ?? 1;

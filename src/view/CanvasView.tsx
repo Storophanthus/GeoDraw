@@ -76,6 +76,7 @@ export function CanvasView() {
   const pendingSelection = useGeoStore((store) => store.pendingSelection);
   const copyStyle = useGeoStore((store) => store.copyStyle);
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
+  const angleDefaults = useGeoStore((store) => store.angleDefaults);
   const dependencyGlowEnabled = useGeoStore((store) => store.dependencyGlowEnabled);
   const exportClipWorld = useGeoStore((store) => store.exportClipWorld);
   const gridEnabled = useGeoStore((store) => store.gridEnabled);
@@ -305,6 +306,7 @@ export function CanvasView() {
         resolvedAngles,
         angleFixedTool,
         circleFixedTool,
+        anglePreviewArcRadius: angleDefaults.arcRadius,
         pendingPreviewTolerances: {
           linePx: LINE_HIT_TOLERANCE_PX,
           segmentPx: SEGMENT_HIT_TOLERANCE_PX,
@@ -320,6 +322,7 @@ export function CanvasView() {
     [
       activeTool,
       angleFixedTool,
+      angleDefaults.arcRadius,
       camera,
       copyStyle.source,
       cursorWorld,

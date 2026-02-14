@@ -85,3 +85,9 @@ export function computeRightMarkSizePx(radiusPx: number, strokePx: number): numb
   // Keep right-angle marker readable against current arc sizing.
   return Math.max(7, radiusPx * 0.34 + Math.max(0, strokePx) * 0.3);
 }
+
+export function nonSectorAngleRadiusPx(arcRadius: number): number {
+  // Keep angle cosmetics screen-stable: independent from camera zoom.
+  // UI arcRadius remains a compact scalar; map it into practical px range.
+  return Math.max(18, Math.min(120, arcRadius * 34));
+}

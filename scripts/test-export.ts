@@ -641,6 +641,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (exportError) throw exportError;
     if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-arc-dot angle to emit \\tkzMarkRightAngles.");
     if (!tikz.includes("german")) throw new Error("Expected right-arc-dot angle to include german option.");
+    if (!tikz.includes("dotsize=")) throw new Error("Expected right-arc-dot angle to include dotsize option.");
   }
 
   if (fileName === "sector-basic.json") {
