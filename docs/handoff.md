@@ -224,6 +224,8 @@
 
 
 ## Active Work (Open)
+- UX consistency update:
+  - Grid lattice magnetism now follows Grid visibility: when `Grid` is off, free-point grid snapping is disabled even if `Snap` remains checked.
 - Intersection semantics hardening (completed this pass):
   - Runtime branch selection no longer uses nearest-`preferredWorld` heuristics in generic intersection assignment.
   - Export fallback for legacy generic intersections no longer uses `preferredWorld` root distance; explicit branch is used when present, deterministic root `0` otherwise.

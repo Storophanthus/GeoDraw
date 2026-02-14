@@ -1,0 +1,343 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  urlcolor=blue!60!black
+}
+
+\title{\textbf{GeoDraw User Guide}\\\large End-User Manual}
+\author{GeoDraw}
+\date{\today}
+
+\begin{document}
+\begin{titlepage}
+  \centering
+  {\Huge\bfseries GeoDraw User Guide\par}
+  \vspace{0.6em}
+  {\Large End-User Manual\par}
+  \vspace{2em}
+  {\large Version: Stable Desktop Build\par}
+  \vfill
+  {\large \today\par}
+\end{titlepage}
+\tableofcontents
+\bigskip
+
+\section{Purpose}
+GeoDraw is an interactive geometry app for constructing points, lines, circles, angles, sectors, and polygons, then exporting the figure to TikZ (\texttt{tkz-euclide} style workflow).
+
+\section{Interface Overview}
+The window is divided into:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Left Toolbar}: tool groups (Move, Points, Lines, Angle, Circles, Styles).
+  \item \textbf{Center Canvas}: drawing and interaction area.
+  \item \textbf{Top Actions}: file controls (Open, Save, Save As), Undo/Redo, Fit View.
+  \item \textbf{Right Sidebar}: \textbf{Objects} tab and \textbf{Export} tab.
+  \item \textbf{Bottom Command Bar}: expression evaluation and command-driven construction.
+\end{itemize}
+
+% \begin{figure}[h]
+% \centering
+% \includegraphics[width=\linewidth]{screenshots/layout-overview.png}
+% \caption{Main layout}
+% \end{figure}
+
+\section{File Operations}
+\subsection{Open / Save / Save As}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Open}: load \texttt{.geodraw} or \texttt{.json} snapshot.
+  \item \textbf{Save}: overwrite current file if already opened/saved once.
+  \item \textbf{Save As}: choose new name/location.
+\end{itemize}
+
+\subsection{Supported file types}
+\begin{itemize}[leftmargin=1.5em]
+  \item \texttt{.geodraw}
+  \item \texttt{.json} (same snapshot structure)
+\end{itemize}
+
+\section{Navigation and Global Controls}
+\subsection{Mouse}
+\begin{itemize}[leftmargin=1.5em]
+  \item Drag points to move them.
+  \item Pan the canvas in Move mode.
+  \item Use mouse wheel/trackpad to zoom.
+\end{itemize}
+
+\subsection{Keyboard shortcuts}
+\begin{itemize}[leftmargin=1.5em]
+  \item \texttt{Ctrl/Cmd + Z}: Undo
+  \item \texttt{Ctrl/Cmd + Shift + Z} or \texttt{Ctrl/Cmd + Y}: Redo
+  \item \texttt{Shift + F}: Fit View
+  \item \texttt{Delete}/\texttt{Backspace}: delete selected object
+  \item \texttt{Esc}: cancel Copy Style mode / clear pending selections
+\end{itemize}
+
+\section{Tool Palette}
+Long-press or right-click a group button to open its flyout tools.
+
+\subsection{Move Group}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Move / Select} (\texttt{V}): select and manipulate objects.
+  \item \textbf{Export Clip}: create a clip polygon for export (click vertices, close by clicking near the first vertex).
+\end{itemize}
+
+\subsection{Points Group}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Point} (\texttt{P}): create/select points.
+  \item \textbf{Midpoint} (\texttt{M}): midpoint from two points or from a segment.
+\end{itemize}
+
+\subsection{Lines Group}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Segment} (\texttt{S})
+  \item \textbf{Line Through 2 Points} (\texttt{L})
+  \item \textbf{Perpendicular Line}
+  \item \textbf{Parallel Line}
+  \item \textbf{Tangent Line}
+  \item \textbf{Internal Angle Bisector}
+\end{itemize}
+
+\subsection{Angle Group}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Angle}: select 3 points (A, vertex B, C).
+  \item \textbf{Angle with Fixed Value}: define expression and direction (CW/CCW), then construct.
+\end{itemize}
+
+\subsection{Circles Group}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Circle Center + Point} (\texttt{O})
+  \item \textbf{Circle through 3 Points}
+  \item \textbf{Circle with Fixed Radius}
+  \item \textbf{Circular Sector}
+  \item \textbf{Polygon}
+\end{itemize}
+
+\subsection{Styles Group}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Copy Style} (\texttt{C}): pick a source style, then apply to targets.
+\end{itemize}
+
+\section{Objects Tab (Right Sidebar)}
+\subsection{Top toggles}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Grid}: show/hide grid.
+  \item \textbf{Axes}: show/hide axes.
+  \item \textbf{Snap}: snap free-point creation to grid intersections.
+  \item \textbf{Dependency Glow}: highlight dependency categories visually.
+\end{itemize}
+
+\subsection{Object Browser}
+\begin{itemize}[leftmargin=1.5em]
+  \item Tabs: All, Points, Lines, Circles, Angles, Numbers.
+  \item Click row to select object.
+  \item Use the row checkbox (right side) to toggle object visibility.
+\end{itemize}
+
+\section{Properties Panel}
+When an object is selected, the panel shows editable properties.
+
+\subsection{Point properties}
+\begin{itemize}[leftmargin=1.5em]
+  \item Rename point.
+  \item Position readout.
+  \item Visual style: shape, size, stroke/fill, label style.
+\end{itemize}
+
+\subsection{Line/Segment properties}
+\begin{itemize}[leftmargin=1.5em]
+  \item Stroke color, width, dash, opacity.
+  \item Segment marks (\texttt{|}, \texttt{||}, \texttt{|||}, etc.) and arrow marks (end/mid).
+\end{itemize}
+
+\subsection{Circle/Polygon/Sector properties}
+\begin{itemize}[leftmargin=1.5em]
+  \item Stroke and fill settings.
+  \item Fill opacity.
+  \item Fill pattern and pattern color.
+\end{itemize}
+
+\subsection{Angle properties}
+\begin{itemize}[leftmargin=1.5em]
+  \item Arc radius, stroke, fill.
+  \item Label/value visibility and placement.
+  \item Mark styles:
+  \begin{itemize}[leftmargin=1.5em]
+    \item Non-right: vanilla arc, bar marks (\texttt{|}, \texttt{||}, \texttt{|||}), double/triple arc, none.
+    \item Right-angle status aware options for exact/proven right angles.
+  \end{itemize}
+\end{itemize}
+
+\subsection{Tool info panels}
+Special tools (Fixed Angle, Fixed Radius Circle, Export Clip, Copy Style) show context-specific instructions and inputs.
+
+\section{Command Bar}
+Command Bar supports expression evaluation, object creation commands, and assignments.
+
+\subsection{Input behavior}
+\begin{itemize}[leftmargin=1.5em]
+  \item \texttt{Enter}: run command
+  \item \texttt{Esc}: clear input
+  \item \texttt{Up/Down}: command history
+\end{itemize}
+
+\subsection{Expression examples}
+\begin{itemize}[leftmargin=1.5em]
+  \item \texttt{5*5}
+  \item \texttt{sin(pi/6)}
+  \item \texttt{Distance(A,B)}
+\end{itemize}
+
+\subsection{Construction command examples}
+\begin{itemize}[leftmargin=1.5em]
+  \item \texttt{Point(1,2)}
+  \item \texttt{Line(A,B)}
+  \item \texttt{Line(0,0,3,4)}
+  \item \texttt{Segment(A,B)}
+  \item \texttt{Polygon(A,B,C,D)}
+  \item \texttt{Circle(O,A)}
+  \item \texttt{Circle(O,3.5)}
+  \item \texttt{Circle(0,0,5)}
+\end{itemize}
+
+\subsection{Assignments}
+\begin{itemize}[leftmargin=1.5em]
+  \item Scalar: \texttt{n\_1 = 2.023}
+  \item Named object: \texttt{P = Point(1,2)}, \texttt{l = Line(A,B)}, \texttt{c = Circle(O,3)}
+  \item Point-expression assignment (vector style): \texttt{X = A + B}
+\end{itemize}
+
+\subsection{Important assignment rule}
+Names are fail-closed/no-overwrite by default:
+\begin{itemize}[leftmargin=1.5em]
+  \item If a name is already used by a point/number/alias, reassignment is rejected.
+\end{itemize}
+
+\section{Export Tab}
+\subsection{TikZ export options}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Use Current View}: export based on current camera viewport.
+  \item \textbf{Use Export Clip selection}: apply clip polygon from Export Clip tool.
+  \item \textbf{Match canvas size conversion}
+  \item \textbf{Label glow}
+  \item Scale controls:
+  \begin{itemize}[leftmargin=1.5em]
+    \item Global Scale
+    \item Point Scale
+    \item Line Scale
+    \item Label Scale
+  \end{itemize}
+\end{itemize}
+
+\subsection{JSON export}
+\begin{itemize}[leftmargin=1.5em]
+  \item Export model snapshot as JSON.
+  \item Optional debug world coordinates.
+\end{itemize}
+
+\section{Typical Workflows}
+\subsection{Workflow A: classic construction}
+\begin{enumerate}[leftmargin=1.5em]
+  \item Create base points with Point tool.
+  \item Build segments/lines/circles.
+  \item Add angles/sectors/polygons.
+  \item Tune style from Properties panel.
+  \item Export TikZ.
+\end{enumerate}
+
+\subsection{Workflow B: command-driven}
+\begin{enumerate}[leftmargin=1.5em]
+  \item Create anchor points from Command Bar.
+  \item Create lines/circles/segments via named references.
+  \item Assign constants and reuse them in commands.
+  \item Export.
+\end{enumerate}
+
+\section{Troubleshooting}
+\subsection{I cannot select a tool variant}
+Long-press or right-click the group button to open its flyout.
+
+\subsection{Clip export does not apply}
+Ensure you closed the clip polygon (click near first point), then enable \textbf{Use Export Clip selection} in Export tab.
+
+\subsection{Command reports unknown/ambiguous point}
+\begin{itemize}[leftmargin=1.5em]
+  \item Verify point labels exist.
+  \item Avoid duplicate labels.
+\end{itemize}
+
+\subsection{Object is hidden unexpectedly}
+Check per-object visibility checkbox in Object Browser.
+
+\section{Current Limits (User-visible)}
+\begin{itemize}[leftmargin=1.5em]
+  \item Command Bar currently rejects overwrite of existing names.
+  \item Some advanced symbolic redefinition workflows (GeoGebra-style redefine in-place) are not yet exposed as a dedicated UI flow.
+\end{itemize}
+
+\appendix
+\section{Screenshot Appendix Template}
+Use this template to insert screenshots consistently.
+
+\subsection*{A.1 Main Layout}
+% \begin{figure}[h]
+% \centering
+% \includegraphics[width=\linewidth]{screenshots/main-layout.png}
+% \caption{Main layout with tool palette, canvas, sidebar, and command bar.}
+% \end{figure}
+
+\subsection*{A.2 Tool Flyout}
+% \begin{figure}[h]
+% \centering
+% \includegraphics[width=.7\linewidth]{screenshots/tool-flyout.png}
+% \caption{Long-press/right-click flyout for tool variants.}
+% \end{figure}
+
+\subsection*{A.3 Object Browser}
+% \begin{figure}[h]
+% \centering
+% \includegraphics[width=.7\linewidth]{screenshots/object-browser.png}
+% \caption{Object tabs and per-object visibility checkbox.}
+% \end{figure}
+
+\subsection*{A.4 Properties Panel}
+% \begin{figure}[h]
+% \centering
+% \includegraphics[width=.7\linewidth]{screenshots/properties-panel.png}
+% \caption{Example properties for a selected object.}
+% \end{figure}
+
+\subsection*{A.5 Command Bar}
+% \begin{figure}[h]
+% \centering
+% \includegraphics[width=\linewidth]{screenshots/command-bar.png}
+% \caption{Command entry and status feedback.}
+% \end{figure}
+
+\subsection*{A.6 Export Panel + Clip}
+% \begin{figure}[h]
+% \centering
+% \includegraphics[width=\linewidth]{screenshots/export-panel.png}
+% \caption{Export options and clip selection workflow.}
+% \end{figure}
+
+\subsection*{A.7 TikZ Output}
+% \begin{figure}[h]
+% \centering
+% \includegraphics[width=\linewidth]{screenshots/tikz-output.png}
+% \caption{Compiled TikZ result preview.}
+% \end{figure}
+
+\end{document}

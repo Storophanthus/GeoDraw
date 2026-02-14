@@ -81,6 +81,7 @@ export function CanvasView() {
   const gridEnabled = useGeoStore((store) => store.gridEnabled);
   const axesEnabled = useGeoStore((store) => store.axesEnabled);
   const gridSnapEnabled = useGeoStore((store) => store.gridSnapEnabled);
+  const effectiveGridSnapEnabled = gridEnabled && gridSnapEnabled;
 
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
   const setHoveredHit = useGeoStore((store) => store.setHoveredHit);
@@ -175,7 +176,7 @@ export function CanvasView() {
         const point = scene.points.find((p) => p.id === id);
         return point ? getPointWorldPos(point, scene) : null;
       },
-      gridSnapEnabled,
+      gridSnapEnabled: effectiveGridSnapEnabled,
       snapWorldToGrid: (world) => snapWorldToRectGrid(world, camera, gridSettings),
     }),
     [
@@ -207,7 +208,7 @@ export function CanvasView() {
       setCopyStyleSource,
       applyCopyStyleTo,
       setExportClipWorld,
-      gridSnapEnabled,
+      effectiveGridSnapEnabled,
       camera,
       gridSettings,
       scene,
