@@ -14,7 +14,6 @@ export type CircleLineAssignmentPoint = {
 export type GenericAssignmentPoint = {
   id: string;
   branchIndex?: number;
-  preferredWorld: Vec2;
   excludePointId?: string;
 };
 
@@ -22,7 +21,6 @@ type AssignmentRequest<TPoint> = {
   point: TPoint;
   candidates: RootIndex[];
   forced: boolean;
-  hasPrev: boolean;
   order: number;
 };
 
@@ -33,7 +31,6 @@ type AssignmentOps = {
 function sortRequests<TPoint>(requests: AssignmentRequest<TPoint>[]): void {
   requests.sort((a, b) => {
     if (a.forced !== b.forced) return a.forced ? -1 : 1;
-    if (a.hasPrev !== b.hasPrev) return a.hasPrev ? -1 : 1;
     return a.order - b.order;
   });
 }
@@ -102,7 +99,6 @@ export function assignCircleLinePairPoints(
       point: item,
       candidates: [primary, secondary],
       forced: forcedCandidate !== null,
-      hasPrev: prev !== null,
       order: i,
     });
   }
@@ -170,7 +166,6 @@ export function assignGenericIntersectionPairPoints(
       }
     }
     let primary: RootIndex;
-    const prev = ops.getPreviousStablePoint(item.id);
     if (forcedExcludedIndex !== null) {
       // Prefer any root that is not the excluded one.
       const allowed = intersections.map((_, idx) => idx).filter((idx) => idx !== forcedExcludedIndex);
@@ -178,39 +173,27 @@ export function assignGenericIntersectionPairPoints(
         out.set(item.id, null);
         continue;
       }
-      if (prev) {
-        primary = allowed.reduce((best, idx) =>
-          distance(intersections[idx], prev) < distance(intersections[best], prev) ? idx : best
-        , allowed[0]);
-      } else if (Number.isInteger(item.branchIndex) && (item.branchIndex as number) >= 0 && (item.branchIndex as number) < intersections.length) {
+      if (Number.isInteger(item.branchIndex) && (item.branchIndex as number) >= 0 && (item.branchIndex as number) < intersections.length) {
         primary = allowed.includes(item.branchIndex as number) ? (item.branchIndex as number) : allowed[0];
       } else {
-        primary = allowed.reduce((best, idx) =>
-          distance(intersections[idx], item.preferredWorld) < distance(intersections[best], item.preferredWorld) ? idx : best
-        , allowed[0]);
+        // Deterministic fallback: choose the first allowed root by index.
+        primary = allowed[0];
       }
     } else if (Number.isInteger(item.branchIndex) && (item.branchIndex as number) >= 0 && (item.branchIndex as number) < intersections.length) {
       primary = item.branchIndex as number;
-    } else if (prev) {
-      primary = intersections.reduce((best, root, idx) =>
-        distance(root, prev) < distance(intersections[best], prev) ? idx : best
-      , 0);
     } else {
-      primary = intersections.reduce((best, root, idx) =>
-        distance(root, item.preferredWorld) < distance(intersections[best], item.preferredWorld) ? idx : best
-      , 0);
+      // Deterministic fallback when branch index is missing.
+      primary = 0;
     }
     const candidates = intersections
-      .map((root, idx) => ({ idx, d: distance(root, prev ?? item.preferredWorld) }))
-      .sort((a, b) => a.d - b.d)
-      .map((it) => it.idx)
-      .filter((idx) => idx !== primary);
+      .map((_, idx) => idx)
+      .filter((idx) => idx !== primary)
+      .sort((a, b) => a - b);
     candidates.unshift(primary);
     requests.push({
       point: item,
       candidates,
       forced: forcedExcludedIndex !== null,
-      hasPrev: prev !== null,
       order: i,
     });
   }

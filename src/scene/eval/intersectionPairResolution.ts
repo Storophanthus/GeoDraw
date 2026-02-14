@@ -78,7 +78,6 @@ export function resolveGenericIntersectionPairAssignmentsInScene(
       if (!sameObjectPair(ip.objA, ip.objB, objA, objB)) continue;
       pairPoints.push({
         id: ip.id,
-        preferredWorld: ip.preferredWorld,
       });
       continue;
     }
@@ -88,7 +87,6 @@ export function resolveGenericIntersectionPairAssignmentsInScene(
       pairPoints.push({
         id: ip.id,
         branchIndex: ip.branchIndex,
-        preferredWorld: { x: 0, y: 0 },
         excludePointId: ip.excludePointId,
       });
       continue;
@@ -99,7 +97,6 @@ export function resolveGenericIntersectionPairAssignmentsInScene(
       pairPoints.push({
         id: ip.id,
         branchIndex: ip.branchIndex,
-        preferredWorld: { x: 0, y: 0 },
         excludePointId: ip.excludePointId,
       });
     }

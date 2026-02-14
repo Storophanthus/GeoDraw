@@ -19,7 +19,7 @@
       "visible": true,
       "showLabel": "name",
       "definition": {
-        "kind": "intersectionPoint",
+        "kind": "lineLikeIntersectionPoint",
         "objA": {
           "type": "line",
           "id": "l_1"
@@ -56,19 +56,10 @@
       "visible": true,
       "showLabel": "name",
       "definition": {
-        "kind": "intersectionPoint",
-        "objA": {
-          "type": "circle",
-          "id": "c_1"
-        },
-        "objB": {
-          "type": "circle",
-          "id": "c_2"
-        },
-        "preferredWorld": {
-          "x": -1.9424894584690269,
-          "y": 4.356932955638787
-        }
+        "kind": "circleCircleIntersectionPoint",
+        "circleAId": "c_1",
+        "circleBId": "c_2",
+        "branchIndex": 0
       },
       "dependsOn": [
         "circle:c_1",
@@ -81,19 +72,10 @@
       "visible": true,
       "showLabel": "name",
       "definition": {
-        "kind": "intersectionPoint",
-        "objA": {
-          "type": "circle",
-          "id": "c_1"
-        },
-        "objB": {
-          "type": "circle",
-          "id": "c_2"
-        },
-        "preferredWorld": {
-          "x": 2.9364417647456293,
-          "y": 0.6699967365755191
-        }
+        "kind": "circleCircleIntersectionPoint",
+        "circleAId": "c_1",
+        "circleBId": "c_2",
+        "branchIndex": 1
       },
       "dependsOn": [
         "circle:c_1",
@@ -106,19 +88,10 @@
       "visible": true,
       "showLabel": "name",
       "definition": {
-        "kind": "intersectionPoint",
-        "objA": {
-          "type": "segment",
-          "id": "s_1"
-        },
-        "objB": {
-          "type": "circle",
-          "id": "c_2"
-        },
-        "preferredWorld": {
-          "x": 3.3503866283703476,
-          "y": -0.32640529927204787
-        }
+        "kind": "circleSegmentIntersectionPoint",
+        "segId": "s_1",
+        "circleId": "c_2",
+        "branchIndex": 1
       },
       "dependsOn": [
         "segment:s_1",
@@ -173,19 +146,10 @@
       "visible": true,
       "showLabel": "name",
       "definition": {
-        "kind": "intersectionPoint",
-        "objA": {
-          "type": "segment",
-          "id": "s_1"
-        },
-        "objB": {
-          "type": "circle",
-          "id": "c_1"
-        },
-        "preferredWorld": {
-          "x": 2.652482357210735,
-          "y": 0.13436553382676397
-        }
+        "kind": "circleSegmentIntersectionPoint",
+        "segId": "s_1",
+        "circleId": "c_1",
+        "branchIndex": 1
       },
       "dependsOn": [
         "segment:s_1",
@@ -252,7 +216,7 @@
       "visible": true,
       "showLabel": "name",
       "definition": {
-        "kind": "intersectionPoint",
+        "kind": "lineLikeIntersectionPoint",
         "objA": {
           "type": "line",
           "id": "l_1"

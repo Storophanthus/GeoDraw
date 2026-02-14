@@ -224,9 +224,13 @@
 
 
 ## Active Work (Open)
+- Intersection semantics hardening (completed this pass):
+  - Runtime branch selection no longer uses nearest-`preferredWorld` heuristics in generic intersection assignment.
+  - Export fallback for legacy generic intersections no longer uses `preferredWorld` root distance; explicit branch is used when present, deterministic root `0` otherwise.
+  - Export path now normalizes scene integrity before emitting TikZ, so missing legacy branch indices are backfilled once before export.
+  - Regression fixture `regression-line-coverage-j-o.json` was upgraded to semantic intersection kinds (`lineLikeIntersectionPoint`, `circleSegmentIntersectionPoint`, `circleCircleIntersectionPoint`) with explicit branch indices.
 - Active homework focus (correctness-first):
-  1. Keep `preferredWorld` as seed only; rely on explicit branch semantics where available.
-  2. Validate on dense construction scenes and guard against regressions.
+  1. Validate on dense construction scenes and guard against regressions.
 - Performance track is secondary and must not alter intersection semantics.
 - Performance follow-up now is measurement/tuning only:
   - run `npm run test:zoom` and dense-scene checks

@@ -1,5 +1,6 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
 import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
+import { normalizeSceneIntegrity } from "../domain/sceneIntegrity";
 import {
   computeOrientedAngleRad,
   evaluateAngleExpressionDegrees,
@@ -1350,19 +1351,21 @@ export function renderTikz(cmds: TikzCommand[]): string {
 }
 
 export function exportTikz(scene: SceneModel): string {
+  const normalizedScene = normalizeSceneIntegrity(scene);
   // Scene can be updated frequently; reset per-scene memoized lookups before each export.
-  pointByIdCache.delete(scene);
-  pointWorldCache.delete(scene);
-  const tex = renderTikz(buildTikzIR(scene));
+  pointByIdCache.delete(normalizedScene);
+  pointWorldCache.delete(normalizedScene);
+  const tex = renderTikz(buildTikzIR(normalizedScene));
   assertNoUnknownTkzMacro(tex);
   return tex;
 }
 
 export function exportTikzWithOptions(scene: SceneModel, options: TikzExportOptions): string {
+  const normalizedScene = normalizeSceneIntegrity(scene);
   // Scene can be updated frequently; reset per-scene memoized lookups before each export.
-  pointByIdCache.delete(scene);
-  pointWorldCache.delete(scene);
-  const tex = renderTikz(buildTikzIR(scene, options));
+  pointByIdCache.delete(normalizedScene);
+  pointWorldCache.delete(normalizedScene);
+  const tex = renderTikz(buildTikzIR(normalizedScene, options));
   assertNoUnknownTkzMacro(tex);
   return tex;
 }
@@ -1445,21 +1448,15 @@ function circleFromRef(
 
 function inferLineCircleBranchFromWorld(
   point: Extract<ScenePoint, { kind: "intersectionPoint" }>,
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-  center: { x: number; y: number },
-  through: { x: number; y: number }
+  _a: { x: number; y: number },
+  _b: { x: number; y: number },
+  _center: { x: number; y: number },
+  _through: { x: number; y: number }
 ): 0 | 1 {
   if (Number.isInteger(point.branchIndex) && (point.branchIndex as number) >= 0) {
     return (point.branchIndex as number) === 1 ? 1 : 0;
   }
-  const radius = distance(center, through);
-  const branches = lineCircleIntersectionBranches(a, b, center, radius);
-  if (branches.length < 2) return 0;
-
-  const d0 = distance(branches[0].point, point.preferredWorld);
-  const d1 = distance(branches[1].point, point.preferredWorld);
-  return d1 < d0 ? 1 : 0;
+  return 0;
 }
 
 function inferLineCircleBranchFromExcludedWorld(
@@ -1484,22 +1481,15 @@ function inferLineCircleBranchFromExcludedWorld(
 
 function inferCircleCircleBranch(
   point: Extract<ScenePoint, { kind: "intersectionPoint" }>,
-  aCenter: { x: number; y: number },
-  aThrough: { x: number; y: number },
-  bCenter: { x: number; y: number },
-  bThrough: { x: number; y: number }
+  _aCenter: { x: number; y: number },
+  _aThrough: { x: number; y: number },
+  _bCenter: { x: number; y: number },
+  _bThrough: { x: number; y: number }
 ): 0 | 1 {
   if (Number.isInteger(point.branchIndex) && (point.branchIndex as number) >= 0) {
     return (point.branchIndex as number) === 1 ? 1 : 0;
   }
-  const ra = distance(aCenter, aThrough);
-  const rb = distance(bCenter, bThrough);
-  const intersections = circleCircleIntersections(aCenter, ra, bCenter, rb);
-  if (intersections.length < 2) return 0;
-
-  const d0 = distance(intersections[0], point.preferredWorld);
-  const d1 = distance(intersections[1], point.preferredWorld);
-  return d1 < d0 ? 1 : 0;
+  return 0;
 }
 
 function isCircleRef(ref: GeometryObjectRef): boolean {
