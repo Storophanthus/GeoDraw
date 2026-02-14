@@ -3,6 +3,9 @@ import type { ActiveTool, AngleFixedDirection, SelectedObject } from "./storeTyp
 
 export type UiSliceState = {
   camera: Camera;
+  gridEnabled: boolean;
+  axesEnabled: boolean;
+  gridSnapEnabled: boolean;
   activeTool: ActiveTool;
   angleFixedTool: {
     angleExpr: string;
@@ -24,8 +27,12 @@ export type UiSliceState = {
 };
 
 export function createUiSliceState(): UiSliceState {
+  const initialZoom = 80;
   return {
-    camera: { pos: { x: 0, y: 0 }, zoom: 80 },
+    camera: { pos: { x: 0, y: 0 }, zoom: initialZoom, logZoom: Math.log(initialZoom) },
+    gridEnabled: true,
+    axesEnabled: true,
+    gridSnapEnabled: true,
     activeTool: "move",
     angleFixedTool: {
       angleExpr: "30",

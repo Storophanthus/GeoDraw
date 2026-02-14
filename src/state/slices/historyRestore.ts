@@ -21,6 +21,9 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
   };
   return {
     ...prev,
+    gridEnabled: snapshot.gridEnabled ?? true,
+    axesEnabled: snapshot.axesEnabled ?? true,
+    gridSnapEnabled: snapshot.gridSnapEnabled ?? true,
     activeTool: snapshot.activeTool,
     scene: sceneWithBranches,
     selectedObject: snapshot.selectedObject,

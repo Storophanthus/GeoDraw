@@ -20,6 +20,7 @@ export type ToolClickIO = {
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
   createCircle: (centerId: string, throughId: string) => string | null;
+  createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
@@ -53,6 +54,8 @@ export type ToolClickIO = {
   applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
   getPointWorldById: (id: string) => Vec2 | null;
+  gridSnapEnabled: boolean;
+  snapWorldToGrid: (world: Vec2) => Vec2;
   camera: Camera;
   vp: Viewport;
 };
@@ -64,6 +67,9 @@ export function handleToolClick(
   hits: ToolClickHits,
   io: ToolClickIO
 ) {
+  const maybeSnapWorldToGrid = (world: Vec2): Vec2 =>
+    io.gridSnapEnabled && !hits.shiftKey ? io.snapWorldToGrid(world) : world;
+
   const resolveOrCreatePointAtCursor = (): string => {
     const snap = hits.shiftKey ? null : hits.snap;
     if (snap?.kind === "point" && snap.pointId) return snap.pointId;
@@ -84,7 +90,7 @@ export function handleToolClick(
       if (created) return created;
     }
     if (hits.hitPointId) return hits.hitPointId;
-    const world = camMath.screenToWorld(screen, io.camera, io.vp);
+    const world = maybeSnapWorldToGrid(camMath.screenToWorld(screen, io.camera, io.vp));
     return io.createFreePoint(world);
   };
 
@@ -114,7 +120,7 @@ export function handleToolClick(
       io.setSelectedObject({ type: "point", id: hits.hitPointId });
       return;
     }
-    const world = camMath.screenToWorld(screen, io.camera, io.vp);
+    const world = maybeSnapWorldToGrid(camMath.screenToWorld(screen, io.camera, io.vp));
     io.createFreePoint(world);
     return;
   }
@@ -259,8 +265,9 @@ export function handleToolClick(
     let delta = endAng - startAng;
     while (delta < 0) delta += Math.PI * 2;
     while (delta >= Math.PI * 2) delta -= Math.PI * 2;
-    const angleDeg = (delta * 180) / Math.PI;
-    const endId = io.createPointByRotation(pendingSelection.first.id, pendingSelection.second.id, angleDeg, "CCW");
+    const helperCircleId = io.createAuxiliaryCircle(pendingSelection.first.id, pendingSelection.second.id);
+    if (!helperCircleId) return;
+    const endId = io.createPointOnCircle(helperCircleId, endAng);
     if (!endId) return;
     const created = io.createSector(pendingSelection.first.id, pendingSelection.second.id, endId);
     if (!created) return;

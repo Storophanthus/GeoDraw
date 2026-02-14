@@ -140,6 +140,9 @@ export type AngleFixedDirection = "CCW" | "CW";
 
 export type GeoState = {
   camera: Camera;
+  gridEnabled: boolean;
+  axesEnabled: boolean;
+  gridSnapEnabled: boolean;
   activeTool: ActiveTool;
   scene: SceneModel;
   selectedObject: SelectedObject;
@@ -190,6 +193,7 @@ export type GeoActions = {
   clearPendingSelection: () => void;
   panByScreenDelta: (delta: Vec2) => void;
   zoomAtScreenPoint: (vp: Viewport, pScreen: Vec2, zoomFactor: number) => void;
+  fitViewToScene: (vp: Viewport) => void;
 
   createFreePoint: (world: Vec2) => string;
   createMidpointFromPoints: (aId: string, bId: string) => string | null;
@@ -209,6 +213,7 @@ export type GeoActions = {
     direction: AngleFixedDirection
   ) => { pointId: string; lineId: string; angleId: string } | null;
   createCircle: (centerId: string, throughId: string) => string | null;
+  createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
   createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
@@ -236,6 +241,9 @@ export type GeoActions = {
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
   setCircleFixedTool: (next: Partial<GeoState["circleFixedTool"]>) => void;
+  setGridEnabled: (enabled: boolean) => void;
+  setAxesEnabled: (enabled: boolean) => void;
+  setGridSnapEnabled: (enabled: boolean) => void;
   setDependencyGlowEnabled: (enabled: boolean) => void;
   setExportClipRectWorld: (rect: { xmin: number; xmax: number; ymin: number; ymax: number } | null) => void;
   clearExportClipRectWorld: () => void;
@@ -251,6 +259,10 @@ export type GeoActions = {
   updateSelectedLineFields: (next: Partial<Pick<SceneModel["lines"][number], "visible">>) => void;
   updateSelectedCircleFields: (next: Partial<Pick<SceneModel["circles"][number], "visible">>) => void;
   updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;
+  setObjectVisibility: (
+    obj: Exclude<SelectedObject, null>,
+    visible: boolean
+  ) => void;
 
   renameSelectedPoint: (nextNameRaw: string) => RenameResult;
   deleteSelectedObject: () => void;

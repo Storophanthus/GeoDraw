@@ -19,6 +19,7 @@ import { CanvasLabelsLayer } from "./CanvasLabelsLayer";
 import { renderCanvasFrame } from "./renderFrame";
 import { useCanvasInteractionController, type PointerState } from "./useCanvasInteractionController";
 import { isValidTarget } from "../tools/toolClick";
+import { snapWorldToRectGrid } from "../render/rectGrid";
 
 const POINT_HIT_TOLERANCE_PX = 12;
 const SEGMENT_HIT_TOLERANCE_PX = 10;
@@ -28,8 +29,7 @@ const ANGLE_HIT_TOLERANCE_PX = 20;
 const CLICK_EPSILON_PX = 3;
 const SNAP_OP_BUDGET_PER_FRAME = 6000;
 
-const GRID_SETTINGS = {
-  enabled: true,
+const GRID_SETTINGS_BASE = {
   rotationRad: 0,
   targetSpacingPx: 40,
   majorEvery: 5,
@@ -79,6 +79,9 @@ export function CanvasView() {
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
   const dependencyGlowEnabled = useGeoStore((store) => store.dependencyGlowEnabled);
   const exportClipRectWorld = useGeoStore((store) => store.exportClipRectWorld);
+  const gridEnabled = useGeoStore((store) => store.gridEnabled);
+  const axesEnabled = useGeoStore((store) => store.axesEnabled);
+  const gridSnapEnabled = useGeoStore((store) => store.gridSnapEnabled);
 
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
   const setHoveredHit = useGeoStore((store) => store.setHoveredHit);
@@ -120,6 +123,14 @@ export function CanvasView() {
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
   const [snapDisabled, setSnapDisabled] = useState(false);
+  const gridSettings = useMemo(
+    () => ({
+      ...GRID_SETTINGS_BASE,
+      enabled: gridEnabled,
+      showAxes: axesEnabled,
+    }),
+    [gridEnabled, axesEnabled]
+  );
   const hitTolerances = useMemo(
     () => ({
       point: POINT_HIT_TOLERANCE_PX,
@@ -163,6 +174,8 @@ export function CanvasView() {
         const point = scene.points.find((p) => p.id === id);
         return point ? getPointWorldPos(point, scene) : null;
       },
+      gridSnapEnabled,
+      snapWorldToGrid: (world) => snapWorldToRectGrid(world, camera, gridSettings),
     }),
     [
       setPendingSelection,
@@ -192,6 +205,9 @@ export function CanvasView() {
       setCopyStyleSource,
       applyCopyStyleTo,
       setExportClipRectWorld,
+      gridSnapEnabled,
+      camera,
+      gridSettings,
       scene,
     ]
   );
@@ -274,7 +290,7 @@ export function CanvasView() {
         camera,
         vp,
         dpr,
-        gridSettings: GRID_SETTINGS,
+        gridSettings,
         activeTool,
         pendingSelection,
         cursorWorld,
@@ -317,6 +333,7 @@ export function CanvasView() {
       selectedObject,
       dependencyGlowEnabled,
       exportClipRectWorld,
+      gridSettings,
       vp,
     ]
   );

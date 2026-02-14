@@ -16,6 +16,9 @@ export function createUiActions(
   | "setAngleDefaults"
   | "setAngleFixedTool"
   | "setCircleFixedTool"
+  | "setGridEnabled"
+  | "setAxesEnabled"
+  | "setGridSnapEnabled"
   | "setDependencyGlowEnabled"
   | "setExportClipRectWorld"
   | "clearExportClipRectWorld"
@@ -88,6 +91,27 @@ export function createUiActions(
           ...prev.circleFixedTool,
           ...next,
         },
+      }));
+    },
+
+    setGridEnabled(enabled) {
+      ctx.setState((prev) => ({
+        ...prev,
+        gridEnabled: enabled,
+      }));
+    },
+
+    setAxesEnabled(enabled) {
+      ctx.setState((prev) => ({
+        ...prev,
+        axesEnabled: enabled,
+      }));
+    },
+
+    setGridSnapEnabled(enabled) {
+      ctx.setState((prev) => ({
+        ...prev,
+        gridSnapEnabled: enabled,
       }));
     },
 

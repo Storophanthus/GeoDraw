@@ -9,6 +9,7 @@ import {
 import type { SceneModel } from "../scene/points";
 import type { SelectedObject } from "../state/slices/storeTypes";
 import { getNumberValue } from "../scene/points";
+import { useGeoStore } from "../state/geoStore";
 
 type ObjectBrowserProps = {
     scene: SceneModel;
@@ -20,6 +21,7 @@ type TabId = "all" | "points" | "lines" | "circles" | "angles" | "numbers";
 
 export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: ObjectBrowserProps) {
     const [activeTab, setActiveTab] = useState<TabId>("all");
+    const setObjectVisibility = useGeoStore((store) => store.setObjectVisibility);
 
     const tabs: Array<{ id: TabId; icon: React.ElementType; label: string; description: string; count: number }> = [
         { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.angles.length + scene.numbers.length },
@@ -56,7 +58,15 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         }
                         onClick={() => setSelectedObject({ type: "point", id: point.id })}
                     >
-                        Point {point.name}
+                        <span className="objectItemLabel">Point {point.name}</span>
+                        <input
+                            type="checkbox"
+                            className="objectVisibilityToggle"
+                            checked={point.visible}
+                            title={point.visible ? "Hide object" : "Show object"}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setObjectVisibility({ type: "point", id: point.id }, e.target.checked)}
+                        />
                     </button>
                 ))}
 
@@ -70,7 +80,15 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         }
                         onClick={() => setSelectedObject({ type: "segment", id: segment.id })}
                     >
-                        Segment {segment.id}
+                        <span className="objectItemLabel">Segment {segment.id}</span>
+                        <input
+                            type="checkbox"
+                            className="objectVisibilityToggle"
+                            checked={segment.visible}
+                            title={segment.visible ? "Hide object" : "Show object"}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setObjectVisibility({ type: "segment", id: segment.id }, e.target.checked)}
+                        />
                     </button>
                 ))}
 
@@ -84,7 +102,15 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         }
                         onClick={() => setSelectedObject({ type: "line", id: line.id })}
                     >
-                        Line {line.id}
+                        <span className="objectItemLabel">Line {line.id}</span>
+                        <input
+                            type="checkbox"
+                            className="objectVisibilityToggle"
+                            checked={line.visible}
+                            title={line.visible ? "Hide object" : "Show object"}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setObjectVisibility({ type: "line", id: line.id }, e.target.checked)}
+                        />
                     </button>
                 ))}
 
@@ -98,7 +124,15 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         }
                         onClick={() => setSelectedObject({ type: "circle", id: circle.id })}
                     >
-                        Circle {circle.id}
+                        <span className="objectItemLabel">Circle {circle.id}</span>
+                        <input
+                            type="checkbox"
+                            className="objectVisibilityToggle"
+                            checked={circle.visible}
+                            title={circle.visible ? "Hide object" : "Show object"}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setObjectVisibility({ type: "circle", id: circle.id }, e.target.checked)}
+                        />
                     </button>
                 ))}
 
@@ -112,7 +146,15 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         }
                         onClick={() => setSelectedObject({ type: "angle", id: angle.id })}
                     >
-                        Angle {angle.id}
+                        <span className="objectItemLabel">Angle {angle.id}</span>
+                        <input
+                            type="checkbox"
+                            className="objectVisibilityToggle"
+                            checked={angle.visible}
+                            title={angle.visible ? "Hide object" : "Show object"}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setObjectVisibility({ type: "angle", id: angle.id }, e.target.checked)}
+                        />
                     </button>
                 ))}
 
@@ -126,16 +168,26 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         }
                         onClick={() => setSelectedObject({ type: "number", id: num.id })}
                     >
-                        Number {num.name}
-                        {(() => {
+                        <span className="objectItemLabel">
+                          Number {num.name}
+                          {(() => {
                             const value = getNumberValue(num.id, scene);
                             return value === null ? " = undefined" : ` = ${value.toFixed(6)}`;
-                        })()}
+                          })()}
+                        </span>
+                        <input
+                            type="checkbox"
+                            className="objectVisibilityToggle"
+                            checked={num.visible}
+                            title={num.visible ? "Hide object" : "Show object"}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setObjectVisibility({ type: "number", id: num.id }, e.target.checked)}
+                        />
                     </button>
                 ))}
             </>
         );
-    }, [activeTab, scene, selectedObject, setSelectedObject]);
+    }, [activeTab, scene, selectedObject, setSelectedObject, setObjectVisibility]);
 
     const isEmpty =
         (activeTab === "all" &&

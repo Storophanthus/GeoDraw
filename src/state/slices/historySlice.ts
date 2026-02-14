@@ -7,6 +7,9 @@ export type SetStateOptions = {
 };
 
 export type HistorySnapshot = {
+  gridEnabled: boolean;
+  axesEnabled: boolean;
+  gridSnapEnabled: boolean;
   activeTool: ActiveTool;
   scene: SceneModel;
   selectedObject: SelectedObject;
@@ -44,6 +47,9 @@ export const MAX_HISTORY = 200;
 
 export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
   return {
+    gridEnabled: prev.gridEnabled,
+    axesEnabled: prev.axesEnabled,
+    gridSnapEnabled: prev.gridSnapEnabled,
     activeTool: prev.activeTool,
     scene: prev.scene,
     selectedObject: prev.selectedObject,

@@ -110,6 +110,9 @@ constructFromClick({
     createCircle() {
       return null;
     },
+    createAuxiliaryCircle() {
+      return null;
+    },
     createCircleThreePoint() {
       return null;
     },
@@ -166,6 +169,10 @@ constructFromClick({
       return null;
     },
     angleFixedTool: { angleExpr: "45", direction: "CCW" },
+    gridSnapEnabled: false,
+    snapWorldToGrid(world) {
+      return world;
+    },
     camera,
     vp,
   },

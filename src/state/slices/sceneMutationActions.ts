@@ -27,6 +27,7 @@ export function createSceneMutationActions({
   | "updateSelectedLineFields"
   | "updateSelectedCircleFields"
   | "updateSelectedAngleFields"
+  | "setObjectVisibility"
   | "deleteSelectedObject"
   | "setCopyStyleSource"
   | "applyCopyStyleTo"
@@ -287,6 +288,78 @@ export function createSceneMutationActions({
             ),
           },
         };
+      });
+    },
+
+    setObjectVisibility(obj, visible) {
+      setState((prev) => {
+        if (obj.type === "point") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              points: prev.scene.points.map((point) =>
+                point.id === obj.id ? { ...point, visible } : point
+              ),
+            },
+          };
+        }
+        if (obj.type === "segment") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              segments: prev.scene.segments.map((seg) =>
+                seg.id === obj.id ? { ...seg, visible } : seg
+              ),
+            },
+          };
+        }
+        if (obj.type === "line") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              lines: prev.scene.lines.map((line) =>
+                line.id === obj.id ? { ...line, visible } : line
+              ),
+            },
+          };
+        }
+        if (obj.type === "circle") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              circles: prev.scene.circles.map((circle) =>
+                circle.id === obj.id ? { ...circle, visible } : circle
+              ),
+            },
+          };
+        }
+        if (obj.type === "angle") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              angles: prev.scene.angles.map((angle) =>
+                angle.id === obj.id ? { ...angle, visible } : angle
+              ),
+            },
+          };
+        }
+        if (obj.type === "number") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              numbers: prev.scene.numbers.map((num) =>
+                num.id === obj.id ? { ...num, visible } : num
+              ),
+            },
+          };
+        }
+        return prev;
       });
     },
 
