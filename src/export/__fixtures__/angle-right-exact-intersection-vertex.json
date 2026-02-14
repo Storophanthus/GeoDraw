@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "A",
+      "definition": { "kind": "free", "x": 0.58740234375, "y": 4.152587890625 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_2",
+      "name": "B",
+      "definition": { "kind": "free", "x": 5.77255859375, "y": -1.113330078125 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_3",
+      "name": "C",
+      "definition": { "kind": "free", "x": -3.11845703125, "y": -2.64931640625 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_4",
+      "name": "D",
+      "definition": {
+        "kind": "intersectionPoint",
+        "objA": { "type": "line", "id": "l_1" },
+        "objB": { "type": "segment", "id": "s_1" },
+        "preferredWorld": { "x": 2.163654335855223, "y": 2.5517848890751664 }
+      },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "lines": [
+    {
+      "id": "l_1",
+      "kind": "perpendicular",
+      "throughId": "p_3",
+      "base": { "type": "segment", "id": "s_1" },
+      "visible": true
+    }
+  ],
+  "segments": [
+    { "id": "s_1", "aId": "p_1", "bId": "p_2", "visible": true },
+    { "id": "s_2", "aId": "p_2", "bId": "p_3", "visible": true },
+    { "id": "s_3", "aId": "p_3", "bId": "p_1", "visible": true }
+  ],
+  "circles": [],
+  "angles": [
+    {
+      "id": "a_1",
+      "kind": "angle",
+      "aId": "p_3",
+      "bId": "p_4",
+      "cId": "p_2",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "strokeOpacity": 1,
+        "textColor": "#0f172a",
+        "textSize": 16,
+        "fillEnabled": false,
+        "fillColor": "#93c5fd",
+        "fillOpacity": 0.2,
+        "markStyle": "rightSquare",
+        "markSymbol": "none",
+        "arcMultiplicity": 1,
+        "markPos": 0.5,
+        "markSize": 4,
+        "markColor": "#334155",
+        "arcRadius": 1.2,
+        "labelText": "",
+        "labelPosWorld": { "x": 2.2, "y": 2.1 },
+        "showLabel": false,
+        "showValue": false
+      }
+    }
+  ],
+  "numbers": []
+}

@@ -1,4 +1,5 @@
 import { computeOrientedAngleRad, getPointWorldPos, type SceneModel } from "../scene/points";
+import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import type { ResolvedAngle } from "./labelOverlays";
 
 export function resolveAngles(scene: SceneModel): ResolvedAngle[] {
@@ -14,7 +15,13 @@ export function resolveAngles(scene: SceneModel): ResolvedAngle[] {
       if (!a || !b || !c) return null;
       const theta = computeOrientedAngleRad(a, b, c);
       if (theta === null) return null;
-      return { angle, a, b, c, theta };
+      const status = resolveAngleRightStatus(scene, angle);
+      const resolvedAngle: SceneModel["angles"][number] = {
+        ...angle,
+        isRightExact: status === "exact",
+        isRightApprox: status === "approx",
+      };
+      return { angle: resolvedAngle, a, b, c, theta };
     })
     .filter((item): item is ResolvedAngle => Boolean(item));
 }

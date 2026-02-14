@@ -43,11 +43,21 @@ export function buildAngleLabelTex(
   thetaRad: number
 ): string | null {
   const custom = (labelTextRaw || "").trim();
-  const valueDeg = `${((thetaRad * 180) / Math.PI).toFixed(2)}^{\\circ}`;
+  const valueDeg = `${formatAngleDegreesValue((thetaRad * 180) / Math.PI)}^{\\circ}`;
   if (!showLabel && !showValue) return null;
   if (showLabel && custom.length > 0) return showValue ? `${custom}=${valueDeg}` : custom;
   if (showValue) return valueDeg;
   return null;
+}
+
+function formatAngleDegreesValue(degRaw: number): string {
+  if (!Number.isFinite(degRaw)) return "0";
+  const deg = ((degRaw % 360) + 360) % 360;
+  const nearest5 = Math.round(deg / 5) * 5;
+  if (Math.abs(deg - nearest5) <= 1e-3) {
+    return String(nearest5);
+  }
+  return deg.toFixed(2);
 }
 
 export function createPointLabelOverlays(

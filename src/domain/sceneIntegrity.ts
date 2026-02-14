@@ -1,14 +1,17 @@
 import type { GeometryObjectRef, SceneModel } from "../scene/points";
+import { resolveIntersectionBranchIndexInScene } from "./intersectionReuse";
 
 function objectRefAlive(
   obj: GeometryObjectRef,
   lines: SceneModel["lines"],
   segments: SceneModel["segments"],
-  circles: SceneModel["circles"]
+  circles: SceneModel["circles"],
+  angles: SceneModel["angles"]
 ): boolean {
   if (obj.type === "line") return lines.some((line) => line.id === obj.id);
   if (obj.type === "segment") return segments.some((segment) => segment.id === obj.id);
-  return circles.some((circle) => circle.id === obj.id);
+  if (obj.type === "circle") return circles.some((circle) => circle.id === obj.id);
+  return angles.some((angle) => angle.id === obj.id && angle.kind === "sector");
 }
 
 export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
@@ -16,6 +19,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   let segments = scene.segments;
   let lines = scene.lines;
   let circles = scene.circles;
+  let polygons = scene.polygons;
   let angles = scene.angles;
   let numbers = scene.numbers;
   let changed = false;
@@ -37,6 +41,9 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     });
     const nextAngles = angles.filter(
       (angle) => pointIds.has(angle.aId) && pointIds.has(angle.bId) && pointIds.has(angle.cId)
+    );
+    const nextPolygons = polygons.filter(
+      (polygon) => polygon.pointIds.length >= 3 && polygon.pointIds.every((pointId) => pointIds.has(pointId))
     );
 
     const nextSegmentIds = new Set(nextSegments.map((s) => s.id));
@@ -60,9 +67,28 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
 
     const nextLineIdsAfter = new Set(nextLines.map((l) => l.id));
 
-    const nextPoints = points
+    const sceneForPass: SceneModel = { points, lines, segments, circles, polygons, angles, numbers };
+    const pointsWithBranches = points.map((point) => {
+      if (
+        point.kind !== "intersectionPoint" ||
+        (Number.isInteger(point.branchIndex) && (point.branchIndex as number) >= 0)
+      ) {
+        return point;
+      }
+      const branchIndex = resolveIntersectionBranchIndexInScene(sceneForPass, point.objA, point.objB, point.preferredWorld);
+      if (branchIndex === null) return point;
+      return { ...point, branchIndex };
+    });
+
+    const nextPoints = pointsWithBranches
       .map((point) => {
         if (point.kind === "circleLineIntersectionPoint" && point.excludePointId && !pointIds.has(point.excludePointId)) {
+          return { ...point, excludePointId: undefined };
+        }
+        if (point.kind === "circleSegmentIntersectionPoint" && point.excludePointId && !pointIds.has(point.excludePointId)) {
+          return { ...point, excludePointId: undefined };
+        }
+        if (point.kind === "circleCircleIntersectionPoint" && point.excludePointId && !pointIds.has(point.excludePointId)) {
           return { ...point, excludePointId: undefined };
         }
         if (point.kind === "intersectionPoint" && point.excludePointId && !pointIds.has(point.excludePointId)) {
@@ -77,14 +103,27 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         if (point.kind === "pointOnLine") return nextLineIdsAfter.has(point.lineId);
         if (point.kind === "pointOnSegment") return nextSegmentIds.has(point.segId);
         if (point.kind === "pointOnCircle") return nextCircleIds.has(point.circleId);
+        if (point.kind === "circleCenter") return nextCircleIds.has(point.circleId);
         if (point.kind === "pointByRotation") return pointIds.has(point.centerId) && pointIds.has(point.pointId);
         if (point.kind === "circleLineIntersectionPoint") {
           return nextCircleIds.has(point.circleId) && nextLineIdsAfter.has(point.lineId);
         }
+        if (point.kind === "circleSegmentIntersectionPoint") {
+          return nextCircleIds.has(point.circleId) && nextSegmentIds.has(point.segId);
+        }
+        if (point.kind === "circleCircleIntersectionPoint") {
+          return nextCircleIds.has(point.circleAId) && nextCircleIds.has(point.circleBId);
+        }
+        if (point.kind === "lineLikeIntersectionPoint") {
+          return (
+            objectRefAlive(point.objA, nextLines, nextSegments, nextCircles, nextAngles) &&
+            objectRefAlive(point.objB, nextLines, nextSegments, nextCircles, nextAngles)
+          );
+        }
         if (point.kind === "intersectionPoint") {
           return (
-            objectRefAlive(point.objA, nextLines, nextSegments, nextCircles) &&
-            objectRefAlive(point.objB, nextLines, nextSegments, nextCircles)
+            objectRefAlive(point.objA, nextLines, nextSegments, nextCircles, nextAngles) &&
+            objectRefAlive(point.objB, nextLines, nextSegments, nextCircles, nextAngles)
           );
         }
         return true;
@@ -114,6 +153,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       !sameIds(nextSegments, segments) ||
       !sameIds(nextLines, lines) ||
       !sameIds(nextCircles, circles) ||
+      !sameIds(nextPolygons, polygons) ||
       !sameIds(nextAngles, angles) ||
       !sameIds(nextNumbers, numbers) ||
       nextPoints.some((point, idx) => point !== points[idx]);
@@ -122,6 +162,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     segments = nextSegments;
     lines = nextLines;
     circles = nextCircles;
+    polygons = nextPolygons;
     angles = nextAngles;
     numbers = nextNumbers;
     changed = changed || anyChanged;
@@ -129,5 +170,5 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   }
 
   if (!changed) return scene;
-  return { ...scene, points, segments, lines, circles, angles, numbers };
+  return { ...scene, points, segments, lines, circles, polygons, angles, numbers };
 }

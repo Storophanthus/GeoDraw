@@ -8,6 +8,7 @@ type GlobalHotkeysOptions = {
   onDeleteSelectedObject: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  onFitView: () => void;
 };
 
 export function useGlobalCanvasHotkeys({
@@ -17,6 +18,7 @@ export function useGlobalCanvasHotkeys({
   onDeleteSelectedObject,
   onUndo,
   onRedo,
+  onFitView,
 }: GlobalHotkeysOptions) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -48,6 +50,11 @@ export function useGlobalCanvasHotkeys({
         onRedo();
         return;
       }
+      if (!mod && !e.altKey && e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        onFitView();
+        return;
+      }
 
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
@@ -61,6 +68,7 @@ export function useGlobalCanvasHotkeys({
     activeTool,
     onClearCopyStyle,
     onDeleteSelectedObject,
+    onFitView,
     onRedo,
     onSetMoveTool,
     onUndo,

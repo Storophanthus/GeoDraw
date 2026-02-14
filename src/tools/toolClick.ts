@@ -1,13 +1,14 @@
 import type { Vec2 } from "../geo/vec2";
 import type { GeometryObjectRef, LineLikeObjectRef } from "../scene/points";
 import type { ActiveTool, PendingSelection } from "../state/geoStore";
+import type { ExportClipWorld } from "../state/slices/storeTypes";
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
 import type { SnapCandidate } from "../view/snapEngine";
 
 export type ToolClickHits = {
   hitPointId: string | null;
   hitSegmentId: string | null;
-  hitObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null;
+  hitObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null;
   shiftKey: boolean;
   hasCopyStyleSource: boolean;
   snap: SnapCandidate | null;
@@ -19,7 +20,9 @@ export type ToolClickIO = {
   createFreePoint: (world: Vec2) => string;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
+  createPolygon: (pointIds: string[]) => string | null;
   createCircle: (centerId: string, throughId: string) => string | null;
+  createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
@@ -38,12 +41,23 @@ export type ToolClickIO = {
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number) => string | null;
+  createPointByRotation: (
+    centerId: string,
+    basePointId: string,
+    angleDeg: number,
+    direction: "CCW" | "CW",
+    angleExpr?: string
+  ) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
-  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null) => void;
-  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
-  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
+  createCircleCenterPoint: (circleId: string) => string | null;
+  setExportClipWorld: (clip: ExportClipWorld | null) => void;
+  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null) => void;
+  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
+  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
   getPointWorldById: (id: string) => Vec2 | null;
+  gridSnapEnabled: boolean;
+  snapWorldToGrid: (world: Vec2) => Vec2;
   camera: Camera;
   vp: Viewport;
 };
@@ -55,6 +69,9 @@ export function handleToolClick(
   hits: ToolClickHits,
   io: ToolClickIO
 ) {
+  const maybeSnapWorldToGrid = (world: Vec2): Vec2 =>
+    io.gridSnapEnabled && !hits.shiftKey ? io.snapWorldToGrid(world) : world;
+
   const resolveOrCreatePointAtCursor = (): string => {
     const snap = hits.shiftKey ? null : hits.snap;
     if (snap?.kind === "point" && snap.pointId) return snap.pointId;
@@ -75,7 +92,7 @@ export function handleToolClick(
       if (created) return created;
     }
     if (hits.hitPointId) return hits.hitPointId;
-    const world = camMath.screenToWorld(screen, io.camera, io.vp);
+    const world = maybeSnapWorldToGrid(camMath.screenToWorld(screen, io.camera, io.vp));
     return io.createFreePoint(world);
   };
 
@@ -105,7 +122,7 @@ export function handleToolClick(
       io.setSelectedObject({ type: "point", id: hits.hitPointId });
       return;
     }
-    const world = camMath.screenToWorld(screen, io.camera, io.vp);
+    const world = maybeSnapWorldToGrid(camMath.screenToWorld(screen, io.camera, io.vp));
     io.createFreePoint(world);
     return;
   }
@@ -118,6 +135,34 @@ export function handleToolClick(
       return;
     }
     io.applyCopyStyleTo(hits.hitObject);
+    return;
+  }
+
+  if (activeTool === "export_clip") {
+    const snap = hits.shiftKey ? null : hits.snap;
+    const world =
+      snap?.world
+      ?? (hits.hitPointId ? io.getPointWorldById(hits.hitPointId) : null)
+      ?? camMath.screenToWorld(screen, io.camera, io.vp);
+    if (!pendingSelection || pendingSelection.tool !== "export_clip") {
+      io.setPendingSelection({ tool: "export_clip", step: 2, points: [{ type: "world", world }] });
+      return;
+    }
+    const points = pendingSelection.points.map((p) => p.world);
+    const first = points[0];
+    const firstScreen = camMath.worldToScreen(first, io.camera, io.vp);
+    const closeThresholdPx = 14;
+    const nearFirst = Math.hypot(screen.x - firstScreen.x, screen.y - firstScreen.y) <= closeThresholdPx;
+    if (points.length >= 3 && nearFirst) {
+      io.setExportClipWorld({ kind: "polygon", points });
+      io.clearPendingSelection();
+      return;
+    }
+    io.setPendingSelection({
+      tool: "export_clip",
+      step: 2,
+      points: [...pendingSelection.points, { type: "world", world }],
+    });
     return;
   }
 
@@ -140,6 +185,29 @@ export function handleToolClick(
     const bId = resolveOrCreatePointAtCursor();
     io.createLine(pendingSelection.first.id, bId);
     io.clearPendingSelection();
+    return;
+  }
+
+  if (activeTool === "polygon") {
+    const nextPointId = resolveOrCreatePointAtCursor();
+    if (!pendingSelection || pendingSelection.tool !== "polygon") {
+      io.setPendingSelection({ tool: "polygon", step: 2, points: [{ type: "point", id: nextPointId }] });
+      return;
+    }
+    const points = pendingSelection.points.map((point) => point.id);
+    if (nextPointId === points[0]) {
+      if (points.length >= 3) {
+        io.createPolygon(points);
+        io.clearPendingSelection();
+      }
+      return;
+    }
+    if (points.includes(nextPointId)) return;
+    io.setPendingSelection({
+      tool: "polygon",
+      step: 2,
+      points: [...pendingSelection.points, { type: "point", id: nextPointId }],
+    });
     return;
   }
 
@@ -210,21 +278,28 @@ export function handleToolClick(
       io.setPendingSelection({ tool: "sector", step: 3, first: pendingSelection.first, second: { type: "point", id: aId } });
       return;
     }
-    let endId: string | null = hits.hitPointId;
-    if (!endId) {
-      const center = io.getPointWorldById(pendingSelection.first.id);
-      const start = io.getPointWorldById(pendingSelection.second.id);
-      const cursorWorld = camMath.screenToWorld(screen, io.camera, io.vp);
-      if (!center || !start) return;
-      const vx = cursorWorld.x - center.x;
-      const vy = cursorWorld.y - center.y;
-      const d = Math.hypot(vx, vy);
-      const r = Math.hypot(start.x - center.x, start.y - center.y);
-      if (!Number.isFinite(r) || r <= 1e-12) return;
-      const ux = d <= 1e-12 ? (start.x - center.x) / r : vx / d;
-      const uy = d <= 1e-12 ? (start.y - center.y) / r : vy / d;
-      endId = io.createFreePoint({ x: center.x + ux * r, y: center.y + uy * r });
-    }
+    const center = io.getPointWorldById(pendingSelection.first.id);
+    const start = io.getPointWorldById(pendingSelection.second.id);
+    if (!center || !start) return;
+    const pickedWorld =
+      (hits.hitPointId ? io.getPointWorldById(hits.hitPointId) : null) ?? camMath.screenToWorld(screen, io.camera, io.vp);
+    if (!pickedWorld) return;
+    const vx = pickedWorld.x - center.x;
+    const vy = pickedWorld.y - center.y;
+    const d = Math.hypot(vx, vy);
+    const r = Math.hypot(start.x - center.x, start.y - center.y);
+    if (!Number.isFinite(r) || r <= 1e-12) return;
+    const ux = d <= 1e-12 ? (start.x - center.x) / r : vx / d;
+    const uy = d <= 1e-12 ? (start.y - center.y) / r : vy / d;
+    const endOnCircle = { x: center.x + ux * r, y: center.y + uy * r };
+    const startAng = Math.atan2(start.y - center.y, start.x - center.x);
+    const endAng = Math.atan2(endOnCircle.y - center.y, endOnCircle.x - center.x);
+    let delta = endAng - startAng;
+    while (delta < 0) delta += Math.PI * 2;
+    while (delta >= Math.PI * 2) delta -= Math.PI * 2;
+    const helperCircleId = io.createAuxiliaryCircle(pendingSelection.first.id, pendingSelection.second.id);
+    if (!helperCircleId) return;
+    const endId = io.createPointOnCircle(helperCircleId, endAng);
     if (!endId) return;
     const created = io.createSector(pendingSelection.first.id, pendingSelection.second.id, endId);
     if (!created) return;
@@ -296,6 +371,14 @@ export function handleToolClick(
 
     if (hits.hitSegmentId) {
       io.createMidpointFromSegment(hits.hitSegmentId);
+      io.clearPendingSelection();
+      return;
+    }
+
+    if (hits.hitObject?.type === "circle") {
+      const centerId = io.createCircleCenterPoint(hits.hitObject.id);
+      if (!centerId) return;
+      io.setSelectedObject({ type: "point", id: centerId });
       io.clearPendingSelection();
       return;
     }
@@ -420,18 +503,20 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     activeTool === "circle_cp" ||
     activeTool === "circle_3p" ||
     activeTool === "circle_fixed" ||
+    activeTool === "polygon" ||
     activeTool === "sector" ||
     activeTool === "midpoint" ||
     activeTool === "angle_bisector" ||
     activeTool === "angle" ||
-    activeTool === "angle_fixed"
+    activeTool === "angle_fixed" ||
+    activeTool === "export_clip"
   );
 }
 
 export function isValidTarget(
   activeTool: ActiveTool,
   pendingSelection: PendingSelection,
-  hoveredHit: { type: "point" | "segment" | "line2p" | "circle" | "angle"; id: string } | null
+  hoveredHit: { type: "point" | "segment" | "line2p" | "circle" | "polygon" | "angle"; id: string } | null
 ): boolean {
   if (!hoveredHit) return false;
 
@@ -440,6 +525,7 @@ export function isValidTarget(
   if (activeTool === "circle_cp") return hoveredHit.type === "point";
   if (activeTool === "circle_3p") return hoveredHit.type === "point";
   if (activeTool === "circle_fixed") return hoveredHit.type === "point";
+  if (activeTool === "polygon") return hoveredHit.type === "point";
   if (activeTool === "angle_bisector") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";
   if (activeTool === "sector") return hoveredHit.type === "point";
@@ -447,6 +533,7 @@ export function isValidTarget(
     if (pendingSelection?.tool === "angle_fixed" && pendingSelection.step === 3) return false;
     return hoveredHit.type === "point";
   }
+  if (activeTool === "export_clip") return false;
   if (activeTool === "perp_line") {
     if (!pendingSelection || pendingSelection.tool !== "perp_line") {
       return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
@@ -477,7 +564,7 @@ export function isValidTarget(
 
   if (activeTool === "midpoint") {
     if (pendingSelection?.tool === "midpoint") return hoveredHit.type === "point";
-    return hoveredHit.type === "segment" || hoveredHit.type === "point";
+    return hoveredHit.type === "segment" || hoveredHit.type === "point" || hoveredHit.type === "circle";
   }
 
   return false;

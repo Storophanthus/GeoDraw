@@ -1,4 +1,4 @@
-import type { AngleStyle, CircleStyle, LineStyle, PointStyle } from "../../scene/points";
+import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle } from "../../scene/points";
 
 export const defaultPointStyle: PointStyle = {
   shape: "circle",
@@ -53,23 +53,42 @@ export const defaultCircleStyle: CircleStyle = {
   strokeDash: "solid",
   strokeOpacity: 1,
   fillOpacity: 0,
+  pattern: "",
+};
+
+export const defaultPolygonStyle: PolygonStyle = {
+  strokeColor: "#334155",
+  strokeWidth: 1.6,
+  strokeDash: "solid",
+  strokeOpacity: 1,
+  fillColor: "#93c5fd",
+  fillOpacity: 0.22,
+  pattern: "",
 };
 
 export const defaultAngleStyle: AngleStyle = {
   strokeColor: "#334155",
-  strokeWidth: 1.8,
+  strokeWidth: 1,
+  strokeDash: "solid",
   strokeOpacity: 1,
   textColor: "#0f172a",
   textSize: 16,
   fillEnabled: false,
   fillColor: "#93c5fd",
   fillOpacity: 0.2,
+  pattern: "",
   markStyle: "arc",
-  arcRadius: 1.2,
+  markSymbol: "none",
+  arcMultiplicity: 1,
+  markPos: 0.5,
+  markSize: 7.4,
+  markColor: "#334155",
+  arcRadius: 1.95,
   labelText: "",
   labelPosWorld: { x: 0, y: 0 },
   showLabel: true,
   showValue: true,
+  promoteToSolid: false,
 };
 
 export function createSceneSliceState() {
@@ -79,6 +98,7 @@ export function createSceneSliceState() {
       segments: [],
       lines: [],
       circles: [],
+      polygons: [],
       angles: [],
       numbers: [],
     },
@@ -86,12 +106,14 @@ export function createSceneSliceState() {
     nextSegmentId: 1,
     nextLineId: 1,
     nextCircleId: 1,
+    nextPolygonId: 1,
     nextAngleId: 1,
     nextNumberId: 1,
     pointDefaults: defaultPointStyle,
     segmentDefaults: defaultSegmentStyle,
     lineDefaults: defaultLineStyle,
     circleDefaults: defaultCircleStyle,
+    polygonDefaults: defaultPolygonStyle,
     angleDefaults: defaultAngleStyle,
   };
 }

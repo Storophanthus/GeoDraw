@@ -124,6 +124,12 @@ export function ToolInfoSection({
           </div>
         </div>
       )}
+      {activeTool === "export_clip" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Export Clip</div>
+          <div className="statusText">Click first corner, then second corner to set TikZ clip rectangle.</div>
+        </div>
+      )}
     </>
   );
 }

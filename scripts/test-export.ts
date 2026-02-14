@@ -7,12 +7,14 @@ import type {
   GeometryObjectRef,
   LineStyle,
   PointStyle,
+  PolygonStyle,
   SceneCircle,
   SceneAngle,
   SceneLine,
   SceneModel,
   SceneNumber,
   ScenePoint,
+  ScenePolygon,
   SceneSegment,
   ShowLabelMode,
 } from "../src/scene/points.ts";
@@ -50,6 +52,15 @@ const defaultCircleStyle: CircleStyle = {
   strokeWidth: 1.8,
   strokeDash: "solid",
   strokeOpacity: 1,
+};
+
+const defaultPolygonStyle: PolygonStyle = {
+  strokeColor: "#1f2937",
+  strokeWidth: 1.8,
+  strokeDash: "solid",
+  strokeOpacity: 1,
+  fillColor: "#93c5fd",
+  fillOpacity: 0.2,
 };
 
 async function main(): Promise<void> {
@@ -92,6 +103,7 @@ function hydrateScene(raw: {
   lines?: Array<Record<string, unknown>>;
   segments?: Array<Record<string, unknown>>;
   circles?: Array<Record<string, unknown>>;
+  polygons?: Array<Record<string, unknown>>;
   angles?: Array<Record<string, unknown>>;
 }): SceneModel {
   const points = (raw.points ?? []).map(hydratePoint);
@@ -99,8 +111,9 @@ function hydrateScene(raw: {
   const lines = (raw.lines ?? []).map(hydrateLine);
   const segments = (raw.segments ?? []).map(hydrateSegment);
   const circles = (raw.circles ?? []).map(hydrateCircle);
+  const polygons = (raw.polygons ?? []).map(hydratePolygon);
   const angles = (raw.angles ?? []).map(hydrateAngle);
-  return { points, numbers, lines, segments, circles, angles };
+  return { points, numbers, lines, segments, circles, polygons, angles };
 }
 
 function hydratePoint(raw: Record<string, unknown>): ScenePoint {
@@ -147,6 +160,9 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
   if (kind === "pointOnSegment") {
     return { ...base, kind: "pointOnSegment", segId: String(def.segId), u: Number(def.u) };
   }
+  if (kind === "circleCenter") {
+    return { ...base, kind: "circleCenter", circleId: String(def.circleId) };
+  }
   if (kind === "midpointPoints") {
     return { ...base, kind: "midpointPoints", aId: String(def.aId), bId: String(def.bId) };
   }
@@ -163,12 +179,43 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
       excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
     };
   }
+  if (kind === "circleSegmentIntersectionPoint") {
+    return {
+      ...base,
+      kind: "circleSegmentIntersectionPoint",
+      circleId: String(def.circleId),
+      segId: String(def.segId),
+      branchIndex: Number(def.branchIndex) === 1 ? 1 : 0,
+      excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
+    };
+  }
+  if (kind === "circleCircleIntersectionPoint") {
+    return {
+      ...base,
+      kind: "circleCircleIntersectionPoint",
+      circleAId: String(def.circleAId),
+      circleBId: String(def.circleBId),
+      branchIndex: Number(def.branchIndex) === 1 ? 1 : 0,
+      excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
+    };
+  }
+  if (kind === "lineLikeIntersectionPoint") {
+    return {
+      ...base,
+      kind: "lineLikeIntersectionPoint",
+      objA: def.objA as { type: "line" | "segment"; id: string },
+      objB: def.objB as { type: "line" | "segment"; id: string },
+      preferredWorld: def.preferredWorld as { x: number; y: number },
+    };
+  }
   if (kind === "intersectionPoint") {
+    const parsedBranch = Number(def.branchIndex);
     return {
       ...base,
       kind: "intersectionPoint",
       objA: def.objA as GeometryObjectRef,
       objB: def.objB as GeometryObjectRef,
+      branchIndex: Number.isInteger(parsedBranch) && parsedBranch >= 0 ? parsedBranch : undefined,
       preferredWorld: def.preferredWorld as { x: number; y: number },
       excludePointId: def.excludePointId ? String(def.excludePointId) : undefined,
     };
@@ -279,6 +326,11 @@ function hydrateAngle(raw: Record<string, unknown>): SceneAngle {
     fillColor: "#93c5fd",
     fillOpacity: 0.2,
     markStyle: "arc",
+    markSymbol: "none",
+    arcMultiplicity: 1,
+    markPos: 0.5,
+    markSize: 4,
+    markColor: "#334155",
     arcRadius: 1.2,
     labelText: "",
     labelPosWorld: { x: 0, y: 0 },
@@ -291,8 +343,18 @@ function hydrateAngle(raw: Record<string, unknown>): SceneAngle {
     aId: String(raw.aId),
     bId: String(raw.bId),
     cId: String(raw.cId),
+    isRightExact: typeof raw.isRightExact === "boolean" ? raw.isRightExact : undefined,
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
     style,
+  };
+}
+
+function hydratePolygon(raw: Record<string, unknown>): ScenePolygon {
+  return {
+    id: String(raw.id),
+    pointIds: Array.isArray(raw.pointIds) ? raw.pointIds.map((id) => String(id)) : [],
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    style: (raw.style as PolygonStyle) ?? defaultPolygonStyle,
   };
 }
 
@@ -400,7 +462,39 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
-  if (exportError) throw exportError;
+  if (fileName === "sector-constrained-endpoint.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefPointOnCircle")) {
+      throw new Error("Expected sector constrained-endpoint fixture to emit pointOnCircle construction.");
+    }
+  }
+
+  if (fileName === "polygon-basic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\draw[")) {
+      throw new Error("Expected polygon fixture to emit raw TikZ draw command.");
+    }
+    if (!tikz.includes("-- cycle;")) {
+      throw new Error("Expected polygon fixture to emit closed cycle path.");
+    }
+    if (!tikz.includes("pattern=grid") || !tikz.includes("pattern color=")) {
+      throw new Error("Expected polygon fixture to preserve pattern + pattern color options.");
+    }
+  }
+
+  if (fileName === "sector-line-intersection-export.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefPoint")) {
+      throw new Error("Expected sector-line intersection fixture to define explicit point coordinates.");
+    }
+    const hasNamedPointI =
+      /\\tkzDefPoint\([^)]*\)\{I\}/.test(tikz) ||
+      /\\tkzDefPoints\{[^}]*\/I(?:,|})/.test(tikz) ||
+      /\\tkzGetPoint\{I\}/.test(tikz);
+    if (!hasNamedPointI) {
+      throw new Error("Expected sector-line intersection fixture to define point I (direct or via tkzGetPoint).");
+    }
+  }
 
   if (fileName === "regression-line-coverage-j-o.json") {
     if (!/\\tkzInterLL\(F,G\)\(E,D\)\s+\\tkzGetPoint\{J\}/.test(tikz)) {
@@ -474,6 +568,79 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("\\pi/2")) {
       throw new Error("Expected custom angle label text to be preserved as TeX.");
     }
+  }
+
+  if (fileName === "angle-right-exact-from-perp-tool.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected exact-right fixture to emit \\tkzMarkRightAngles.");
+    }
+  }
+
+  if (fileName === "angle-right-exact-intersection-vertex.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected intersection-vertex right-angle fixture to emit \\tkzMarkRightAngles.");
+    }
+  }
+
+  if (fileName === "angle-right-exact-linelike-vertex.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected lineLike-vertex right-angle fixture to emit \\tkzMarkRightAngles.");
+    }
+  }
+
+  if (fileName === "angle-right-exact-tangent-centerpoint.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected tangent-centerpoint right-angle fixture to emit \\tkzMarkRightAngles.");
+    }
+  }
+
+  if (fileName === "angle-right-approx-only.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkAngle")) {
+      throw new Error("Expected approx-right fixture to fallback to \\tkzMarkAngle.");
+    }
+    if (tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected approx-right fixture to avoid \\tkzMarkRightAngles.");
+    }
+    return;
+  }
+
+  if (fileName === "angle-nonright-vanilla.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkAngle")) throw new Error("Expected vanilla non-right angle to emit \\tkzMarkAngle.");
+    if (!tikz.includes("arc=l")) throw new Error("Expected vanilla non-right angle to emit arc=l.");
+  }
+
+  if (fileName === "angle-nonright-doublearc.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("arc=ll")) throw new Error("Expected double-arc angle to emit arc=ll.");
+  }
+
+  if (fileName === "angle-nonright-triplearc.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("arc=lll")) throw new Error("Expected triple-arc angle to emit arc=lll.");
+  }
+
+  if (fileName === "angle-nonright-markbars.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("mark=||")) throw new Error("Expected mark-bars angle to emit mark=||.");
+    if (!tikz.includes("mkpos=0.35")) throw new Error("Expected mark-bars angle to emit mkpos=0.35.");
+  }
+
+  if (fileName === "angle-right-square.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-square angle to emit \\tkzMarkRightAngles.");
+    if (tikz.includes("german")) throw new Error("Expected right-square angle to omit german option.");
+  }
+
+  if (fileName === "angle-right-german.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-arc-dot angle to emit \\tkzMarkRightAngles.");
+    if (!tikz.includes("german")) throw new Error("Expected right-arc-dot angle to include german option.");
   }
 
   if (fileName === "sector-basic.json") {
@@ -561,6 +728,54 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
       throw new Error("Expected three-point circle fixture to emit \\tkzDrawCircle.");
     }
   }
+
+  if (fileName === "export-no-patterns.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\usetikzlibrary{patterns}")) {
+      throw new Error("Expected no-patterns fixture to omit patterns library line.");
+    }
+    if (tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
+      throw new Error("Expected no-patterns fixture to omit patterns.meta library line.");
+    }
+  }
+
+  if (fileName === "export-with-patterns.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\usetikzlibrary{patterns}")) {
+      throw new Error("Expected patterns fixture to emit \\usetikzlibrary{patterns}.");
+    }
+    if (tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
+      throw new Error("Expected classic patterns fixture to avoid patterns.meta.");
+    }
+    if (!tikz.includes("pattern=north east lines")) {
+      throw new Error("Expected patterns fixture to emit classic pattern style.");
+    }
+  }
+
+  if (fileName === "export-with-patterns-meta.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
+      throw new Error("Expected patterns-meta fixture to emit \\usetikzlibrary{patterns,patterns.meta}.");
+    }
+    if (!tikz.includes("pattern={Lines[angle=45,distance=4pt]}")) {
+      throw new Error("Expected patterns-meta fixture to emit pattern={...} style.");
+    }
+  }
+
+  if (fileName === "sector-pattern-fill.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\usetikzlibrary{patterns}")) {
+      throw new Error("Expected sector pattern fixture to emit \\usetikzlibrary{patterns}.");
+    }
+    if (!tikz.includes("pattern=north east lines")) {
+      throw new Error("Expected sector pattern fixture to emit pattern option.");
+    }
+    if (!tikz.includes("pattern color=")) {
+      throw new Error("Expected sector pattern fixture to emit pattern color option.");
+    }
+  }
+
+  if (exportError) throw exportError;
 }
 
 function parseDrawLines(

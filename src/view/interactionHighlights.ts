@@ -1,5 +1,6 @@
 import type { Vec2 } from "../geo/vec2";
 import { add, mul, sub } from "../geo/geometry";
+import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import {
   computeOrientedAngleRad,
   type SceneModel,
@@ -9,7 +10,7 @@ import { geoStoreHelpers } from "../state/geoStore";
 import type { ActiveTool, HoveredHit, PendingSelection } from "../state/geoStore";
 import type { Camera } from "./camera";
 import { camera as camMath, type Viewport } from "./camera";
-import { drawAngleArcPreview } from "./angleRender";
+import { computeRightMarkSizePx, drawAngleArcPreview } from "./angleRender";
 
 const ANGLE_STROKE_RENDER_SCALE = 3.25 / 1.8;
 
@@ -25,6 +26,12 @@ export function drawInteractionHighlights(
   vp: Viewport
 ) {
   if (pendingSelection) {
+    if (pendingSelection.tool === "export_clip") {
+      if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
+        drawHitHighlight(ctx, hoveredHit, resolvedPoints, scene, camera, vp, "#0ea5e9", 0.9);
+      }
+      return;
+    }
     if (
       pendingSelection.tool === "angle" ||
       pendingSelection.tool === "sector" ||
@@ -51,6 +58,24 @@ export function drawInteractionHighlights(
           vp,
           "#16a34a",
           0.9
+        );
+      }
+      if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
+        drawHitHighlight(ctx, hoveredHit, resolvedPoints, scene, camera, vp, "#0ea5e9", 0.9);
+      }
+      return;
+    }
+    if (pendingSelection.tool === "polygon") {
+      for (let i = 0; i < pendingSelection.points.length; i += 1) {
+        drawHitHighlight(
+          ctx,
+          { type: "point", id: pendingSelection.points[i].id },
+          resolvedPoints,
+          scene,
+          camera,
+          vp,
+          i === 0 ? "#16a34a" : "#22c55e",
+          0.95
         );
       }
       if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
@@ -192,7 +217,10 @@ function drawHitHighlight(
     if (!a || !b || !c) return;
     const as = camMath.worldToScreen(a, camera, vp);
     const bs = camMath.worldToScreen(b, camera, vp);
-    const radiusPx = Math.max(16, angle.style.arcRadius * camera.zoom);
+    const radiusPx =
+      angle.kind === "sector"
+        ? Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y))
+        : Math.max(18, Math.min(120, angle.style.arcRadius * 34));
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
@@ -203,7 +231,37 @@ function drawHitHighlight(
       ctx.restore();
       return;
     }
-    drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
+    const right = resolveAngleRightStatus(scene, angle) !== "none";
+    const rawMarkStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
+    const markStyle = right && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle;
+    if (right && markStyle === "rightSquare") {
+      const markSize = computeRightMarkSizePx(radiusPx, getAngleStrokeRenderWidth(angle.style.strokeWidth));
+      drawRightAngleHighlight(ctx, as, bs, camMath.worldToScreen(c, camera, vp), markSize);
+    } else {
+      drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (hit.type === "polygon") {
+    const polygon = scene.polygons.find((item) => item.id === hit.id);
+    if (!polygon || !polygon.visible || polygon.pointIds.length < 3) return;
+    const screenPoints = polygon.pointIds
+      .map((id) => geoStoreHelpers.getPointWorldById(scene, id))
+      .filter((world): world is Vec2 => Boolean(world))
+      .map((world) => camMath.worldToScreen(world, camera, vp));
+    if (screenPoints.length < 3) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = polygon.style.strokeWidth + 2.5;
+    ctx.beginPath();
+    ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+    for (let i = 1; i < screenPoints.length; i += 1) ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+    ctx.closePath();
+    ctx.stroke();
     ctx.restore();
     return;
   }
@@ -228,4 +286,27 @@ function drawHitHighlight(
 
 function getAngleStrokeRenderWidth(rawStrokeWidth: number): number {
   return rawStrokeWidth * ANGLE_STROKE_RENDER_SCALE;
+}
+
+function drawRightAngleHighlight(
+  ctx: CanvasRenderingContext2D,
+  aScreen: Vec2,
+  bScreen: Vec2,
+  cScreen: Vec2,
+  sizePx: number
+): void {
+  const uLen = Math.hypot(aScreen.x - bScreen.x, aScreen.y - bScreen.y) || 1;
+  const vLen = Math.hypot(cScreen.x - bScreen.x, cScreen.y - bScreen.y) || 1;
+  const ux = (aScreen.x - bScreen.x) / uLen;
+  const uy = (aScreen.y - bScreen.y) / uLen;
+  const vx = (cScreen.x - bScreen.x) / vLen;
+  const vy = (cScreen.y - bScreen.y) / vLen;
+  const p1 = { x: bScreen.x + ux * sizePx, y: bScreen.y + uy * sizePx };
+  const p3 = { x: bScreen.x + vx * sizePx, y: bScreen.y + vy * sizePx };
+  const p2 = { x: p1.x + vx * sizePx, y: p1.y + vy * sizePx };
+  ctx.beginPath();
+  ctx.moveTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.lineTo(p3.x, p3.y);
+  ctx.stroke();
 }

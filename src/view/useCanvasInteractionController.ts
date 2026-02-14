@@ -20,6 +20,7 @@ import {
   hitTestAngleId as engineHitTestAngleId,
   hitTestCircleId as engineHitTestCircleId,
   hitTestLineId as engineHitTestLineId,
+  hitTestPolygonId as engineHitTestPolygonId,
   hitTestPointId as engineHitTestPointId,
   hitTestSegmentId as engineHitTestSegmentId,
 } from "../engine";
@@ -56,7 +57,7 @@ type InteractionActions = {
   setSnapDisabled: (value: boolean) => void;
   setCursorWorld: (value: Vec2 | null) => void;
   setHoveredHit: (hit: HoveredHit) => void;
-  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "angle" | "number"; id: string } | null) => void;
+  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "number"; id: string } | null) => void;
   zoomAtScreenPoint: (vp: Viewport, screen: Vec2, zoomFactor: number) => void;
 };
 
@@ -67,7 +68,7 @@ type InteractionDeps = {
   dragBuffers: DragBufferRefs;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "angle" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "number"; id: string } | null;
   scene: SceneModel;
   camera: Camera;
   vp: Viewport;
@@ -178,9 +179,10 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       dragAngleLabelScreenRef: dragBuffers.dragAngleLabelScreenRef,
     });
 
-    const { onDown, onMove, finish } = createPointerHandlers({
+    const { onDown, onMove, finish, cancelPendingHoverUpdate } = createPointerHandlers({
       canvas,
       activeTool,
+      pendingSelection,
       pointerRef,
       dragFrameRef: dragBuffers.dragFrameRef,
       dragBuffers: dragBufferAccess,
@@ -203,6 +205,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
         hitAngleLabelId: hitTestAngleLabelHandle(screen, resolvedAngles, camera, vp, getAngleTextRenderSize),
         hitAngleId: engineHitTestAngleId(screen, resolvedAngles, camera, vp, tolerances.angle),
         hitSegmentId: engineHitTestSegmentId(screen, scene, camera, vp, tolerances.segment),
+        hitPolygonId: engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment),
         hitLineId: engineHitTestLineId(screen, scene, camera, vp, tolerances.line),
         hitCircleId: engineHitTestCircleId(screen, scene, camera, vp, tolerances.circle),
       }),
@@ -228,7 +231,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
         }),
     });
 
-    const { onWheel, onLeave } = createCanvasAuxHandlers({
+    const { onWheel, onLeave, cancelPendingWheelZoom } = createCanvasAuxHandlers({
       canvas,
       readScreen,
       setHoverScreen: actions.setHoverScreen,
@@ -247,6 +250,8 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     });
 
     return () => {
+      cancelPendingWheelZoom();
+      cancelPendingHoverUpdate();
       if (dragBuffers.dragFrameRef.current !== null) {
         cancelAnimationFrame(dragBuffers.dragFrameRef.current);
         dragBuffers.dragFrameRef.current = null;

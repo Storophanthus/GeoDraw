@@ -28,6 +28,8 @@ export type SceneEvalContext<TPoint, TLine, TSegment, TCircle, TAngle, TNumber> 
   lineInProgress: Set<string>;
   circleLinePairAssignments: Map<string, Map<string, Vec2 | null>>;
   genericIntersectionPairAssignments: Map<string, Map<string, Vec2 | null>>;
+  resolvedLineCache: Map<string, { a: Vec2; b: Vec2 } | null>;
+  circleGeometryCache: Map<string, { center: Vec2; radius: number } | null>;
   stats: SceneEvalStats;
   explicit: boolean;
 };
@@ -66,6 +68,8 @@ export function buildSceneEvalContext<TPoint, TLine, TSegment, TCircle, TAngle, 
     lineInProgress: new Set<string>(),
     circleLinePairAssignments: new Map<string, Map<string, Vec2 | null>>(),
     genericIntersectionPairAssignments: new Map<string, Map<string, Vec2 | null>>(),
+    resolvedLineCache: new Map<string, { a: Vec2; b: Vec2 } | null>(),
+    circleGeometryCache: new Map<string, { center: Vec2; radius: number } | null>(),
     stats: {
       tick,
       dirtyNodes,

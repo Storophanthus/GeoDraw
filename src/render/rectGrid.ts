@@ -4,6 +4,7 @@ import type { Vec2 } from "../geo/vec2";
 
 export type RectGridSettings = {
   enabled: boolean;
+  showAxes?: boolean;
   rotationRad: number;
   targetSpacingPx: number;
   majorEvery: number;
@@ -16,7 +17,7 @@ export type RectGridSettings = {
 export function drawRectGrid(ctx: CanvasRenderingContext2D, cam: Camera, vp: Viewport, s: RectGridSettings) {
   if (!s.enabled) return;
 
-  const spacingWorld = niceSpacing(s.targetSpacingPx / cam.zoom);
+  const spacingWorld = gridSpacingWorld(cam, s);
   const rot = s.rotationRad;
 
   const corners: Vec2[] = [
@@ -75,7 +76,37 @@ export function drawRectGrid(ctx: CanvasRenderingContext2D, cam: Camera, vp: Vie
     ctx.stroke();
   }
 
+  if (s.showAxes ?? true) {
+    ctx.globalAlpha = 0.42;
+    ctx.lineWidth = Math.max(1.2, s.majorWidth + 0.3);
+    ctx.strokeStyle = "#334155";
+    const xAxisA = camera.worldToScreen(gridToWorld({ x: minX, y: 0 }, rot), cam, vp);
+    const xAxisB = camera.worldToScreen(gridToWorld({ x: maxX, y: 0 }, rot), cam, vp);
+    ctx.beginPath();
+    ctx.moveTo(xAxisA.x, xAxisA.y);
+    ctx.lineTo(xAxisB.x, xAxisB.y);
+    ctx.stroke();
+    const yAxisA = camera.worldToScreen(gridToWorld({ x: 0, y: minY }, rot), cam, vp);
+    const yAxisB = camera.worldToScreen(gridToWorld({ x: 0, y: maxY }, rot), cam, vp);
+    ctx.beginPath();
+    ctx.moveTo(yAxisA.x, yAxisA.y);
+    ctx.lineTo(yAxisB.x, yAxisB.y);
+    ctx.stroke();
+  }
+
   ctx.restore();
+}
+
+export function gridSpacingWorld(cam: Camera, s: RectGridSettings): number {
+  return niceSpacing(s.targetSpacingPx / Math.max(1e-9, cam.zoom));
+}
+
+export function snapWorldToRectGrid(world: Vec2, cam: Camera, s: RectGridSettings): Vec2 {
+  const spacingWorld = gridSpacingWorld(cam, s);
+  const p = worldToGrid(world, s.rotationRad);
+  const gx = Math.round(p.x / spacingWorld) * spacingWorld;
+  const gy = Math.round(p.y / spacingWorld) * spacingWorld;
+  return gridToWorld({ x: gx, y: gy }, s.rotationRad);
 }
 
 function niceSpacing(raw: number) {

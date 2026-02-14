@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p_1", "name": "A", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": -3.954541015625, "y": 2.13017578125 }, "dependsOn": [] },
+    { "id": "p_2", "name": "B", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 6.26259765625, "y": -0.6255859375 }, "dependsOn": [] },
+    { "id": "p_3", "name": "C", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 4.359912109375, "y": 4.71044921875 }, "dependsOn": [] },
+    {
+      "id": "p_4",
+      "name": "D",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "lineLikeIntersectionPoint",
+        "objA": { "type": "line", "id": "l_1" },
+        "objB": { "type": "segment", "id": "s_1" },
+        "preferredWorld": { "x": 3.147312005672447, "y": 0.21466740685999497 }
+      },
+      "dependsOn": ["line:l_1", "segment:s_1"]
+    }
+  ],
+  "numbers": [],
+  "lines": [
+    {
+      "id": "l_1",
+      "kind": "perpendicular",
+      "throughId": "p_3",
+      "base": { "type": "segment", "id": "s_1" },
+      "visible": true
+    }
+  ],
+  "segments": [
+    { "id": "s_1", "aId": "p_1", "bId": "p_2", "visible": true }
+  ],
+  "circles": [],
+  "angles": [
+    {
+      "id": "a_1",
+      "kind": "angle",
+      "aId": "p_3",
+      "bId": "p_4",
+      "cId": "p_1",
+      "visible": true
+    }
+  ]
+}

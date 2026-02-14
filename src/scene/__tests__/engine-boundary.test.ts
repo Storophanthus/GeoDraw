@@ -69,6 +69,7 @@ const scene: SceneModel = {
   circles: [],
   angles: [],
   numbers: [],
+    polygons: [],
 };
 
 const camera: Camera = { pos: { x: 0, y: 0 }, zoom: 100 };
@@ -110,7 +111,13 @@ constructFromClick({
     createCircle() {
       return null;
     },
+    createAuxiliaryCircle() {
+      return null;
+    },
     createCircleThreePoint() {
+      return null;
+    },
+    createPolygon() {
       return null;
     },
     createPerpendicularLine() {
@@ -149,9 +156,16 @@ constructFromClick({
     createPointOnCircle() {
       return null;
     },
+    createPointByRotation() {
+      return null;
+    },
     createIntersectionPoint() {
       return null;
     },
+    createCircleCenterPoint() {
+      return null;
+    },
+    setExportClipWorld() {},
     setSelectedObject() {},
     setCopyStyleSource() {},
     applyCopyStyleTo() {},
@@ -159,6 +173,10 @@ constructFromClick({
       return null;
     },
     angleFixedTool: { angleExpr: "45", direction: "CCW" },
+    gridSnapEnabled: false,
+    snapWorldToGrid(world) {
+      return world;
+    },
     camera,
     vp,
   },

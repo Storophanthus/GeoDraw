@@ -26,7 +26,7 @@ type PointPropertiesSectionProps = {
   setShapePickerOpen: (value: boolean | ((v: boolean) => boolean)) => void;
   shapePickerRef: RefObject<HTMLDivElement | null>;
   updateSelectedPointFields: (
-    fields: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>
+    fields: Partial<Pick<ScenePoint, "captionTex" | "showLabel" | "locked" | "auxiliary">>
   ) => void;
   updateSelectedPointStyle: (style: Partial<ScenePoint["style"]>) => void;
   deleteSelectedObject: () => void;
@@ -87,15 +87,6 @@ export function PointPropertiesSection({
           onChange={(e) => updateSelectedPointFields({ captionTex: e.target.value })}
         />
       </div>
-
-      <label className="checkboxRow">
-        <input
-          type="checkbox"
-          checked={selectedPoint.visible}
-          onChange={(e) => updateSelectedPointFields({ visible: e.target.checked })}
-        />
-        Show Object
-      </label>
 
       <div className="fieldBlock">
         <label className="fieldLabel">Show Label</label>

@@ -1,0 +1,97 @@
+{
+    "version": 1,
+    "points": [
+        {
+            "id": "p_1",
+            "name": "A",
+            "visible": true,
+            "showLabel": "name",
+            "definition": {
+                "kind": "free",
+                "x": 0,
+                "y": 0
+            }
+        },
+        {
+            "id": "p_2",
+            "name": "B",
+            "visible": true,
+            "showLabel": "name",
+            "definition": {
+                "kind": "free",
+                "x": 2,
+                "y": 0
+            }
+        },
+        {
+            "id": "p_3",
+            "name": "C",
+            "visible": true,
+            "showLabel": "name",
+            "definition": {
+                "kind": "free",
+                "x": 2,
+                "y": 2
+            }
+        }
+    ],
+    "lines": [],
+    "segments": [
+        {
+            "id": "s_1",
+            "aId": "p_1",
+            "bId": "p_2",
+            "visible": true,
+            "showLabel": false,
+            "style": {
+                "strokeColor": "#000000",
+                "strokeWidth": 1,
+                "dash": "solid",
+                "opacity": 1
+            }
+        },
+        {
+            "id": "s_2",
+            "aId": "p_2",
+            "bId": "p_3",
+            "visible": true,
+            "showLabel": false,
+            "style": {
+                "strokeColor": "#000000",
+                "strokeWidth": 1,
+                "dash": "solid",
+                "opacity": 1
+            }
+        }
+    ],
+    "circles": [],
+    "angles": [
+        {
+            "id": "a_1",
+            "aId": "p_1",
+            "bId": "p_2",
+            "cId": "p_3",
+            "isRightExact": true,
+            "visible": true,
+            "style": {
+                "strokeColor": "#334155",
+                "strokeWidth": 1.5,
+                "strokeOpacity": 1,
+                "textColor": "#0f172a",
+                "textSize": 16,
+                "fillEnabled": false,
+                "fillColor": "#93c5fd",
+                "fillOpacity": 0.15,
+                "markStyle": "rightArcDot",
+                "arcRadius": 0.5,
+                "labelText": ".",
+                "labelPosWorld": {
+                    "x": 2.55,
+                    "y": 0.55
+                },
+                "showLabel": false,
+                "showValue": false
+            }
+        }
+    ]
+}

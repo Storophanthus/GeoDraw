@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p_1", "name": "A", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 0, "y": 0 } },
+    { "id": "p_2", "name": "B", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 1, "y": 0 } },
+    { "id": "p_3", "name": "C", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 2, "y": 1 } }
+  ],
+  "numbers": [],
+  "lines": [],
+  "segments": [],
+  "circles": [],
+  "angles": [
+    {
+      "id": "a_1",
+      "kind": "angle",
+      "aId": "p_1",
+      "bId": "p_2",
+      "cId": "p_3",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "strokeOpacity": 1,
+        "textColor": "#0f172a",
+        "textSize": 16,
+        "fillEnabled": false,
+        "fillColor": "#93c5fd",
+        "fillOpacity": 0.2,
+        "markStyle": "arc",
+        "markSymbol": "none",
+        "arcMultiplicity": 1,
+        "markPos": 0.5,
+        "markSize": 4,
+        "markColor": "#334155",
+        "arcRadius": 1.2,
+        "labelText": "",
+        "labelPosWorld": { "x": 1.35, "y": 0.45 },
+        "showLabel": true,
+        "showValue": true
+      }
+    }
+  ]
+}

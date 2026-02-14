@@ -1,7 +1,7 @@
 import type { GeometryObjectRef, SceneModel } from "../scene/points";
 import type { SelectedObject } from "../state/slices/storeTypes";
 
-type NodeType = "point" | "segment" | "line" | "circle" | "angle" | "number";
+type NodeType = "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "number";
 type NodeKey = `${NodeType}:${string}`;
 
 type Graph = {
@@ -15,13 +15,15 @@ function key(type: NodeType, id: string): NodeKey {
 function objectRefToKey(ref: GeometryObjectRef): NodeKey {
   if (ref.type === "line") return key("line", ref.id);
   if (ref.type === "segment") return key("segment", ref.id);
-  return key("circle", ref.id);
+  if (ref.type === "circle") return key("circle", ref.id);
+  return key("angle", ref.id);
 }
 
 function selectedToKey(selected: Exclude<SelectedObject, null>): NodeKey {
   if (selected.type === "line") return key("line", selected.id);
   if (selected.type === "segment") return key("segment", selected.id);
   if (selected.type === "circle") return key("circle", selected.id);
+  if (selected.type === "polygon") return key("polygon", selected.id);
   if (selected.type === "point") return key("point", selected.id);
   if (selected.type === "angle") return key("angle", selected.id);
   return key("number", selected.id);
@@ -66,6 +68,8 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
       addDependency(graph, child, key("segment", p.segId));
     } else if (p.kind === "pointOnCircle") {
       addDependency(graph, child, key("circle", p.circleId));
+    } else if (p.kind === "circleCenter") {
+      addDependency(graph, child, key("circle", p.circleId));
     } else if (p.kind === "pointByRotation") {
       addDependency(graph, child, key("point", p.centerId));
       addDependency(graph, child, key("point", p.pointId));
@@ -77,6 +81,17 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
       addDependency(graph, child, key("circle", p.circleId));
       addDependency(graph, child, key("line", p.lineId));
       if (p.excludePointId) addDependency(graph, child, key("point", p.excludePointId));
+    } else if (p.kind === "circleSegmentIntersectionPoint") {
+      addDependency(graph, child, key("circle", p.circleId));
+      addDependency(graph, child, key("segment", p.segId));
+      if (p.excludePointId) addDependency(graph, child, key("point", p.excludePointId));
+    } else if (p.kind === "circleCircleIntersectionPoint") {
+      addDependency(graph, child, key("circle", p.circleAId));
+      addDependency(graph, child, key("circle", p.circleBId));
+      if (p.excludePointId) addDependency(graph, child, key("point", p.excludePointId));
+    } else if (p.kind === "lineLikeIntersectionPoint") {
+      addDependency(graph, child, objectRefToKey(p.objA));
+      addDependency(graph, child, objectRefToKey(p.objB));
     }
   }
 
@@ -125,6 +140,14 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
     addDependency(graph, child, key("point", a.aId));
     addDependency(graph, child, key("point", a.bId));
     addDependency(graph, child, key("point", a.cId));
+  }
+
+  for (const polygon of scene.polygons) {
+    const child = key("polygon", polygon.id);
+    ensureNode(graph, child);
+    for (let i = 0; i < polygon.pointIds.length; i += 1) {
+      addDependency(graph, child, key("point", polygon.pointIds[i]));
+    }
   }
 
   for (const n of scene.numbers) {
@@ -179,10 +202,11 @@ export function applyDeletion(scene: SceneModel, deleted: Set<NodeKey>): SceneMo
   const segments = scene.segments.filter((s) => !drop("segment", s.id));
   const lines = scene.lines.filter((l) => !drop("line", l.id));
   const circles = scene.circles.filter((c) => !drop("circle", c.id));
+  const polygons = scene.polygons.filter((p) => !drop("polygon", p.id));
   const angles = scene.angles.filter((a) => !drop("angle", a.id));
   const numbers = scene.numbers.filter((n) => !drop("number", n.id));
 
-  return { ...scene, points, segments, lines, circles, angles, numbers };
+  return { ...scene, points, segments, lines, circles, polygons, angles, numbers };
 }
 
 export function isSelectedObjectAlive(scene: SceneModel, selected: SelectedObject): boolean {
@@ -191,6 +215,7 @@ export function isSelectedObjectAlive(scene: SceneModel, selected: SelectedObjec
   if (selected.type === "segment") return scene.segments.some((s) => s.id === selected.id);
   if (selected.type === "line") return scene.lines.some((l) => l.id === selected.id);
   if (selected.type === "circle") return scene.circles.some((c) => c.id === selected.id);
+  if (selected.type === "polygon") return scene.polygons.some((p) => p.id === selected.id);
   if (selected.type === "angle") return scene.angles.some((a) => a.id === selected.id);
   return scene.numbers.some((n) => n.id === selected.id);
 }

@@ -8,13 +8,15 @@ import {
   getCircleWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
+  isRightAngle,
   type LineLikeObjectRef,
   type SceneModel,
 } from "../../scene/points";
 import type { HoveredHit, PendingSelection } from "../../state/geoStore";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import type { SnapCandidate } from "../snapEngine";
-import { drawAngleArcPreview, drawAngleSector } from "../angleRender";
+import { isRightExactByProvenance } from "../../domain/rightAngleProvenance";
+import { computeRightMarkSizePx, drawAngleArcPreview, drawAngleSector, drawRightAngleMark } from "../angleRender";
 
 export type AngleFixedToolState = { angleExpr: string; direction: "CCW" | "CW" };
 export type CircleFixedToolState = { radius: string };
@@ -49,7 +51,8 @@ export function drawPendingPreview(
   tolerances: { linePx: number; segmentPx: number }
 ): void {
   if (!pendingSelection) return;
-  const firstPointId = pendingSelection.first.type === "point" ? pendingSelection.first.id : null;
+  const firstSelection = "first" in pendingSelection ? pendingSelection.first : null;
+  const firstPointId = firstSelection?.type === "point" ? firstSelection.id : null;
   const firstPoint = firstPointId ? scene.points.find((p) => p.id === firstPointId) : null;
   const firstWorld = firstPoint ? getPointWorldPos(firstPoint, scene) : null;
   const p1 = firstWorld ? camMath.worldToScreen(firstWorld, camera, vp) : null;
@@ -73,12 +76,73 @@ export function drawPendingPreview(
     ctx.stroke();
   };
 
+  if (pendingSelection.tool === "export_clip" && pendingSelection.step === 2) {
+    const points = pendingSelection.points.map((entry) => entry.world);
+    if (points.length >= 1) {
+      const first = camMath.worldToScreen(points[0], camera, vp);
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = "#0ea5e9";
+      ctx.fillStyle = "rgba(14,165,233,0.08)";
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(first.x, first.y);
+      for (let i = 1; i < points.length; i += 1) {
+        const p = camMath.worldToScreen(points[i], camera, vp);
+        ctx.lineTo(p.x, p.y);
+      }
+      if (cursorWorld) {
+        const c = camMath.worldToScreen(cursorWorld, camera, vp);
+        ctx.lineTo(c.x, c.y);
+      }
+      ctx.stroke();
+
+      // Show the first vertex explicitly so users can close the clip path easily.
+      ctx.setLineDash([]);
+      const canClose = points.length >= 3 && cursorScreen && Math.hypot(cursorScreen.x - first.x, cursorScreen.y - first.y) <= 14;
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(14,165,233,0.95)";
+      ctx.arc(first.x, first.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      if (canClose) {
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(14,165,233,0.95)";
+        ctx.lineWidth = 1.4;
+        ctx.arc(first.x, first.y, 9, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+    return;
+  }
+
   if (p1 && (pendingSelection.tool === "segment" || pendingSelection.tool === "midpoint") && cursorWorld) {
     const p2 = camMath.worldToScreen(cursorWorld, camera, vp);
     ctx.beginPath();
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
     ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  if (pendingSelection.tool === "polygon" && pendingSelection.points.length > 0) {
+    const polyWorld = pendingSelection.points
+      .map((entry) => scene.points.find((point) => point.id === entry.id))
+      .map((point) => (point ? getPointWorldPos(point, scene) : null))
+      .filter((world): world is Vec2 => Boolean(world));
+    if (polyWorld.length > 0) {
+      const polyScreen = polyWorld.map((world) => camMath.worldToScreen(world, camera, vp));
+      ctx.beginPath();
+      ctx.moveTo(polyScreen[0].x, polyScreen[0].y);
+      for (let i = 1; i < polyScreen.length; i += 1) {
+        ctx.lineTo(polyScreen[i].x, polyScreen[i].y);
+      }
+      if (cursorWorld) {
+        const cursor = camMath.worldToScreen(cursorWorld, camera, vp);
+        ctx.lineTo(cursor.x, cursor.y);
+      }
+      ctx.stroke();
+    }
     ctx.restore();
     return;
   }
@@ -282,13 +346,20 @@ export function drawPendingPreview(
     const a = aPoint ? getPointWorldPos(aPoint, scene) : null;
     const b = bPoint ? getPointWorldPos(bPoint, scene) : null;
     let c: Vec2 | null = null;
+    let cId: string | null = null;
     if (hoverSnap?.kind === "point" && hoverSnap.pointId) {
       const p = scene.points.find((pt) => pt.id === hoverSnap.pointId);
-      c = p ? getPointWorldPos(p, scene) : null;
+      if (p) {
+        c = getPointWorldPos(p, scene);
+        cId = p.id;
+      }
     }
     if (!c && hoveredHit?.type === "point") {
       const p = scene.points.find((pt) => pt.id === hoveredHit.id);
-      c = p ? getPointWorldPos(p, scene) : null;
+      if (p) {
+        c = getPointWorldPos(p, scene);
+        cId = p.id;
+      }
     }
     if (!c) c = cursorWorld;
     if (a && b && c) {
@@ -296,8 +367,28 @@ export function drawPendingPreview(
       if (theta !== null) {
         const as = camMath.worldToScreen(a, camera, vp);
         const bs = camMath.worldToScreen(b, camera, vp);
-        const radiusPx = Math.max(18, Math.min(72, Math.hypot(as.x - bs.x, as.y - bs.y) * 0.28));
-        drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
+        const cs = camMath.worldToScreen(c, camera, vp);
+        // Keep preview cosmetics stable under camera zoom by using world distance.
+        const radiusPx = Math.max(24, Math.min(120, Math.hypot(a.x - b.x, a.y - b.y) * 0.34));
+        const rightStatus: "none" | "approx" | "exact" = cId
+          ? isRightExactByProvenance(scene, pendingSelection.first.id, pendingSelection.second.id, cId)
+            ? "exact"
+            : isRightAngle(a, b, c, 1e-2)
+              ? "approx"
+              : "none"
+          : isRightAngle(a, b, c, 1e-2)
+            ? "approx"
+            : "none";
+        if (rightStatus === "none") {
+          drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
+        } else {
+          const rightMarkSizePx = computeRightMarkSizePx(radiusPx, 1.3);
+          ctx.save();
+          ctx.setLineDash(rightStatus === "approx" ? [5, 4] : []);
+          drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx);
+          ctx.stroke();
+          ctx.restore();
+        }
         const start = Math.atan2(as.y - bs.y, as.x - bs.x);
         const mid = start - theta * 0.5;
         const lx = bs.x + Math.cos(mid) * (radiusPx + 16);
@@ -308,7 +399,7 @@ export function drawPendingPreview(
         ctx.fillStyle = "#0284c7";
         ctx.font = "12px system-ui";
         const deg = (theta * 180) / Math.PI;
-        ctx.fillText(`${deg.toFixed(2)}°`, lx, ly);
+        ctx.fillText(`${formatPreviewAngleDegrees(deg)}°`, lx, ly);
         ctx.restore();
       }
     }
@@ -462,4 +553,12 @@ export function drawPendingPreview(
   }
 
   ctx.restore();
+}
+
+function formatPreviewAngleDegrees(degRaw: number): string {
+  if (!Number.isFinite(degRaw)) return "0";
+  const deg = ((degRaw % 360) + 360) % 360;
+  const nearest5 = Math.round(deg / 5) * 5;
+  if (Math.abs(deg - nearest5) <= 1e-3) return String(nearest5);
+  return deg.toFixed(2);
 }

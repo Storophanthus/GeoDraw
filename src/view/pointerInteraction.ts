@@ -19,6 +19,7 @@ type MovePointerDownDecision = {
     | { type: "segment"; id: string }
     | { type: "line"; id: string }
     | { type: "circle"; id: string }
+    | { type: "polygon"; id: string }
     | { type: "angle"; id: string }
     | null;
 };
@@ -28,6 +29,7 @@ type MovePointerDownInput = {
   hitAngleLabelId: string | null;
   hitPointId: string | null;
   hitSegmentId: string | null;
+  hitPolygonId: string | null;
   hitLineId: string | null;
   hitCircleId: string | null;
   hitAngleId: string | null;
@@ -40,6 +42,7 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     hitAngleLabelId,
     hitPointId,
     hitSegmentId,
+    hitPolygonId,
     hitLineId,
     hitCircleId,
     hitAngleId,
@@ -71,6 +74,10 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     };
   }
 
+  if (hitPolygonId) {
+    return { mode: "idle", pointId: null, selectedObject: { type: "polygon", id: hitPolygonId } };
+  }
+
   if (hitSegmentId) {
     return { mode: "idle", pointId: null, selectedObject: { type: "segment", id: hitSegmentId } };
   }
@@ -100,7 +107,7 @@ export function computeCanvasCursor(
     if (mode === "pan" || mode === "drag-point" || mode === "drag-label" || mode === "drag-angle-label") {
       return "grabbing";
     }
-    if (hoveredHit?.type === "point" || hoveredHit?.type === "angle") {
+    if (hoveredHit?.type === "point" || hoveredHit?.type === "angle" || hoveredHit?.type === "polygon") {
       return "pointer";
     }
     return "grab";

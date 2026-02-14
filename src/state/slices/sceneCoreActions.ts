@@ -1,5 +1,6 @@
 import { nextLabelFromIndex } from "../../scene/points";
 import type { ShowLabelMode } from "../../scene/points";
+import { registerLinePair, registerSegmentPair } from "../../domain/rightAngleProvenance";
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
 
@@ -20,7 +21,16 @@ function nextUnusedPointName(state: GeoState): string {
 
 export function createSceneCoreActions(
   ctx: SceneCoreContext
-): Pick<GeoActions, "createFreePoint" | "createMidpointFromPoints" | "createMidpointFromSegment" | "createSegment" | "createLine"> {
+): Pick<
+  GeoActions,
+  | "createFreePoint"
+  | "createMidpointFromPoints"
+  | "createMidpointFromSegment"
+  | "createSegment"
+  | "createLine"
+  | "createPolygon"
+  | "createCircleCenterPoint"
+> {
   return {
     createFreePoint(world) {
       let createdId = "";
@@ -173,6 +183,7 @@ export function createSceneCoreActions(
           nextSegmentId: prev.nextSegmentId + 1,
         };
       });
+      if (id) registerSegmentPair(id, aId, bId);
       return id;
     },
 
@@ -205,7 +216,100 @@ export function createSceneCoreActions(
           nextLineId: prev.nextLineId + 1,
         };
       });
+      if (id) registerLinePair(id, aId, bId);
       return id;
+    },
+
+    createPolygon(pointIds) {
+      const uniqueIds = Array.from(new Set(pointIds));
+      if (uniqueIds.length < 3) return null;
+      let id: string | null = null;
+      ctx.setState((prev) => {
+        for (let i = 0; i < uniqueIds.length; i += 1) {
+          if (!prev.scene.points.some((p) => p.id === uniqueIds[i])) return prev;
+        }
+        id = `pg_${prev.nextPolygonId}`;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            polygons: [
+              ...prev.scene.polygons,
+              {
+                id,
+                pointIds: uniqueIds,
+                visible: true,
+                style: { ...prev.polygonDefaults },
+              },
+            ],
+          },
+          selectedObject: { type: "polygon", id },
+          recentCreatedObject: { type: "polygon", id },
+          nextPolygonId: prev.nextPolygonId + 1,
+        };
+      });
+      return id;
+    },
+
+    createCircleCenterPoint(circleId) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const circle = prev.scene.circles.find((c) => c.id === circleId);
+        if (!circle) return prev;
+
+        if (circle.kind !== "threePoint") {
+          const center = prev.scene.points.find((p) => p.id === circle.centerId);
+          if (!center) return prev;
+          createdId = center.id;
+          return {
+            ...prev,
+            selectedObject: { type: "point", id: center.id },
+          };
+        }
+
+        const existing = prev.scene.points.find(
+          (p) => p.kind === "circleCenter" && p.circleId === circleId
+        );
+        if (existing) {
+          createdId = existing.id;
+          return {
+            ...prev,
+            selectedObject: { type: "point", id: existing.id },
+          };
+        }
+
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "circleCenter",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: "name" as ShowLabelMode,
+                locked: true,
+                auxiliary: true,
+                circleId,
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
     },
   };
 }

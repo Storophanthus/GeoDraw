@@ -20,6 +20,7 @@ import { evalNumberByIdWithCtxInScene } from "./eval/numberEvaluators";
 import {
   asCircleWithCtx,
   asLineLikeWithCtx,
+  asSectorArcWithCtx,
   buildGeometryResolveOpsWithCtx,
   getCircleWorldGeometryWithCtxInScene,
   resolveLineAnchorsWithCtx,
@@ -111,25 +112,55 @@ export type CircleStyle = {
   strokeOpacity: number;
   fillColor?: string;
   fillOpacity?: number;
+  pattern?: string;
+  patternColor?: string;
 };
 
-export type AngleMarkStyle = "arc" | "right" | "none";
+export type PolygonStyle = {
+  strokeColor: string;
+  strokeWidth: number;
+  strokeDash: "solid" | "dashed" | "dotted";
+  strokeOpacity: number;
+  fillColor?: string;
+  fillOpacity?: number;
+  pattern?: string;
+  patternColor?: string;
+};
+
+export type AngleMarkStyle =
+  | "arc"
+  | "none"
+  | "rightSquare"
+  | "rightArcDot"
+  // Legacy value kept for scene backward compatibility.
+  | "right";
+
+export type AngleMarkSymbol = "none" | "|" | "||" | "|||";
 
 export type AngleStyle = {
   strokeColor: string;
   strokeWidth: number;
+  strokeDash?: "solid" | "dashed" | "dotted";
   strokeOpacity: number;
   textColor: string;
   textSize: number;
   fillEnabled: boolean;
   fillColor: string;
   fillOpacity: number;
+  pattern?: string;
+  patternColor?: string;
   markStyle: AngleMarkStyle;
+  markSymbol: AngleMarkSymbol;
+  arcMultiplicity: 1 | 2 | 3;
+  markPos: number;
+  markSize: number;
+  markColor: string;
   arcRadius: number;
   labelText: string;
   labelPosWorld: Vec2;
   showLabel: boolean;
   showValue: boolean;
+  promoteToSolid?: boolean;
 };
 
 export type ShowLabelMode = "none" | "name" | "caption";
@@ -234,10 +265,24 @@ export type PointByRotation = {
   style: PointStyle;
 };
 
+export type CircleCenterPoint = {
+  id: string;
+  kind: "circleCenter";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  circleId: string;
+  style: PointStyle;
+};
+
 export type GeometryObjectRef =
   | { type: "line"; id: string }
   | { type: "segment"; id: string }
-  | { type: "circle"; id: string };
+  | { type: "circle"; id: string }
+  | { type: "angle"; id: string };
 
 export type LineLikeObjectRef = { type: "line"; id: string } | { type: "segment"; id: string };
 
@@ -252,8 +297,26 @@ export type IntersectionPoint = {
   auxiliary?: boolean;
   objA: GeometryObjectRef;
   objB: GeometryObjectRef;
+  // Optional explicit branch index. When set, evaluation uses this branch
+  // deterministically instead of preferredWorld heuristics.
+  branchIndex?: number;
   preferredWorld: Vec2;
   excludePointId?: string;
+  style: PointStyle;
+};
+
+export type LineLikeIntersectionPoint = {
+  id: string;
+  kind: "lineLikeIntersectionPoint";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  objA: LineLikeObjectRef;
+  objB: LineLikeObjectRef;
+  preferredWorld: Vec2;
   style: PointStyle;
 };
 
@@ -273,6 +336,38 @@ export type CircleLineIntersectionPoint = {
   style: PointStyle;
 };
 
+export type CircleSegmentIntersectionPoint = {
+  id: string;
+  kind: "circleSegmentIntersectionPoint";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  circleId: string;
+  segId: string;
+  branchIndex: 0 | 1;
+  excludePointId?: string;
+  style: PointStyle;
+};
+
+export type CircleCircleIntersectionPoint = {
+  id: string;
+  kind: "circleCircleIntersectionPoint";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  circleAId: string;
+  circleBId: string;
+  branchIndex: 0 | 1;
+  excludePointId?: string;
+  style: PointStyle;
+};
+
 export type ScenePoint =
   | FreePoint
   | MidpointFromPoints
@@ -281,8 +376,12 @@ export type ScenePoint =
   | PointOnSegment
   | PointOnCircle
   | PointByRotation
+  | CircleCenterPoint
   | IntersectionPoint
-  | CircleLineIntersectionPoint;
+  | LineLikeIntersectionPoint
+  | CircleLineIntersectionPoint
+  | CircleSegmentIntersectionPoint
+  | CircleCircleIntersectionPoint;
 
 export type SceneSegment = {
   id: string;
@@ -373,12 +472,23 @@ export type SceneCircleFixedRadius = {
 
 export type SceneCircle = SceneCircleTwoPoint | SceneCircleThreePoint | SceneCircleFixedRadius;
 
+export type ScenePolygon = {
+  id: string;
+  pointIds: string[];
+  visible: boolean;
+  style: PolygonStyle;
+};
+
 export type SceneAngle = {
   id: string;
   kind?: "angle" | "sector";
   aId: string;
   bId: string;
   cId: string;
+  // True only when right-angle relation is proven by construction provenance.
+  isRightExact?: boolean;
+  // Runtime hint for UI/render; persisted scenes may omit it.
+  isRightApprox?: boolean;
   visible: boolean;
   style: AngleStyle;
 };
@@ -447,6 +557,7 @@ export type SceneModel = {
   segments: SceneSegment[];
   lines: SceneLine[];
   circles: SceneCircle[];
+  polygons: ScenePolygon[];
   angles: SceneAngle[];
   numbers: SceneNumber[];
 };
@@ -529,6 +640,7 @@ function objectIntersections(
   return objectIntersectionsWithOps(a, b, {
     asLineLike: (ref) => asLineLike(ref, scene, ctx),
     asCircle: (ref) => asCircle(ref, scene, ctx),
+    asSectorArc: (ref) => asSectorArc(ref, scene, ctx),
     onLineLineCall: () => {
       ctx.stats.lineLineCalls += 1;
     },
@@ -573,6 +685,14 @@ function asCircle(
   ctx: SceneEvalContext
 ): { center: Vec2; radius: number } | null {
   return asCircleWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
+}
+
+function asSectorArc(
+  ref: GeometryObjectRef,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): { center: Vec2; radius: number; start: number; sweep: number } | null {
+  return asSectorArcWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
 }
 
 function getCircleWorldGeometryWithCtx(
@@ -642,7 +762,7 @@ function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): n
   });
 }
 
-export { computeConvexAngleRad, computeOrientedAngleRad } from "./eval/angleMath";
+export { computeConvexAngleRad, computeOrientedAngleRad, isRightAngle, RIGHT_ANGLE_EPS } from "./eval/angleMath";
 
 export function evaluateAngleExpressionDegrees(scene: SceneModel, exprRaw: string): AngleExpressionEvalResult {
   const expr = exprRaw.trim();

@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "K",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": -3.72, "y": -9.37 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_2",
+      "name": "L",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 5.37, "y": -8.86 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_3",
+      "name": "M",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "pointOnCircle",
+        "circleId": "c_1",
+        "t": 2.019298022761774
+      },
+      "dependsOn": ["c_1"]
+    }
+  ],
+  "numbers": [],
+  "lines": [],
+  "segments": [],
+  "circles": [
+    {
+      "id": "c_1",
+      "kind": "twoPoint",
+      "centerId": "p_1",
+      "throughId": "p_2",
+      "visible": false
+    }
+  ],
+  "angles": [
+    {
+      "id": "a_1",
+      "kind": "sector",
+      "aId": "p_2",
+      "bId": "p_1",
+      "cId": "p_3",
+      "visible": true
+    }
+  ]
+}

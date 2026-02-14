@@ -7,6 +7,7 @@ import {
   evalPointOnSegment,
 } from "./pointGeometryEval";
 import type {
+  CircleCenterPoint,
   MidpointFromPoints,
   MidpointFromSegment,
   PointByRotation,
@@ -121,4 +122,21 @@ export function evalPointByRotationPoint(
   if (!exprEval.ok) return null;
   ctx.stats.allocationsEstimate += 1;
   return evalPointByRotation(center, base, exprEval.valueDeg, point.direction);
+}
+
+export function evalCircleCenterPointPoint(
+  point: CircleCenterPoint,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getCircleWorldGeometryWithCtx: (
+      circleId: string,
+      scene: SceneModel,
+      ctx: SceneEvalContext
+    ) => { center: Vec2; radius: number } | null;
+  }
+): Vec2 | null {
+  const geom = ops.getCircleWorldGeometryWithCtx(point.circleId, scene, ctx);
+  if (!geom) return null;
+  return geom.center;
 }

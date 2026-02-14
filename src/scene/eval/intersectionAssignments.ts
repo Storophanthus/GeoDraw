@@ -3,7 +3,7 @@ import { distance } from "../../geo/geometry";
 
 const ROOT_EPS = 1e-6;
 
-type RootIndex = 0 | 1;
+type RootIndex = number;
 
 export type CircleLineAssignmentPoint = {
   id: string;
@@ -13,13 +13,14 @@ export type CircleLineAssignmentPoint = {
 
 export type GenericAssignmentPoint = {
   id: string;
+  branchIndex?: number;
   preferredWorld: Vec2;
   excludePointId?: string;
 };
 
 type AssignmentRequest<TPoint> = {
   point: TPoint;
-  candidates: [RootIndex, RootIndex];
+  candidates: RootIndex[];
   forced: boolean;
   hasPrev: boolean;
   order: number;
@@ -151,41 +152,64 @@ export function assignGenericIntersectionPairPoints(
     return out;
   }
 
-  const root0 = intersections[0];
-  const root1 = intersections[1];
   const requests: AssignmentRequest<GenericAssignmentPoint>[] = [];
   for (let i = 0; i < pairPoints.length; i += 1) {
     const item = pairPoints[i];
-    let forcedCandidate: RootIndex | null = null;
+    let forcedExcludedIndex: RootIndex | null = null;
     if (item.excludePointId) {
       const excluded = ops.getExcludedPointWorld(item.excludePointId);
       if (excluded) {
-        const d0 = distance(root0, excluded);
-        const d1 = distance(root1, excluded);
-        if (d0 <= ROOT_EPS && d1 > ROOT_EPS) forcedCandidate = 1;
-        else if (d1 <= ROOT_EPS && d0 > ROOT_EPS) forcedCandidate = 0;
-        else if (d0 <= ROOT_EPS && d1 <= ROOT_EPS) {
+        const matches = intersections
+          .map((root, idx) => ({ idx, d: distance(root, excluded) }))
+          .filter((it) => it.d <= ROOT_EPS);
+        if (matches.length >= intersections.length) {
           out.set(item.id, null);
           continue;
         }
+        if (matches.length === 1) forcedExcludedIndex = matches[0].idx;
       }
     }
     let primary: RootIndex;
     const prev = ops.getPreviousStablePoint(item.id);
-    if (forcedCandidate !== null) {
-      primary = forcedCandidate;
+    if (forcedExcludedIndex !== null) {
+      // Prefer any root that is not the excluded one.
+      const allowed = intersections.map((_, idx) => idx).filter((idx) => idx !== forcedExcludedIndex);
+      if (allowed.length === 0) {
+        out.set(item.id, null);
+        continue;
+      }
+      if (prev) {
+        primary = allowed.reduce((best, idx) =>
+          distance(intersections[idx], prev) < distance(intersections[best], prev) ? idx : best
+        , allowed[0]);
+      } else if (Number.isInteger(item.branchIndex) && (item.branchIndex as number) >= 0 && (item.branchIndex as number) < intersections.length) {
+        primary = allowed.includes(item.branchIndex as number) ? (item.branchIndex as number) : allowed[0];
+      } else {
+        primary = allowed.reduce((best, idx) =>
+          distance(intersections[idx], item.preferredWorld) < distance(intersections[best], item.preferredWorld) ? idx : best
+        , allowed[0]);
+      }
+    } else if (Number.isInteger(item.branchIndex) && (item.branchIndex as number) >= 0 && (item.branchIndex as number) < intersections.length) {
+      primary = item.branchIndex as number;
     } else if (prev) {
-      const d0 = distance(root0, prev);
-      const d1 = distance(root1, prev);
-      primary = d0 <= d1 ? 0 : 1;
+      primary = intersections.reduce((best, root, idx) =>
+        distance(root, prev) < distance(intersections[best], prev) ? idx : best
+      , 0);
     } else {
-      primary = distance(root0, item.preferredWorld) <= distance(root1, item.preferredWorld) ? 0 : 1;
+      primary = intersections.reduce((best, root, idx) =>
+        distance(root, item.preferredWorld) < distance(intersections[best], item.preferredWorld) ? idx : best
+      , 0);
     }
-    const secondary: RootIndex = primary === 0 ? 1 : 0;
+    const candidates = intersections
+      .map((root, idx) => ({ idx, d: distance(root, prev ?? item.preferredWorld) }))
+      .sort((a, b) => a.d - b.d)
+      .map((it) => it.idx)
+      .filter((idx) => idx !== primary);
+    candidates.unshift(primary);
     requests.push({
       point: item,
-      candidates: [primary, secondary],
-      forced: forcedCandidate !== null,
+      candidates,
+      forced: forcedExcludedIndex !== null,
       hasPrev: prev !== null,
       order: i,
     });
@@ -194,12 +218,15 @@ export function assignGenericIntersectionPairPoints(
   sortRequests(requests);
   const used = new Set<RootIndex>();
   for (const req of requests) {
-    let chosenIdx: RootIndex;
-    if (!used.has(req.candidates[0])) chosenIdx = req.candidates[0];
-    else if (!used.has(req.candidates[1])) chosenIdx = req.candidates[1];
-    else chosenIdx = req.candidates[0];
+    let chosenIdx: RootIndex = req.candidates[0];
+    for (const candidate of req.candidates) {
+      if (!used.has(candidate)) {
+        chosenIdx = candidate;
+        break;
+      }
+    }
     if (!used.has(chosenIdx)) used.add(chosenIdx);
-    const chosen = chosenIdx === 0 ? root0 : root1;
+    const chosen = intersections[chosenIdx] ?? intersections[0];
     out.set(req.point.id, chosen);
     ops.rememberStablePoint(req.point.id, chosen);
   }

@@ -60,3 +60,28 @@ export function drawRightAngleMark(
   ctx.lineTo(p2.x, p2.y);
   ctx.lineTo(p3.x, p3.y);
 }
+
+export function drawRightAngleSquareFill(
+  ctx: CanvasRenderingContext2D,
+  aScreen: Vec2,
+  bScreen: Vec2,
+  cScreen: Vec2,
+  sizePx: number
+): void {
+  const u = normalizeScreenVec({ x: aScreen.x - bScreen.x, y: aScreen.y - bScreen.y });
+  const v = normalizeScreenVec({ x: cScreen.x - bScreen.x, y: cScreen.y - bScreen.y });
+  const p1 = { x: bScreen.x + u.x * sizePx, y: bScreen.y + u.y * sizePx };
+  const p3 = { x: bScreen.x + v.x * sizePx, y: bScreen.y + v.y * sizePx };
+  const p2 = { x: p1.x + v.x * sizePx, y: p1.y + v.y * sizePx };
+  ctx.beginPath();
+  ctx.moveTo(bScreen.x, bScreen.y);
+  ctx.lineTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.lineTo(p3.x, p3.y);
+  ctx.closePath();
+}
+
+export function computeRightMarkSizePx(radiusPx: number, strokePx: number): number {
+  // Keep right-angle marker readable against current arc sizing.
+  return Math.max(7, radiusPx * 0.34 + Math.max(0, strokePx) * 0.3);
+}

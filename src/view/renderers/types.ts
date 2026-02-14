@@ -1,3 +1,3 @@
 export type DrawableObjectSelection =
-  | { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }
+  | { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }
   | null;

@@ -19,6 +19,7 @@ import { CanvasLabelsLayer } from "./CanvasLabelsLayer";
 import { renderCanvasFrame } from "./renderFrame";
 import { useCanvasInteractionController, type PointerState } from "./useCanvasInteractionController";
 import { isValidTarget } from "../tools/toolClick";
+import { snapWorldToRectGrid } from "../render/rectGrid";
 
 const POINT_HIT_TOLERANCE_PX = 12;
 const SEGMENT_HIT_TOLERANCE_PX = 10;
@@ -26,9 +27,9 @@ const LINE_HIT_TOLERANCE_PX = 10;
 const CIRCLE_HIT_TOLERANCE_PX = 10;
 const ANGLE_HIT_TOLERANCE_PX = 20;
 const CLICK_EPSILON_PX = 3;
+const SNAP_OP_BUDGET_PER_FRAME = 6000;
 
-const GRID_SETTINGS = {
-  enabled: true,
+const GRID_SETTINGS_BASE = {
   rotationRad: 0,
   targetSpacingPx: 40,
   majorEvery: 5,
@@ -76,6 +77,10 @@ export function CanvasView() {
   const copyStyle = useGeoStore((store) => store.copyStyle);
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
   const dependencyGlowEnabled = useGeoStore((store) => store.dependencyGlowEnabled);
+  const exportClipWorld = useGeoStore((store) => store.exportClipWorld);
+  const gridEnabled = useGeoStore((store) => store.gridEnabled);
+  const axesEnabled = useGeoStore((store) => store.axesEnabled);
+  const gridSnapEnabled = useGeoStore((store) => store.gridSnapEnabled);
 
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
   const setHoveredHit = useGeoStore((store) => store.setHoveredHit);
@@ -87,7 +92,9 @@ export function CanvasView() {
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
+  const createPolygon = useGeoStore((store) => store.createPolygon);
   const createCircle = useGeoStore((store) => store.createCircle);
+  const createAuxiliaryCircle = useGeoStore((store) => store.createAuxiliaryCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
@@ -101,18 +108,29 @@ export function CanvasView() {
   const createPointOnLine = useGeoStore((store) => store.createPointOnLine);
   const createPointOnSegment = useGeoStore((store) => store.createPointOnSegment);
   const createPointOnCircle = useGeoStore((store) => store.createPointOnCircle);
+  const createPointByRotation = useGeoStore((store) => store.createPointByRotation);
+  const createCircleCenterPoint = useGeoStore((store) => store.createCircleCenterPoint);
   const createIntersectionPoint = useGeoStore((store) => store.createIntersectionPoint);
   const movePointTo = useGeoStore((store) => store.movePointTo);
   const movePointLabelBy = useGeoStore((store) => store.movePointLabelBy);
   const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
+  const setExportClipWorld = useGeoStore((store) => store.setExportClipWorld);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
 
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
   const [snapDisabled, setSnapDisabled] = useState(false);
+  const gridSettings = useMemo(
+    () => ({
+      ...GRID_SETTINGS_BASE,
+      enabled: gridEnabled,
+      showAxes: axesEnabled,
+    }),
+    [gridEnabled, axesEnabled]
+  );
   const hitTolerances = useMemo(
     () => ({
       point: POINT_HIT_TOLERANCE_PX,
@@ -130,7 +148,9 @@ export function CanvasView() {
       createFreePoint,
       createSegment,
       createLine,
+      createPolygon,
       createCircle,
+      createAuxiliaryCircle,
       createCircleThreePoint,
       createPerpendicularLine,
       createParallelLine,
@@ -144,14 +164,19 @@ export function CanvasView() {
       createPointOnLine,
       createPointOnSegment,
       createPointOnCircle,
+      createPointByRotation,
+      createCircleCenterPoint,
       createIntersectionPoint,
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
+      setExportClipWorld,
       getPointWorldById: (id) => {
         const point = scene.points.find((p) => p.id === id);
         return point ? getPointWorldPos(point, scene) : null;
       },
+      gridSnapEnabled,
+      snapWorldToGrid: (world) => snapWorldToRectGrid(world, camera, gridSettings),
     }),
     [
       setPendingSelection,
@@ -159,7 +184,9 @@ export function CanvasView() {
       createFreePoint,
       createSegment,
       createLine,
+      createPolygon,
       createCircle,
+      createAuxiliaryCircle,
       createCircleThreePoint,
       createPerpendicularLine,
       createParallelLine,
@@ -173,10 +200,16 @@ export function CanvasView() {
       createPointOnLine,
       createPointOnSegment,
       createPointOnCircle,
+      createPointByRotation,
+      createCircleCenterPoint,
       createIntersectionPoint,
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
+      setExportClipWorld,
+      gridSnapEnabled,
+      camera,
+      gridSettings,
       scene,
     ]
   );
@@ -213,8 +246,8 @@ export function CanvasView() {
   const hoverSnap: SnapCandidate | null = useMemo(() => {
     if (!hoverScreen) return null;
     if (snapDisabled) return null;
-    return findBestSnap(hoverScreen, camera, vp, scene, POINT_HIT_TOLERANCE_PX);
-  }, [camera, hoverScreen, scene, snapDisabled, vp]);
+    return findBestSnap(hoverScreen, camera, vp, scene, POINT_HIT_TOLERANCE_PX, SNAP_OP_BUDGET_PER_FRAME);
+  }, [hoverScreen, scene, snapDisabled]);
 
   const hoveredTargetValid = isValidTarget(activeTool, pendingSelection, hoveredHit);
 
@@ -259,7 +292,7 @@ export function CanvasView() {
         camera,
         vp,
         dpr,
-        gridSettings: GRID_SETTINGS,
+        gridSettings,
         activeTool,
         pendingSelection,
         cursorWorld,
@@ -279,6 +312,7 @@ export function CanvasView() {
         recentDrawableObject,
         copySourceDrawable,
         dependencyGlowEnabled,
+        exportClipWorld,
         getAngleStrokeRenderWidth,
       });
     },
@@ -300,6 +334,8 @@ export function CanvasView() {
       scene,
       selectedObject,
       dependencyGlowEnabled,
+      exportClipWorld,
+      gridSettings,
       vp,
     ]
   );

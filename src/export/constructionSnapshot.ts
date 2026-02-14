@@ -1,4 +1,11 @@
-import type { GeometryObjectRef, SceneModel, ScenePoint } from "../scene/points";
+import {
+  beginSceneEvalTick,
+  endSceneEvalTick,
+  getPointWorldPos,
+  type GeometryObjectRef,
+  type SceneModel,
+  type ScenePoint,
+} from "../scene/points";
 
 export type SnapshotObjectRef = GeometryObjectRef;
 
@@ -9,6 +16,7 @@ export type SnapshotPointDefinition =
   | { kind: "pointOnLine"; lineId: string; s: number }
   | { kind: "pointOnSegment"; segId: string; u: number }
   | { kind: "pointOnCircle"; circleId: string; t: number }
+  | { kind: "circleCenter"; circleId: string }
   | {
       kind: "pointByRotation";
       centerId: string;
@@ -18,13 +26,39 @@ export type SnapshotPointDefinition =
       direction: "CCW" | "CW";
       radiusMode: "keep";
     }
-  | { kind: "intersectionPoint"; objA: SnapshotObjectRef; objB: SnapshotObjectRef; preferredWorld: { x: number; y: number } }
+  | {
+      kind: "intersectionPoint";
+      objA: SnapshotObjectRef;
+      objB: SnapshotObjectRef;
+      branchIndex?: number;
+      preferredWorld: { x: number; y: number };
+    }
   | {
       kind: "circleLineIntersectionPoint";
       circleId: string;
       lineId: string;
       branchIndex: 0 | 1;
       excludePointId?: string;
+    }
+  | {
+      kind: "circleSegmentIntersectionPoint";
+      circleId: string;
+      segId: string;
+      branchIndex: 0 | 1;
+      excludePointId?: string;
+    }
+  | {
+      kind: "circleCircleIntersectionPoint";
+      circleAId: string;
+      circleBId: string;
+      branchIndex: 0 | 1;
+      excludePointId?: string;
+    }
+  | {
+      kind: "lineLikeIntersectionPoint";
+      objA: { type: "line" | "segment"; id: string };
+      objB: { type: "line" | "segment"; id: string };
+      preferredWorld: { x: number; y: number };
     };
 
 export type SnapshotPoint = {
@@ -81,6 +115,11 @@ export type ConstructionSnapshot = {
   lines: SnapshotLine[];
   segments: SnapshotSegment[];
   circles: SnapshotCircle[];
+  polygons: Array<{
+    id: string;
+    pointIds: string[];
+    visible: boolean;
+  }>;
   angles: Array<{
     id: string;
     kind: "angle" | "sector";
@@ -88,6 +127,13 @@ export type ConstructionSnapshot = {
     bId: string;
     cId: string;
     visible: boolean;
+  }>;
+};
+
+export type ConstructionSnapshotWithWorld = ConstructionSnapshot & {
+  debugPointWorld: Array<{
+    id: string;
+    world: { x: number; y: number } | null;
   }>;
 };
 
@@ -189,6 +235,14 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
     )
     .sort((a, b) => a.id.localeCompare(b.id));
 
+  const polygons = scene.polygons
+    .map((polygon) => ({
+      id: polygon.id,
+      pointIds: [...polygon.pointIds],
+      visible: polygon.visible,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
   const angles = scene.angles
     .map((angle) => {
       const kind: "angle" | "sector" = angle.kind === "sector" ? "sector" : "angle";
@@ -210,12 +264,39 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
     lines,
     segments,
     circles,
+    polygons,
     angles,
   };
 }
 
 export function exportConstructionSnapshot(scene: SceneModel): string {
   return `${JSON.stringify(buildConstructionSnapshot(scene), null, 2)}\n`;
+}
+
+export function buildConstructionSnapshotWithWorld(scene: SceneModel): ConstructionSnapshotWithWorld {
+  const base = buildConstructionSnapshot(scene);
+  beginSceneEvalTick(scene);
+  try {
+    const debugPointWorld = scene.points
+      .map((point) => {
+        const world = getPointWorldPos(point, scene);
+        return {
+          id: point.id,
+          world: world ? { x: world.x, y: world.y } : null,
+        };
+      })
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return {
+      ...base,
+      debugPointWorld,
+    };
+  } finally {
+    endSceneEvalTick(scene);
+  }
+}
+
+export function exportConstructionSnapshotWithWorld(scene: SceneModel): string {
+  return `${JSON.stringify(buildConstructionSnapshotWithWorld(scene), null, 2)}\n`;
 }
 
 function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
@@ -237,6 +318,9 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
   if (point.kind === "pointOnCircle") {
     return { kind: "pointOnCircle", circleId: point.circleId, t: point.t };
   }
+  if (point.kind === "circleCenter") {
+    return { kind: "circleCenter", circleId: point.circleId };
+  }
   if (point.kind === "pointByRotation") {
     return {
       kind: "pointByRotation",
@@ -257,10 +341,40 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
       excludePointId: point.excludePointId,
     };
   }
+  if (point.kind === "circleSegmentIntersectionPoint") {
+    return {
+      kind: "circleSegmentIntersectionPoint",
+      circleId: point.circleId,
+      segId: point.segId,
+      branchIndex: point.branchIndex,
+      excludePointId: point.excludePointId,
+    };
+  }
+  if (point.kind === "circleCircleIntersectionPoint") {
+    return {
+      kind: "circleCircleIntersectionPoint",
+      circleAId: point.circleAId,
+      circleBId: point.circleBId,
+      branchIndex: point.branchIndex,
+      excludePointId: point.excludePointId,
+    };
+  }
+  if (point.kind === "lineLikeIntersectionPoint") {
+    return {
+      kind: "lineLikeIntersectionPoint",
+      objA: point.objA,
+      objB: point.objB,
+      preferredWorld: {
+        x: point.preferredWorld.x,
+        y: point.preferredWorld.y,
+      },
+    };
+  }
   return {
     kind: "intersectionPoint",
     objA: point.objA,
     objB: point.objB,
+    branchIndex: point.branchIndex,
     preferredWorld: {
       x: point.preferredWorld.x,
       y: point.preferredWorld.y,
@@ -275,11 +389,25 @@ function pointDependsOn(point: ScenePoint): string[] {
   if (point.kind === "pointOnLine") return [point.lineId];
   if (point.kind === "pointOnSegment") return [point.segId];
   if (point.kind === "pointOnCircle") return [point.circleId];
+  if (point.kind === "circleCenter") return [point.circleId];
   if (point.kind === "pointByRotation") return [point.centerId, point.pointId];
   if (point.kind === "circleLineIntersectionPoint") {
     const refs = [point.circleId, point.lineId];
     if (point.excludePointId) refs.push(point.excludePointId);
     return refs;
+  }
+  if (point.kind === "circleSegmentIntersectionPoint") {
+    const refs = [point.circleId, point.segId];
+    if (point.excludePointId) refs.push(point.excludePointId);
+    return refs;
+  }
+  if (point.kind === "circleCircleIntersectionPoint") {
+    const refs = [point.circleAId, point.circleBId];
+    if (point.excludePointId) refs.push(point.excludePointId);
+    return refs;
+  }
+  if (point.kind === "lineLikeIntersectionPoint") {
+    return [objectRefKey(point.objA), objectRefKey(point.objB)];
   }
   return [objectRefKey(point.objA), objectRefKey(point.objB)];
 }

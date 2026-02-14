@@ -7,6 +7,7 @@ import {
   hitTestAngleId as engineHitTestAngleId,
   hitTestCircleId as engineHitTestCircleId,
   hitTestLineId as engineHitTestLineId,
+  hitTestPolygonId as engineHitTestPolygonId,
   hitTestPointId as engineHitTestPointId,
   hitTestSegmentId as engineHitTestSegmentId,
 } from "../engine";
@@ -58,6 +59,8 @@ export function createHoveredHitResolver({
   return (screen: Vec2): HoveredHit => {
     const pointId = engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point);
     if (pointId) return { type: "point", id: pointId };
+    const polygonId = engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment);
+    if (polygonId) return { type: "polygon", id: polygonId };
     const angleId = engineHitTestAngleId(screen, resolvedAngles, camera, vp, tolerances.angle);
     if (angleId) return { type: "angle", id: angleId };
     const segmentId = engineHitTestSegmentId(screen, scene, camera, vp, tolerances.segment);

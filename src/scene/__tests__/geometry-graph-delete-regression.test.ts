@@ -40,6 +40,11 @@ const angleStyle: AngleStyle = {
   fillColor: "#60a5fa",
   fillOpacity: 0.2,
   markStyle: "arc",
+  markSymbol: "none",
+  arcMultiplicity: 1,
+  markPos: 0.5,
+  markSize: 4,
+  markColor: "#334155",
   arcRadius: 0.8,
   labelText: "",
   labelPosWorld: { x: 0, y: 0 },
@@ -114,6 +119,7 @@ function baseScene(): SceneModel {
     ],
     segments: [{ id: "s1", aId: "pA", bId: "pB", visible: true, showLabel: false, style: lineStyle }],
     circles: [{ id: "c1", kind: "twoPoint", centerId: "pA", throughId: "pB", visible: true, style: circleStyle }],
+    polygons: [],
     angles: [{ id: "a1", aId: "pA", bId: "pB", cId: "pC", visible: true, style: angleStyle }],
   };
 }

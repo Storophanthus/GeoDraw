@@ -1,7 +1,7 @@
 # GeoDraw Handoff (Stability Contract)
 
 ## Branch / Baseline
-- Active branch: `refactor/stage2-app-decomposition`
+- Active branch: `feature/next-heavy`
 - Keep commits small and scoped.
 - Do not bundle unrelated files in feature commits.
 - Architecture map reference: `docs/architecture-snapshot.md`
@@ -16,8 +16,44 @@
   - checkpoint commit at stable milestones,
   - update this handoff with `Done / Next / Risks`,
   - resume from handoff state, not memory.
+- Tool-Command parity (mandatory):
+  - Any newly added UI construction tool must ship with a Command Bar counterpart in the same feature cycle.
+  - Required minimum:
+    - parser support in `src/CommandParser.ts`
+    - command execution wiring (store/API) + user feedback in `src/CommandBar.tsx`
+    - docs update (`docs/command-bar-reference.md` + this handoff)
+    - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- Camera/zoom stability batch completed (commit `0e2c62a`):
+  - Expanded camera zoom bounds in `src/view/camera.ts` for better infinite-zoom behavior (`1e-30..1e30`).
+  - Added viewport/LOD guards for huge/offscreen circles in:
+    - `src/view/snapEngine.ts`
+    - `src/engine/hitTest.ts`
+  - Added deterministic snap operation budget per frame:
+    - bounded pairwise snap loops in `findBestSnap(...)`
+    - fixed budget wiring in `src/view/CanvasView.tsx`
+  - Added recovery hotkey: `Shift+F` triggers Fit View.
+  - Fit View action moved to top actions (next to Undo/Redo), not in left tool groups.
+  - Added regression/perf gate:
+    - `scripts/zoom-stress.ts`
+    - `npm run test:zoom`
+- Sector status:
+  - Sector endpoint/tool-flow detachment bug is considered fixed for current reported cases.
+  - Do not reopen sector endpoint detachment without a new reproducible JSON.
+- Correctness track (intersection semantics) advanced:
+  - `intersectionPoint` now supports optional `branchIndex` and evaluation honors it for two-root generic intersections.
+  - Generic intersection creation records deterministic `branchIndex` when two roots exist.
+  - Existing generic intersection reuse now respects `branchIndex` (not just `preferredWorld` proximity).
+  - Snapshot export includes `intersectionPoint.definition.branchIndex`.
+  - Restore path backfills missing `branchIndex` where deterministically resolvable.
+  - Added regression test: branch index must override misleading preferred seed for generic two-root intersections.
+  - Added mixed-scene regression coverage to enforce branch persistence (`0/1`) under drag for:
+    - segment-circle generic two-root intersections
+    - circle-circle generic two-root intersections
+- Debug visibility track added:
+  - Export panel has `Include evaluated world coords (debug)` for Model JSON.
+  - New export path emits `debugPointWorld` with runtime-evaluated coordinates per point.
 - `PropertiesPanel` is already decomposed and **not** a monolith now:
   - `src/ui/PropertiesPanel.tsx` (~373 lines, orchestration/composition)
   - `src/ui/ToolInfoSection.tsx`
@@ -43,10 +79,194 @@
   - Handoff enforcement script: `scripts/check-handoff-update.mjs`
   - CI workflow: `.github/workflows/guardrails.yml`
   - npm command: `npm run check:handoff`
+- Command Bar references upgrade added:
+  - New parser: `src/CommandParser.ts` (pure parser/evaluator, no store side effects).
+  - New UI: `src/CommandBar.tsx` fixed at bottom of workspace.
+  - Supported constructors:
+    - `Point(x,y)`
+    - `Line(x1,y1,x2,y2)` and `Line(A,B)`
+    - `Segment(A,B)`
+    - `Circle(x,y,r)`, `Circle(O,A)`, `Circle(O,r)`
+    - `Distance(A,B)` (evaluation only; creates nothing)
+  - Label resolution rules:
+    - exact label match
+    - unknown => `Unknown point: <id>`
+    - non-point => `Not a point: <id>`
+    - ambiguous => `Ambiguous identifier: <id>`
+  - Expression eval supports safe allowlist functions/constants and `ans` chaining.
+  - Input safety guards:
+    - max length cap
+    - disallowed token filter (`import`, `createUnit`, `unit`, `range`, `ones`, `zeros`, `matrix`)
+    - AST allowlist validation for symbols/functions/operators.
+  - Feedback:
+    - success/error status text
+    - expression result display
+    - history up/down (last 20)
+    - Esc clears input.
+- Command Bar Phase 2 assignments added:
+  - Assignment syntax:
+    - scalar: `n_1 = 2.023242`
+    - named objects: `B = Point(...)`, `l = Line(...)`, `s = Segment(...)`, `c_1 = Circle(...)`
+  - Parser remains pure and now returns deterministic assignment intents:
+    - `assignScalar`
+    - `assignObject`
+  - Scalar assignments now create visible scene `Number` objects (constants) via store API.
+  - Scalar lookup for command evaluation is derived from current scene numbers (`getScalarVars`), not hidden-only state.
+  - Named non-point object aliases added in store:
+    - `commandObjectAliases` map + `getCommandObjectAliases`
+  - Label/name conflict policy enforced (Phase 2):
+    - no overwrite for scalar names
+    - no overwrite for existing point labels
+    - no overwrite for tracked command object aliases
+  - `Circle(O, X)` resolution priority is deterministic:
+    - if `X` is a point label => center-through circle
+    - else if `X` is a scalar name => center-radius circle
+    - else error
+  - Snapshot semantics are explicit:
+    - scalar vars are evaluated at command execution time
+    - existing objects do not auto-update on scalar reassignment
+- Command Bar Phase 3 (minimal dynamic dependency step):
+  - `Circle(O, rExpr)` from Command Bar now preserves the radius expression string (`rExpr`) through parse/execute.
+  - Creation path now calls fixed-radius circle creation with the original expression when available, not only frozen numeric text.
+  - Practical effect: circles created from scalar names/expressions can update when referenced scene numbers change.
+- Command Bar math usability upgrade:
+  - Added constant aliases: `Pi`, `PI` (in addition to `pi`).
+  - Added trig aliases: `Sin`, `Cos`, `Tan` (in addition to lowercase).
+  - Added concise user reference doc: `docs/command-bar-reference.md`.
+- Export now auto-emits optional TikZ pattern libraries only when needed:
+  - no pattern styles => no `\\usetikzlibrary{patterns}` line emitted
+  - classic pattern styles (`pattern=...`, `pattern color=...`) => emits exactly `\\usetikzlibrary{patterns}`
+  - meta pattern styles (`pattern={...}`) => emits exactly `\\usetikzlibrary{patterns,patterns.meta}`
+  - deterministic: single line, stable ordering, no duplicates
+- Properties panel now exposes fill pattern controls for current fill-capable objects:
+  - Circle style: `Fill Pattern`, `Pattern Color`
+  - Angle/Sector style: `Fill Pattern`, `Pattern Color`
+  - Backed by typed style fields: `pattern`, `patternColor`
+  - Export picks these up automatically (`pattern=...`, `pattern color=...`) and injects required TikZ library lines.
+- Angle mark cosmetics upgraded with deterministic right-angle detection:
+  - Right-angle detection uses `isRightAngle` (dot-product EPS in `src/scene/eval/angleMath.ts`).
+  - UI is conditional:
+    - right angles: `RightSquare`, `RightArcDot`, `None`
+    - non-right angles: `Vanilla`, `Arc+|`, `Arc+||`, `Arc+|||`, `Double`, `Triple`, `None`
+  - Export mapping:
+    - non-right -> `\\tkzMarkAngle[arc=l|ll|lll,...]` (+ optional `mark`, `mksize`, `mkcolor`, `mkpos`)
+    - right square -> `\\tkzMarkRightAngles[...]`
+    - right arc-dot -> `\\tkzMarkRightAngles[german,...]`
+  - Added export regression fixtures for all mark variants.
+- Right-angle provenance fallback hardened for imported/saved scenes:
+  - `isRightExact` is now resolved from provenance when field is missing (not forced to `false`).
+  - Covers intersection-vertex case where angle rays lie on a perpendicular line and its base segment.
+  - Added regression fixture: `src/export/__fixtures__/angle-right-exact-intersection-vertex.json`.
+- Current right-angle fallback policy:
+  - provenance first (exact construction relation),
+  - then deterministic numeric fallback at high precision (`eps=1e-16`) for unresolved legacy/imported cases.
+- Performance optimization and handoff integrity fixes (Completed):
+  - `rightAngleProvenance.ts` now uses `Map`/`Set` for O(1) lookups (linear scan removed).
+  - `SceneEvalContext` now caches resolved line anchors and circle geometry per-tick.
+  - Geometry adapters (`resolveLineAnchors`, `getCircleWorldGeometry`) use this cache to eliminate redundant ops.
+  - Verified benchmarks: ~0.47ms/tick on dense 52-node scene.
+  - `APPROX_RIGHT_EPS` reverted to `1e-2` (visual/practical hints) to fix strictness regression.
+  - `FileControls.tsx` now enforces structural validation on import (fail-closed).
+  - `historyActions.ts` `loadSnapshot` fixed to prevent double-undo entry creation.
+- Semantic intersection hardening (checkpoint):
+  - Added `resolveIntersectionBranchIndexInScene(scene, objA, objB, preferredWorld)` in `src/domain/intersectionReuse.ts`.
+  - `normalizeSceneIntegrity` now backfills missing `intersectionPoint.branchIndex` for two-root generic intersections.
+  - Export branch inference now prefers explicit `intersectionPoint.branchIndex` when present (line-circle and circle-circle), using `preferredWorld` only as fallback.
+  - Added regression: `testNormalizeBackfillsMissingGenericBranchIndex` in `src/scene/__tests__/intersection-ownership-regression.test.ts`.
+- Semantic intersections (checkpoint 3):
+  - New point kind: `circleSegmentIntersectionPoint` for deterministic segment-circle intersections.
+  - `createIntersectionPoint` now emits `circleSegmentIntersectionPoint` for `(segment,circle)` object pairs.
+  - Eval pipeline supports the new kind (`pointEvalDispatch` + pair assignment resolution).
+  - Integrity/dependency layers now track the new kind:
+    - `normalizeSceneIntegrity` validates circle/segment refs and exclude-point refs.
+    - `geometryGraph` dependency edges include circle+segment parents.
+  - Export supports the new semantic kind directly (mapped to `InterLC` with segment endpoints as line anchors).
+  - Model snapshot export supports new definition kind:
+    - `circleSegmentIntersectionPoint` in `constructionSnapshot`.
+  - Added export regression fixture:
+    - `src/export/__fixtures__/circle-segment-intersection-semantic.json`.
+- Semantic intersections (checkpoint 4):
+  - New point kind: `circleCircleIntersectionPoint` for deterministic circle-circle intersections.
+  - `createIntersectionPoint` now emits this semantic kind for `(circle,circle)` object pairs.
+  - Eval pipeline supports the new kind (`pointEvalDispatch` + generic pair assignment resolution by explicit circle IDs).
+  - Integrity/dependency layers now track the new kind:
+    - `normalizeSceneIntegrity` validates both circle refs + exclude-point refs.
+    - `geometryGraph` dependency edges include both circles.
+  - Export supports the new semantic kind directly (mapped to `InterCC` with explicit `branchIndex` semantics).
+  - Snapshot export + diagnostics/test fixture hydration support the new kind.
+  - Added export regression fixture:
+    - `src/export/__fixtures__/circle-circle-intersection-semantic.json`.
+- Semantic intersections (checkpoint 5):
+  - New point kind: `lineLikeIntersectionPoint` for deterministic intersections between:
+    - line-line
+    - line-segment
+    - segment-segment
+  - `createIntersectionPoint` now emits this semantic kind for line-like pairs instead of generic `intersectionPoint`.
+  - Eval pipeline supports the new kind via generic pair assignment with explicit line-like refs.
+  - Integrity/dependency/export/snapshot/diagnostics support added.
+  - Added export regression fixture:
+    - `src/export/__fixtures__/line-like-intersection-semantic.json`.
+- Semantic branch indexing generalized for generic intersections:
+  - `intersectionPoint.branchIndex` now supports non-binary indices (`number`), not just `0|1`.
+  - `resolveIntersectionBranchIndexInScene` now selects nearest branch across **all** resolved roots.
+  - Generic assignment now handles `N` roots deterministically (not truncated to first two roots).
+  - Scene normalization/restore now treat any non-negative integer `branchIndex` as explicit.
+  - Snapshot/test hydration updated to preserve non-binary branch indices.
+- Export hardening aligned with generalized branch indexing:
+  - Export branch inference now treats any non-negative integer `intersectionPoint.branchIndex` as explicit (not only `0|1`).
+  - `preferredWorld` remains fallback-only when explicit branch index is absent.
+- Scene regression coverage (semantic kinds):
+  - Added semantic drag/persistence tests in `src/scene/__tests__/intersection-ownership-regression.test.ts`:
+    - `testCircleSegmentSemanticBranchPersistenceUnderDrag`
+    - `testCircleCircleSemanticBranchPersistenceUnderDrag`
+    - `testLineLikeSemanticIntersectionTracksGeometryUnderDrag`
+  - Note: `npm run test:scene` remains blocked in this sandbox due `tsx` IPC `EPERM`, but code compiles and export harness remains green.
+
 
 ## Active Work (Open)
-- No active bugfix from this handoff currently.
-- Current focus (if continuing refactor): incremental polish only, no behavior changes.
+- Active homework focus (correctness-first):
+  1. Keep `preferredWorld` as seed only; rely on explicit branch semantics where available.
+  2. Validate on dense construction scenes and guard against regressions.
+- Performance track is secondary and must not alter intersection semantics.
+- Performance follow-up now is measurement/tuning only:
+  - run `npm run test:zoom` and dense-scene checks
+  - do not reopen zoom architecture items from commit `0e2c62a` unless there is a new reproducible regression.
+- Closed decision (do not reopen unless concrete failing file is provided):
+  - Legacy migration/backfill for pre-branchIndex snapshots is already implemented and active.
+  - Implementation locations:
+    - `src/domain/sceneIntegrity.ts` (normalization backfill)
+    - `src/state/slices/historyRestore.ts` (restore/load backfill)
+  - Policy: do not re-discuss or re-scope this item without a reproducible failing scene file.
+- Command Bar Phase 2 candidates:
+  - optional overwrite semantics (`set`, `:=`, `let`, `del`) if desired.
+  - parametric dependencies (Phase 3) where objects depend on scalars dynamically.
+- Tool-Command parity backlog (homework):
+  - Missing command counterparts for existing tools:
+    - `midpoint`
+    - `circle_3p`
+    - `sector`
+    - `perp_line`
+    - `parallel_line`
+    - `tangent_line`
+    - `angle_bisector`
+    - `angle`
+    - `angle_fixed`
+  - Optional/non-goal parity:
+    - `move`, `copyStyle`, `export_clip` (UI workflow tools; no strict command mapping required).
+
+## Risks / Notes
+- `preferredWorld` is a branch seed for `intersectionPoint`, not guaranteed solved world coordinate.
+- For geometric truth/debugging, use runtime-evaluated positions (or export JSON with `debugPointWorld`).
+- `mathjs` bundle size impact should be monitored (parser currently uses strict guards to keep scope safe).
+- `Circle(x,y,r)` currently constructs a center point and then uses existing fixed-radius-circle creation, which is deterministic and compatible with current scene model.
+- In current model `Circle(O,r)` maps directly to fixed-radius circle creation (`createCircleFixedRadius`), no synthetic through-point needed.
+- Command Bar name collisions now span three namespaces:
+  - point labels
+  - scalar vars
+  - command object aliases
+  This is intentional to keep deterministic, fail-closed behavior.
+- Pattern-library auto-emission only affects export header lines; drawing semantics are unchanged.
+- Future polygon fill can reuse the same `pattern`/`patternColor` style contract to stay consistent across object classes.
 
 ## Historical (Do Not Reopen Automatically)
 - Items below are historical progress logs and rationale.
@@ -55,6 +275,9 @@
   - “PropertiesPanel is monolithic”
   - old `I_C` label anchor discussion
   - angle preview/copy-style regressions already marked fixed
+  - Fit View placement (already moved to top actions near Undo/Redo)
+  - camera zoom culling/snap-budget/hotkey batch from commit `0e2c62a`
+  - sector endpoint detachment bug unless a new reproducible file is provided
 
 ## Intersection Do-Not-Break Checklist (Read First)
 
@@ -761,3 +984,93 @@ When starting a new chat, provide:
 - Build: `npm run build`
 - Export regressions: `npm run test:export`
 - Status check: `git status --short`
+
+## Latest Done (Angle Real Perpendicular)
+- Added deterministic right-angle provenance module: `src/domain/rightAngleProvenance.ts`.
+  - Maintains O(1) pair index for `(point,point) -> line/segment`.
+  - Maintains O(1) perpendicular adjacency between line-like refs.
+  - Exposes `isRightExactByProvenance(scene, aId, bId, cId)`.
+- Angle creation now stores `isRightExact` on created angles (from provenance, not numeric epsilon).
+  - `createAngle(...)` sets `isRightExact` and defaults mark style to `rightSquare` when exact and default style was `arc`.
+  - `createSector(...)` and `createAngleFixed(...)` set `isRightExact: false`.
+- Provenance lifecycle wired:
+  - Register line/segment pair indices on `createLine` / `createSegment`.
+  - Register perpendicular relation on `createPerpendicularLine`.
+  - Rebuild provenance on delete cascade (`deleteSelectedObject`) and on undo/redo restore.
+  - Initial store boot also rebuilds provenance from scene.
+- UI gating now uses `angle.isRightExact` (not numeric dot-product):
+  - Right-only mark options shown only for exact-right angles.
+- Renderer / hit-test / hover highlight right-angle behavior now keys off `angle.isRightExact`.
+- Exporter fail-closed right-angle gating:
+  - Right-angle marks emitted only when `isRightExact=true`.
+  - Otherwise throws: `Unsupported construction: RightAngleMark on non-right angle`.
+- New regression fixtures:
+  - `src/export/__fixtures__/angle-right-exact-from-perp-tool.json`
+  - `src/export/__fixtures__/angle-right-approx-only.json` (expected fail-closed)
+
+## Next
+- If needed later: add optional `isRightApprox` (numeric hint only) strictly for UI hints, never for export/certification.
+- Keep provenance manager as the only source of truth for “real right angle”.
+
+## Risks / Constraints
+- “Real perpendicular” is provenance-based only. Visually perpendicular free-point angles are intentionally not certified.
+- Pair-index relies on explicit constructions (`line/segment` endpoints or constrained point-on-line/segment).
+
+## Latest Done (Sector Arc Intersections)
+- Added sector as a valid `GeometryObjectRef` (`{ type: "angle", id }`) for intersection workflows.
+- Implemented boundary-only sector support in intersection evaluation:
+  - supported now: `line/segment ∩ sector-arc`
+  - explicitly not supported: sector interior intersections.
+- Wired sector-arc into runtime geometry adapters/resolvers:
+  - `asSectorArcWithOps` / `asSectorArcWithCtx` / `asSectorArcInScene`
+  - intersection query path now filters line-circle roots by sector sweep.
+- Wired sector-arc into snap intersection candidates:
+  - point tool can now create intersection points between line-like objects and sector arcs.
+- Added dependency/integrity support for intersection points referencing sectors:
+  - graph key mapping for `GeometryObjectRef.type === "angle"`
+  - integrity liveness check for sector refs.
+- Added scene regression coverage:
+  - `testLineSectorArcIntersectionTracksBoundary` in `src/scene/__tests__/intersection-ownership-regression.test.ts`.
+
+## Sector Intersection Notes
+- Sector intersection semantics are boundary-only and currently arc-focused.
+- Radial-edge boundary intersections (with BA/BC rays/segments) are not included in this phase.
+- Sector tool endpoint constraint fix:
+  - Step-3 no longer creates `pointByRotation` for the third sector point.
+  - It now creates a `pointOnCircle` constrained to a hidden auxiliary two-point circle `(center=startVertex, through=sectorStartPoint)`.
+  - This keeps the endpoint draggable on the locus and preserves radius coupling when the start point moves.
+
+## Latest Done (Polygon Tool + Command Parity)
+- Added first-class `ScenePolygon` support to scene model/state:
+  - `scene.polygons` added to `SceneModel`, state slice defaults, history snapshots, restore path, and integrity normalization.
+  - New polygon defaults (`polygonDefaults`) and ids (`nextPolygonId`).
+- Added polygon creation/action surface:
+  - `createPolygon(pointIds)` in scene core actions.
+  - polygon selection/hover/copy-style/delete graph support in domain/store.
+- Added canvas integration:
+  - Tool id: `polygon`
+  - Pending polygon preview (polyline rubber-band).
+  - Polygon renderer + hit-test support.
+  - Object browser lists polygons (under Circles/Polygons tab).
+- Added properties/style editing parity:
+  - Polygon style controls in properties panel (stroke/fill/pattern/pattern-color) via `ObjectStyleSections`.
+  - “Make this default for this object” now supports polygons.
+- Added TikZ export support for polygons:
+  - Export emits deterministic raw TikZ closed path:
+    - `\draw[<style>] (P1) -- (P2) -- ... -- cycle;`
+  - Polygon style maps include stroke, fill opacity/color, pattern, pattern color.
+  - Added regression fixture: `src/export/__fixtures__/polygon-basic.json`.
+- Added Command Bar parity for polygon:
+  - Parser command: `Polygon(A,B,C,...)` -> `CreatePolygonByPoints`.
+  - Supports assignment form (`P = Polygon(A,B,C,...)`) through existing assignObject flow.
+  - Command execution wiring for both direct and assigned polygon creation.
+  - Added parser regression assertion in `src/scene/__tests__/command-parser.test.ts`.
+
+## Next
+- Add polygon construction descriptions with vertex list polishing in UI (currently basic id/name display).
+- Optional: add dedicated polygon tab icon semantics and specialized polygon info panel.
+- Optional: add polygon command docs entry in `docs/command-bar-reference.md`.
+
+## Risks / Constraints
+- Command alias labeling for polygons is command-level alias only (same behavior as line/segment/circle aliases), not scene object renaming.
+- Polygon export uses raw `\draw[...] ... -- cycle;` (deterministic and compile-safe), not tkz-specific polygon macros.

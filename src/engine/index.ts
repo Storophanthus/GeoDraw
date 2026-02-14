@@ -5,6 +5,7 @@ export {
   hitTestSegmentId,
   hitTestLineId,
   hitTestCircleId,
+  hitTestPolygonId,
   hitTestAngleId,
   resolveVisibleAngles,
   type EngineHit,

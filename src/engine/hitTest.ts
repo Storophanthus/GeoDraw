@@ -1,4 +1,5 @@
 import { projectPointToLine, projectPointToSegment } from "../geo/geometry";
+import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import {
   computeOrientedAngleRad,
   getCircleWorldGeometry,
@@ -8,10 +9,14 @@ import {
   type ScenePoint,
 } from "../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
+import { computeRightMarkSizePx } from "../view/angleRender";
 import type { Vec2 } from "../geo/vec2";
+const VIS_EPS = 1;
+const HUGE_RADIUS_PICK_PX = 200_000;
 
 export type EngineHit =
   | { type: "point"; id: string }
+  | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
   | { type: "segment"; id: string }
   | { type: "line"; id: string }
@@ -50,7 +55,9 @@ export function resolveVisibleAngles(scene: SceneModel): ResolvedAngle[] {
     if (!a || !b || !c) continue;
     const theta = computeOrientedAngleRad(a, b, c);
     if (theta === null) continue;
-    out.push({ angle, a, b, c, theta });
+    const status = resolveAngleRightStatus(scene, angle);
+    const resolvedAngle = { ...angle, isRightExact: status === "exact", isRightApprox: status === "approx" };
+    out.push({ angle: resolvedAngle, a, b, c, theta });
   }
   return out;
 }
@@ -159,6 +166,10 @@ export function hitTestCircleId(
     if (!geom) continue;
     const centerScreen = camMath.worldToScreen(geom.center, camera, vp);
     const radiusPx = geom.radius * camera.zoom;
+    if (!Number.isFinite(radiusPx) || radiusPx <= 1e-9) continue;
+    const vis = circleBoundaryVisibility(centerScreen, radiusPx, vp.widthPx, vp.heightPx, VIS_EPS);
+    if (vis === "none") continue;
+    if (vis === "contains" && radiusPx >= HUGE_RADIUS_PICK_PX) continue;
     const d = Math.abs(Math.hypot(screenPoint.x - centerScreen.x, screenPoint.y - centerScreen.y) - radiusPx);
     if (d <= best) {
       best = d;
@@ -176,6 +187,7 @@ export function hitTestAngleId(
   vp: Viewport,
   tolerancePx: number
 ): string | null {
+  const sectorPickupRatio = 0.45;
   let bestId: string | null = null;
   let best = tolerancePx;
   for (let i = resolvedAngles.length - 1; i >= 0; i -= 1) {
@@ -184,17 +196,58 @@ export function hitTestAngleId(
     const as = camMath.worldToScreen(entry.a, camera, vp);
     const bs = camMath.worldToScreen(entry.b, camera, vp);
     const cs = camMath.worldToScreen(entry.c, camera, vp);
-    const r = Math.max(12, entry.angle.style.arcRadius * camera.zoom);
+    const r =
+      entry.angle.kind === "sector"
+        ? Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y))
+        : Math.max(12, entry.angle.style.arcRadius * camera.zoom);
+    const right = Boolean(entry.angle.isRightExact) || Boolean(entry.angle.isRightApprox);
+    const rawMarkStyle = entry.angle.style.markStyle === "right" ? "rightSquare" : entry.angle.style.markStyle;
+    const markStyle = right && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle;
+    const arcDistance = distanceToAngleArc(screenPoint, as, bs, entry.theta, r, sectorPickupRatio);
     const d =
-      entry.angle.style.markStyle === "right"
-        ? distanceToRightAngleMark(screenPoint, as, bs, cs, r * 0.55)
-        : distanceToAngleArc(screenPoint, as, bs, entry.theta, r);
+      right && markStyle === "rightSquare"
+        ? Math.min(
+            distanceToRightAngleMark(screenPoint, as, bs, cs, computeRightMarkSizePx(r, entry.angle.style.strokeWidth)),
+            arcDistance
+          )
+        : arcDistance;
     if (d <= best) {
       best = d;
       bestId = entry.angle.id;
     }
   }
   return bestId;
+}
+
+export function hitTestPolygonId(
+  screenPoint: Vec2,
+  scene: SceneModel,
+  camera: Camera,
+  vp: Viewport,
+  tolerancePx: number
+): string | null {
+  for (let i = scene.polygons.length - 1; i >= 0; i -= 1) {
+    const polygon = scene.polygons[i];
+    if (!polygon.visible || polygon.pointIds.length < 3) continue;
+    const screenVertices = polygon.pointIds
+      .map((id) => scene.points.find((p) => p.id === id))
+      .map((point) => (point ? getPointWorldPos(point, scene) : null))
+      .filter((world): world is Vec2 => Boolean(world))
+      .map((world) => camMath.worldToScreen(world, camera, vp));
+    if (screenVertices.length < 3) continue;
+    if (pointInPolygon(screenPoint, screenVertices)) return polygon.id;
+    let nearEdge = false;
+    for (let j = 0; j < screenVertices.length; j += 1) {
+      const a = screenVertices[j];
+      const b = screenVertices[(j + 1) % screenVertices.length];
+      if (projectPointToSegment(screenPoint, a, b).distance <= tolerancePx) {
+        nearEdge = true;
+        break;
+      }
+    }
+    if (nearEdge) return polygon.id;
+  }
+  return null;
 }
 
 export function hitTestTopObject(
@@ -220,6 +273,8 @@ export function hitTestTopObject(
 
   const pointId = hitTestPointId(screenPoint, resolvedPoints, camera, vp, pointTolPx);
   if (pointId) return { type: "point", id: pointId };
+  const polygonId = hitTestPolygonId(screenPoint, scene, camera, vp, segmentTolPx);
+  if (polygonId) return { type: "polygon", id: polygonId };
   const angleId = hitTestAngleId(screenPoint, resolveVisibleAngles(scene), camera, vp, angleTolPx);
   if (angleId) return { type: "angle", id: angleId };
   const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx);
@@ -232,19 +287,42 @@ export function hitTestTopObject(
   return null;
 }
 
+function pointInPolygon(point: Vec2, vertices: Vec2[]): boolean {
+  let inside = false;
+  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i, i += 1) {
+    const xi = vertices[i].x;
+    const yi = vertices[i].y;
+    const xj = vertices[j].x;
+    const yj = vertices[j].y;
+    const intersects = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + 1e-12) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
 function angleSweep(aScreen: Vec2, bScreen: Vec2, thetaRad: number): { start: number; sweep: number } {
   const start = Math.atan2(aScreen.y - bScreen.y, aScreen.x - bScreen.x);
   const sweep = Math.min(Math.PI * 2, Math.max(0, thetaRad));
   return { start, sweep };
 }
 
-function distanceToAngleArc(p: Vec2, aScreen: Vec2, bScreen: Vec2, thetaRad: number, radiusPx: number): number {
+function distanceToAngleArc(
+  p: Vec2,
+  aScreen: Vec2,
+  bScreen: Vec2,
+  thetaRad: number,
+  radiusPx: number,
+  sectorPickupRatio: number
+): number {
   const sweep = angleSweep(aScreen, bScreen, thetaRad);
   const dx = p.x - bScreen.x;
   const dy = p.y - bScreen.y;
   const dist = Math.hypot(dx, dy);
   const theta = Math.atan2(dy, dx);
   const isWithin = isAngleOnArc(theta, sweep.start, sweep.sweep);
+  if (isWithin && dist <= radiusPx * Math.max(0, Math.min(1, sectorPickupRatio))) {
+    return 0;
+  }
   if (!isWithin) {
     const pStart = { x: bScreen.x + Math.cos(sweep.start) * radiusPx, y: bScreen.y + Math.sin(sweep.start) * radiusPx };
     const pEnd = {
@@ -285,4 +363,27 @@ function isAngleOnArc(theta: number, start: number, sweep: number): boolean {
   const s = norm(start);
   const delta = norm(s - t);
   return delta <= sweep + 1e-9;
+}
+
+function circleBoundaryVisibility(center: Vec2, radius: number, width: number, height: number, eps: number): "none" | "contains" | "crosses" {
+  const nearestX = Math.max(0, Math.min(width, center.x));
+  const nearestY = Math.max(0, Math.min(height, center.y));
+  const dx = center.x - nearestX;
+  const dy = center.y - nearestY;
+  const d2 = dx * dx + dy * dy;
+  const r2 = radius * radius;
+  if (d2 > r2 + eps) return "none";
+
+  const corners = [
+    { x: 0, y: 0 },
+    { x: width, y: 0 },
+    { x: 0, y: height },
+    { x: width, y: height },
+  ];
+  const allInside = corners.every((c) => {
+    const cx = c.x - center.x;
+    const cy = c.y - center.y;
+    return cx * cx + cy * cy <= r2 - eps;
+  });
+  return allInside ? "contains" : "crosses";
 }

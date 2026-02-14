@@ -13,7 +13,14 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 
 ```tex
 % Mark convex angle ABC
-\tkzMarkAngle[size=1.2](A,B,C)
+\tkzMarkAngle[arc=l,mark=none,size=1.2](A,B,C)
+
+% Mark convex angle ABC with || bars
+\tkzMarkAngle[arc=l,mark=||,mksize=4,mkcolor=red,mkpos=0.35,size=1.2](A,B,C)
+
+% Double/triple arc
+\tkzMarkAngle[arc=ll,mark=none,size=1.2](A,B,C)
+\tkzMarkAngle[arc=lll,mark=none,size=1.2](A,B,C)
 
 % Fill convex angle ABC
 \tkzFillAngle[fill=blue!30,fill opacity=0.3,size=1.2](A,B,C)
@@ -21,8 +28,16 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 % Right-angle marker at B
 \tkzMarkRightAngles[size=0.35](A,B,C)
 
+% Right-angle arc + inner dot
+\tkzMarkRightAngles[german,size=0.35](A,B,C)
+
+% Note: GeoDraw emits right-angle macros only for construction-proven exact right angles.
+
 % Label by distance + absolute direction from B
 \tkzLabelAngle[dist=1.4,angle=42](A,B,C){$1.571\ \mathrm{rad}$}
+
+% Customized angle mark (position, size, color)
+\tkzMarkAngle[size=1.2,mark=||,mkpos=0.6,mksize=3,mkcolor=red](A,B,C)
 ```
 
 ## AngleFixed (deg) snippets
@@ -70,6 +85,9 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 % Circular sector AOB (center O)
 \tkzFillSector[fill=blue!20,fill opacity=0.25](O,A)(B)
 \tkzDrawSector[color=blue,line width=1pt](O,A)(B)
+
+% Sector with pattern
+\tkzFillSector[pattern=north east lines,pattern color=blue!50](O,A)(B)
 ```
 
 ## User Cheat-Sheet (verbatim)

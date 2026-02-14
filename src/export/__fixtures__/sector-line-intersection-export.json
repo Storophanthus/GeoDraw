@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "A",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 0, "y": 0 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_2",
+      "name": "B",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 3, "y": 0 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_3",
+      "name": "C",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 0, "y": 3 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_4",
+      "name": "U",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": -4, "y": 1 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_5",
+      "name": "V",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 4, "y": 1 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_6",
+      "name": "I",
+      "visible": true,
+      "showLabel": "name",
+      "definition": {
+        "kind": "intersectionPoint",
+        "objA": { "type": "line", "id": "l_1" },
+        "objB": { "type": "angle", "id": "a_1" },
+        "preferredWorld": { "x": 2, "y": 1 }
+      },
+      "dependsOn": ["line:l_1", "angle:a_1"]
+    }
+  ],
+  "numbers": [],
+  "lines": [
+    { "id": "l_1", "kind": "twoPoint", "aId": "p_4", "bId": "p_5", "visible": true }
+  ],
+  "segments": [],
+  "circles": [],
+  "angles": [
+    {
+      "id": "a_1",
+      "kind": "sector",
+      "aId": "p_2",
+      "bId": "p_1",
+      "cId": "p_3",
+      "visible": true
+    }
+  ]
+}

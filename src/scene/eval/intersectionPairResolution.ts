@@ -1,8 +1,11 @@
 import type { Vec2 } from "../../geo/vec2";
 import type {
+  CircleCircleIntersectionPoint,
+  CircleSegmentIntersectionPoint,
   CircleLineIntersectionPoint,
   GeometryObjectRef,
   IntersectionPoint,
+  LineLikeIntersectionPoint,
   ScenePoint,
 } from "../points";
 import {
@@ -64,10 +67,42 @@ export function resolveGenericIntersectionPairAssignmentsInScene(
 
   const pairPoints: GenericAssignmentPoint[] = [];
   for (const item of scenePoints) {
-    if (item.kind !== "intersectionPoint") continue;
-    const ip = item as IntersectionPoint;
-    if (!sameObjectPair(ip.objA, ip.objB, objA, objB)) continue;
-    pairPoints.push(ip);
+    if (item.kind === "intersectionPoint") {
+      const ip = item as IntersectionPoint;
+      if (!sameObjectPair(ip.objA, ip.objB, objA, objB)) continue;
+      pairPoints.push(ip);
+      continue;
+    }
+    if (item.kind === "lineLikeIntersectionPoint") {
+      const ip = item as LineLikeIntersectionPoint;
+      if (!sameObjectPair(ip.objA, ip.objB, objA, objB)) continue;
+      pairPoints.push({
+        id: ip.id,
+        preferredWorld: ip.preferredWorld,
+      });
+      continue;
+    }
+    if (item.kind === "circleSegmentIntersectionPoint") {
+      const ip = item as CircleSegmentIntersectionPoint;
+      if (!sameObjectPair({ type: "segment", id: ip.segId }, { type: "circle", id: ip.circleId }, objA, objB)) continue;
+      pairPoints.push({
+        id: ip.id,
+        branchIndex: ip.branchIndex,
+        preferredWorld: { x: 0, y: 0 },
+        excludePointId: ip.excludePointId,
+      });
+      continue;
+    }
+    if (item.kind === "circleCircleIntersectionPoint") {
+      const ip = item as CircleCircleIntersectionPoint;
+      if (!sameObjectPair({ type: "circle", id: ip.circleAId }, { type: "circle", id: ip.circleBId }, objA, objB)) continue;
+      pairPoints.push({
+        id: ip.id,
+        branchIndex: ip.branchIndex,
+        preferredWorld: { x: 0, y: 0 },
+        excludePointId: ip.excludePointId,
+      });
+    }
   }
   const out = assignGenericIntersectionPairPoints(pairPoints, intersections, {
     getExcludedPointWorld: ops.getExcludedPointWorld,
@@ -77,4 +112,3 @@ export function resolveGenericIntersectionPairAssignmentsInScene(
   ops.setCached(key, out);
   return out;
 }
-

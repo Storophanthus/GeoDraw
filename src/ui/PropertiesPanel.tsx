@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import {
   evaluateAngleExpressionDegrees,
   evaluateNumberExpression,
@@ -26,6 +27,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const segmentDefaults = useGeoStore((store) => store.segmentDefaults);
   const lineDefaults = useGeoStore((store) => store.lineDefaults);
   const circleDefaults = useGeoStore((store) => store.circleDefaults);
+  const polygonDefaults = useGeoStore((store) => store.polygonDefaults);
   const angleDefaults = useGeoStore((store) => store.angleDefaults);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
@@ -34,6 +36,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const setSegmentDefaults = useGeoStore((store) => store.setSegmentDefaults);
   const setLineDefaults = useGeoStore((store) => store.setLineDefaults);
   const setCircleDefaults = useGeoStore((store) => store.setCircleDefaults);
+  const setPolygonDefaults = useGeoStore((store) => store.setPolygonDefaults);
   const setAngleDefaults = useGeoStore((store) => store.setAngleDefaults);
   const setAngleFixedTool = useGeoStore((store) => store.setAngleFixedTool);
   const setCircleFixedTool = useGeoStore((store) => store.setCircleFixedTool);
@@ -44,11 +47,8 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const updateSelectedSegmentStyle = useGeoStore((store) => store.updateSelectedSegmentStyle);
   const updateSelectedLineStyle = useGeoStore((store) => store.updateSelectedLineStyle);
   const updateSelectedCircleStyle = useGeoStore((store) => store.updateSelectedCircleStyle);
+  const updateSelectedPolygonStyle = useGeoStore((store) => store.updateSelectedPolygonStyle);
   const updateSelectedAngleStyle = useGeoStore((store) => store.updateSelectedAngleStyle);
-  const updateSelectedSegmentFields = useGeoStore((store) => store.updateSelectedSegmentFields);
-  const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
-  const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
-  const updateSelectedAngleFields = useGeoStore((store) => store.updateSelectedAngleFields);
   const createNumber = useGeoStore((store) => store.createNumber);
 
   const selectedPoint = useMemo(
@@ -66,6 +66,10 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const selectedCircle = useMemo(
     () => (selectedObject?.type === "circle" ? scene.circles.find((item) => item.id === selectedObject.id) ?? null : null),
     [scene.circles, selectedObject]
+  );
+  const selectedPolygon = useMemo(
+    () => (selectedObject?.type === "polygon" ? scene.polygons.find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.polygons, selectedObject]
   );
   const selectedAngle = useMemo(
     () => (selectedObject?.type === "angle" ? scene.angles.find((item) => item.id === selectedObject.id) ?? null : null),
@@ -96,19 +100,25 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     () => evaluateNumberExpression(scene, circleFixedTool.radius),
     [scene, circleFixedTool.radius]
   );
-  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "angle" | null>(() => {
+  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "polygon" | "angle" | null>(() => {
     if (selectedPoint) return "point";
     if (selectedSegment) return "segment";
     if (selectedLine) return "line";
     if (selectedCircle) return "circle";
+    if (selectedPolygon) return "polygon";
     if (selectedAngle) return "angle";
     return null;
-  }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedSegment]);
+  }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedPolygon, selectedSegment]);
+  const selectedAngleRightStatus = useMemo<"none" | "approx" | "exact">(
+    () => (selectedAngle ? resolveAngleRightStatus(scene, selectedAngle) : "none"),
+    [scene, selectedAngle]
+  );
   const selectedStyleAsDefault = useMemo(() => {
     if (selectedPoint) return pointStyleEqual(pointDefaults, selectedPoint.style);
     if (selectedSegment) return lineStyleEqual(segmentDefaults, selectedSegment.style);
     if (selectedLine) return lineStyleEqual(lineDefaults, selectedLine.style);
     if (selectedCircle) return circleStyleEqual(circleDefaults, selectedCircle.style);
+    if (selectedPolygon) return polygonStyleEqual(polygonDefaults, selectedPolygon.style);
     if (selectedAngle) return angleStyleEqual(angleDefaults, selectedAngle.style);
     return false;
   }, [
@@ -116,11 +126,13 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     circleDefaults,
     lineDefaults,
     pointDefaults,
+    polygonDefaults,
     segmentDefaults,
     selectedAngle,
     selectedCircle,
     selectedLine,
     selectedPoint,
+    selectedPolygon,
     selectedSegment,
   ]);
 
@@ -215,7 +227,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     </button>
   </div>
 )}
-{!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedAngle && !selectedNumber && (
+{!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedPolygon && !selectedAngle && !selectedNumber && (
   <div className="emptyState">Select an object to edit properties</div>
 )}
 {selectedPoint && (
@@ -240,15 +252,14 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   selectedSegment={selectedSegment}
   selectedLine={selectedLine}
   selectedCircle={selectedCircle}
+  selectedPolygon={selectedPolygon}
   selectedAngle={selectedAngle}
+  selectedAngleRightStatus={selectedAngleRightStatus}
   updateSelectedSegmentStyle={updateSelectedSegmentStyle}
   updateSelectedLineStyle={updateSelectedLineStyle}
   updateSelectedCircleStyle={updateSelectedCircleStyle}
+  updateSelectedPolygonStyle={updateSelectedPolygonStyle}
   updateSelectedAngleStyle={updateSelectedAngleStyle}
-  updateSelectedSegmentFields={updateSelectedSegmentFields}
-  updateSelectedLineFields={updateSelectedLineFields}
-  updateSelectedCircleFields={updateSelectedCircleFields}
-  updateSelectedAngleFields={updateSelectedAngleFields}
   deleteSelectedObject={deleteSelectedObject}
 />
 
@@ -277,6 +288,10 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
         }
         if (selectedStyleKind === "circle" && selectedCircle) {
           setCircleDefaults({ ...selectedCircle.style });
+          return;
+        }
+        if (selectedStyleKind === "polygon" && selectedPolygon) {
+          setPolygonDefaults({ ...selectedPolygon.style });
           return;
         }
         if (selectedStyleKind === "angle" && selectedAngle) {
@@ -350,7 +365,22 @@ function circleStyleEqual(a: SceneModel["circles"][number]["style"], b: SceneMod
     a.strokeDash === b.strokeDash &&
     a.strokeOpacity === b.strokeOpacity &&
     (a.fillColor ?? "") === (b.fillColor ?? "") &&
-    (a.fillOpacity ?? 0) === (b.fillOpacity ?? 0)
+    (a.fillOpacity ?? 0) === (b.fillOpacity ?? 0) &&
+    (a.pattern ?? "") === (b.pattern ?? "") &&
+    (a.patternColor ?? "") === (b.patternColor ?? "")
+  );
+}
+
+function polygonStyleEqual(a: SceneModel["polygons"][number]["style"], b: SceneModel["polygons"][number]["style"]): boolean {
+  return (
+    a.strokeColor === b.strokeColor &&
+    a.strokeWidth === b.strokeWidth &&
+    a.strokeDash === b.strokeDash &&
+    a.strokeOpacity === b.strokeOpacity &&
+    (a.fillColor ?? "") === (b.fillColor ?? "") &&
+    (a.fillOpacity ?? 0) === (b.fillOpacity ?? 0) &&
+    (a.pattern ?? "") === (b.pattern ?? "") &&
+    (a.patternColor ?? "") === (b.patternColor ?? "")
   );
 }
 
@@ -358,6 +388,7 @@ function angleStyleEqual(a: SceneModel["angles"][number]["style"], b: SceneModel
   return (
     a.strokeColor === b.strokeColor &&
     a.strokeWidth === b.strokeWidth &&
+    (a.strokeDash ?? "solid") === (b.strokeDash ?? "solid") &&
     a.strokeOpacity === b.strokeOpacity &&
     a.textColor === b.textColor &&
     a.textSize === b.textSize &&
@@ -365,9 +396,15 @@ function angleStyleEqual(a: SceneModel["angles"][number]["style"], b: SceneModel
     a.fillColor === b.fillColor &&
     a.fillOpacity === b.fillOpacity &&
     a.markStyle === b.markStyle &&
+    a.markSymbol === b.markSymbol &&
+    a.arcMultiplicity === b.arcMultiplicity &&
+    a.markPos === b.markPos &&
+    a.markSize === b.markSize &&
+    a.markColor === b.markColor &&
     a.arcRadius === b.arcRadius &&
     a.labelText === b.labelText &&
     a.showLabel === b.showLabel &&
-    a.showValue === b.showValue
+    a.showValue === b.showValue &&
+    Boolean(a.promoteToSolid) === Boolean(b.promoteToSolid)
   );
 }

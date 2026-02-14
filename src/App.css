@@ -332,6 +332,14 @@ textarea {
   margin: 0;
 }
 
+.tinyToggleGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .rightTabs {
   display: flex;
   gap: 0;
@@ -578,6 +586,7 @@ textarea {
 .cosmeticsBlock {
   margin-top: 12px;
   padding-top: 10px;
+  margin-bottom: 16px;
   border-top: 1px solid #e2e8f0;
 }
 
@@ -617,6 +626,30 @@ textarea {
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px solid #eef2f7;
+}
+
+.compactScaleBlock {
+  margin-top: 8px;
+  padding-top: 6px;
+}
+
+.compactControlRow {
+  margin-top: 7px;
+  gap: 8px;
+}
+
+.compactControlRow span {
+  font-size: 11px;
+  color: #475569;
+}
+
+.scaleInputCompact {
+  width: 76px;
+  height: 26px;
+  padding: 2px 6px;
+  font-size: 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
 }
 
 .shapeButton {
@@ -742,12 +775,37 @@ textarea {
 
 /* Ensure the objectItem looks good inside the scroll area */
 .objectListScrollArea .objectList {
-  gap: 4px;
+  gap: 6px;
 }
 
 .objectListScrollArea .objectItem {
   border: none; /* Cleaner look in list */
   background: #f8fafc; /* Slight contrast against white bg */
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+}
+
+.objectItemLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.objectVisibilityToggle {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
 }
 
 .objectListScrollArea .objectItem:hover {

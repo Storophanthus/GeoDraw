@@ -16,10 +16,24 @@ type HistoryActionsContext = {
   getIsRestoringHistory: () => boolean;
   setIsRestoringHistory: (value: boolean) => void;
   restoreFromSnapshot: (prev: GeoState, snapshot: HistorySnapshot) => GeoState;
+  onSceneRestored?: (scene: GeoState["scene"]) => void;
 };
 
-export function createHistoryActions(ctx: HistoryActionsContext): Pick<GeoActions, "undo" | "redo"> {
+export function createHistoryActions(ctx: HistoryActionsContext): Pick<GeoActions, "undo" | "redo" | "loadSnapshot"> {
   return {
+    loadSnapshot(snapshot: HistorySnapshot) {
+      ctx.setState(
+        (prev) => {
+          ctx.setLastHistoryActionKey(null);
+          ctx.setIsRestoringHistory(true);
+          const restored = ctx.restoreFromSnapshot(prev, snapshot);
+          ctx.onSceneRestored?.(restored.scene);
+          ctx.setIsRestoringHistory(false);
+          return restored;
+        },
+        { history: "push" }
+      );
+    },
     undo() {
       if (ctx.undoStack.length === 0) return;
       ctx.setState(
@@ -31,6 +45,7 @@ export function createHistoryActions(ctx: HistoryActionsContext): Pick<GeoAction
           ctx.setLastHistoryActionKey(null);
           ctx.setIsRestoringHistory(true);
           const restored = ctx.restoreFromSnapshot(prev, snapshot);
+          ctx.onSceneRestored?.(restored.scene);
           ctx.setIsRestoringHistory(false);
           return restored;
         },

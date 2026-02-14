@@ -1,24 +1,50 @@
-import type { AngleStyle, CircleStyle, LineStyle, SceneAngle, SceneCircle, SceneLine, SceneSegment } from "../scene/points";
+import type {
+  AngleMarkSymbol,
+  AngleStyle,
+  CircleStyle,
+  LineStyle,
+  SceneAngle,
+  SceneCircle,
+  SceneLine,
+  ScenePolygon,
+  SceneSegment,
+} from "../scene/points";
 
 const SEGMENT_MARK_OPTIONS = ["none", "|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"] as const;
 const SEGMENT_ARROW_DIRECTIONS = ["->", "<-", "<->"] as const;
 const SEGMENT_ARROW_DISTRIBUTIONS = ["single", "multi"] as const;
+const FILL_PATTERN_OPTIONS = [
+  { value: "", label: "None" },
+  { value: "north east lines", label: "North East Lines" },
+  { value: "north west lines", label: "North West Lines" },
+  { value: "grid", label: "Grid" },
+  { value: "crosshatch", label: "Crosshatch" },
+  { value: "dots", label: "Dots" },
+] as const;
 const SEGMENT_ARROW_WIDTH_UI_FACTOR = 8;
+const ARC_VARIANT_OPTIONS = [
+  { value: "vanilla", label: "Vanilla Arc" },
+  { value: "bars1", label: 'Arc + "|"' },
+  { value: "bars2", label: 'Arc + "||"' },
+  { value: "bars3", label: 'Arc + "|||"' },
+  { value: "double", label: "Double Arc" },
+  { value: "triple", label: "Triple Arc" },
+  { value: "none", label: "None" },
+] as const;
 
 type ObjectStyleSectionsProps = {
   selectedPointPresent: boolean;
   selectedSegment: SceneSegment | null;
   selectedLine: SceneLine | null;
   selectedCircle: SceneCircle | null;
+  selectedPolygon: ScenePolygon | null;
   selectedAngle: SceneAngle | null;
+  selectedAngleRightStatus: "none" | "approx" | "exact";
   updateSelectedSegmentStyle: (style: Partial<LineStyle>) => void;
   updateSelectedLineStyle: (style: Partial<LineStyle>) => void;
   updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
+  updateSelectedPolygonStyle: (style: Partial<ScenePolygon["style"]>) => void;
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
-  updateSelectedSegmentFields: (fields: Partial<Pick<SceneSegment, "visible">>) => void;
-  updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "visible">>) => void;
-  updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "visible">>) => void;
-  updateSelectedAngleFields: (fields: Partial<Pick<SceneAngle, "visible">>) => void;
   deleteSelectedObject: () => void;
 };
 
@@ -27,30 +53,66 @@ export function ObjectStyleSections({
   selectedSegment,
   selectedLine,
   selectedCircle,
+  selectedPolygon,
   selectedAngle,
+  selectedAngleRightStatus,
   updateSelectedSegmentStyle,
   updateSelectedLineStyle,
   updateSelectedCircleStyle,
+  updateSelectedPolygonStyle,
   updateSelectedAngleStyle,
-  updateSelectedSegmentFields,
-  updateSelectedLineFields,
-  updateSelectedCircleFields,
-  updateSelectedAngleFields,
   deleteSelectedObject,
 }: ObjectStyleSectionsProps) {
+  const selectedAngleIsRight = selectedAngleRightStatus !== "none";
+  const selectedAngleIsRightExact = selectedAngleRightStatus === "exact";
+  const selectedAngleIsSector = selectedAngle?.kind === "sector";
+  const selectedAreaStyle = selectedPolygon ? selectedPolygon.style : selectedCircle?.style;
+  const updateSelectedAreaStyle = (style: Partial<CircleStyle>) => {
+    if (selectedPolygon) {
+      updateSelectedPolygonStyle(style);
+      return;
+    }
+    updateSelectedCircleStyle(style);
+  };
+  const angleArcVariant =
+    selectedAngle?.style.markStyle === "none"
+      ? "none"
+      : selectedAngle?.style.arcMultiplicity === 3
+      ? "triple"
+      : selectedAngle?.style.arcMultiplicity === 2
+      ? "double"
+      : selectedAngle?.style.markSymbol === "|||"
+      ? "bars3"
+      : selectedAngle?.style.markSymbol === "||"
+      ? "bars2"
+      : selectedAngle?.style.markSymbol === "|"
+      ? "bars1"
+      : "vanilla";
+
+  const updateAngleArcVariant = (variant: string) => {
+    if (!selectedAngle) return;
+    if (variant === "none") {
+      updateSelectedAngleStyle({ markStyle: "none" });
+      return;
+    }
+    if (variant === "double") {
+      updateSelectedAngleStyle({ markStyle: "arc", arcMultiplicity: 2, markSymbol: "none" });
+      return;
+    }
+    if (variant === "triple") {
+      updateSelectedAngleStyle({ markStyle: "arc", arcMultiplicity: 3, markSymbol: "none" });
+      return;
+    }
+    const markSymbol: AngleMarkSymbol =
+      variant === "bars1" ? "|" : variant === "bars2" ? "||" : variant === "bars3" ? "|||" : "none";
+    updateSelectedAngleStyle({ markStyle: "arc", arcMultiplicity: 1, markSymbol });
+  };
+
   return (
     <>
       {!selectedPointPresent && !selectedAngle && selectedSegment && (
         <div className="cosmeticsBlock">
           <div className="subSectionTitle">Segment Style</div>
-          <label className="checkboxRow">
-            <input
-              type="checkbox"
-              checked={selectedSegment.visible}
-              onChange={(e) => updateSelectedSegmentFields({ visible: e.target.checked })}
-            />
-            Show Object
-          </label>
           <div className="controlRow">
             <label className="controlLabel">Stroke Color</label>
             <input
@@ -549,14 +611,6 @@ export function ObjectStyleSections({
       {!selectedPointPresent && !selectedAngle && selectedLine && (
         <div className="cosmeticsBlock">
           <div className="subSectionTitle">Line Style</div>
-          <label className="checkboxRow">
-            <input
-              type="checkbox"
-              checked={selectedLine.visible}
-              onChange={(e) => updateSelectedLineFields({ visible: e.target.checked })}
-            />
-            Show Object
-          </label>
           <div className="controlRow">
             <label className="controlLabel">Stroke Color</label>
             <input
@@ -605,24 +659,16 @@ export function ObjectStyleSections({
         </div>
       )}
 
-      {!selectedPointPresent && !selectedAngle && selectedCircle && (
+      {!selectedPointPresent && !selectedAngle && selectedAreaStyle && (
         <div className="cosmeticsBlock">
-          <div className="subSectionTitle">Circle Style</div>
-          <label className="checkboxRow">
-            <input
-              type="checkbox"
-              checked={selectedCircle.visible}
-              onChange={(e) => updateSelectedCircleFields({ visible: e.target.checked })}
-            />
-            Show Object
-          </label>
+          <div className="subSectionTitle">{selectedPolygon ? "Polygon Style" : "Circle Style"}</div>
           <div className="controlRow">
             <label className="controlLabel">Stroke Color</label>
             <input
               className="colorInput"
               type="color"
-              value={selectedCircle.style.strokeColor}
-              onChange={(e) => updateSelectedCircleStyle({ strokeColor: e.target.value })}
+              value={selectedAreaStyle.strokeColor}
+              onChange={(e) => updateSelectedAreaStyle({ strokeColor: e.target.value })}
             />
           </div>
           <div className="controlRow">
@@ -633,17 +679,17 @@ export function ObjectStyleSections({
               min={0.5}
               max={6}
               step={0.1}
-              value={selectedCircle.style.strokeWidth}
-              onChange={(e) => updateSelectedCircleStyle({ strokeWidth: Number(e.target.value) })}
+              value={selectedAreaStyle.strokeWidth}
+              onChange={(e) => updateSelectedAreaStyle({ strokeWidth: Number(e.target.value) })}
             />
           </div>
           <div className="controlRow">
             <label className="controlLabel">Dash</label>
             <select
               className="selectInput"
-              value={selectedCircle.style.strokeDash}
+              value={selectedAreaStyle.strokeDash}
               onChange={(e) =>
-                updateSelectedCircleStyle({ strokeDash: e.target.value as "solid" | "dashed" | "dotted" })
+                updateSelectedAreaStyle({ strokeDash: e.target.value as "solid" | "dashed" | "dotted" })
               }
             >
               <option value="solid">Solid</option>
@@ -659,8 +705,8 @@ export function ObjectStyleSections({
               min={0}
               max={1}
               step={0.01}
-              value={selectedCircle.style.strokeOpacity}
-              onChange={(e) => updateSelectedCircleStyle({ strokeOpacity: Number(e.target.value) })}
+              value={selectedAreaStyle.strokeOpacity}
+              onChange={(e) => updateSelectedAreaStyle({ strokeOpacity: Number(e.target.value) })}
             />
           </div>
           <div className="controlRow">
@@ -668,8 +714,8 @@ export function ObjectStyleSections({
             <input
               className="colorInput"
               type="color"
-              value={selectedCircle.style.fillColor ?? "#000000"}
-              onChange={(e) => updateSelectedCircleStyle({ fillColor: e.target.value })}
+              value={selectedAreaStyle.fillColor ?? "#FFFFFF"}
+              onChange={(e) => updateSelectedAreaStyle({ fillColor: e.target.value })}
             />
           </div>
           <div className="controlRow">
@@ -680,24 +726,46 @@ export function ObjectStyleSections({
               min={0}
               max={1}
               step={0.01}
-              value={selectedCircle.style.fillOpacity ?? 0}
-              onChange={(e) => updateSelectedCircleStyle({ fillOpacity: Number(e.target.value) })}
+              value={selectedAreaStyle.fillOpacity ?? 0}
+              onChange={(e) =>
+                updateSelectedAreaStyle({
+                  fillOpacity: Number(e.target.value),
+                  fillColor: selectedAreaStyle.fillColor ?? "#FFFFFF",
+                })
+              }
             />
           </div>
+          <div className="controlRow">
+            <label className="controlLabel">Fill Pattern</label>
+            <select
+              className="selectInput"
+              value={selectedAreaStyle.pattern ?? ""}
+              onChange={(e) => updateSelectedAreaStyle({ pattern: e.target.value })}
+            >
+              {FILL_PATTERN_OPTIONS.map((opt) => (
+                <option key={opt.value || "none"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(selectedAreaStyle.pattern ?? "") !== "" && (
+            <div className="controlRow">
+              <label className="controlLabel">Pattern Color</label>
+              <input
+                className="colorInput"
+                type="color"
+                value={selectedAreaStyle.patternColor ?? selectedAreaStyle.strokeColor}
+                onChange={(e) => updateSelectedAreaStyle({ patternColor: e.target.value })}
+              />
+            </div>
+          )}
         </div>
       )}
 
       {!selectedPointPresent && selectedAngle && (
         <div className="cosmeticsBlock">
-          <div className="subSectionTitle">Angle Style</div>
-          <label className="checkboxRow">
-            <input
-              type="checkbox"
-              checked={selectedAngle.visible}
-              onChange={(e) => updateSelectedAngleFields({ visible: e.target.checked })}
-            />
-            Show Object
-          </label>
+          <div className="subSectionTitle">{selectedAngleIsSector ? "Sector Style" : "Angle Style"}</div>
           <label className="checkboxRow">
             <input
               type="checkbox"
@@ -706,14 +774,16 @@ export function ObjectStyleSections({
             />
             Show Label
           </label>
-          <label className="checkboxRow">
-            <input
-              type="checkbox"
-              checked={selectedAngle.style.showValue}
-              onChange={(e) => updateSelectedAngleStyle({ showValue: e.target.checked })}
-            />
-            Show Value (deg)
-          </label>
+          {!selectedAngleIsSector && (
+            <label className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={selectedAngle.style.showValue}
+                onChange={(e) => updateSelectedAngleStyle({ showValue: e.target.checked })}
+              />
+              Show Value (deg)
+            </label>
+          )}
           <div className="controlRow">
             <label className="controlLabel">Label Text</label>
             <input
@@ -722,30 +792,104 @@ export function ObjectStyleSections({
               onChange={(e) => updateSelectedAngleStyle({ labelText: e.target.value })}
             />
           </div>
-          <div className="controlRow">
-            <label className="controlLabel">Mark</label>
-            <select
-              className="selectInput"
-              value={selectedAngle.style.markStyle}
-              onChange={(e) => updateSelectedAngleStyle({ markStyle: e.target.value as "arc" | "right" | "none" })}
-            >
-              <option value="arc">Arc</option>
-              <option value="right">Right</option>
-              <option value="none">None</option>
-            </select>
-          </div>
-          <div className="controlRow">
-            <label className="controlLabel">Arc Radius</label>
-            <input
-              className="sizeSlider"
-              type="range"
-              min={0.2}
-              max={4}
-              step={0.05}
-              value={selectedAngle.style.arcRadius}
-              onChange={(e) => updateSelectedAngleStyle({ arcRadius: Number(e.target.value) })}
-            />
-          </div>
+          {!selectedAngleIsSector && (
+            <>
+              <div className="controlRow">
+                <label className="controlLabel">Mark</label>
+                {selectedAngleIsRight ? (
+                  <select
+                    className="selectInput"
+                    value={
+                      selectedAngle.style.markStyle === "none"
+                        ? "none"
+                        : selectedAngle.style.markStyle === "right" || selectedAngle.style.markStyle === "arc"
+                        ? "rightSquare"
+                        : selectedAngle.style.markStyle
+                    }
+                    onChange={(e) =>
+                      updateSelectedAngleStyle({
+                        markStyle: e.target.value as "rightSquare" | "rightArcDot" | "none",
+                        arcMultiplicity: 1,
+                        markSymbol: "none",
+                      })
+                    }
+                  >
+                    <option value="rightSquare">RightSquare</option>
+                    <option value="rightArcDot">RightArcDot</option>
+                    <option value="none">None</option>
+                  </select>
+                ) : (
+                  <select className="selectInput" value={angleArcVariant} onChange={(e) => updateAngleArcVariant(e.target.value)}>
+                    {ARC_VARIANT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {selectedAngleIsRight && (
+                <label className="checkboxRow">
+                  <input
+                    type="checkbox"
+                    checked={selectedAngleIsRightExact || Boolean(selectedAngle.style.promoteToSolid)}
+                    disabled={selectedAngleIsRightExact}
+                    onChange={(e) => updateSelectedAngleStyle({ promoteToSolid: e.target.checked })}
+                  />
+                  Promote to solid
+                </label>
+              )}
+              <div className="controlRow">
+                <label className="controlLabel">Arc Radius</label>
+                <input
+                  className="sizeSlider"
+                  type="range"
+                  min={0.2}
+                  max={5.5}
+                  step={0.05}
+                  value={selectedAngle.style.arcRadius}
+                  onChange={(e) => updateSelectedAngleStyle({ arcRadius: Number(e.target.value) })}
+                />
+              </div>
+              {!selectedAngleIsRight && (
+                <>
+                  <div className="controlRow">
+                    <label className="controlLabel">Mark Position</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={selectedAngle.style.markPos ?? 0.5}
+                      onChange={(e) => updateSelectedAngleStyle({ markPos: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Mark Size</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={1}
+                      max={20}
+                      step={0.1}
+                      value={selectedAngle.style.markSize ?? 4}
+                      onChange={(e) => updateSelectedAngleStyle({ markSize: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Mark Color</label>
+                    <input
+                      className="colorInput"
+                      type="color"
+                      value={selectedAngle.style.markColor ?? selectedAngle.style.strokeColor}
+                      onChange={(e) => updateSelectedAngleStyle({ markColor: e.target.value })}
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          )}
           <div className="controlRow">
             <label className="controlLabel">Stroke Color</label>
             <input
@@ -761,19 +905,35 @@ export function ObjectStyleSections({
               className="sizeSlider"
               type="range"
               min={0.5}
-              max={6}
+              max={2}
               step={0.1}
               value={selectedAngle.style.strokeWidth}
               onChange={(e) => updateSelectedAngleStyle({ strokeWidth: Number(e.target.value) })}
             />
           </div>
+          {selectedAngleIsSector && (
+            <div className="controlRow">
+              <label className="controlLabel">Dash</label>
+              <select
+                className="selectInput"
+                value={selectedAngle.style.strokeDash ?? "solid"}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({ strokeDash: e.target.value as "solid" | "dashed" | "dotted" })
+                }
+              >
+                <option value="solid">Solid</option>
+                <option value="dashed">Dashed</option>
+                <option value="dotted">Dotted</option>
+              </select>
+            </div>
+          )}
           <label className="checkboxRow">
             <input
               type="checkbox"
               checked={selectedAngle.style.fillEnabled}
               onChange={(e) => updateSelectedAngleStyle({ fillEnabled: e.target.checked })}
             />
-            Fill Angle
+            {selectedAngleIsSector ? "Fill Sector" : "Fill Angle"}
           </label>
           <div className="controlRow">
             <label className="controlLabel">Fill Color</label>
@@ -790,12 +950,37 @@ export function ObjectStyleSections({
               className="sizeSlider"
               type="range"
               min={0}
-              max={1}
+              max={0.6}
               step={0.01}
               value={selectedAngle.style.fillOpacity}
               onChange={(e) => updateSelectedAngleStyle({ fillOpacity: Number(e.target.value) })}
             />
           </div>
+          <div className="controlRow">
+            <label className="controlLabel">Fill Pattern</label>
+            <select
+              className="selectInput"
+              value={selectedAngle.style.pattern ?? ""}
+              onChange={(e) => updateSelectedAngleStyle({ pattern: e.target.value })}
+            >
+              {FILL_PATTERN_OPTIONS.map((opt) => (
+                <option key={opt.value || "none"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(selectedAngle.style.pattern ?? "") !== "" && (
+            <div className="controlRow">
+              <label className="controlLabel">Pattern Color</label>
+              <input
+                className="colorInput"
+                type="color"
+                value={selectedAngle.style.patternColor ?? selectedAngle.style.strokeColor}
+                onChange={(e) => updateSelectedAngleStyle({ patternColor: e.target.value })}
+              />
+            </div>
+          )}
           <div className="controlRow">
             <label className="controlLabel">Text Color</label>
             <input
@@ -811,7 +996,7 @@ export function ObjectStyleSections({
               className="sizeSlider"
               type="range"
               min={8}
-              max={42}
+              max={32}
               step={1}
               value={selectedAngle.style.textSize}
               onChange={(e) => updateSelectedAngleStyle({ textSize: Number(e.target.value) })}

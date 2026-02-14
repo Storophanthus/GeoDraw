@@ -13,10 +13,16 @@ export function createUiActions(
   | "setSegmentDefaults"
   | "setLineDefaults"
   | "setCircleDefaults"
+  | "setPolygonDefaults"
   | "setAngleDefaults"
   | "setAngleFixedTool"
   | "setCircleFixedTool"
+  | "setGridEnabled"
+  | "setAxesEnabled"
+  | "setGridSnapEnabled"
   | "setDependencyGlowEnabled"
+  | "setExportClipWorld"
+  | "clearExportClipWorld"
 > {
   return {
     setPointDefaults(next) {
@@ -59,6 +65,16 @@ export function createUiActions(
       }));
     },
 
+    setPolygonDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        polygonDefaults: {
+          ...prev.polygonDefaults,
+          ...next,
+        },
+      }));
+    },
+
     setAngleDefaults(next) {
       ctx.setState((prev) => ({
         ...prev,
@@ -89,10 +105,45 @@ export function createUiActions(
       }));
     },
 
+    setGridEnabled(enabled) {
+      ctx.setState((prev) => ({
+        ...prev,
+        gridEnabled: enabled,
+      }));
+    },
+
+    setAxesEnabled(enabled) {
+      ctx.setState((prev) => ({
+        ...prev,
+        axesEnabled: enabled,
+      }));
+    },
+
+    setGridSnapEnabled(enabled) {
+      ctx.setState((prev) => ({
+        ...prev,
+        gridSnapEnabled: enabled,
+      }));
+    },
+
     setDependencyGlowEnabled(enabled) {
       ctx.setState((prev) => ({
         ...prev,
         dependencyGlowEnabled: enabled,
+      }));
+    },
+
+    setExportClipWorld(clip) {
+      ctx.setState((prev) => ({
+        ...prev,
+        exportClipWorld: clip,
+      }));
+    },
+
+    clearExportClipWorld() {
+      ctx.setState((prev) => ({
+        ...prev,
+        exportClipWorld: null,
       }));
     },
   };

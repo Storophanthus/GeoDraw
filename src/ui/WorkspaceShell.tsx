@@ -1,6 +1,8 @@
 import type { ActiveTool } from "../state/geoStore";
 import type { PointerEventHandler } from "react";
 import { CanvasView } from "../view/CanvasView";
+import { CommandBar } from "../CommandBar";
+import { FileControls } from "./FileControls";
 import { HistoryControls } from "./HistoryControls";
 import { RightSidebar } from "./RightSidebar";
 import { ToolPalette } from "./ToolPalette";
@@ -19,6 +21,7 @@ export type WorkspaceShellProps = {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  onFitView: () => void;
   onStartResizeLeft: PointerEventHandler<HTMLDivElement>;
   onStartResizeRight: PointerEventHandler<HTMLDivElement>;
 };
@@ -37,6 +40,7 @@ export function WorkspaceShell({
   canRedo,
   onUndo,
   onRedo,
+  onFitView,
   onStartResizeLeft,
   onStartResizeRight,
 }: WorkspaceShellProps) {
@@ -54,8 +58,12 @@ export function WorkspaceShell({
       <div className="resizeHandle left" onPointerDown={onStartResizeLeft} />
 
       <main className="canvasPane">
-        <HistoryControls canUndo={canUndo} canRedo={canRedo} onUndo={onUndo} onRedo={onRedo} />
-        <CanvasView />
+        <div style={{ position: "absolute", inset: "0 0 64px 0" }}>
+          <FileControls />
+          <HistoryControls canUndo={canUndo} canRedo={canRedo} onUndo={onUndo} onRedo={onRedo} onFitView={onFitView} />
+          <CanvasView />
+        </div>
+        <CommandBar />
       </main>
 
       <div className="resizeHandle right" onPointerDown={onStartResizeRight} />

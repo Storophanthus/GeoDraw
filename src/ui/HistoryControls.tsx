@@ -1,10 +1,11 @@
-import { Redo2, Undo2 } from "lucide-react";
+import { Redo2, Undo2, ZoomIn } from "lucide-react";
 
 type HistoryControlsProps = {
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  onFitView: () => void;
 };
 
 export function HistoryControls({
@@ -12,6 +13,7 @@ export function HistoryControls({
   canRedo,
   onUndo,
   onRedo,
+  onFitView,
 }: HistoryControlsProps) {
   return (
     <div className="canvasTopActions" aria-label="History controls">
@@ -32,6 +34,14 @@ export function HistoryControls({
         aria-label="Redo"
       >
         <Redo2 size={16} />
+      </button>
+      <button
+        className="iconActionButton"
+        onClick={onFitView}
+        title="Fit View"
+        aria-label="Fit view"
+      >
+        <ZoomIn size={16} />
       </button>
     </div>
   );

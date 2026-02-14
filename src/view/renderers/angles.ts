@@ -1,7 +1,14 @@
 import type { Vec2 } from "../../geo/vec2";
 import type { SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
-import { drawAngleArcPreview, drawAngleSector, drawRightAngleMark } from "../angleRender";
+import {
+  computeRightMarkSizePx,
+  drawAngleArcPreview,
+  drawAngleSector,
+  drawRightAngleMark,
+  drawRightAngleSquareFill,
+} from "../angleRender";
+import { resolveCanvasFillStyle } from "../patternFill";
 import type { DrawableObjectSelection } from "./types";
 
 export type ResolvedAngleForRender = {
@@ -27,19 +34,51 @@ export function drawAngles(
     const as = camMath.worldToScreen(a, camera, vp);
     const bs = camMath.worldToScreen(b, camera, vp);
     const cs = camMath.worldToScreen(c, camera, vp);
-    const radiusPx = Math.max(12, angle.style.arcRadius * camera.zoom);
     const isSector = angle.kind === "sector";
+    const radiusPx = isSector
+      ? Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y))
+      : nonSectorAngleRadiusPx(angle.style.arcRadius);
+    const rightExact = Boolean(angle.isRightExact);
+    const rightApprox = !rightExact && Boolean(angle.isRightApprox);
+    const rightLike = rightExact || rightApprox;
+    const rightSolid = rightExact || (rightApprox && Boolean(angle.style.promoteToSolid));
+    const rawMarkStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
+    const drawRightSquareShape = rawMarkStyle === "rightSquare" || (rightLike && rawMarkStyle === "arc");
+    const resolvedMarkStyle = (drawRightSquareShape ? "rightSquare" : rawMarkStyle) as
+      | "arc"
+      | "none"
+      | "rightSquare"
+      | "rightArcDot";
+    const markSizePx = Math.max(3, Math.min(16, angle.style.markSize ?? 4));
+    const rightMarkSizePx = computeRightMarkSizePx(radiusPx, mapStrokeWidth(angle.style.strokeWidth));
 
     ctx.save();
     if (angle.style.fillEnabled && angle.style.fillOpacity > 0) {
       ctx.globalAlpha = angle.style.fillOpacity;
-      ctx.fillStyle = angle.style.fillColor;
-      drawAngleSector(ctx, as, bs, entry.theta, radiusPx);
+      ctx.fillStyle = resolveCanvasFillStyle(
+        ctx,
+        angle.style.fillColor,
+        angle.style.pattern,
+        angle.style.patternColor
+      );
+      if (resolvedMarkStyle === "rightSquare") {
+        drawRightAngleSquareFill(ctx, as, bs, cs, rightMarkSizePx);
+      } else {
+        drawAngleSector(ctx, as, bs, entry.theta, radiusPx);
+      }
       ctx.fill();
     }
     ctx.globalAlpha = angle.style.strokeOpacity;
     ctx.strokeStyle = angle.style.strokeColor;
     ctx.lineWidth = mapStrokeWidth(angle.style.strokeWidth);
+    const approxDashed =
+      !isSector && rightApprox && !rightSolid && (resolvedMarkStyle === "rightSquare" || resolvedMarkStyle === "rightArcDot");
+    if (approxDashed) ctx.setLineDash([6, 4]);
+    if (isSector) {
+      const dash = angle.style.strokeDash ?? "solid";
+      if (dash === "dashed") ctx.setLineDash([7, 5]);
+      else if (dash === "dotted") ctx.setLineDash([2, 4]);
+    }
     if (isSector) {
       const start = Math.atan2(as.y - bs.y, as.x - bs.x);
       const end = start - entry.theta;
@@ -49,11 +88,31 @@ export function drawAngles(
       ctx.arc(bs.x, bs.y, radiusPx, start, end, true);
       ctx.lineTo(bs.x, bs.y);
       ctx.stroke();
-    } else if (angle.style.markStyle === "right") {
-      drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.55);
-      ctx.stroke();
-    } else if (angle.style.markStyle === "arc") {
-      drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
+    } else if (resolvedMarkStyle !== "none") {
+      if (rightLike && resolvedMarkStyle === "rightSquare") {
+        drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx);
+        ctx.stroke();
+      } else {
+        drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
+        if (!rightLike) {
+          if ((angle.style.arcMultiplicity ?? 1) >= 2) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 6);
+          if ((angle.style.arcMultiplicity ?? 1) >= 3) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 12);
+          drawArcBarMarks(
+            ctx,
+            as,
+            bs,
+            entry.theta,
+            radiusPx,
+            angle.style.markSymbol ?? "none",
+            markSizePx,
+            angle.style.markPos ?? 0.5,
+            angle.style.markColor ?? angle.style.strokeColor,
+            mapStrokeWidth(angle.style.strokeWidth)
+          );
+        } else if (resolvedMarkStyle === "rightArcDot") {
+          drawRightInnerDot(ctx, as, bs, entry.theta, radiusPx * 0.7, Math.max(2, ctx.lineWidth * 0.8));
+        }
+      }
     }
 
     if (selectedObject?.type === "angle" && selectedObject.id === angle.id) {
@@ -70,11 +129,17 @@ export function drawAngles(
         ctx.arc(bs.x, bs.y, radiusPx + 2, start, end, true);
         ctx.lineTo(bs.x, bs.y);
         ctx.stroke();
-      } else if (angle.style.markStyle === "right") {
-        drawRightAngleMark(ctx, as, bs, cs, radiusPx * 0.63);
-        ctx.stroke();
-      } else if (angle.style.markStyle === "arc") {
-        drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);
+      } else if (resolvedMarkStyle !== "none") {
+        if (rightLike && resolvedMarkStyle === "rightSquare") {
+          drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx + 2);
+          ctx.stroke();
+        } else {
+          drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);
+          if (!rightLike) {
+            if ((angle.style.arcMultiplicity ?? 1) >= 2) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 8);
+            if ((angle.style.arcMultiplicity ?? 1) >= 3) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 14);
+          }
+        }
       }
       const lScreen = camMath.worldToScreen(angle.style.labelPosWorld, camera, vp);
       ctx.beginPath();
@@ -85,4 +150,67 @@ export function drawAngles(
 
     ctx.restore();
   }
+}
+
+function nonSectorAngleRadiusPx(arcRadius: number): number {
+  // Keep angle cosmetics screen-stable: independent from camera zoom.
+  // UI arcRadius remains a compact scalar; map it into practical px range.
+  return Math.max(18, Math.min(120, arcRadius * 34));
+}
+
+function drawArcBarMarks(
+  ctx: CanvasRenderingContext2D,
+  a: Vec2,
+  b: Vec2,
+  theta: number,
+  radius: number,
+  mark: "none" | "|" | "||" | "|||",
+  markSize: number,
+  pos: number,
+  markColor: string,
+  strokeWidth: number
+): void {
+  const count = mark === "|" ? 1 : mark === "||" ? 2 : mark === "|||" ? 3 : 0;
+  if (count === 0) return;
+  const start = Math.atan2(a.y - b.y, a.x - b.x);
+  const p = Math.max(0.1, Math.min(0.9, Number.isFinite(pos) ? pos : 0.5));
+  const mid = start - theta * p;
+  // Keep bars visually proportional to the arc radius and closer together like textbook marks.
+  const tickHalf = Math.max(3.6, Math.min(radius * 0.4, markSize * 1.08 + radius * 0.09));
+  const baseStep = Math.max(0.022, Math.min(0.075, (tickHalf * 0.54) / Math.max(1, radius)));
+  ctx.save();
+  ctx.strokeStyle = markColor;
+  ctx.lineWidth = strokeWidth;
+  for (let i = 0; i < count; i += 1) {
+    // Bars are distributed along the arc (angle offset), not radially.
+    const phi = mid + (i - (count - 1) * 0.5) * baseStep;
+    const nx = Math.cos(phi);
+    const ny = Math.sin(phi);
+    const cx = b.x + nx * radius;
+    const cy = b.y + ny * radius;
+    ctx.beginPath();
+    // Tick orientation should cross the arc like tkz marks (radial stroke).
+    ctx.moveTo(cx - nx * tickHalf, cy - ny * tickHalf);
+    ctx.lineTo(cx + nx * tickHalf, cy + ny * tickHalf);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawRightInnerDot(
+  ctx: CanvasRenderingContext2D,
+  a: Vec2,
+  b: Vec2,
+  theta: number,
+  radius: number,
+  dotRadius: number
+): void {
+  const start = Math.atan2(a.y - b.y, a.x - b.x);
+  const mid = start - theta * 0.5;
+  const cx = b.x + Math.cos(mid) * radius;
+  const cy = b.y + Math.sin(mid) * radius;
+  ctx.beginPath();
+  ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.fill();
 }
