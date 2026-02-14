@@ -384,12 +384,16 @@ export function createSceneLineAngleActions(
         const s = Math.sin(sign * theta);
         const rot = { x: base.x * c - base.y * s, y: base.x * s + base.y * c };
         const wc = { x: wv.x + rot.x, y: wv.y + rot.y };
-        const oriented = computeOrientedAngleRad(wa, wv, wc);
+        const angleAWorld = direction === "CCW" ? wa : wc;
+        const angleCWorld = direction === "CCW" ? wc : wa;
+        const oriented = computeOrientedAngleRad(angleAWorld, wv, angleCWorld);
         if (oriented === null) return prev;
-        const start = Math.atan2(wa.y - wv.y, wa.x - wv.x);
+        const start = Math.atan2(angleAWorld.y - wv.y, angleAWorld.x - wv.x);
         const mid = start + oriented * 0.5;
         const labelDist = Math.max(0.45, prev.angleDefaults.arcRadius * 1.25);
         const labelPosWorld = { x: wv.x + Math.cos(mid) * labelDist, y: wv.y + Math.sin(mid) * labelDist };
+        const angleAId = direction === "CCW" ? basePointId : pointId;
+        const angleCId = direction === "CCW" ? pointId : basePointId;
 
         result = { pointId, lineId, angleId };
         return {
@@ -434,9 +438,9 @@ export function createSceneLineAngleActions(
               ...prev.scene.angles,
               {
                 id: angleId,
-                aId: basePointId,
+                aId: angleAId,
                 bId: vertexId,
-                cId: pointId,
+                cId: angleCId,
                 isRightExact: false,
                 visible: true,
                 style: {

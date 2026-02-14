@@ -1052,6 +1052,8 @@ When starting a new chat, provide:
   - New polygon defaults (`polygonDefaults`) and ids (`nextPolygonId`).
 - Added polygon creation/action surface:
   - `createPolygon(pointIds)` in scene core actions.
+  - Polygon creation now auto-creates missing edge segments for each consecutive pair (including closing edge), reusing existing segments order-insensitively to avoid duplicates.
+  - Edge segment creation is atomic with polygon creation (single history action) and registers right-angle provenance segment pair index for new edges.
   - polygon selection/hover/copy-style/delete graph support in domain/store.
 - Added canvas integration:
   - Tool id: `polygon`

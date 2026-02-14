@@ -31,6 +31,8 @@ export function createSceneCoreActions(
   | "createPolygon"
   | "createCircleCenterPoint"
 > {
+  const edgeKey = (aId: string, bId: string) => (aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`);
+
   return {
     createFreePoint(world) {
       let createdId = "";
@@ -224,15 +226,47 @@ export function createSceneCoreActions(
       const uniqueIds = Array.from(new Set(pointIds));
       if (uniqueIds.length < 3) return null;
       let id: string | null = null;
+      let createdEdges: Array<{ id: string; aId: string; bId: string }> = [];
       ctx.setState((prev) => {
+        createdEdges = [];
         for (let i = 0; i < uniqueIds.length; i += 1) {
           if (!prev.scene.points.some((p) => p.id === uniqueIds[i])) return prev;
         }
+
+        const existingEdgeKeys = new Set<string>();
+        for (let i = 0; i < prev.scene.segments.length; i += 1) {
+          const seg = prev.scene.segments[i];
+          existingEdgeKeys.add(edgeKey(seg.aId, seg.bId));
+        }
+
+        const newSegments = [...prev.scene.segments];
+        let nextSegmentId = prev.nextSegmentId;
+        for (let i = 0; i < uniqueIds.length; i += 1) {
+          const aId = uniqueIds[i];
+          const bId = uniqueIds[(i + 1) % uniqueIds.length];
+          if (aId === bId) continue;
+          const key = edgeKey(aId, bId);
+          if (existingEdgeKeys.has(key)) continue;
+          existingEdgeKeys.add(key);
+          const segId = `s_${nextSegmentId}`;
+          nextSegmentId += 1;
+          newSegments.push({
+            id: segId,
+            aId,
+            bId,
+            visible: true,
+            showLabel: false,
+            style: { ...prev.segmentDefaults },
+          });
+          createdEdges.push({ id: segId, aId, bId });
+        }
+
         id = `pg_${prev.nextPolygonId}`;
         return {
           ...prev,
           scene: {
             ...prev.scene,
+            segments: newSegments,
             polygons: [
               ...prev.scene.polygons,
               {
@@ -245,9 +279,14 @@ export function createSceneCoreActions(
           },
           selectedObject: { type: "polygon", id },
           recentCreatedObject: { type: "polygon", id },
+          nextSegmentId,
           nextPolygonId: prev.nextPolygonId + 1,
         };
       });
+      for (let i = 0; i < createdEdges.length; i += 1) {
+        const edge = createdEdges[i];
+        registerSegmentPair(edge.id, edge.aId, edge.bId);
+      }
       return id;
     },
 
