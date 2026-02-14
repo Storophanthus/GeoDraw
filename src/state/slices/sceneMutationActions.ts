@@ -1,6 +1,6 @@
 import type { Vec2 } from "../../geo/vec2";
 import { projectPointToCircle, projectPointToLine, projectPointToSegment } from "../../geo/geometry";
-import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos, type AngleStyle, type CircleStyle, type LineStyle, type PointStyle, type SceneModel } from "../../scene/points";
+import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos, type AngleStyle, type CircleStyle, type LineStyle, type PointStyle, type PolygonStyle, type SceneModel } from "../../scene/points";
 import { applyDeletion, collectCascadeDelete, isSelectedObjectAlive } from "../../domain/geometryGraph";
 import { rebuildRightAngleProvenance } from "../../domain/rightAngleProvenance";
 import type { SetStateOptions } from "./historySlice";
@@ -22,10 +22,12 @@ export function createSceneMutationActions({
   | "updateSelectedSegmentStyle"
   | "updateSelectedLineStyle"
   | "updateSelectedCircleStyle"
+  | "updateSelectedPolygonStyle"
   | "updateSelectedAngleStyle"
   | "updateSelectedSegmentFields"
   | "updateSelectedLineFields"
   | "updateSelectedCircleFields"
+  | "updateSelectedPolygonFields"
   | "updateSelectedAngleFields"
   | "setObjectVisibility"
   | "deleteSelectedObject"
@@ -215,6 +217,21 @@ export function createSceneMutationActions({
       });
     },
 
+    updateSelectedPolygonStyle(next) {
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "polygon") return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            polygons: prev.scene.polygons.map((polygon) =>
+              polygon.id === prev.selectedObject!.id ? { ...polygon, style: { ...polygon.style, ...next } } : polygon
+            ),
+          },
+        };
+      });
+    },
+
     updateSelectedAngleStyle(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "angle") return prev;
@@ -270,6 +287,21 @@ export function createSceneMutationActions({
             ...prev.scene,
             circles: prev.scene.circles.map((circle) =>
               circle.id === prev.selectedObject!.id ? { ...circle, ...next } : circle
+            ),
+          },
+        };
+      });
+    },
+
+    updateSelectedPolygonFields(next) {
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "polygon") return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            polygons: prev.scene.polygons.map((polygon) =>
+              polygon.id === prev.selectedObject!.id ? { ...polygon, ...next } : polygon
             ),
           },
         };
@@ -337,6 +369,17 @@ export function createSceneMutationActions({
             },
           };
         }
+        if (obj.type === "polygon") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              polygons: prev.scene.polygons.map((polygon) =>
+                polygon.id === obj.id ? { ...polygon, visible } : polygon
+              ),
+            },
+          };
+        }
         if (obj.type === "angle") {
           return {
             ...prev,
@@ -376,7 +419,7 @@ export function createSceneMutationActions({
           recentCreatedObject: null,
           copyStyle: isSelectedObjectAlive(nextScene, prev.copyStyle.source)
             ? prev.copyStyle
-            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, angleStyle: null, showLabel: null },
+            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, polygonStyle: null, angleStyle: null, showLabel: null },
         };
       });
     },
@@ -396,6 +439,7 @@ export function createSceneMutationActions({
               },
               lineStyle: null,
               circleStyle: null,
+              polygonStyle: null,
               angleStyle: null,
               showLabel: point.showLabel,
             },
@@ -412,6 +456,7 @@ export function createSceneMutationActions({
               pointStyle: null,
               lineStyle: { ...segment.style },
               circleStyle: circleStyleFromLineStyle(segment.style),
+              polygonStyle: polygonStyleFromLineStyle(segment.style),
               angleStyle: angleStyleFromLineStyle(segment.style),
               showLabel: null,
             },
@@ -428,7 +473,25 @@ export function createSceneMutationActions({
               pointStyle: null,
               lineStyle: lineStyleFromCircleStyle(circle.style),
               circleStyle: { ...circle.style },
+              polygonStyle: polygonStyleFromCircleStyle(circle.style),
               angleStyle: angleStyleFromCircleStyle(circle.style),
+              showLabel: null,
+            },
+          };
+        }
+
+        if (obj.type === "polygon") {
+          const polygon = prev.scene.polygons.find((item) => item.id === obj.id);
+          if (!polygon) return prev;
+          return {
+            ...prev,
+            copyStyle: {
+              source: obj,
+              pointStyle: null,
+              lineStyle: lineStyleFromPolygonStyle(polygon.style),
+              circleStyle: circleStyleFromPolygonStyle(polygon.style),
+              polygonStyle: { ...polygon.style },
+              angleStyle: angleStyleFromCircleStyle(circleStyleFromPolygonStyle(polygon.style)),
               showLabel: null,
             },
           };
@@ -458,6 +521,16 @@ export function createSceneMutationActions({
                 pattern: angle.style.pattern ?? "",
                 patternColor: angle.style.patternColor,
               },
+              polygonStyle: {
+                strokeColor: angle.style.strokeColor,
+                strokeWidth: angle.style.strokeWidth,
+                strokeDash: "solid",
+                strokeOpacity: angle.style.strokeOpacity,
+                fillColor: angle.style.fillColor,
+                fillOpacity: angle.style.fillOpacity,
+                pattern: angle.style.pattern ?? "",
+                patternColor: angle.style.patternColor,
+              },
               angleStyle: {
                 ...angle.style,
                 labelPosWorld: { ...angle.style.labelPosWorld },
@@ -476,6 +549,7 @@ export function createSceneMutationActions({
             pointStyle: null,
             lineStyle: { ...line.style },
             circleStyle: circleStyleFromLineStyle(line.style),
+            polygonStyle: polygonStyleFromLineStyle(line.style),
             angleStyle: angleStyleFromLineStyle(line.style),
             showLabel: null,
           },
@@ -515,6 +589,7 @@ export function createSceneMutationActions({
         if (obj.type === "segment") {
           const sourceLineStyle =
             prev.copyStyle.lineStyle ??
+            (prev.copyStyle.polygonStyle ? lineStyleFromPolygonStyle(prev.copyStyle.polygonStyle) : null) ??
             (prev.copyStyle.circleStyle ? lineStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
             (prev.copyStyle.pointStyle ? lineStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
           if (!sourceLineStyle) return prev;
@@ -532,6 +607,7 @@ export function createSceneMutationActions({
         if (obj.type === "circle") {
           const sourceCircleStyle =
             prev.copyStyle.circleStyle ??
+            (prev.copyStyle.polygonStyle ? circleStyleFromPolygonStyle(prev.copyStyle.polygonStyle) : null) ??
             (prev.copyStyle.lineStyle ? circleStyleFromLineStyle(prev.copyStyle.lineStyle) : null) ??
             (prev.copyStyle.pointStyle ? circleStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
           if (!sourceCircleStyle) return prev;
@@ -546,9 +622,27 @@ export function createSceneMutationActions({
           };
         }
 
+        if (obj.type === "polygon") {
+          const sourcePolygonStyle =
+            prev.copyStyle.polygonStyle ??
+            (prev.copyStyle.circleStyle ? polygonStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
+            (prev.copyStyle.lineStyle ? polygonStyleFromLineStyle(prev.copyStyle.lineStyle) : null);
+          if (!sourcePolygonStyle) return prev;
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              polygons: prev.scene.polygons.map((polygon) =>
+                polygon.id === obj.id ? { ...polygon, style: { ...polygon.style, ...sourcePolygonStyle } } : polygon
+              ),
+            },
+          };
+        }
+
         if (obj.type === "angle") {
           const sourceAngleStyle =
             prev.copyStyle.angleStyle ??
+            (prev.copyStyle.polygonStyle ? angleStyleFromCircleStyle(circleStyleFromPolygonStyle(prev.copyStyle.polygonStyle)) : null) ??
             (prev.copyStyle.lineStyle ? angleStyleFromLineStyle(prev.copyStyle.lineStyle) : null) ??
             (prev.copyStyle.circleStyle ? angleStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
             (prev.copyStyle.pointStyle ? angleStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
@@ -575,6 +669,7 @@ export function createSceneMutationActions({
 
         const sourceLineStyle =
           prev.copyStyle.lineStyle ??
+          (prev.copyStyle.polygonStyle ? lineStyleFromPolygonStyle(prev.copyStyle.polygonStyle) : null) ??
           (prev.copyStyle.circleStyle ? lineStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
           (prev.copyStyle.pointStyle ? lineStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
         if (!sourceLineStyle) return prev;
@@ -598,6 +693,7 @@ export function createSceneMutationActions({
           pointStyle: null,
           lineStyle: null,
           circleStyle: null,
+          polygonStyle: null,
           angleStyle: null,
           showLabel: null,
         },
@@ -621,12 +717,56 @@ function circleStyleFromLineStyle(style: LineStyle): CircleStyle {
   };
 }
 
+function polygonStyleFromLineStyle(style: LineStyle): PolygonStyle {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    strokeDash: style.dash,
+    strokeOpacity: style.opacity,
+  };
+}
+
 function lineStyleFromCircleStyle(style: CircleStyle): LineStyle {
   return {
     strokeColor: style.strokeColor,
     strokeWidth: style.strokeWidth,
     dash: style.strokeDash,
     opacity: style.strokeOpacity,
+  };
+}
+
+function lineStyleFromPolygonStyle(style: PolygonStyle): LineStyle {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    dash: style.strokeDash,
+    opacity: style.strokeOpacity,
+  };
+}
+
+function circleStyleFromPolygonStyle(style: PolygonStyle): CircleStyle {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    strokeDash: style.strokeDash,
+    strokeOpacity: style.strokeOpacity,
+    fillColor: style.fillColor,
+    fillOpacity: style.fillOpacity,
+    pattern: style.pattern,
+    patternColor: style.patternColor,
+  };
+}
+
+function polygonStyleFromCircleStyle(style: CircleStyle): PolygonStyle {
+  return {
+    strokeColor: style.strokeColor,
+    strokeWidth: style.strokeWidth,
+    strokeDash: style.strokeDash,
+    strokeOpacity: style.strokeOpacity,
+    fillColor: style.fillColor,
+    fillOpacity: style.fillOpacity,
+    pattern: style.pattern,
+    patternColor: style.patternColor,
   };
 }
 

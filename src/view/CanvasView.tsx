@@ -93,6 +93,7 @@ export function CanvasView() {
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
+  const createPolygon = useGeoStore((store) => store.createPolygon);
   const createCircle = useGeoStore((store) => store.createCircle);
   const createAuxiliaryCircle = useGeoStore((store) => store.createAuxiliaryCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
@@ -148,6 +149,7 @@ export function CanvasView() {
       createFreePoint,
       createSegment,
       createLine,
+      createPolygon,
       createCircle,
       createAuxiliaryCircle,
       createCircleThreePoint,
@@ -183,6 +185,7 @@ export function CanvasView() {
       createFreePoint,
       createSegment,
       createLine,
+      createPolygon,
       createCircle,
       createAuxiliaryCircle,
       createCircleThreePoint,

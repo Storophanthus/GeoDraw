@@ -22,6 +22,7 @@ import {
   IconParallel,
   IconPerpendicular,
   IconPoint,
+  IconPolygon,
   IconSector,
   IconSegment,
   IconTangent,
@@ -57,16 +58,17 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   circle_cp: { icon: IconCircleCenterPoint, tooltip: "Circle Center + Point (O)", ariaLabel: "Circle center-through-point tool" },
   circle_3p: { icon: IconCircle3Point, tooltip: "Circle through 3 Points", ariaLabel: "Circle through three points tool" },
   circle_fixed: { icon: IconCircleRadius, tooltip: "Circle with Fixed Radius", ariaLabel: "Circle with fixed radius tool" },
+  polygon: { icon: IconPolygon, tooltip: "Polygon", ariaLabel: "Polygon tool" },
   sector: { icon: IconSector, tooltip: "Circular Sector", ariaLabel: "Circular sector tool" },
 };
 
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
-  { id: "move", label: "MOVE", tools: ["move"] },
+  { id: "move", label: "MOVE", tools: ["move", "export_clip"] },
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
-  { id: "circles", label: "CIRCLES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector"] },
-  { id: "styles", label: "STYLES", tools: ["copyStyle", "export_clip"] },
+  { id: "circles", label: "CIRCLES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon"] },
+  { id: "styles", label: "STYLES", tools: ["copyStyle"] },
 ];
 
 const LONG_PRESS_MS = 250;

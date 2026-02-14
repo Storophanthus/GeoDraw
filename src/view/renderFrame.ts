@@ -11,7 +11,7 @@ import {
   type AngleFixedToolState,
   type CircleFixedToolState,
 } from "./previews/pendingPreview";
-import { drawAngles, drawCircles, drawLines, drawPoints, drawSegments } from "./renderers";
+import { drawAngles, drawCircles, drawLines, drawPoints, drawPolygons, drawSegments } from "./renderers";
 import type { DrawableObjectSelection } from "./renderers/types";
 import type { ResolvedAngle } from "./labelOverlays";
 import { drawInteractionHighlights } from "./interactionHighlights";
@@ -92,6 +92,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
 
     drawRectGrid(ctx, camera, vp, gridSettings);
     drawCircles(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
+    drawPolygons(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
     drawLines(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
     drawSegments(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
     drawAngles(ctx, resolvedAngles, camera, vp, selectedDrawableObject, recentDrawableObject, getAngleStrokeRenderWidth);

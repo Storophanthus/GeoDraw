@@ -5,13 +5,14 @@ import {
 } from "../../scene/points";
 
 export function selectConstructionDescription(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle" | "number"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "number"; id: string } | null,
   scene: SceneModel
 ): string | null {
   const pointNameById = new Map(scene.points.map((p) => [p.id, p.name]));
   const lineById = new Map(scene.lines.map((l) => [l.id, l]));
   const segmentById = new Map(scene.segments.map((s) => [s.id, s]));
   const circleById = new Map(scene.circles.map((c) => [c.id, c]));
+  const polygonById = new Map(scene.polygons.map((p) => [p.id, p]));
   const angleById = new Map(scene.angles.map((a) => [a.id, a]));
   const numberById = new Map(scene.numbers.map((n) => [n.id, n]));
 
@@ -22,18 +23,20 @@ export function selectConstructionDescription(
     lineById,
     segmentById,
     circleById,
+    polygonById,
     angleById,
     numberById
   );
 }
 
 function describeSelectedConstruction(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "angle" | "number"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "number"; id: string } | null,
   scene: SceneModel,
   pointNameById: Map<string, string>,
   lineById: Map<string, SceneModel["lines"][number]>,
   segmentById: Map<string, SceneModel["segments"][number]>,
   circleById: Map<string, SceneModel["circles"][number]>,
+  polygonById: Map<string, SceneModel["polygons"][number]>,
   angleById: Map<string, SceneModel["angles"][number]>,
   numberById: Map<string, SceneModel["numbers"][number]>
 ): string | null {
@@ -83,6 +86,12 @@ function describeSelectedConstruction(
     const circle = circleById.get(selectedObject.id);
     if (!circle) return `Circle ${selectedObject.id}`;
     return describeCircleForConstruction(circle, pointNameById);
+  }
+  if (selectedObject.type === "polygon") {
+    const polygon = polygonById.get(selectedObject.id);
+    if (!polygon) return `Polygon ${selectedObject.id}`;
+    const labels = polygon.pointIds.map((id) => pointLabel(id, pointNameById)).join("");
+    return `Polygon ${labels}.`;
   }
   if (selectedObject.type === "angle") {
     const angle = angleById.get(selectedObject.id);
@@ -251,6 +260,31 @@ function describePointConstruction(
       : `line ${point.lineId}`;
     return `Intersection of ${lineText} with ${circleText}.`;
   }
+  if (point.kind === "circleSegmentIntersectionPoint") {
+    const circle = circleById.get(point.circleId);
+    const seg = segmentById.get(point.segId);
+    const circleText = circle ? describeCircleRef(circle, pointNameById) : `circle ${point.circleId}`;
+    const segText = seg
+      ? `segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}`
+      : `segment ${point.segId}`;
+    return `Intersection of ${segText} with ${circleText}.`;
+  }
+  if (point.kind === "circleCircleIntersectionPoint") {
+    const ca = circleById.get(point.circleAId);
+    const cb = circleById.get(point.circleBId);
+    const caText = ca ? describeCircleRef(ca, pointNameById) : `circle ${point.circleAId}`;
+    const cbText = cb ? describeCircleRef(cb, pointNameById) : `circle ${point.circleBId}`;
+    return `Intersection of ${caText} and ${cbText}.`;
+  }
+  if (point.kind === "lineLikeIntersectionPoint") {
+    return `Intersection of ${describeObjectRef(point.objA, pointNameById, lineById, segmentById, circleById)} and ${describeObjectRef(
+      point.objB,
+      pointNameById,
+      lineById,
+      segmentById,
+      circleById
+    )}.`;
+  }
   return `Intersection of ${describeObjectRef(point.objA, pointNameById, lineById, segmentById, circleById)} and ${describeObjectRef(
     point.objB,
     pointNameById,
@@ -299,6 +333,9 @@ function describeObjectRef(
     return seg
       ? `segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}`
       : `segment ${ref.id}`;
+  }
+  if (ref.type === "angle") {
+    return `sector ${ref.id}`;
   }
   const circle = circleById.get(ref.id);
   return circle

@@ -23,6 +23,7 @@ type PointerHits = {
   hitLabelId: string | null;
   hitAngleLabelId: string | null;
   hitAngleId: string | null;
+  hitPolygonId: string | null;
   hitSegmentId: string | null;
   hitLineId: string | null;
   hitCircleId: string | null;
@@ -36,6 +37,7 @@ type MoveDecision = {
     | { type: "segment"; id: string }
     | { type: "line"; id: string }
     | { type: "circle"; id: string }
+    | { type: "polygon"; id: string }
     | { type: "angle"; id: string }
     | null;
 };
@@ -49,9 +51,9 @@ type CreatePointerHandlersDeps = {
   dragBuffers: DragBufferAccess;
   clickEpsilonPx: number;
   readScreen: (e: PointerEvent) => Vec2;
-  computeHoveredHit: (screen: Vec2) => { type: "point" | "angle" | "segment" | "line2p" | "circle"; id: string } | null;
+  computeHoveredHit: (screen: Vec2) => { type: "point" | "angle" | "segment" | "line2p" | "circle" | "polygon"; id: string } | null;
   applyCursor: (
-    hovered: { type: "point" | "angle" | "segment" | "line2p" | "circle"; id: string } | null,
+    hovered: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "polygon"; id: string } | null,
     modeOverride?: PointerMode
   ) => void;
   scheduleDragUpdate: () => void;
@@ -59,13 +61,14 @@ type CreatePointerHandlersDeps = {
   setHoverScreen: (screen: Vec2) => void;
   setSnapDisabled: (disabled: boolean) => void;
   setCursorWorldFromScreen: (screen: Vec2) => void;
-  setHoveredHit: (hit: { type: "point" | "angle" | "segment" | "line2p" | "circle"; id: string } | null) => void;
+  setHoveredHit: (hit: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "polygon"; id: string } | null) => void;
   setSelectedObject: (
     obj:
       | { type: "point"; id: string }
       | { type: "segment"; id: string }
       | { type: "line"; id: string }
       | { type: "circle"; id: string }
+      | { type: "polygon"; id: string }
       | { type: "angle"; id: string }
       | null
   ) => void;
@@ -241,16 +244,34 @@ type CreateCanvasAuxHandlersDeps = {
   setHoverScreen: (screen: Vec2 | null) => void;
   setCursorWorldFromScreen: (screen: Vec2) => void;
   setCursorWorldNull: () => void;
-  setHoveredHit: (hit: { type: "point" | "angle" | "segment" | "line2p" | "circle"; id: string } | null) => void;
+  setHoveredHit: (hit: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "polygon"; id: string } | null) => void;
   zoomAtScreenPoint: (screen: Vec2, zoomFactor: number) => void;
 };
 
 export function createCanvasAuxHandlers(deps: CreateCanvasAuxHandlersDeps) {
+  let wheelRafId: number | null = null;
+  let wheelScreen: Vec2 | null = null;
+  let wheelFactor = 1;
+
+  const flushWheelZoom = () => {
+    wheelRafId = null;
+    if (!wheelScreen) return;
+    const factor = wheelFactor;
+    const screen = wheelScreen;
+    wheelFactor = 1;
+    wheelScreen = null;
+    deps.zoomAtScreenPoint(screen, factor);
+  };
+
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
     const screen = deps.readScreen(e);
     const zoomFactor = Math.pow(1.0015, -e.deltaY);
-    deps.zoomAtScreenPoint(screen, zoomFactor);
+    wheelScreen = screen;
+    wheelFactor = Math.max(0.2, Math.min(5, wheelFactor * zoomFactor));
+    if (wheelRafId === null) {
+      wheelRafId = window.requestAnimationFrame(flushWheelZoom);
+    }
   };
 
   const onLeave = () => {
@@ -260,5 +281,14 @@ export function createCanvasAuxHandlers(deps: CreateCanvasAuxHandlersDeps) {
     deps.canvas.style.cursor = "default";
   };
 
-  return { onWheel, onLeave };
+  const cancelPendingWheelZoom = () => {
+    wheelScreen = null;
+    wheelFactor = 1;
+    if (wheelRafId !== null) {
+      cancelAnimationFrame(wheelRafId);
+      wheelRafId = null;
+    }
+  };
+
+  return { onWheel, onLeave, cancelPendingWheelZoom };
 }

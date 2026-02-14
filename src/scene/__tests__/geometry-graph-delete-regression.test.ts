@@ -119,6 +119,7 @@ function baseScene(): SceneModel {
     ],
     segments: [{ id: "s1", aId: "pA", bId: "pB", visible: true, showLabel: false, style: lineStyle }],
     circles: [{ id: "c1", kind: "twoPoint", centerId: "pA", throughId: "pB", visible: true, style: circleStyle }],
+    polygons: [],
     angles: [{ id: "a1", aId: "pA", bId: "pB", cId: "pC", visible: true, style: angleStyle }],
   };
 }

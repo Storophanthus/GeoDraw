@@ -1039,3 +1039,38 @@ When starting a new chat, provide:
   - Step-3 no longer creates `pointByRotation` for the third sector point.
   - It now creates a `pointOnCircle` constrained to a hidden auxiliary two-point circle `(center=startVertex, through=sectorStartPoint)`.
   - This keeps the endpoint draggable on the locus and preserves radius coupling when the start point moves.
+
+## Latest Done (Polygon Tool + Command Parity)
+- Added first-class `ScenePolygon` support to scene model/state:
+  - `scene.polygons` added to `SceneModel`, state slice defaults, history snapshots, restore path, and integrity normalization.
+  - New polygon defaults (`polygonDefaults`) and ids (`nextPolygonId`).
+- Added polygon creation/action surface:
+  - `createPolygon(pointIds)` in scene core actions.
+  - polygon selection/hover/copy-style/delete graph support in domain/store.
+- Added canvas integration:
+  - Tool id: `polygon`
+  - Pending polygon preview (polyline rubber-band).
+  - Polygon renderer + hit-test support.
+  - Object browser lists polygons (under Circles/Polygons tab).
+- Added properties/style editing parity:
+  - Polygon style controls in properties panel (stroke/fill/pattern/pattern-color) via `ObjectStyleSections`.
+  - “Make this default for this object” now supports polygons.
+- Added TikZ export support for polygons:
+  - Export emits deterministic raw TikZ closed path:
+    - `\draw[<style>] (P1) -- (P2) -- ... -- cycle;`
+  - Polygon style maps include stroke, fill opacity/color, pattern, pattern color.
+  - Added regression fixture: `src/export/__fixtures__/polygon-basic.json`.
+- Added Command Bar parity for polygon:
+  - Parser command: `Polygon(A,B,C,...)` -> `CreatePolygonByPoints`.
+  - Supports assignment form (`P = Polygon(A,B,C,...)`) through existing assignObject flow.
+  - Command execution wiring for both direct and assigned polygon creation.
+  - Added parser regression assertion in `src/scene/__tests__/command-parser.test.ts`.
+
+## Next
+- Add polygon construction descriptions with vertex list polishing in UI (currently basic id/name display).
+- Optional: add dedicated polygon tab icon semantics and specialized polygon info panel.
+- Optional: add polygon command docs entry in `docs/command-bar-reference.md`.
+
+## Risks / Constraints
+- Command alias labeling for polygons is command-level alias only (same behavior as line/segment/circle aliases), not scene object renaming.
+- Polygon export uses raw `\draw[...] ... -- cycle;` (deterministic and compile-safe), not tkz-specific polygon macros.

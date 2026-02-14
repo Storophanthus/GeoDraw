@@ -7,12 +7,14 @@ import type {
   GeometryObjectRef,
   LineStyle,
   PointStyle,
+  PolygonStyle,
   SceneCircle,
   SceneAngle,
   SceneLine,
   SceneModel,
   SceneNumber,
   ScenePoint,
+  ScenePolygon,
   SceneSegment,
   ShowLabelMode,
 } from "../src/scene/points.ts";
@@ -50,6 +52,15 @@ const defaultCircleStyle: CircleStyle = {
   strokeWidth: 1.8,
   strokeDash: "solid",
   strokeOpacity: 1,
+};
+
+const defaultPolygonStyle: PolygonStyle = {
+  strokeColor: "#1f2937",
+  strokeWidth: 1.8,
+  strokeDash: "solid",
+  strokeOpacity: 1,
+  fillColor: "#93c5fd",
+  fillOpacity: 0.2,
 };
 
 async function main(): Promise<void> {
@@ -92,6 +103,7 @@ function hydrateScene(raw: {
   lines?: Array<Record<string, unknown>>;
   segments?: Array<Record<string, unknown>>;
   circles?: Array<Record<string, unknown>>;
+  polygons?: Array<Record<string, unknown>>;
   angles?: Array<Record<string, unknown>>;
 }): SceneModel {
   const points = (raw.points ?? []).map(hydratePoint);
@@ -99,8 +111,9 @@ function hydrateScene(raw: {
   const lines = (raw.lines ?? []).map(hydrateLine);
   const segments = (raw.segments ?? []).map(hydrateSegment);
   const circles = (raw.circles ?? []).map(hydrateCircle);
+  const polygons = (raw.polygons ?? []).map(hydratePolygon);
   const angles = (raw.angles ?? []).map(hydrateAngle);
-  return { points, numbers, lines, segments, circles, angles };
+  return { points, numbers, lines, segments, circles, polygons, angles };
 }
 
 function hydratePoint(raw: Record<string, unknown>): ScenePoint {
@@ -336,6 +349,15 @@ function hydrateAngle(raw: Record<string, unknown>): SceneAngle {
   };
 }
 
+function hydratePolygon(raw: Record<string, unknown>): ScenePolygon {
+  return {
+    id: String(raw.id),
+    pointIds: Array.isArray(raw.pointIds) ? raw.pointIds.map((id) => String(id)) : [],
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    style: (raw.style as PolygonStyle) ?? defaultPolygonStyle,
+  };
+}
+
 function hydrateNumber(raw: Record<string, unknown>): SceneNumber {
   return {
     id: String(raw.id),
@@ -444,6 +466,19 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (exportError) throw exportError;
     if (!tikz.includes("\\tkzDefPointOnCircle")) {
       throw new Error("Expected sector constrained-endpoint fixture to emit pointOnCircle construction.");
+    }
+  }
+
+  if (fileName === "polygon-basic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\draw[")) {
+      throw new Error("Expected polygon fixture to emit raw TikZ draw command.");
+    }
+    if (!tikz.includes("-- cycle;")) {
+      throw new Error("Expected polygon fixture to emit closed cycle path.");
+    }
+    if (!tikz.includes("pattern=grid") || !tikz.includes("pattern color=")) {
+      throw new Error("Expected polygon fixture to preserve pattern + pattern color options.");
     }
   }
 
@@ -564,11 +599,12 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "angle-right-approx-only.json") {
-    if (!exportError) {
-      throw new Error("Expected approx-right fixture to fail-closed for right-angle mark.");
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkAngle")) {
+      throw new Error("Expected approx-right fixture to fallback to \\tkzMarkAngle.");
     }
-    if (!exportError.message.includes("Unsupported construction: RightAngleMark on non-right angle")) {
-      throw exportError;
+    if (tikz.includes("\\tkzMarkRightAngles")) {
+      throw new Error("Expected approx-right fixture to avoid \\tkzMarkRightAngles.");
     }
     return;
   }

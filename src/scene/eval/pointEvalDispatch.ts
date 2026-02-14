@@ -1,5 +1,7 @@
 import type { Vec2 } from "../../geo/vec2";
 import type {
+  CircleCircleIntersectionPoint,
+  CircleSegmentIntersectionPoint,
   CircleCenterPoint,
   CircleLineIntersectionPoint,
   GeometryObjectRef,
@@ -12,12 +14,16 @@ import type {
   PointOnSegment,
   SceneModel,
   ScenePoint,
+  LineLikeIntersectionPoint,
 } from "../points";
 import type { SceneEvalContext } from "./sceneContextBuilder";
 import type { AngleExpressionEvalResult } from "./expressionEval";
 import {
+  evalCircleCircleIntersectionPoint,
+  evalCircleSegmentIntersectionPoint,
   evalCircleLineIntersectionPoint,
   evalGenericIntersectionPoint,
+  evalLineLikeIntersectionPoint,
 } from "./pointIntersectionEvaluators";
 import {
   evalCircleCenterPointPoint,
@@ -88,6 +94,9 @@ export function evalPointUnchecked(
   if (point.kind === "pointByRotation") return evalPointByRotation(point, scene, ctx, ops);
   if (point.kind === "circleCenter") return evalCircleCenterPoint(point, scene, ctx, ops);
   if (point.kind === "circleLineIntersectionPoint") return evalCircleLineIntersection(point, scene, ctx, ops);
+  if (point.kind === "circleSegmentIntersectionPoint") return evalCircleSegmentIntersection(point, scene, ctx, ops);
+  if (point.kind === "circleCircleIntersectionPoint") return evalCircleCircleIntersection(point, scene, ctx, ops);
+  if (point.kind === "lineLikeIntersectionPoint") return evalLineLikeIntersection(point, scene, ctx, ops);
   return evalGenericIntersection(point, scene, ctx, ops);
 }
 
@@ -184,6 +193,48 @@ function evalGenericIntersection(
   ops: PointEvalDispatchOps
 ): Vec2 | null {
   return evalGenericIntersectionPoint(point, scene, ctx, {
+    objectIntersections: ops.objectIntersections,
+    resolveGenericIntersectionPairAssignments: ops.resolveGenericIntersectionPairAssignments,
+    rememberStablePoint: (pointId, _signature, value) =>
+      ops.rememberStableGenericIntersectionPoint(pointId, point.objA, point.objB, value),
+  });
+}
+
+function evalCircleSegmentIntersection(
+  point: CircleSegmentIntersectionPoint,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalCircleSegmentIntersectionPoint(point, scene, ctx, {
+    objectIntersections: ops.objectIntersections,
+    resolveGenericIntersectionPairAssignments: ops.resolveGenericIntersectionPairAssignments,
+    rememberStablePoint: (pointId, _signature, value) =>
+      ops.rememberStableGenericIntersectionPoint(pointId, { type: "segment", id: point.segId }, { type: "circle", id: point.circleId }, value),
+  });
+}
+
+function evalCircleCircleIntersection(
+  point: CircleCircleIntersectionPoint,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalCircleCircleIntersectionPoint(point, scene, ctx, {
+    objectIntersections: ops.objectIntersections,
+    resolveGenericIntersectionPairAssignments: ops.resolveGenericIntersectionPairAssignments,
+    rememberStablePoint: (pointId, _signature, value) =>
+      ops.rememberStableGenericIntersectionPoint(pointId, { type: "circle", id: point.circleAId }, { type: "circle", id: point.circleBId }, value),
+  });
+}
+
+function evalLineLikeIntersection(
+  point: LineLikeIntersectionPoint,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalLineLikeIntersectionPoint(point, scene, ctx, {
     objectIntersections: ops.objectIntersections,
     resolveGenericIntersectionPairAssignments: ops.resolveGenericIntersectionPairAssignments,
     rememberStablePoint: (pointId, _signature, value) =>

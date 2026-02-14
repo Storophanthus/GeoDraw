@@ -116,6 +116,17 @@ export type CircleStyle = {
   patternColor?: string;
 };
 
+export type PolygonStyle = {
+  strokeColor: string;
+  strokeWidth: number;
+  strokeDash: "solid" | "dashed" | "dotted";
+  strokeOpacity: number;
+  fillColor?: string;
+  fillOpacity?: number;
+  pattern?: string;
+  patternColor?: string;
+};
+
 export type AngleMarkStyle =
   | "arc"
   | "none"
@@ -460,6 +471,13 @@ export type SceneCircleFixedRadius = {
 
 export type SceneCircle = SceneCircleTwoPoint | SceneCircleThreePoint | SceneCircleFixedRadius;
 
+export type ScenePolygon = {
+  id: string;
+  pointIds: string[];
+  visible: boolean;
+  style: PolygonStyle;
+};
+
 export type SceneAngle = {
   id: string;
   kind?: "angle" | "sector";
@@ -538,6 +556,7 @@ export type SceneModel = {
   segments: SceneSegment[];
   lines: SceneLine[];
   circles: SceneCircle[];
+  polygons: ScenePolygon[];
   angles: SceneAngle[];
   numbers: SceneNumber[];
 };

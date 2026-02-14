@@ -6,6 +6,7 @@ import type {
   LineLikeObjectRef,
   LineStyle,
   PointStyle,
+  PolygonStyle,
   SceneModel,
   SceneNumberDefinition,
   ScenePoint,
@@ -23,6 +24,7 @@ export type ActiveTool =
   | "circle_cp"
   | "circle_3p"
   | "circle_fixed"
+  | "polygon"
   | "sector"
   | "perp_line"
   | "parallel_line"
@@ -37,6 +39,7 @@ export type SelectedObject =
   | { type: "segment"; id: string }
   | { type: "line"; id: string }
   | { type: "circle"; id: string }
+  | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
   | { type: "number"; id: string }
   | null;
@@ -46,6 +49,7 @@ export type HoveredHit =
   | { type: "segment"; id: string }
   | { type: "line2p"; id: string }
   | { type: "circle"; id: string }
+  | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
   | null;
 
@@ -79,6 +83,11 @@ export type PendingSelection =
     tool: "segment" | "line2p" | "circle_cp" | "midpoint";
     step: 2;
     first: { type: "point"; id: string };
+  }
+  | {
+    tool: "polygon";
+    step: 2;
+    points: Array<{ type: "point"; id: string }>;
   }
   | {
     tool: "circle_3p";
@@ -154,12 +163,14 @@ export type GeoState = {
   nextSegmentId: number;
   nextLineId: number;
   nextCircleId: number;
+  nextPolygonId: number;
   nextAngleId: number;
   nextNumberId: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
+  polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
   angleFixedTool: {
     angleExpr: string;
@@ -175,6 +186,7 @@ export type GeoState = {
     pointStyle: PointStyle | null;
     lineStyle: LineStyle | null;
     circleStyle: CircleStyle | null;
+    polygonStyle: PolygonStyle | null;
     angleStyle: Partial<AngleStyle> | null;
     showLabel: ShowLabelMode | null;
   };
@@ -216,6 +228,7 @@ export type GeoActions = {
   createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
   createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
+  createPolygon: (pointIds: string[]) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number) => string | null;
@@ -238,6 +251,7 @@ export type GeoActions = {
   setSegmentDefaults: (next: Partial<LineStyle>) => void;
   setLineDefaults: (next: Partial<LineStyle>) => void;
   setCircleDefaults: (next: Partial<CircleStyle>) => void;
+  setPolygonDefaults: (next: Partial<PolygonStyle>) => void;
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
   setCircleFixedTool: (next: Partial<GeoState["circleFixedTool"]>) => void;
@@ -254,10 +268,12 @@ export type GeoActions = {
   updateSelectedSegmentStyle: (next: Partial<LineStyle>) => void;
   updateSelectedLineStyle: (next: Partial<LineStyle>) => void;
   updateSelectedCircleStyle: (next: Partial<CircleStyle>) => void;
+  updateSelectedPolygonStyle: (next: Partial<PolygonStyle>) => void;
   updateSelectedAngleStyle: (next: Partial<AngleStyle>) => void;
   updateSelectedSegmentFields: (next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel">>) => void;
   updateSelectedLineFields: (next: Partial<Pick<SceneModel["lines"][number], "visible">>) => void;
   updateSelectedCircleFields: (next: Partial<Pick<SceneModel["circles"][number], "visible">>) => void;
+  updateSelectedPolygonFields: (next: Partial<Pick<SceneModel["polygons"][number], "visible">>) => void;
   updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;
   setObjectVisibility: (
     obj: Exclude<SelectedObject, null>,

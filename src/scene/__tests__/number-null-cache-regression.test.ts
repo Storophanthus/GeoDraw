@@ -138,6 +138,7 @@ const scene: SceneModel = {
     { id: "l_1", kind: "twoPoint", aId: "p_4", bId: "p_7", visible: false, style: lineStyle },
   ],
   circles: [{ id: "c_1", centerId: "p_8", throughId: "p_3", visible: true, style: circleStyle }],
+  polygons: [],
   angles: [{ id: "a_1", aId: "p_1", bId: "p_2", cId: "p_3", visible: true, style: angleStyle }],
   numbers: [
     { id: "n_1", name: "ang_1", visible: true, definition: { kind: "angleDegrees", angleId: "a_1" } },

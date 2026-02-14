@@ -69,6 +69,7 @@ const scene: SceneModel = {
   circles: [],
   angles: [],
   numbers: [],
+    polygons: [],
 };
 
 const tikz = exportTikz(scene);

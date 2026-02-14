@@ -26,6 +26,7 @@ export function drawSegmentMarkOverlay(
   const cx = p1.x + ux * (len * pos);
   const cy = p1.y + uy * (len * pos);
   const size = Math.max(1, mark.sizePt);
+  const tickHalf = size * 2.2;
   const gap = Math.max(2, size * 0.85);
   const lineWidth = Math.max(0.5, mark.lineWidthPt ?? style.strokeWidth);
   const color = mark.color ?? style.strokeColor;
@@ -43,8 +44,8 @@ export function drawSegmentMarkOverlay(
     const ox = cx + ux * offsetAlong;
     const oy = cy + uy * offsetAlong;
     ctx.beginPath();
-    ctx.moveTo(ox - nx * size, oy - ny * size);
-    ctx.lineTo(ox + nx * size, oy + ny * size);
+    ctx.moveTo(ox - nx * tickHalf, oy - ny * tickHalf);
+    ctx.lineTo(ox + nx * tickHalf, oy + ny * tickHalf);
     ctx.stroke();
   };
 
@@ -52,8 +53,8 @@ export function drawSegmentMarkOverlay(
     const ox = cx + ux * offsetAlong;
     const oy = cy + uy * offsetAlong;
     ctx.beginPath();
-    ctx.moveTo(ox - ux * size - nx * size * 0.55, oy - uy * size - ny * size * 0.55);
-    ctx.lineTo(ox + ux * size + nx * size * 0.55, oy + uy * size + ny * size * 0.55);
+    ctx.moveTo(ox - ux * tickHalf - nx * tickHalf * 0.55, oy - uy * tickHalf - ny * tickHalf * 0.55);
+    ctx.lineTo(ox + ux * tickHalf + nx * tickHalf * 0.55, oy + uy * tickHalf + ny * tickHalf * 0.55);
     ctx.stroke();
   };
 

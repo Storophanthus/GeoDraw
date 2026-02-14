@@ -1,6 +1,7 @@
 import { distance } from "../../geo/geometry";
 import type { Vec2 } from "../../geo/vec2";
-import type { GeometryObjectRef, LineLikeObjectRef, SceneCircle, SceneLine } from "../points";
+import { computeOrientedAngleRad } from "./angleMath";
+import type { GeometryObjectRef, LineLikeObjectRef, SceneAngle, SceneCircle, SceneLine } from "../points";
 
 type SegmentRef = { aId: string; bId: string };
 
@@ -9,6 +10,7 @@ type GeometryResolveOps = {
   getLineById: (id: string) => SceneLine | null;
   getSegmentById: (id: string) => SegmentRef | null;
   getCircleById: (id: string) => SceneCircle | null;
+  getAngleById: (id: string) => SceneAngle | null;
   evaluateCircleRadiusExpr: (expr: string) => number | null;
   lineInProgress: Set<string>;
 };
@@ -205,4 +207,23 @@ export function asCircleWithOps(
   const circle = ops.getCircleById(ref.id);
   if (!circle) return null;
   return getCircleWorldGeometryWithOps(circle, ops);
+}
+
+export function asSectorArcWithOps(
+  ref: GeometryObjectRef,
+  ops: GeometryResolveOps
+): { center: Vec2; radius: number; start: number; sweep: number } | null {
+  if (ref.type !== "angle") return null;
+  const angle = ops.getAngleById(ref.id);
+  if (!angle || angle.kind !== "sector") return null;
+  const a = ops.getPointWorldById(angle.aId);
+  const b = ops.getPointWorldById(angle.bId);
+  const c = ops.getPointWorldById(angle.cId);
+  if (!a || !b || !c) return null;
+  const radius = distance(a, b);
+  if (!Number.isFinite(radius) || radius <= 1e-12) return null;
+  const sweep = computeOrientedAngleRad(a, b, c);
+  if (sweep === null) return null;
+  const start = Math.atan2(a.y - b.y, a.x - b.x);
+  return { center: b, radius, start, sweep };
 }

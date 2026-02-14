@@ -69,6 +69,7 @@ const scene: SceneModel = {
   circles: [],
   angles: [],
   numbers: [],
+    polygons: [],
 };
 
 const camera: Camera = { pos: { x: 0, y: 0 }, zoom: 100 };
@@ -114,6 +115,9 @@ constructFromClick({
       return null;
     },
     createCircleThreePoint() {
+      return null;
+    },
+    createPolygon() {
       return null;
     },
     createPerpendicularLine() {

@@ -59,6 +59,24 @@ export function drawInteractionHighlights(
       }
       return;
     }
+    if (pendingSelection.tool === "polygon") {
+      for (let i = 0; i < pendingSelection.points.length; i += 1) {
+        drawHitHighlight(
+          ctx,
+          { type: "point", id: pendingSelection.points[i].id },
+          resolvedPoints,
+          scene,
+          camera,
+          vp,
+          i === 0 ? "#16a34a" : "#22c55e",
+          0.95
+        );
+      }
+      if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
+        drawHitHighlight(ctx, hoveredHit, resolvedPoints, scene, camera, vp, "#0ea5e9", 0.9);
+      }
+      return;
+    }
     if (
       (pendingSelection.tool === "perp_line" || pendingSelection.tool === "parallel_line") &&
       pendingSelection.first.type === "lineLike"
@@ -196,7 +214,7 @@ function drawHitHighlight(
     const radiusPx =
       angle.kind === "sector"
         ? Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y))
-        : Math.max(16, angle.style.arcRadius * camera.zoom);
+        : Math.max(18, Math.min(120, angle.style.arcRadius * 34));
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
@@ -216,6 +234,28 @@ function drawHitHighlight(
     } else {
       drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
     }
+    ctx.restore();
+    return;
+  }
+
+  if (hit.type === "polygon") {
+    const polygon = scene.polygons.find((item) => item.id === hit.id);
+    if (!polygon || !polygon.visible || polygon.pointIds.length < 3) return;
+    const screenPoints = polygon.pointIds
+      .map((id) => geoStoreHelpers.getPointWorldById(scene, id))
+      .filter((world): world is Vec2 => Boolean(world))
+      .map((world) => camMath.worldToScreen(world, camera, vp));
+    if (screenPoints.length < 3) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = polygon.style.strokeWidth + 2.5;
+    ctx.beginPath();
+    ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+    for (let i = 1; i < screenPoints.length; i += 1) ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+    ctx.closePath();
+    ctx.stroke();
     ctx.restore();
     return;
   }

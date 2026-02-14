@@ -19,6 +19,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   let segments = scene.segments;
   let lines = scene.lines;
   let circles = scene.circles;
+  let polygons = scene.polygons;
   let angles = scene.angles;
   let numbers = scene.numbers;
   let changed = false;
@@ -40,6 +41,9 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     });
     const nextAngles = angles.filter(
       (angle) => pointIds.has(angle.aId) && pointIds.has(angle.bId) && pointIds.has(angle.cId)
+    );
+    const nextPolygons = polygons.filter(
+      (polygon) => polygon.pointIds.length >= 3 && polygon.pointIds.every((pointId) => pointIds.has(pointId))
     );
 
     const nextSegmentIds = new Set(nextSegments.map((s) => s.id));
@@ -63,7 +67,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
 
     const nextLineIdsAfter = new Set(nextLines.map((l) => l.id));
 
-    const sceneForPass: SceneModel = { points, lines, segments, circles, angles, numbers };
+    const sceneForPass: SceneModel = { points, lines, segments, circles, polygons, angles, numbers };
     const pointsWithBranches = points.map((point) => {
       if (
         point.kind !== "intersectionPoint" ||
@@ -149,6 +153,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       !sameIds(nextSegments, segments) ||
       !sameIds(nextLines, lines) ||
       !sameIds(nextCircles, circles) ||
+      !sameIds(nextPolygons, polygons) ||
       !sameIds(nextAngles, angles) ||
       !sameIds(nextNumbers, numbers) ||
       nextPoints.some((point, idx) => point !== points[idx]);
@@ -157,6 +162,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     segments = nextSegments;
     lines = nextLines;
     circles = nextCircles;
+    polygons = nextPolygons;
     angles = nextAngles;
     numbers = nextNumbers;
     changed = changed || anyChanged;
@@ -164,5 +170,5 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   }
 
   if (!changed) return scene;
-  return { ...scene, points, segments, lines, circles, angles, numbers };
+  return { ...scene, points, segments, lines, circles, polygons, angles, numbers };
 }

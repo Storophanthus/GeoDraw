@@ -6,6 +6,7 @@ import type {
   SceneAngle,
   SceneCircle,
   SceneLine,
+  ScenePolygon,
   SceneSegment,
 } from "../scene/points";
 
@@ -36,11 +37,13 @@ type ObjectStyleSectionsProps = {
   selectedSegment: SceneSegment | null;
   selectedLine: SceneLine | null;
   selectedCircle: SceneCircle | null;
+  selectedPolygon: ScenePolygon | null;
   selectedAngle: SceneAngle | null;
   selectedAngleRightStatus: "none" | "approx" | "exact";
   updateSelectedSegmentStyle: (style: Partial<LineStyle>) => void;
   updateSelectedLineStyle: (style: Partial<LineStyle>) => void;
   updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
+  updateSelectedPolygonStyle: (style: Partial<ScenePolygon["style"]>) => void;
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
   deleteSelectedObject: () => void;
 };
@@ -50,17 +53,27 @@ export function ObjectStyleSections({
   selectedSegment,
   selectedLine,
   selectedCircle,
+  selectedPolygon,
   selectedAngle,
   selectedAngleRightStatus,
   updateSelectedSegmentStyle,
   updateSelectedLineStyle,
   updateSelectedCircleStyle,
+  updateSelectedPolygonStyle,
   updateSelectedAngleStyle,
   deleteSelectedObject,
 }: ObjectStyleSectionsProps) {
   const selectedAngleIsRight = selectedAngleRightStatus !== "none";
   const selectedAngleIsRightExact = selectedAngleRightStatus === "exact";
   const selectedAngleIsSector = selectedAngle?.kind === "sector";
+  const selectedAreaStyle = selectedPolygon ? selectedPolygon.style : selectedCircle?.style;
+  const updateSelectedAreaStyle = (style: Partial<CircleStyle>) => {
+    if (selectedPolygon) {
+      updateSelectedPolygonStyle(style);
+      return;
+    }
+    updateSelectedCircleStyle(style);
+  };
   const angleArcVariant =
     selectedAngle?.style.markStyle === "none"
       ? "none"
@@ -646,16 +659,16 @@ export function ObjectStyleSections({
         </div>
       )}
 
-      {!selectedPointPresent && !selectedAngle && selectedCircle && (
+      {!selectedPointPresent && !selectedAngle && selectedAreaStyle && (
         <div className="cosmeticsBlock">
-          <div className="subSectionTitle">Circle Style</div>
+          <div className="subSectionTitle">{selectedPolygon ? "Polygon Style" : "Circle Style"}</div>
           <div className="controlRow">
             <label className="controlLabel">Stroke Color</label>
             <input
               className="colorInput"
               type="color"
-              value={selectedCircle.style.strokeColor}
-              onChange={(e) => updateSelectedCircleStyle({ strokeColor: e.target.value })}
+              value={selectedAreaStyle.strokeColor}
+              onChange={(e) => updateSelectedAreaStyle({ strokeColor: e.target.value })}
             />
           </div>
           <div className="controlRow">
@@ -666,17 +679,17 @@ export function ObjectStyleSections({
               min={0.5}
               max={6}
               step={0.1}
-              value={selectedCircle.style.strokeWidth}
-              onChange={(e) => updateSelectedCircleStyle({ strokeWidth: Number(e.target.value) })}
+              value={selectedAreaStyle.strokeWidth}
+              onChange={(e) => updateSelectedAreaStyle({ strokeWidth: Number(e.target.value) })}
             />
           </div>
           <div className="controlRow">
             <label className="controlLabel">Dash</label>
             <select
               className="selectInput"
-              value={selectedCircle.style.strokeDash}
+              value={selectedAreaStyle.strokeDash}
               onChange={(e) =>
-                updateSelectedCircleStyle({ strokeDash: e.target.value as "solid" | "dashed" | "dotted" })
+                updateSelectedAreaStyle({ strokeDash: e.target.value as "solid" | "dashed" | "dotted" })
               }
             >
               <option value="solid">Solid</option>
@@ -692,8 +705,8 @@ export function ObjectStyleSections({
               min={0}
               max={1}
               step={0.01}
-              value={selectedCircle.style.strokeOpacity}
-              onChange={(e) => updateSelectedCircleStyle({ strokeOpacity: Number(e.target.value) })}
+              value={selectedAreaStyle.strokeOpacity}
+              onChange={(e) => updateSelectedAreaStyle({ strokeOpacity: Number(e.target.value) })}
             />
           </div>
           <div className="controlRow">
@@ -701,8 +714,8 @@ export function ObjectStyleSections({
             <input
               className="colorInput"
               type="color"
-              value={selectedCircle.style.fillColor ?? "#FFFFFF"}
-              onChange={(e) => updateSelectedCircleStyle({ fillColor: e.target.value })}
+              value={selectedAreaStyle.fillColor ?? "#FFFFFF"}
+              onChange={(e) => updateSelectedAreaStyle({ fillColor: e.target.value })}
             />
           </div>
           <div className="controlRow">
@@ -713,11 +726,11 @@ export function ObjectStyleSections({
               min={0}
               max={1}
               step={0.01}
-              value={selectedCircle.style.fillOpacity ?? 0}
+              value={selectedAreaStyle.fillOpacity ?? 0}
               onChange={(e) =>
-                updateSelectedCircleStyle({
+                updateSelectedAreaStyle({
                   fillOpacity: Number(e.target.value),
-                  fillColor: selectedCircle.style.fillColor ?? "#FFFFFF",
+                  fillColor: selectedAreaStyle.fillColor ?? "#FFFFFF",
                 })
               }
             />
@@ -726,8 +739,8 @@ export function ObjectStyleSections({
             <label className="controlLabel">Fill Pattern</label>
             <select
               className="selectInput"
-              value={selectedCircle.style.pattern ?? ""}
-              onChange={(e) => updateSelectedCircleStyle({ pattern: e.target.value })}
+              value={selectedAreaStyle.pattern ?? ""}
+              onChange={(e) => updateSelectedAreaStyle({ pattern: e.target.value })}
             >
               {FILL_PATTERN_OPTIONS.map((opt) => (
                 <option key={opt.value || "none"} value={opt.value}>
@@ -736,14 +749,14 @@ export function ObjectStyleSections({
               ))}
             </select>
           </div>
-          {(selectedCircle.style.pattern ?? "") !== "" && (
+          {(selectedAreaStyle.pattern ?? "") !== "" && (
             <div className="controlRow">
               <label className="controlLabel">Pattern Color</label>
               <input
                 className="colorInput"
                 type="color"
-                value={selectedCircle.style.patternColor ?? selectedCircle.style.strokeColor}
-                onChange={(e) => updateSelectedCircleStyle({ patternColor: e.target.value })}
+                value={selectedAreaStyle.patternColor ?? selectedAreaStyle.strokeColor}
+                onChange={(e) => updateSelectedAreaStyle({ patternColor: e.target.value })}
               />
             </div>
           )}

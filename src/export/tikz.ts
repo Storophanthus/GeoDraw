@@ -912,6 +912,23 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       });
     }
   }
+  for (const polygon of scene.polygons) {
+    if (!polygon.visible) continue;
+    if (polygon.pointIds.length < 3) continue;
+    const names: string[] = [];
+    for (let i = 0; i < polygon.pointIds.length; i += 1) {
+      const pointId = polygon.pointIds[i];
+      resolvePoint(pointId);
+      if (!definedPointIds.has(pointId)) {
+        throw new Error(`Cannot export undefined polygon geometry: ${polygon.id}`);
+      }
+      names.push(mustName(pointName, pointId));
+    }
+    const style = polygonStyleToTikz(polygon.style, options);
+    const path = names.map((name, idx) => (idx === 0 ? `(${name})` : ` -- (${name})`)).join("");
+    const opts = style ? `[${style}]` : "";
+    draws.push({ kind: "DrawRaw", tex: `\\draw${opts} ${path} -- cycle;` });
+  }
   for (const angle of scene.angles) {
     if (!angle.visible) continue;
     resolvePoint(angle.aId);
@@ -1973,6 +1990,22 @@ function lineStyleToTikz(style: SceneModel["lines"][number]["style"], options: T
 }
 
 function circleStyleToTikz(style: SceneModel["circles"][number]["style"], options: TikzExportOptions): string {
+  const opts = lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash, style.strokeOpacity, options);
+  const parts = opts.split(", ").filter(Boolean);
+  const fillOpacity = clamp01(style.fillOpacity ?? 0);
+  if (fillOpacity > 0) {
+    parts.push(`fill=${rgbColorExpr(style.fillColor ?? style.strokeColor)}`);
+    parts.push(`fill opacity=${fmt(fillOpacity)}`);
+  }
+  const pattern = readPatternOption(style);
+  if (pattern) {
+    parts.push(pattern.patternExpr);
+    if (pattern.patternColorExpr) parts.push(pattern.patternColorExpr);
+  }
+  return parts.join(", ");
+}
+
+function polygonStyleToTikz(style: SceneModel["polygons"][number]["style"], options: TikzExportOptions): string {
   const opts = lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash, style.strokeOpacity, options);
   const parts = opts.split(", ").filter(Boolean);
   const fillOpacity = clamp01(style.fillOpacity ?? 0);

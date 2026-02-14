@@ -17,7 +17,7 @@ function buildParseContext(
   scene: SceneModel,
   ans: number | null,
   scalarVars: Record<string, number>,
-  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle"; id: string }>
+  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon"; id: string }>
 ): ParseContext {
   const symbolsByLabel = new Map<string, Symbol[]>();
   const add = (symbol: Symbol) => {
@@ -56,6 +56,7 @@ export function CommandBar() {
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
   const createLine = useGeoStore((store) => store.createLine);
   const createSegment = useGeoStore((store) => store.createSegment);
+  const createPolygon = useGeoStore((store) => store.createPolygon);
   const createCircle = useGeoStore((store) => store.createCircle);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
 
@@ -153,6 +154,15 @@ export function CommandBar() {
         setStatus({ kind: "ok", text: `${name}: Segment created` });
         return;
       }
+      if (cmd.type === "CreatePolygonByPoints") {
+        const id = commandBarApi.createPolygonWithLabel(cmd.pointIds, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct polygon" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Polygon created` });
+        return;
+      }
       if (cmd.type === "CreateCircleCenterThrough") {
         const id = commandBarApi.createCircleCenterThroughWithLabel(cmd.centerId, cmd.throughId, name);
         if (!id) {
@@ -219,6 +229,16 @@ export function CommandBar() {
         return;
       }
       setStatus({ kind: "ok", text: `Created segment ${segId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePolygonByPoints") {
+      const polygonId = createPolygon(cmd.pointIds);
+      if (!polygonId) {
+        setStatus({ kind: "error", text: "Cannot construct polygon" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created polygon ${polygonId}` });
       return;
     }
 

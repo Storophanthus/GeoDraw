@@ -16,6 +16,7 @@ const HUGE_RADIUS_PICK_PX = 200_000;
 
 export type EngineHit =
   | { type: "point"; id: string }
+  | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
   | { type: "segment"; id: string }
   | { type: "line"; id: string }
@@ -218,6 +219,37 @@ export function hitTestAngleId(
   return bestId;
 }
 
+export function hitTestPolygonId(
+  screenPoint: Vec2,
+  scene: SceneModel,
+  camera: Camera,
+  vp: Viewport,
+  tolerancePx: number
+): string | null {
+  for (let i = scene.polygons.length - 1; i >= 0; i -= 1) {
+    const polygon = scene.polygons[i];
+    if (!polygon.visible || polygon.pointIds.length < 3) continue;
+    const screenVertices = polygon.pointIds
+      .map((id) => scene.points.find((p) => p.id === id))
+      .map((point) => (point ? getPointWorldPos(point, scene) : null))
+      .filter((world): world is Vec2 => Boolean(world))
+      .map((world) => camMath.worldToScreen(world, camera, vp));
+    if (screenVertices.length < 3) continue;
+    if (pointInPolygon(screenPoint, screenVertices)) return polygon.id;
+    let nearEdge = false;
+    for (let j = 0; j < screenVertices.length; j += 1) {
+      const a = screenVertices[j];
+      const b = screenVertices[(j + 1) % screenVertices.length];
+      if (projectPointToSegment(screenPoint, a, b).distance <= tolerancePx) {
+        nearEdge = true;
+        break;
+      }
+    }
+    if (nearEdge) return polygon.id;
+  }
+  return null;
+}
+
 export function hitTestTopObject(
   scene: SceneModel,
   camera: Camera,
@@ -241,6 +273,8 @@ export function hitTestTopObject(
 
   const pointId = hitTestPointId(screenPoint, resolvedPoints, camera, vp, pointTolPx);
   if (pointId) return { type: "point", id: pointId };
+  const polygonId = hitTestPolygonId(screenPoint, scene, camera, vp, segmentTolPx);
+  if (polygonId) return { type: "polygon", id: polygonId };
   const angleId = hitTestAngleId(screenPoint, resolveVisibleAngles(scene), camera, vp, angleTolPx);
   if (angleId) return { type: "angle", id: angleId };
   const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx);
@@ -251,6 +285,19 @@ export function hitTestTopObject(
   if (circleId) return { type: "circle", id: circleId };
 
   return null;
+}
+
+function pointInPolygon(point: Vec2, vertices: Vec2[]): boolean {
+  let inside = false;
+  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i, i += 1) {
+    const xi = vertices[i].x;
+    const yi = vertices[i].y;
+    const xj = vertices[j].x;
+    const yj = vertices[j].y;
+    const intersects = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + 1e-12) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
 }
 
 function angleSweep(aScreen: Vec2, bScreen: Vec2, thetaRad: number): { start: number; sweep: number } {

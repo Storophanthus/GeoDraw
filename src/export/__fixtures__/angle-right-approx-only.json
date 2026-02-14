@@ -1,22 +1,38 @@
 {
   "version": 1,
   "points": [
-    { "id": "p_1", "name": "A", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 0, "y": 0 } },
-    { "id": "p_2", "name": "B", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 0, "y": 1 } },
-    { "id": "p_3", "name": "C", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 1, "y": 1 } }
+    {
+      "id": "p_1",
+      "name": "A",
+      "definition": { "kind": "free", "x": 0, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_2",
+      "name": "B",
+      "definition": { "kind": "free", "x": 0, "y": 2 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_3",
+      "name": "C",
+      "definition": { "kind": "free", "x": 2.0001, "y": 2 },
+      "visible": true,
+      "showLabel": "name"
+    }
   ],
-  "numbers": [],
   "lines": [],
   "segments": [],
   "circles": [],
   "angles": [
     {
       "id": "a_1",
-      "kind": "angle",
       "aId": "p_1",
       "bId": "p_2",
       "cId": "p_3",
-      "isRightExact": true,
+      "isRightExact": false,
       "visible": true,
       "style": {
         "strokeColor": "#334155",
@@ -33,12 +49,13 @@
         "markPos": 0.5,
         "markSize": 4,
         "markColor": "#334155",
-        "arcRadius": 1.2,
+        "arcRadius": 2.1,
         "labelText": "",
-        "labelPosWorld": { "x": 0.3, "y": 1.3 },
-        "showLabel": true,
-        "showValue": true
+        "labelPosWorld": { "x": 0.4, "y": 1.6 },
+        "showLabel": false,
+        "showValue": false
       }
     }
-  ]
+  ],
+  "numbers": []
 }

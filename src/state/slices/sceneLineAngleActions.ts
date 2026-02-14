@@ -1,4 +1,5 @@
 import { distance } from "../../geo/geometry";
+import { isRightExactByProvenance, registerPerpendicularRelation } from "../../domain/rightAngleProvenance";
 import {
   computeOrientedAngleRad,
   evaluateAngleExpressionDegrees,
@@ -69,6 +70,7 @@ export function createSceneLineAngleActions(
           nextLineId: prev.nextLineId + 1,
         };
       });
+      if (id) registerPerpendicularRelation(id, base);
       return id;
     },
 
@@ -252,11 +254,14 @@ export function createSceneLineAngleActions(
         if (!wa || !wb || !wc) return prev;
         const theta = computeOrientedAngleRad(wa, wb, wc);
         if (theta === null) return prev;
+        const isRightExact = isRightExactByProvenance(prev.scene, aId, bId, cId);
         const start = Math.atan2(wa.y - wb.y, wa.x - wb.x);
         const mid = start + theta * 0.5;
         const dir = { x: Math.cos(mid), y: Math.sin(mid) };
         const labelDist = Math.max(0.45, prev.angleDefaults.arcRadius * 1.25);
         const labelPosWorld = { x: wb.x + dir.x * labelDist, y: wb.y + dir.y * labelDist };
+        const markStyle =
+          isRightExact && prev.angleDefaults.markStyle === "arc" ? "rightSquare" : prev.angleDefaults.markStyle;
 
         id = `a_${prev.nextAngleId}`;
         return {
@@ -270,9 +275,11 @@ export function createSceneLineAngleActions(
                 aId,
                 bId,
                 cId,
+                isRightExact,
                 visible: true,
                 style: {
                   ...prev.angleDefaults,
+                  markStyle,
                   labelPosWorld,
                 },
               },
@@ -320,6 +327,7 @@ export function createSceneLineAngleActions(
                 aId: startId,
                 bId: centerId,
                 cId: endId,
+                isRightExact: false,
                 visible: true,
                 style: {
                   ...prev.angleDefaults,
@@ -429,6 +437,7 @@ export function createSceneLineAngleActions(
                 aId: basePointId,
                 bId: vertexId,
                 cId: pointId,
+                isRightExact: false,
                 visible: true,
                 style: {
                   ...prev.angleDefaults,

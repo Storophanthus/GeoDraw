@@ -113,6 +113,9 @@ Notes:
 - Right-angle styles:
   - `RightSquare` -> `\tkzMarkRightAngles[...]`
   - `RightArcDot` -> `\tkzMarkRightAngles[german,...]`
+- Right-angle marks are fail-closed gated by `angle.isRightExact === true` (construction provenance).
+  - If a right-only mark style is requested on a non-right angle, exporter throws:
+    `Unsupported construction: RightAngleMark on non-right angle`
 - Non-right styles:
   - Vanilla arc -> `arc=l, mark=none`
   - Double arc -> `arc=ll`

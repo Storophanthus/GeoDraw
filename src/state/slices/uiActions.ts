@@ -13,6 +13,7 @@ export function createUiActions(
   | "setSegmentDefaults"
   | "setLineDefaults"
   | "setCircleDefaults"
+  | "setPolygonDefaults"
   | "setAngleDefaults"
   | "setAngleFixedTool"
   | "setCircleFixedTool"
@@ -59,6 +60,16 @@ export function createUiActions(
         ...prev,
         circleDefaults: {
           ...prev.circleDefaults,
+          ...next,
+        },
+      }));
+    },
+
+    setPolygonDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        polygonDefaults: {
+          ...prev.polygonDefaults,
           ...next,
         },
       }));

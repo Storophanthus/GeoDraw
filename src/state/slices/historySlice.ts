@@ -1,4 +1,4 @@
-import type { AngleStyle, CircleStyle, LineStyle, PointStyle, SceneModel } from "../../scene/points";
+import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneModel } from "../../scene/points";
 import type { ActiveTool, GeoState, SelectedObject } from "./storeTypes";
 
 export type SetStateOptions = {
@@ -18,12 +18,14 @@ export type HistorySnapshot = {
   nextSegmentId: number;
   nextLineId: number;
   nextCircleId: number;
+  nextPolygonId: number;
   nextAngleId: number;
   nextNumberId: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
+  polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
   angleFixedTool: GeoState["angleFixedTool"];
   circleFixedTool: GeoState["circleFixedTool"];
@@ -58,12 +60,14 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     nextSegmentId: prev.nextSegmentId,
     nextLineId: prev.nextLineId,
     nextCircleId: prev.nextCircleId,
+    nextPolygonId: prev.nextPolygonId,
     nextAngleId: prev.nextAngleId,
     nextNumberId: prev.nextNumberId,
     pointDefaults: prev.pointDefaults,
     segmentDefaults: prev.segmentDefaults,
     lineDefaults: prev.lineDefaults,
     circleDefaults: prev.circleDefaults,
+    polygonDefaults: prev.polygonDefaults,
     angleDefaults: prev.angleDefaults,
     angleFixedTool: prev.angleFixedTool,
     circleFixedTool: prev.circleFixedTool,
@@ -83,12 +87,14 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.nextSegmentId !== next.nextSegmentId ||
     prev.nextLineId !== next.nextLineId ||
     prev.nextCircleId !== next.nextCircleId ||
+    prev.nextPolygonId !== next.nextPolygonId ||
     prev.nextAngleId !== next.nextAngleId ||
     prev.nextNumberId !== next.nextNumberId ||
     prev.pointDefaults !== next.pointDefaults ||
     prev.segmentDefaults !== next.segmentDefaults ||
     prev.lineDefaults !== next.lineDefaults ||
     prev.circleDefaults !== next.circleDefaults ||
+    prev.polygonDefaults !== next.polygonDefaults ||
     prev.angleDefaults !== next.angleDefaults
     || prev.exportClipRectWorld !== next.exportClipRectWorld
   );

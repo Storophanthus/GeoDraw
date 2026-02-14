@@ -1,4 +1,5 @@
 import type { Vec2 } from "../../geo/vec2";
+import { getCircleWorldGeometry, getPointWorldPos } from "../../scene/points";
 import type { Camera, Viewport } from "../../view/camera";
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState, HoveredHit, SelectedObject } from "./storeTypes";
@@ -24,6 +25,7 @@ export function createInteractionActions(
   | "clearPendingSelection"
   | "panByScreenDelta"
   | "zoomAtScreenPoint"
+  | "fitViewToScene"
 > {
   return {
     setActiveTool(tool) {
@@ -39,6 +41,7 @@ export function createInteractionActions(
                 pointStyle: null,
                 lineStyle: null,
                 circleStyle: null,
+                polygonStyle: null,
                 angleStyle: null,
                 showLabel: null,
               },
@@ -89,7 +92,62 @@ export function createInteractionActions(
         camera: ctx.cameraMath.zoomAtScreenPoint(prev.camera, vp, pScreen, zoomFactor),
       }));
     },
+
+    fitViewToScene(vp) {
+      ctx.setState((prev) => {
+        const bounds = computeSceneBounds(prev.scene);
+        if (!bounds) return prev;
+        const width = Math.max(1e-9, bounds.xmax - bounds.xmin);
+        const height = Math.max(1e-9, bounds.ymax - bounds.ymin);
+        const pad = Math.max(0.25, 0.12 * Math.max(width, height));
+        const xmin = bounds.xmin - pad;
+        const xmax = bounds.xmax + pad;
+        const ymin = bounds.ymin - pad;
+        const ymax = bounds.ymax + pad;
+        const w = Math.max(1e-9, xmax - xmin);
+        const h = Math.max(1e-9, ymax - ymin);
+        const zoom = Math.max(1e-12, Math.min(1e12, Math.min(vp.widthPx / w, vp.heightPx / h)));
+        return {
+          ...prev,
+          camera: {
+            ...prev.camera,
+            pos: { x: (xmin + xmax) * 0.5, y: (ymin + ymax) * 0.5 },
+            zoom,
+            logZoom: Math.log(zoom),
+          },
+        };
+      });
+    },
   };
+}
+
+function computeSceneBounds(scene: GeoState["scene"]): { xmin: number; xmax: number; ymin: number; ymax: number } | null {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  const add = (x: number, y: number) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  };
+
+  for (let i = 0; i < scene.points.length; i += 1) {
+    const p = getPointWorldPos(scene.points[i], scene);
+    if (p) add(p.x, p.y);
+  }
+  for (let i = 0; i < scene.circles.length; i += 1) {
+    const g = getCircleWorldGeometry(scene.circles[i], scene);
+    if (!g || !Number.isFinite(g.radius)) continue;
+    add(g.center.x - g.radius, g.center.y - g.radius);
+    add(g.center.x + g.radius, g.center.y + g.radius);
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+    return null;
+  }
+  return { xmin: minX, xmax: maxX, ymin: minY, ymax: maxY };
 }
 
 function isSameSelectedObject(a: SelectedObject, b: SelectedObject): boolean {

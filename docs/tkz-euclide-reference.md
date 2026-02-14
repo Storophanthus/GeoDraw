@@ -31,8 +31,13 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 % Right-angle arc + inner dot
 \tkzMarkRightAngles[german,size=0.35](A,B,C)
 
+% Note: GeoDraw emits right-angle macros only for construction-proven exact right angles.
+
 % Label by distance + absolute direction from B
 \tkzLabelAngle[dist=1.4,angle=42](A,B,C){$1.571\ \mathrm{rad}$}
+
+% Customized angle mark (position, size, color)
+\tkzMarkAngle[size=1.2,mark=||,mkpos=0.6,mksize=3,mkcolor=red](A,B,C)
 ```
 
 ## AngleFixed (deg) snippets
@@ -80,6 +85,9 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 % Circular sector AOB (center O)
 \tkzFillSector[fill=blue!20,fill opacity=0.25](O,A)(B)
 \tkzDrawSector[color=blue,line width=1pt](O,A)(B)
+
+% Sector with pattern
+\tkzFillSector[pattern=north east lines,pattern color=blue!50](O,A)(B)
 ```
 
 ## User Cheat-Sheet (verbatim)

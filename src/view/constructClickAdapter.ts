@@ -13,7 +13,7 @@ type RunConstructClickParams = {
   pointerEvent: PointerEvent;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "angle" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "number"; id: string } | null;
   scene: SceneModel;
   resolvedPoints: Array<{ point: SceneModel["points"][number]; world: Vec2 }>;
   camera: Camera;

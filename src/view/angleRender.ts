@@ -82,6 +82,6 @@ export function drawRightAngleSquareFill(
 }
 
 export function computeRightMarkSizePx(radiusPx: number, strokePx: number): number {
-  // Keep the default right-angle marker compact: ~1/4 arc radius + ~1/4 stroke.
-  return Math.max(5, radiusPx * 0.25 + Math.max(0, strokePx) * 0.25);
+  // Keep right-angle marker readable against current arc sizing.
+  return Math.max(7, radiusPx * 0.34 + Math.max(0, strokePx) * 0.3);
 }

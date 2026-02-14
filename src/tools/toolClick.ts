@@ -7,7 +7,7 @@ import type { SnapCandidate } from "../view/snapEngine";
 export type ToolClickHits = {
   hitPointId: string | null;
   hitSegmentId: string | null;
-  hitObject: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null;
+  hitObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null;
   shiftKey: boolean;
   hasCopyStyleSource: boolean;
   snap: SnapCandidate | null;
@@ -19,6 +19,7 @@ export type ToolClickIO = {
   createFreePoint: (world: Vec2) => string;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
+  createPolygon: (pointIds: string[]) => string | null;
   createCircle: (centerId: string, throughId: string) => string | null;
   createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
@@ -49,9 +50,9 @@ export type ToolClickIO = {
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipRectWorld: (rect: { xmin: number; xmax: number; ymin: number; ymax: number } | null) => void;
-  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string } | null) => void;
-  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
-  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "angle"; id: string }) => void;
+  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null) => void;
+  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
+  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
   getPointWorldById: (id: string) => Vec2 | null;
   gridSnapEnabled: boolean;
@@ -176,6 +177,29 @@ export function handleToolClick(
     const bId = resolveOrCreatePointAtCursor();
     io.createLine(pendingSelection.first.id, bId);
     io.clearPendingSelection();
+    return;
+  }
+
+  if (activeTool === "polygon") {
+    const nextPointId = resolveOrCreatePointAtCursor();
+    if (!pendingSelection || pendingSelection.tool !== "polygon") {
+      io.setPendingSelection({ tool: "polygon", step: 2, points: [{ type: "point", id: nextPointId }] });
+      return;
+    }
+    const points = pendingSelection.points.map((point) => point.id);
+    if (nextPointId === points[0]) {
+      if (points.length >= 3) {
+        io.createPolygon(points);
+        io.clearPendingSelection();
+      }
+      return;
+    }
+    if (points.includes(nextPointId)) return;
+    io.setPendingSelection({
+      tool: "polygon",
+      step: 2,
+      points: [...pendingSelection.points, { type: "point", id: nextPointId }],
+    });
     return;
   }
 
@@ -471,6 +495,7 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     activeTool === "circle_cp" ||
     activeTool === "circle_3p" ||
     activeTool === "circle_fixed" ||
+    activeTool === "polygon" ||
     activeTool === "sector" ||
     activeTool === "midpoint" ||
     activeTool === "angle_bisector" ||
@@ -483,7 +508,7 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
 export function isValidTarget(
   activeTool: ActiveTool,
   pendingSelection: PendingSelection,
-  hoveredHit: { type: "point" | "segment" | "line2p" | "circle" | "angle"; id: string } | null
+  hoveredHit: { type: "point" | "segment" | "line2p" | "circle" | "polygon" | "angle"; id: string } | null
 ): boolean {
   if (!hoveredHit) return false;
 
@@ -492,6 +517,7 @@ export function isValidTarget(
   if (activeTool === "circle_cp") return hoveredHit.type === "point";
   if (activeTool === "circle_3p") return hoveredHit.type === "point";
   if (activeTool === "circle_fixed") return hoveredHit.type === "point";
+  if (activeTool === "polygon") return hoveredHit.type === "point";
   if (activeTool === "angle_bisector") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";
   if (activeTool === "sector") return hoveredHit.type === "point";

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p1", "kind": "free", "name": "A", "captionTex": "A", "visible": true, "showLabel": "name", "position": { "x": -2, "y": -1 }, "style": { "shape": "circle", "sizePx": 4, "strokeColor": "#0f172a", "strokeWidth": 1.2, "strokeOpacity": 1, "fillColor": "#60a5fa", "fillOpacity": 1, "labelFontPx": 14, "labelHaloWidthPx": 2.5, "labelHaloColor": "#ffffff", "labelColor": "#0f172a", "labelOffsetPx": { "x": 8, "y": -8 } } },
+    { "id": "p2", "kind": "free", "name": "B", "captionTex": "B", "visible": true, "showLabel": "name", "position": { "x": 2, "y": 1 }, "style": { "shape": "circle", "sizePx": 4, "strokeColor": "#0f172a", "strokeWidth": 1.2, "strokeOpacity": 1, "fillColor": "#60a5fa", "fillOpacity": 1, "labelFontPx": 14, "labelHaloWidthPx": 2.5, "labelHaloColor": "#ffffff", "labelColor": "#0f172a", "labelOffsetPx": { "x": 8, "y": -8 } } },
+    { "id": "p3", "kind": "free", "name": "C", "captionTex": "C", "visible": true, "showLabel": "name", "position": { "x": -1, "y": 2 }, "style": { "shape": "circle", "sizePx": 4, "strokeColor": "#0f172a", "strokeWidth": 1.2, "strokeOpacity": 1, "fillColor": "#60a5fa", "fillOpacity": 1, "labelFontPx": 14, "labelHaloWidthPx": 2.5, "labelHaloColor": "#ffffff", "labelColor": "#0f172a", "labelOffsetPx": { "x": 8, "y": -8 } } },
+    { "id": "p4", "kind": "free", "name": "D", "captionTex": "D", "visible": true, "showLabel": "name", "position": { "x": 1, "y": -2 }, "style": { "shape": "circle", "sizePx": 4, "strokeColor": "#0f172a", "strokeWidth": 1.2, "strokeOpacity": 1, "fillColor": "#60a5fa", "fillOpacity": 1, "labelFontPx": 14, "labelHaloWidthPx": 2.5, "labelHaloColor": "#ffffff", "labelColor": "#0f172a", "labelOffsetPx": { "x": 8, "y": -8 } } },
+    { "id": "p5", "kind": "lineLikeIntersectionPoint", "name": "I", "captionTex": "I", "visible": true, "showLabel": "name", "objA": { "type": "line", "id": "l1" }, "objB": { "type": "segment", "id": "s1" }, "preferredWorld": { "x": 0, "y": 0 }, "style": { "shape": "circle", "sizePx": 4, "strokeColor": "#0f172a", "strokeWidth": 1.2, "strokeOpacity": 1, "fillColor": "#60a5fa", "fillOpacity": 1, "labelFontPx": 14, "labelHaloWidthPx": 2.5, "labelHaloColor": "#ffffff", "labelColor": "#0f172a", "labelOffsetPx": { "x": 8, "y": -8 } } }
+  ],
+  "segments": [
+    { "id": "s1", "aId": "p3", "bId": "p4", "visible": true, "showLabel": false, "style": { "strokeColor": "#0f766e", "strokeWidth": 2, "dash": "solid", "opacity": 1 } }
+  ],
+  "lines": [
+    { "id": "l1", "kind": "twoPoint", "aId": "p1", "bId": "p2", "visible": true, "style": { "strokeColor": "#334155", "strokeWidth": 1.2, "dash": "solid", "opacity": 1 } }
+  ],
+  "circles": [],
+  "angles": [],
+  "numbers": []
+}

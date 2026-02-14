@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p1",
+      "name": "A",
+      "definition": { "kind": "free", "x": -1, "y": -1 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p2",
+      "name": "B",
+      "definition": { "kind": "free", "x": 3, "y": -1 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p3",
+      "name": "C",
+      "definition": { "kind": "free", "x": 2, "y": 2 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p4",
+      "name": "D",
+      "definition": { "kind": "free", "x": -2, "y": 1 },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "numbers": [],
+  "lines": [],
+  "segments": [],
+  "circles": [],
+  "polygons": [
+    {
+      "id": "pg1",
+      "pointIds": ["p1", "p2", "p3", "p4"],
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.6,
+        "strokeDash": "solid",
+        "strokeOpacity": 1,
+        "fillColor": "#93c5fd",
+        "fillOpacity": 0.25,
+        "pattern": "grid",
+        "patternColor": "#1d4ed8"
+      }
+    }
+  ],
+  "angles": []
+}

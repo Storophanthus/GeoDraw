@@ -3,8 +3,20 @@ import { all, create, type MathNode } from "mathjs";
 const math = create(all, { number: "number", matrix: "Array", predictable: true });
 const MAX_INPUT_LENGTH = 300;
 const DISALLOWED_TOKEN_RE = /\b(import|createUnit|unit|range|ones|zeros|matrix)\b/i;
-const ALLOWED_FUNCTIONS = new Set(["sin", "cos", "tan", "sqrt", "abs", "min", "max", "pow"]);
-const BASE_ALLOWED_SYMBOLS = new Set(["ans", "pi", "e", "tau"]);
+const ALLOWED_FUNCTIONS = new Set([
+  "sin",
+  "cos",
+  "tan",
+  "Sin",
+  "Cos",
+  "Tan",
+  "sqrt",
+  "abs",
+  "min",
+  "max",
+  "pow",
+]);
+const BASE_ALLOWED_SYMBOLS = new Set(["ans", "pi", "Pi", "PI", "e", "tau"]);
 const IDENT_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 export type Symbol =
@@ -24,6 +36,7 @@ export type Command =
   | { type: "CreateLineXY"; x1: number; y1: number; x2: number; y2: number }
   | { type: "CreateLineByPoints"; aId: string; bId: string }
   | { type: "CreateSegmentByPoints"; aId: string; bId: string }
+  | { type: "CreatePolygonByPoints"; pointIds: string[] }
   | { type: "CreateCircleXYR"; x: number; y: number; r: number }
   | { type: "CreateCircleCenterRadius"; centerId: string; r: number; rExpr?: string }
   | { type: "CreateCircleCenterThrough"; centerId: string; throughId: string };
@@ -123,11 +136,16 @@ function evaluateExpression(expr: string, ctx: ParseContext): EvalResult {
   const scope: Record<string, number | ((...args: number[]) => number)> = {
     ans: ctx.ans ?? 0,
     pi: Math.PI,
+    Pi: Math.PI,
+    PI: Math.PI,
     e: Math.E,
     tau: Math.PI * 2,
     sin: Math.sin,
     cos: Math.cos,
     tan: Math.tan,
+    Sin: Math.sin,
+    Cos: Math.cos,
+    Tan: Math.tan,
     sqrt: Math.sqrt,
     abs: Math.abs,
     min: Math.min,
@@ -192,7 +210,9 @@ function evalPointExpressionNode(node: MathNode, ctx: ParseContext): { ok: true;
     if (!anyNode.name) return { ok: false, error: "Unsupported symbol: unknown" };
     if (ctx.scalarsByName.has(anyNode.name)) return { ok: true, value: toScalarExprValue(ctx.scalarsByName.get(anyNode.name) as number) };
     if (anyNode.name === "ans") return { ok: true, value: toScalarExprValue(ctx.ans ?? 0) };
-    if (anyNode.name === "pi") return { ok: true, value: toScalarExprValue(Math.PI) };
+    if (anyNode.name === "pi" || anyNode.name === "Pi" || anyNode.name === "PI") {
+      return { ok: true, value: toScalarExprValue(Math.PI) };
+    }
     if (anyNode.name === "e") return { ok: true, value: toScalarExprValue(Math.E) };
     if (anyNode.name === "tau") return { ok: true, value: toScalarExprValue(Math.PI * 2) };
     return exprPointByLabel(anyNode.name, ctx);
@@ -410,6 +430,23 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return { kind: "cmd", cmd: { type: "CreateSegmentByPoints", aId: a.id, bId: b.id } };
   }
 
+  if (name === "Polygon") {
+    if (args.length < 3) return err("Polygon(A, B, C, ...) expects at least 3 point labels");
+    const pointIds: string[] = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < args.length; i += 1) {
+      const label = asIdentifier(args[i]);
+      if (!label) return err("Polygon(A, B, C, ...) expects point labels");
+      const resolved = resolvePointIdentifier(label, ctx);
+      if (!resolved.ok) return err(resolved.message);
+      if (seen.has(resolved.id)) continue;
+      seen.add(resolved.id);
+      pointIds.push(resolved.id);
+    }
+    if (pointIds.length < 3) return err("Polygon requires at least 3 distinct points");
+    return { kind: "cmd", cmd: { type: "CreatePolygonByPoints", pointIds } };
+  }
+
   if (name === "Circle") {
     if (args.length === 3) {
       const x = evalArg(args[0]);
@@ -472,7 +509,13 @@ function parseCommandLike(input: string, ctx: ParseContext): ParseResult {
   const name = commandMatch[1];
   const args = splitArgs(commandMatch[2]);
   if (!args) return err("Invalid command arguments");
-  return parseCommand(name, args, ctx);
+  const asCommand = parseCommand(name, args, ctx);
+  if (asCommand.kind !== "error" || !asCommand.message.startsWith("Unknown command:")) {
+    return asCommand;
+  }
+  const evaluated = evaluateExpression(input, ctx);
+  if (!evaluated.ok) return err(evaluated.error);
+  return { kind: "expr", value: formatNumber(evaluated.value), numeric: evaluated.value };
 }
 
 function checkAssignmentNameAvailable(name: string, ctx: ParseContext): ParseResult | null {

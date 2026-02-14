@@ -4,6 +4,7 @@ import { buildGeometryResolveOpsRuntime } from "./geometryResolveRuntime";
 import {
   asCircleInScene,
   asLineLikeInScene,
+  asSectorArcInScene,
   getCircleWorldGeometryInScene,
   resolveLineAnchorsInScene,
 } from "./sceneGeometryAccess";
@@ -27,6 +28,7 @@ export function buildGeometryResolveOpsWithCtx(
     lineById: ctx.lineById,
     segmentById: ctx.segmentById,
     circleById: ctx.circleById,
+    angleById: ctx.angleById,
     evaluateCircleRadiusExpr: (expr) => {
       const evaluated = ops.evaluateNumberExpressionWithCtx(scene, expr, ctx);
       return evaluated.ok ? evaluated.value : null;
@@ -60,6 +62,15 @@ export function asCircleWithCtx(
   resolveOps: ReturnType<typeof buildGeometryResolveOpsWithCtx>
 ): { center: Vec2; radius: number } | null {
   return asCircleInScene(ref, resolveOps);
+}
+
+export function asSectorArcWithCtx(
+  ref: GeometryObjectRef,
+  _scene: SceneModel,
+  _ctx: SceneEvalContext,
+  resolveOps: ReturnType<typeof buildGeometryResolveOpsWithCtx>
+): { center: Vec2; radius: number; start: number; sweep: number } | null {
+  return asSectorArcInScene(ref, resolveOps);
 }
 
 export function getCircleWorldGeometryWithCtxInScene(

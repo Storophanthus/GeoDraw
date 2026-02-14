@@ -37,7 +37,7 @@ export function drawAngles(
     const isSector = angle.kind === "sector";
     const radiusPx = isSector
       ? Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y))
-      : Math.max(12, angle.style.arcRadius * camera.zoom);
+      : nonSectorAngleRadiusPx(angle.style.arcRadius);
     const rightExact = Boolean(angle.isRightExact);
     const rightApprox = !rightExact && Boolean(angle.isRightApprox);
     const rightLike = rightExact || rightApprox;
@@ -48,7 +48,7 @@ export function drawAngles(
       | "none"
       | "rightSquare"
       | "rightArcDot";
-    const markSizePx = Math.max(3, (angle.style.markSize ?? 4) * camera.zoom * 0.06);
+    const markSizePx = Math.max(3, Math.min(16, angle.style.markSize ?? 4));
     const rightMarkSizePx = computeRightMarkSizePx(radiusPx, mapStrokeWidth(angle.style.strokeWidth));
 
     ctx.save();
@@ -100,7 +100,8 @@ export function drawAngles(
             angle.style.markSymbol ?? "none",
             markSizePx,
             angle.style.markPos ?? 0.5,
-            angle.style.markColor ?? angle.style.strokeColor
+            angle.style.markColor ?? angle.style.strokeColor,
+            mapStrokeWidth(angle.style.strokeWidth)
           );
         } else if (resolvedMarkStyle === "rightArcDot") {
           drawRightInnerDot(ctx, as, bs, entry.theta, radiusPx * 0.7, Math.max(2, ctx.lineWidth * 0.8));
@@ -145,6 +146,12 @@ export function drawAngles(
   }
 }
 
+function nonSectorAngleRadiusPx(arcRadius: number): number {
+  // Keep angle cosmetics screen-stable: independent from camera zoom.
+  // UI arcRadius remains a compact scalar; map it into practical px range.
+  return Math.max(18, Math.min(120, arcRadius * 34));
+}
+
 function drawArcBarMarks(
   ctx: CanvasRenderingContext2D,
   a: Vec2,
@@ -154,16 +161,20 @@ function drawArcBarMarks(
   mark: "none" | "|" | "||" | "|||",
   markSize: number,
   pos: number,
-  markColor: string
+  markColor: string,
+  strokeWidth: number
 ): void {
   const count = mark === "|" ? 1 : mark === "||" ? 2 : mark === "|||" ? 3 : 0;
   if (count === 0) return;
   const start = Math.atan2(a.y - b.y, a.x - b.x);
   const p = Math.max(0.1, Math.min(0.9, Number.isFinite(pos) ? pos : 0.5));
   const mid = start - theta * p;
-  const baseStep = Math.max(0.025, Math.min(0.18, (markSize * 1.15) / Math.max(1, radius)));
+  // Keep bars visually proportional to the arc radius and closer together like textbook marks.
+  const tickHalf = Math.max(3.6, Math.min(radius * 0.4, markSize * 1.08 + radius * 0.09));
+  const baseStep = Math.max(0.022, Math.min(0.075, (tickHalf * 0.54) / Math.max(1, radius)));
   ctx.save();
   ctx.strokeStyle = markColor;
+  ctx.lineWidth = strokeWidth;
   for (let i = 0; i < count; i += 1) {
     // Bars are distributed along the arc (angle offset), not radially.
     const phi = mid + (i - (count - 1) * 0.5) * baseStep;
@@ -171,11 +182,10 @@ function drawArcBarMarks(
     const ny = Math.sin(phi);
     const cx = b.x + nx * radius;
     const cy = b.y + ny * radius;
-    const half = markSize * 0.72;
     ctx.beginPath();
     // Tick orientation should cross the arc like tkz marks (radial stroke).
-    ctx.moveTo(cx - nx * half, cy - ny * half);
-    ctx.lineTo(cx + nx * half, cy + ny * half);
+    ctx.moveTo(cx - nx * tickHalf, cy - ny * tickHalf);
+    ctx.lineTo(cx + nx * tickHalf, cy + ny * tickHalf);
     ctx.stroke();
   }
   ctx.restore();

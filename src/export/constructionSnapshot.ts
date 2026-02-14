@@ -115,6 +115,11 @@ export type ConstructionSnapshot = {
   lines: SnapshotLine[];
   segments: SnapshotSegment[];
   circles: SnapshotCircle[];
+  polygons: Array<{
+    id: string;
+    pointIds: string[];
+    visible: boolean;
+  }>;
   angles: Array<{
     id: string;
     kind: "angle" | "sector";
@@ -230,6 +235,14 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
     )
     .sort((a, b) => a.id.localeCompare(b.id));
 
+  const polygons = scene.polygons
+    .map((polygon) => ({
+      id: polygon.id,
+      pointIds: [...polygon.pointIds],
+      visible: polygon.visible,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
   const angles = scene.angles
     .map((angle) => {
       const kind: "angle" | "sector" = angle.kind === "sector" ? "sector" : "angle";
@@ -251,6 +264,7 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
     lines,
     segments,
     circles,
+    polygons,
     angles,
   };
 }

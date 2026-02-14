@@ -24,7 +24,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
     const setObjectVisibility = useGeoStore((store) => store.setObjectVisibility);
 
     const tabs: Array<{ id: TabId; icon: React.ElementType; label: string; description: string; count: number }> = [
-        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.angles.length + scene.numbers.length },
+        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.polygons.length + scene.angles.length + scene.numbers.length },
         {
             id: "points",
             icon: (props) => <Circle {...props} fill="currentColor" />,
@@ -33,7 +33,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
             count: scene.points.length
         },
         { id: "lines", icon: Minus, label: "Lines", description: "Filter by Lines & Segments", count: scene.segments.length + scene.lines.length },
-        { id: "circles", icon: Circle, label: "Circles", description: "Filter by Circles", count: scene.circles.length },
+        { id: "circles", icon: Circle, label: "Circles", description: "Filter by Circles/Polygons", count: scene.circles.length + scene.polygons.length },
         { id: "angles", icon: Triangle, label: "Angles", description: "Filter by Angles", count: scene.angles.length },
         { id: "numbers", icon: Hash, label: "Numbers", description: "Filter by Numbers & Values", count: scene.numbers.length },
     ];
@@ -136,6 +136,28 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     </button>
                 ))}
 
+                {showCircles && scene.polygons.map((polygon) => (
+                    <button
+                        key={polygon.id}
+                        className={
+                            selectedObject?.type === "polygon" && selectedObject.id === polygon.id
+                                ? "objectItem active"
+                                : "objectItem"
+                        }
+                        onClick={() => setSelectedObject({ type: "polygon", id: polygon.id })}
+                    >
+                        <span className="objectItemLabel">Polygon {polygon.id}</span>
+                        <input
+                            type="checkbox"
+                            className="objectVisibilityToggle"
+                            checked={polygon.visible}
+                            title={polygon.visible ? "Hide object" : "Show object"}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setObjectVisibility({ type: "polygon", id: polygon.id }, e.target.checked)}
+                        />
+                    </button>
+                ))}
+
                 {showAngles && scene.angles.map((angle) => (
                     <button
                         key={angle.id}
@@ -195,11 +217,12 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
             scene.segments.length === 0 &&
             scene.lines.length === 0 &&
             scene.circles.length === 0 &&
+            scene.polygons.length === 0 &&
             scene.angles.length === 0 &&
             scene.numbers.length === 0) ||
         (activeTab === "points" && scene.points.length === 0) ||
         (activeTab === "lines" && scene.segments.length === 0 && scene.lines.length === 0) ||
-        (activeTab === "circles" && scene.circles.length === 0) ||
+        (activeTab === "circles" && scene.circles.length === 0 && scene.polygons.length === 0) ||
         (activeTab === "angles" && scene.angles.length === 0) ||
         (activeTab === "numbers" && scene.numbers.length === 0);
 

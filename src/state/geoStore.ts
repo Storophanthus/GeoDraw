@@ -60,7 +60,7 @@ const runtime = createStoreRuntime({
   normalizeScene: normalizeSceneIntegrity,
 });
 const setState: (updater: (prev: GeoState) => GeoState, options?: SetStateOptions) => void = runtime.setState;
-const commandBarObjectAliases = new Map<string, { type: "point" | "segment" | "line" | "circle"; id: string }>();
+const commandBarObjectAliases = new Map<string, { type: "point" | "segment" | "line" | "circle" | "polygon"; id: string }>();
 
 const actions: GeoActions = {
   ...createInteractionActions({
@@ -133,7 +133,7 @@ export const commandBarApi = {
     if (!id) return { ok: false as const, error: `Name already used: ${trimmed}` };
     return { ok: true as const };
   },
-  getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle"; id: string }> {
+  getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon"; id: string }> {
     return Object.fromEntries(commandBarObjectAliases.entries());
   },
   createPointXYWithLabel(x: number, y: number, label: string): string | null {
@@ -239,6 +239,18 @@ export const commandBarApi = {
     if (!circleId) return null;
     commandBarObjectAliases.set(name, { type: "circle", id: circleId });
     return circleId;
+  },
+  createPolygonWithLabel(pointIds: string[], label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const polygonId = actions.createPolygon(pointIds);
+    if (!polygonId) return null;
+    commandBarObjectAliases.set(name, { type: "polygon", id: polygonId });
+    return polygonId;
   },
 };
 

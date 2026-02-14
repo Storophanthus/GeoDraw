@@ -54,6 +54,9 @@ const baseCtx: ParseContext = {
 
 mustExpr("5*5", baseCtx, "25");
 mustExpr("1+2*3", baseCtx, "7");
+mustExpr("Pi", baseCtx, "3.14159265359");
+mustExpr("sin(pi/2)", baseCtx, "1");
+mustExpr("Sin(Pi/2)", baseCtx, "1");
 
 mustCmd("Point(1,2)", baseCtx, "CreatePointXY");
 mustCmd("Line(0,0,3,4)", baseCtx, "CreateLineXY");
@@ -68,6 +71,11 @@ if (lineAB.type !== "CreateLineByPoints" || lineAB.aId !== "pA" || lineAB.bId !=
 const segAB = mustCmd("Segment(A,B)", baseCtx, "CreateSegmentByPoints");
 if (segAB.type !== "CreateSegmentByPoints" || segAB.aId !== "pA" || segAB.bId !== "pB") {
   throw new Error("Segment(A,B) IDs mismatch");
+}
+
+const polyABO = mustCmd("Polygon(A,B,O)", baseCtx, "CreatePolygonByPoints");
+if (polyABO.type !== "CreatePolygonByPoints" || polyABO.pointIds.join(",") !== "pA,pB,pO") {
+  throw new Error("Polygon(A,B,O) IDs mismatch");
 }
 
 const circleOA = mustCmd("Circle(O,A)", baseCtx, "CreateCircleCenterThrough");

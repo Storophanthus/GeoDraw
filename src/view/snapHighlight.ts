@@ -74,6 +74,43 @@ export function highlightSnapObject(
     return;
   }
 
+  if (obj.type === "angle") {
+    const angle = scene.angles.find((item) => item.id === obj.id);
+    if (!angle || angle.kind !== "sector") {
+      ctx.restore();
+      return;
+    }
+    const aPoint = scene.points.find((p) => p.id === angle.aId);
+    const bPoint = scene.points.find((p) => p.id === angle.bId);
+    const cPoint = scene.points.find((p) => p.id === angle.cId);
+    if (!aPoint || !bPoint || !cPoint) {
+      ctx.restore();
+      return;
+    }
+    const a = getPointWorldPos(aPoint, scene);
+    const b = getPointWorldPos(bPoint, scene);
+    const c = getPointWorldPos(cPoint, scene);
+    if (!a || !b || !c) {
+      ctx.restore();
+      return;
+    }
+    const radius = Math.hypot(a.x - b.x, a.y - b.y);
+    if (!Number.isFinite(radius) || radius <= 1e-12) {
+      ctx.restore();
+      return;
+    }
+    const start = Math.atan2(a.y - b.y, a.x - b.x);
+    let sweep = Math.atan2(c.y - b.y, c.x - b.x) - start;
+    while (sweep < 0) sweep += Math.PI * 2;
+    while (sweep >= Math.PI * 2) sweep -= Math.PI * 2;
+    const bs = camMath.worldToScreen(b, camera, vp);
+    ctx.beginPath();
+    ctx.arc(bs.x, bs.y, radius * camera.zoom, start, start + sweep);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
   const circle = scene.circles.find((item) => item.id === obj.id);
   if (!circle) {
     ctx.restore();

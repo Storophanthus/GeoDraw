@@ -17,6 +17,7 @@
       "aId": "p_1",
       "bId": "p_2",
       "cId": "p_3",
+      "isRightExact": true,
       "visible": true,
       "style": {
         "strokeColor": "#334155",

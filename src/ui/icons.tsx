@@ -166,6 +166,17 @@ export const IconSector = createIcon(() => (
     </>
 ), "IconSector");
 
+export const IconPolygon = createIcon(() => (
+    <>
+        <path d="M3 18 L8 4 L20 6 L22 17 L10 22 Z" fill="currentColor" fillOpacity="0.2" strokeWidth={2.2} />
+        <circle cx="3" cy="18" r="2.4" fill="currentColor" stroke="none" />
+        <circle cx="8" cy="4" r="2.4" fill="currentColor" stroke="none" />
+        <circle cx="20" cy="6" r="2.4" fill="currentColor" stroke="none" />
+        <circle cx="22" cy="17" r="2.4" fill="currentColor" stroke="none" />
+        <circle cx="10" cy="22" r="2.4" fill="currentColor" stroke="none" />
+    </>
+), "IconPolygon");
+
 export const IconCopyStyle = createIcon(() => (
     <>
         <rect x="1" y="1" width="12" height="12" rx="2" fill="currentColor" fillOpacity="0.2" stroke="none" />
@@ -182,3 +193,13 @@ export const IconExportClip = createIcon(() => (
         <path d="M17 17 L17 13 M17 17 L13 17" strokeWidth={2.5} />
     </>
 ), "IconExportClip");
+
+export const IconFitView = createIcon(() => (
+    <>
+        <path d="M3 9V3h6" strokeWidth={2.2} />
+        <path d="M21 9V3h-6" strokeWidth={2.2} />
+        <path d="M3 15v6h6" strokeWidth={2.2} />
+        <path d="M21 15v6h-6" strokeWidth={2.2} />
+        <rect x="7.5" y="7.5" width="9" height="9" rx="1.5" strokeWidth={1.8} />
+    </>
+), "IconFitView");
