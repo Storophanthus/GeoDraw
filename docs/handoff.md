@@ -1,7 +1,7 @@
 # GeoDraw Handoff (Stability Contract)
 
 ## Branch / Baseline
-- Active branch: `refactor/stage2-app-decomposition`
+- Active branch: `feature/next-heavy`
 - Keep commits small and scoped.
 - Do not bundle unrelated files in feature commits.
 - Architecture map reference: `docs/architecture-snapshot.md`
@@ -16,8 +16,31 @@
   - checkpoint commit at stable milestones,
   - update this handoff with `Done / Next / Risks`,
   - resume from handoff state, not memory.
+- Tool-Command parity (mandatory):
+  - Any newly added UI construction tool must ship with a Command Bar counterpart in the same feature cycle.
+  - Required minimum:
+    - parser support in `src/CommandParser.ts`
+    - command execution wiring (store/API) + user feedback in `src/CommandBar.tsx`
+    - docs update (`docs/command-bar-reference.md` + this handoff)
+    - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- Camera/zoom stability batch completed (commit `0e2c62a`):
+  - Expanded camera zoom bounds in `src/view/camera.ts` for better infinite-zoom behavior (`1e-30..1e30`).
+  - Added viewport/LOD guards for huge/offscreen circles in:
+    - `src/view/snapEngine.ts`
+    - `src/engine/hitTest.ts`
+  - Added deterministic snap operation budget per frame:
+    - bounded pairwise snap loops in `findBestSnap(...)`
+    - fixed budget wiring in `src/view/CanvasView.tsx`
+  - Added recovery hotkey: `Shift+F` triggers Fit View.
+  - Fit View action moved to top actions (next to Undo/Redo), not in left tool groups.
+  - Added regression/perf gate:
+    - `scripts/zoom-stress.ts`
+    - `npm run test:zoom`
+- Sector status:
+  - Sector endpoint/tool-flow detachment bug is considered fixed for current reported cases.
+  - Do not reopen sector endpoint detachment without a new reproducible JSON.
 - Correctness track (intersection semantics) advanced:
   - `intersectionPoint` now supports optional `branchIndex` and evaluation honors it for two-root generic intersections.
   - Generic intersection creation records deterministic `branchIndex` when two roots exist.
@@ -106,6 +129,10 @@
   - `Circle(O, rExpr)` from Command Bar now preserves the radius expression string (`rExpr`) through parse/execute.
   - Creation path now calls fixed-radius circle creation with the original expression when available, not only frozen numeric text.
   - Practical effect: circles created from scalar names/expressions can update when referenced scene numbers change.
+- Command Bar math usability upgrade:
+  - Added constant aliases: `Pi`, `PI` (in addition to `pi`).
+  - Added trig aliases: `Sin`, `Cos`, `Tan` (in addition to lowercase).
+  - Added concise user reference doc: `docs/command-bar-reference.md`.
 - Export now auto-emits optional TikZ pattern libraries only when needed:
   - no pattern styles => no `\\usetikzlibrary{patterns}` line emitted
   - classic pattern styles (`pattern=...`, `pattern color=...`) => emits exactly `\\usetikzlibrary{patterns}`
@@ -201,6 +228,9 @@
   1. Keep `preferredWorld` as seed only; rely on explicit branch semantics where available.
   2. Validate on dense construction scenes and guard against regressions.
 - Performance track is secondary and must not alter intersection semantics.
+- Performance follow-up now is measurement/tuning only:
+  - run `npm run test:zoom` and dense-scene checks
+  - do not reopen zoom architecture items from commit `0e2c62a` unless there is a new reproducible regression.
 - Closed decision (do not reopen unless concrete failing file is provided):
   - Legacy migration/backfill for pre-branchIndex snapshots is already implemented and active.
   - Implementation locations:
@@ -210,6 +240,19 @@
 - Command Bar Phase 2 candidates:
   - optional overwrite semantics (`set`, `:=`, `let`, `del`) if desired.
   - parametric dependencies (Phase 3) where objects depend on scalars dynamically.
+- Tool-Command parity backlog (homework):
+  - Missing command counterparts for existing tools:
+    - `midpoint`
+    - `circle_3p`
+    - `sector`
+    - `perp_line`
+    - `parallel_line`
+    - `tangent_line`
+    - `angle_bisector`
+    - `angle`
+    - `angle_fixed`
+  - Optional/non-goal parity:
+    - `move`, `copyStyle`, `export_clip` (UI workflow tools; no strict command mapping required).
 
 ## Risks / Notes
 - `preferredWorld` is a branch seed for `intersectionPoint`, not guaranteed solved world coordinate.
@@ -232,6 +275,9 @@
   - “PropertiesPanel is monolithic”
   - old `I_C` label anchor discussion
   - angle preview/copy-style regressions already marked fixed
+  - Fit View placement (already moved to top actions near Undo/Redo)
+  - camera zoom culling/snap-budget/hotkey batch from commit `0e2c62a`
+  - sector endpoint detachment bug unless a new reproducible file is provided
 
 ## Intersection Do-Not-Break Checklist (Read First)
 
