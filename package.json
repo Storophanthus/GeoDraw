@@ -13,6 +13,7 @@
     "test:command": "node --import tsx src/scene/__tests__/command-parser.test.ts",
     "test:export": "node scripts/test-export.mjs",
     "test:perf": "tsx src/scene/__tests__/eval-perf.test.ts",
+    "test:zoom": "node --import tsx scripts/zoom-stress.ts",
     "test:scene": "tsx src/scene/__tests__/intersection-ownership-regression.test.ts",
     "diag:scene": "tsx scripts/scene-diagnostics.ts",
     "test:export:watch": "tsx --watch src/export/__tests__/line-extents.test.ts",

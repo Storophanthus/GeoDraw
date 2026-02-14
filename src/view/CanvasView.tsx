@@ -26,6 +26,7 @@ const LINE_HIT_TOLERANCE_PX = 10;
 const CIRCLE_HIT_TOLERANCE_PX = 10;
 const ANGLE_HIT_TOLERANCE_PX = 20;
 const CLICK_EPSILON_PX = 3;
+const SNAP_OP_BUDGET_PER_FRAME = 6000;
 
 const GRID_SETTINGS = {
   enabled: true,
@@ -90,6 +91,7 @@ export function CanvasView() {
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
   const createCircle = useGeoStore((store) => store.createCircle);
+  const createAuxiliaryCircle = useGeoStore((store) => store.createAuxiliaryCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
@@ -136,6 +138,7 @@ export function CanvasView() {
       createSegment,
       createLine,
       createCircle,
+      createAuxiliaryCircle,
       createCircleThreePoint,
       createPerpendicularLine,
       createParallelLine,
@@ -168,6 +171,7 @@ export function CanvasView() {
       createSegment,
       createLine,
       createCircle,
+      createAuxiliaryCircle,
       createCircleThreePoint,
       createPerpendicularLine,
       createParallelLine,
@@ -224,8 +228,8 @@ export function CanvasView() {
   const hoverSnap: SnapCandidate | null = useMemo(() => {
     if (!hoverScreen) return null;
     if (snapDisabled) return null;
-    return findBestSnap(hoverScreen, camera, vp, scene, POINT_HIT_TOLERANCE_PX);
-  }, [camera, hoverScreen, scene, snapDisabled, vp]);
+    return findBestSnap(hoverScreen, camera, vp, scene, POINT_HIT_TOLERANCE_PX, SNAP_OP_BUDGET_PER_FRAME);
+  }, [hoverScreen, scene, snapDisabled]);
 
   const hoveredTargetValid = isValidTarget(activeTool, pendingSelection, hoveredHit);
 

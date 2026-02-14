@@ -11,6 +11,8 @@ import {
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
 import { computeRightMarkSizePx } from "../view/angleRender";
 import type { Vec2 } from "../geo/vec2";
+const VIS_EPS = 1;
+const HUGE_RADIUS_PICK_PX = 200_000;
 
 export type EngineHit =
   | { type: "point"; id: string }
@@ -163,6 +165,10 @@ export function hitTestCircleId(
     if (!geom) continue;
     const centerScreen = camMath.worldToScreen(geom.center, camera, vp);
     const radiusPx = geom.radius * camera.zoom;
+    if (!Number.isFinite(radiusPx) || radiusPx <= 1e-9) continue;
+    const vis = circleBoundaryVisibility(centerScreen, radiusPx, vp.widthPx, vp.heightPx, VIS_EPS);
+    if (vis === "none") continue;
+    if (vis === "contains" && radiusPx >= HUGE_RADIUS_PICK_PX) continue;
     const d = Math.abs(Math.hypot(screenPoint.x - centerScreen.x, screenPoint.y - centerScreen.y) - radiusPx);
     if (d <= best) {
       best = d;
@@ -310,4 +316,27 @@ function isAngleOnArc(theta: number, start: number, sweep: number): boolean {
   const s = norm(start);
   const delta = norm(s - t);
   return delta <= sweep + 1e-9;
+}
+
+function circleBoundaryVisibility(center: Vec2, radius: number, width: number, height: number, eps: number): "none" | "contains" | "crosses" {
+  const nearestX = Math.max(0, Math.min(width, center.x));
+  const nearestY = Math.max(0, Math.min(height, center.y));
+  const dx = center.x - nearestX;
+  const dy = center.y - nearestY;
+  const d2 = dx * dx + dy * dy;
+  const r2 = radius * radius;
+  if (d2 > r2 + eps) return "none";
+
+  const corners = [
+    { x: 0, y: 0 },
+    { x: width, y: 0 },
+    { x: 0, y: height },
+    { x: width, y: height },
+  ];
+  const allInside = corners.every((c) => {
+    const cx = c.x - center.x;
+    const cy = c.y - center.y;
+    return cx * cx + cy * cy <= r2 - eps;
+  });
+  return allInside ? "contains" : "crosses";
 }

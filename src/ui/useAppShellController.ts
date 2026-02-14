@@ -19,11 +19,20 @@ export function useAppShellController(): WorkspaceShellProps {
   const redo = useGeoStore((store) => store.redo);
   const canUndo = useGeoStore((store) => store.canUndo);
   const canRedo = useGeoStore((store) => store.canRedo);
+  const fitViewToScene = useGeoStore((store) => store.fitViewToScene);
 
   const [leftWidth, setLeftWidth] = useState(56);
   const [rightWidth, setRightWidth] = useState(312);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+
+  const doFitView = () => {
+    const canvas = document.querySelector<HTMLCanvasElement>(".drawingCanvas");
+    const rect = canvas?.getBoundingClientRect();
+    const widthPx = rect?.width && rect.width > 1 ? rect.width : window.innerWidth;
+    const heightPx = rect?.height && rect.height > 1 ? rect.height : window.innerHeight;
+    fitViewToScene({ widthPx, heightPx });
+  };
 
   useGlobalCanvasHotkeys({
     activeTool,
@@ -32,6 +41,7 @@ export function useAppShellController(): WorkspaceShellProps {
     onDeleteSelectedObject: deleteSelectedObject,
     onUndo: undo,
     onRedo: redo,
+    onFitView: doFitView,
   });
 
   const { startResize } = useSidebarResize({
@@ -61,6 +71,7 @@ export function useAppShellController(): WorkspaceShellProps {
     canRedo,
     onUndo: undo,
     onRedo: redo,
+    onFitView: doFitView,
     onStartResizeLeft: startResize("left"),
     onStartResizeRight: startResize("right"),
   };
