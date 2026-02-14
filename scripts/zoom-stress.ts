@@ -80,7 +80,7 @@ function buildScene(): SceneModel {
     });
   }
 
-  return { points, segments, lines, circles, angles: [], numbers: [] };
+  return { points, segments, lines, circles, polygons: [], angles: [], numbers: [] };
 }
 
 function main(): void {
@@ -129,4 +129,3 @@ function main(): void {
 }
 
 main();
-
