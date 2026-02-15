@@ -43,6 +43,8 @@ mustOk(commandBarApi.applyObjectAssignment("lineX", { type: "CreateLineByPoints"
 // angle alias redefine: angle -> sector should export as sector drawing, not angle mark.
 mustOk(commandBarApi.applyObjectAssignment("angX", { type: "CreateAngle", aId: b, bId: a, cId: c }), "create angX");
 mustOk(commandBarApi.applyObjectAssignment("angX", { type: "CreateSector", centerId: a, startId: b, endId: d }), "redefine angX");
+mustOk(commandBarApi.applyObjectAssignment("angY", { type: "CreateSector", centerId: a, startId: c, endId: d }), "create angY");
+mustOk(commandBarApi.applyObjectAssignment("angY", { type: "CreateAngle", aId: d, bId: a, cId: c }), "redefine angY");
 
 const tikz = exportTikz(getGeoStore().scene);
 
@@ -55,6 +57,7 @@ assert(/\\tkzDefCircle\[R\]\(X_C,2\)/.test(tikz), "Expected redefined fixed-radi
 
 // Redefined angle alias should export as sector
 assert(/\\tkzDrawSector/.test(tikz), "Expected redefined sector alias to emit \\\\tkzDrawSector");
-assert(!/\\tkzMarkAngle/.test(tikz), "Did not expect angle mark export after angle->sector redefine");
+// We should still have angle marks from the Sector->Angle redefine path.
+assert(/\\tkzMarkAngle/.test(tikz), "Expected angle mark export after sector->angle redefine");
 
 console.log("command-redefine-export tests: OK");

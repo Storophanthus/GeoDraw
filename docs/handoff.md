@@ -1218,3 +1218,15 @@ When starting a new chat, provide:
 
 ## Risks / Constraints
 - Manual segments reused by sector become owner-tagged; deleting sector will only delete them when no remaining owners exist.
+
+## Latest Done (Redefine Export Smoke: Bidirectional Angle/Sector)
+- Extended `command-redefine-export.test.ts` to cover both directions:
+  - `Angle -> Sector`
+  - `Sector -> Angle`
+- Export smoke now asserts sector macros and angle-mark macros are both represented when expected after redefine transitions.
+
+## Next
+- Optional: add a dedicated fixture-driven export case for mixed angle+sector redefine in one saved scene.
+
+## Risks / Constraints
+- Current smoke checks are deterministic string assertions; they intentionally do not prove full semantic equivalence.
