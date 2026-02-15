@@ -123,19 +123,19 @@ export function CommandBar() {
         setStatus({ kind: "error", text: out.error });
         return;
       }
-      setStatus({ kind: "ok", text: `${parsed.name} = ${parsed.value}` });
+      setStatus({ kind: "ok", text: `${parsed.name} = ${parsed.value}${out.mode === "updated" ? " (updated)" : ""}` });
       return;
     }
 
     if (parsed.kind === "assignObject") {
       const { name, cmd } = parsed;
       if (cmd.type === "CreatePointXY") {
-        const id = commandBarApi.createPointXYWithLabel(cmd.x, cmd.y, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct point" });
+        const out = commandBarApi.setPointXY(name, cmd.x, cmd.y);
+        if (!out.ok) {
+          setStatus({ kind: "error", text: out.error });
           return;
         }
-        setStatus({ kind: "ok", text: `${name}: Point created` });
+        setStatus({ kind: "ok", text: `${name}: Point ${out.mode === "updated" ? "updated" : "created"}` });
         return;
       }
       if (cmd.type === "CreateLineXY") {

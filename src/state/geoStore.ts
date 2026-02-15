@@ -120,21 +120,61 @@ export const commandBarApi = {
     }
     return out;
   },
-  setScalarVar(name: string, value: number): { ok: true } | { ok: false; error: string } {
+  setScalarVar(name: string, value: number): { ok: true; mode: "created" | "updated" } | { ok: false; error: string } {
     const trimmed = name.trim();
     if (!trimmed) return { ok: false as const, error: "Scalar name is empty" };
     if (!Number.isFinite(value)) return { ok: false as const, error: "Scalar value must be finite" };
     const state = runtime.getState();
-    if (!isNameUnique(trimmed, state.scene.points.map((p) => p.name))) {
-      return { ok: false as const, error: `Name already used: ${trimmed}` };
+    const existingNumber = state.scene.numbers.find((n) => n.name === trimmed);
+    if (existingNumber) {
+      if (existingNumber.definition.kind !== "constant") {
+        return { ok: false as const, error: `Cannot redefine non-constant number: ${trimmed}` };
+      }
+      setState((prev) => ({
+        ...prev,
+        scene: {
+          ...prev.scene,
+          numbers: prev.scene.numbers.map((n) =>
+            n.id === existingNumber.id ? { ...n, definition: { kind: "constant", value } } : n
+          ),
+        },
+      }));
+      return { ok: true as const, mode: "updated" };
     }
-    if (!isNameUnique(trimmed, state.scene.numbers.map((n) => n.name))) {
+    if (!isNameUnique(trimmed, state.scene.points.map((p) => p.name))) {
       return { ok: false as const, error: `Name already used: ${trimmed}` };
     }
     if (commandBarObjectAliases.has(trimmed)) return { ok: false as const, error: `Name already used: ${trimmed}` };
     const id = actions.createNumber({ kind: "constant", value }, trimmed);
     if (!id) return { ok: false as const, error: `Name already used: ${trimmed}` };
-    return { ok: true as const };
+    return { ok: true as const, mode: "created" };
+  },
+  setPointXY(name: string, x: number, y: number): { ok: true; mode: "created" | "updated"; id: string } | { ok: false; error: string } {
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false as const, error: "Point name is empty" };
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return { ok: false as const, error: "Point coordinates must be finite" };
+    const state = runtime.getState();
+    const existingPoints = state.scene.points.filter((p) => p.name === trimmed);
+    if (existingPoints.length > 1) return { ok: false as const, error: `Ambiguous point name: ${trimmed}` };
+    if (existingPoints.length === 1) {
+      const point = existingPoints[0];
+      if (point.kind !== "free" || point.locked) {
+        return { ok: false as const, error: `Cannot redefine non-free point: ${trimmed}` };
+      }
+      setState((prev) => ({
+        ...prev,
+        scene: {
+          ...prev.scene,
+          points: prev.scene.points.map((p) => (p.id === point.id ? { ...p, position: { x, y } } : p)),
+        },
+        selectedObject: { type: "point", id: point.id },
+        recentCreatedObject: { type: "point", id: point.id },
+      }));
+      return { ok: true as const, mode: "updated", id: point.id };
+    }
+    const created = commandBarApi.createPointXYWithLabel(x, y, trimmed);
+    if (!created) return { ok: false as const, error: `Name already used: ${trimmed}` };
+    return { ok: true as const, mode: "created", id: created };
   },
   getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }> {
     return Object.fromEntries(commandBarObjectAliases.entries());

@@ -146,6 +146,13 @@
     - `Circle3P(A,B,C)` (`CircleThreePoint` alias)
   - Parser now resolves point aliases through command alias table as fallback.
   - Added parser tests for new commands and assignment guard on tangent multi-create.
+- Command redefine/edit (homework #3 slice 1):
+  - Assignment redefinition is enabled for:
+    - existing constant numbers (`n = ...` updates value in place),
+    - existing free points (`A = Point(...)` or point-expression assignment updates coordinates in place).
+  - Parser no longer blocks same-name assignments at parse-time; execution layer enforces fail-closed updates.
+  - Non-free points and non-constant numbers reject redefinition explicitly.
+  - Parser regression tests updated for same-name assignment semantics.
 - Export now auto-emits optional TikZ pattern libraries only when needed:
   - no pattern styles => no `\\usetikzlibrary{patterns}` line emitted
   - classic pattern styles (`pattern=...`, `pattern color=...`) => emits exactly `\\usetikzlibrary{patterns}`
@@ -259,6 +266,8 @@
 - Command Bar Phase 2 candidates:
   - optional overwrite semantics (`set`, `:=`, `let`, `del`) if desired.
   - parametric dependencies (Phase 3) where objects depend on scalars dynamically.
+  - Redefine/edit next slices:
+    - in-place redefine for line/segment/circle/angle aliases with dependency preservation rules.
 - Tool-Command parity backlog (homework):
   - Optional/non-goal parity:
     - `move`, `copyStyle`, `export_clip` (UI workflow tools; no strict command mapping required).

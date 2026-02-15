@@ -224,13 +224,16 @@ const overwriteScalarCtx: ParseContext = {
   ...baseCtx,
   scalarsByName: new Map([["n_1", 10]]),
 };
-mustError("n_1 = 3", overwriteScalarCtx, "Name already used: n_1");
+mustAssignScalar("n_1 = 3", overwriteScalarCtx, "n_1", 3);
 
 const overwritePointCtx: ParseContext = {
   ...baseCtx,
   symbolsByLabel: new Map([["B", [{ kind: "point", id: "pB", label: "B" }]]]),
 };
-mustError("B = Point(1,2)", overwritePointCtx, "Name already used: B");
+const redefinePoint = mustAssignObject("B = Point(1,2)", overwritePointCtx, "B", "CreatePointXY");
+if (redefinePoint.type !== "CreatePointXY" || redefinePoint.x !== 1 || redefinePoint.y !== 2) {
+  throw new Error("B = Point(1,2) redefine mismatch");
+}
 
 const unknownScalarCtx: ParseContext = {
   ...baseCtx,
@@ -238,11 +241,5 @@ const unknownScalarCtx: ParseContext = {
 };
 mustError("Circle(O,r)", unknownScalarCtx, "Unknown scalar: r");
 mustError("Z = A + 2", baseCtx, "Unsupported + between point and scalar");
-
-const usedAliasCtx: ParseContext = {
-  ...baseCtx,
-  objectNames: new Set(["l"]),
-};
-mustError("l = Line(A,B)", usedAliasCtx, "Name already used: l");
 
 console.log("command-parser tests: OK");
