@@ -102,6 +102,7 @@ export function CanvasView() {
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createTangentLines = useGeoStore((store) => store.createTangentLines);
+  const createCircleTangentLines = useGeoStore((store) => store.createCircleTangentLines);
   const createAngleBisectorLine = useGeoStore((store) => store.createAngleBisectorLine);
   const createAngle = useGeoStore((store) => store.createAngle);
   const createSector = useGeoStore((store) => store.createSector);
@@ -160,6 +161,7 @@ export function CanvasView() {
       createPerpendicularLine,
       createParallelLine,
       createTangentLines,
+      createCircleTangentLines,
       createAngleBisectorLine,
       createAngle,
       createSector,
@@ -198,6 +200,7 @@ export function CanvasView() {
       createPerpendicularLine,
       createParallelLine,
       createTangentLines,
+      createCircleTangentLines,
       createAngleBisectorLine,
       createAngle,
       createSector,

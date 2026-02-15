@@ -445,7 +445,24 @@ export type SceneLineTangent = {
   style: LineStyle;
 };
 
-export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular | SceneLineParallel | SceneLineAngleBisector | SceneLineTangent;
+export type SceneLineCircleCircleTangent = {
+  id: string;
+  kind: "circleCircleTangent";
+  circleAId: string;
+  circleBId: string;
+  family: "outer" | "inner";
+  branchIndex: 0 | 1;
+  visible: boolean;
+  style: LineStyle;
+};
+
+export type SceneLine =
+  | SceneLineTwoPoint
+  | SceneLinePerpendicular
+  | SceneLineParallel
+  | SceneLineAngleBisector
+  | SceneLineTangent
+  | SceneLineCircleCircleTangent;
 
 export type SceneCircleTwoPoint = {
   id: string;

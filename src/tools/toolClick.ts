@@ -28,6 +28,7 @@ export type ToolClickIO = {
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createTangentLines: (throughId: string, circleId: string) => string[];
+  createCircleTangentLines: (circleAId: string, circleBId: string) => string[];
   createAngleBisectorLine: (aId: string, bId: string, cId: string) => string | null;
   createAngle: (aId: string, bId: string, cId: string) => string | null;
   createSector: (centerId: string, startId: string, endId: string) => string | null;
@@ -497,6 +498,12 @@ export function handleToolClick(
       return;
     }
 
+    if (hitCircleId && hitCircleId !== pendingSelection.first.id) {
+      const created = io.createCircleTangentLines(pendingSelection.first.id, hitCircleId);
+      if (created.length > 0) io.clearPendingSelection();
+      return;
+    }
+
     const throughId = resolveOrCreatePointAtCursor();
     const created = io.createTangentLines(throughId, pendingSelection.first.id);
     if (created.length > 0) io.clearPendingSelection();
@@ -577,7 +584,7 @@ export function isValidTarget(
     if (pendingSelection.first.type === "point") {
       return hoveredHit.type === "circle";
     }
-    return hoveredHit.type === "point";
+    return hoveredHit.type === "point" || hoveredHit.type === "circle";
   }
 
   if (activeTool === "midpoint") {

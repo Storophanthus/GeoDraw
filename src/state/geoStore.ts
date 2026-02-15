@@ -88,6 +88,21 @@ function pruneStaleCommandAliases(scene: GeoState["scene"]): void {
   }
 }
 
+function applyAssignedPointLabel(pointId: string, label: string): void {
+  setState((prev) => {
+    const point = prev.scene.points.find((p) => p.id === pointId);
+    if (!point) return prev;
+    if (point.name === label && point.captionTex === label) return prev;
+    return {
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((p) => (p.id === pointId ? { ...p, name: label, captionTex: label } : p)),
+      },
+    };
+  });
+}
+
 const actions: GeoActions = {
   ...createInteractionActions({
     getState: runtime.getState,
@@ -218,6 +233,7 @@ export const commandBarApi = {
     if (!existing) {
       if (cmd.type === "CreatePointXY") {
         const out = commandBarApi.setPointXY(label, cmd.x, cmd.y);
+        if (out.ok) applyAssignedPointLabel(out.id, label);
         return out.ok
           ? { ok: true as const, mode: out.mode, objectType: "point" as const, id: out.id }
           : { ok: false as const, error: out.error };
@@ -295,11 +311,13 @@ export const commandBarApi = {
       if (cmd.type === "CreateMidpointByPoints") {
         const id = commandBarApi.createMidpointByPointsWithLabel(cmd.aId, cmd.bId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
         return { ok: true as const, mode: "created", objectType: "point", id };
       }
       if (cmd.type === "CreateMidpointBySegment") {
         const id = commandBarApi.createMidpointBySegmentWithLabel(cmd.segId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
         return { ok: true as const, mode: "created", objectType: "point", id };
       }
       if (cmd.type === "CreateCircleXYR") {
@@ -814,6 +832,15 @@ export const commandBarApi = {
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
     const pointId = actions.createMidpointFromPoints(aId, bId);
     if (!pointId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === pointId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
     commandBarObjectAliases.set(name, { type: "point", id: pointId });
     return pointId;
   },
@@ -827,6 +854,15 @@ export const commandBarApi = {
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
     const pointId = actions.createMidpointFromSegment(segId);
     if (!pointId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === pointId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
     commandBarObjectAliases.set(name, { type: "point", id: pointId });
     return pointId;
   },

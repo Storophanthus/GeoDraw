@@ -98,6 +98,9 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       if (line.kind === "tangent") {
         return pointIds.has(line.throughId) && nextCircleIds.has(line.circleId);
       }
+      if (line.kind === "circleCircleTangent") {
+        return nextCircleIds.has(line.circleAId) && nextCircleIds.has(line.circleBId);
+      }
       if (line.kind === "angleBisector") {
         return pointIds.has(line.aId) && pointIds.has(line.bId) && pointIds.has(line.cId);
       }

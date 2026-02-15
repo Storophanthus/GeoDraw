@@ -94,16 +94,16 @@ if (/\\tkzDrawLine\[add=/.test(drawLine)) {
   throw new Error(`Expected no per-line add override: ${drawLine}`);
 }
 
-if (!drawLine.includes("dashed")) {
+if (!drawLine.includes("dash pattern=on")) {
   throw new Error(`Expected dashed style in draw line: ${drawLine}`);
 }
 if (!drawLine.includes("opacity=0.65")) {
   throw new Error(`Expected opacity style in draw line: ${drawLine}`);
 }
-if (!drawLine.includes("line width=1.8pt")) {
+if (!drawLine.includes("line width=2.4pt")) {
   throw new Error(`Expected converted line width style in draw line: ${drawLine}`);
 }
-if (!drawLine.includes("color={rgb,255:red,29;green,78;blue,216}")) {
+if (!drawLine.includes("color=gdC_1d4ed8")) {
   throw new Error(`Expected converted stroke color in draw line: ${drawLine}`);
 }
 

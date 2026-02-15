@@ -55,6 +55,23 @@ export type TikzCommand =
   | { kind: "DefPointByRotation"; name: string; center: string; point: string; angleDeg: number; direction: "CCW" | "CW" }
   | { kind: "DefPerpendicularLine"; auxName: string; through: string; baseA: string; baseB: string }
   | { kind: "DefParallelLine"; auxName: string; through: string; baseA: string; baseB: string }
+  | {
+      kind: "DefCircleSimilitudeCenter";
+      name: string;
+      mode: "outer" | "inner";
+      circleAO: string;
+      circleAX: string;
+      circleBO: string;
+      circleBX: string;
+    }
+  | {
+      kind: "DefCircleTangentsFromPoint";
+      from: string;
+      circleO: string;
+      circleX: string;
+      firstName: string;
+      secondName: string;
+    }
   | { kind: "DefAngleBisectorLine"; auxName: string; a: string; b: string; c: string }
   | { kind: "DefCircleCircumCenter"; centerName: string; a: string; b: string; c: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
@@ -288,6 +305,87 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         y: anchorsWorld.b.y,
       });
       const anchors = { a: mustName(pointName, line.throughId), b: auxName };
+      lineAnchorNames.set(lineId, anchors);
+      return anchors;
+    }
+
+    if (line.kind === "circleCircleTangent") {
+      const anchorsWorld = getLineWorldAnchors(line, scene);
+      if (!anchorsWorld) {
+        throw new Error(`Cannot export undefined circle-circle tangent geometry: ${line.id}`);
+      }
+      const circleA = circleById.get(line.circleAId);
+      const circleB = circleById.get(line.circleBId);
+      if (!circleA || !circleB) {
+        throw new Error(`Cannot export undefined circle-circle tangent geometry: ${line.id}`);
+      }
+      const geomA = circleGeomById(circleA.id);
+      const geomB = circleGeomById(circleB.id);
+      const simMode: "outer" | "inner" = line.family === "outer" ? "outer" : "inner";
+      const simWorld = resolveCircleSimilitudeCenter(geomA.center, geomA.radius, geomB.center, geomB.radius, simMode);
+      const tangentCandidates = simWorld ? tangentPointsFromPointToCircle(simWorld, geomA.center, geomA.radius) : [];
+
+      if (simWorld && tangentCandidates.length > 0) {
+        const circleAO = ensureCircleCenterName(line.circleAId);
+        const circleAX = ensureCircleThroughName(line.circleAId);
+        const circleBO = ensureCircleCenterName(line.circleBId);
+        const circleBX = ensureCircleThroughName(line.circleBId);
+
+        derivedAuxIndex += 1;
+        const simName = `tkzSim_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefCircleSimilitudeCenter",
+          name: simName,
+          mode: simMode,
+          circleAO,
+          circleAX,
+          circleBO,
+          circleBX,
+        });
+
+        derivedAuxIndex += 1;
+        const tangentFirstName = `tkzTanCC_${derivedAuxIndex}_1`;
+        derivedAuxIndex += 1;
+        const tangentSecondName = `tkzTanCC_${derivedAuxIndex}_2`;
+        constructions.push({
+          kind: "DefCircleTangentsFromPoint",
+          from: simName,
+          circleO: circleAO,
+          circleX: circleAX,
+          firstName: tangentFirstName,
+          secondName: tangentSecondName,
+        });
+
+        let tangentName = tangentFirstName;
+        if (tangentCandidates.length > 1) {
+          const d0 = distance(tangentCandidates[0], anchorsWorld.a);
+          const d1 = distance(tangentCandidates[1], anchorsWorld.a);
+          tangentName = d1 < d0 ? tangentSecondName : tangentFirstName;
+        }
+        const anchors = { a: simName, b: tangentName };
+        lineAnchorNames.set(lineId, anchors);
+        return anchors;
+      }
+
+      // Fallback for degenerate/export-unrepresentable similitude cases
+      // (for example equal-radius outer tangents where external center is at infinity).
+      derivedAuxIndex += 1;
+      const auxAName = `tkzTanCC_A_${derivedAuxIndex}`;
+      constructions.push({
+        kind: "DefPoint",
+        name: auxAName,
+        x: anchorsWorld.a.x,
+        y: anchorsWorld.a.y,
+      });
+      derivedAuxIndex += 1;
+      const auxBName = `tkzTanCC_B_${derivedAuxIndex}`;
+      constructions.push({
+        kind: "DefPoint",
+        name: auxBName,
+        x: anchorsWorld.b.x,
+        y: anchorsWorld.b.y,
+      });
+      const anchors = { a: auxAName, b: auxBName };
       lineAnchorNames.set(lineId, anchors);
       return anchors;
     }
@@ -877,9 +975,12 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (!line.visible) continue;
     const lineNames = resolveLineAnchorsById(line.id);
     const ext = computeLineDrawPlacement(scene, line);
+    const circleCircleAnchorId = line.kind === "circleCircleTangent" ? `${line.id}#a` : null;
     const lineAnchorId =
       line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent"
         ? line.throughId
+        : line.kind === "circleCircleTangent"
+          ? (circleCircleAnchorId as string)
         : line.kind === "angleBisector"
           ? line.bId
           : line.aId;
@@ -1200,6 +1301,21 @@ export function renderTikz(cmds: TikzCommand[]): string {
       out.push(`\\tkzDefLine[parallel=through ${cmd.through}](${cmd.baseA},${cmd.baseB}) \\tkzGetPoint{${cmd.auxName}}`);
       continue;
     }
+    if (cmd.kind === "DefCircleSimilitudeCenter") {
+      const macro = cmd.mode === "outer" ? "tkzDefExtSimilitudeCenter" : "tkzDefIntSimilitudeCenter";
+      assertTkzMacro(macro);
+      assertTkzMacro("tkzGetPoint");
+      out.push(`\\${macro}(${cmd.circleAO},${cmd.circleAX})(${cmd.circleBO},${cmd.circleBX}) \\tkzGetPoint{${cmd.name}}`);
+      continue;
+    }
+    if (cmd.kind === "DefCircleTangentsFromPoint") {
+      assertTkzMacro("tkzDefLine");
+      assertTkzMacro("tkzGetPoints");
+      out.push(
+        `\\tkzDefLine[tangent from = ${cmd.from}](${cmd.circleO},${cmd.circleX}) \\tkzGetPoints{${cmd.firstName}}{${cmd.secondName}}`
+      );
+      continue;
+    }
     if (cmd.kind === "DefAngleBisectorLine") {
       assertAngleBisectorMacro("tkzDefTriangleCenter");
       assertTkzMacro("tkzGetPoint");
@@ -1398,6 +1514,65 @@ function fmt(v: number): string {
   return Number(v.toPrecision(15)).toString();
 }
 
+function resolveCircleSimilitudeCenter(
+  centerA: { x: number; y: number },
+  radiusA: number,
+  centerB: { x: number; y: number },
+  radiusB: number,
+  mode: "outer" | "inner"
+): { x: number; y: number } | null {
+  const eps = 1e-12;
+  if (!(radiusA > eps) || !(radiusB > eps)) return null;
+  if (mode === "outer") {
+    const denom = radiusA - radiusB;
+    if (Math.abs(denom) <= eps) return null;
+    return {
+      x: (-radiusB * centerA.x + radiusA * centerB.x) / denom,
+      y: (-radiusB * centerA.y + radiusA * centerB.y) / denom,
+    };
+  }
+  const denom = radiusA + radiusB;
+  if (Math.abs(denom) <= eps) return null;
+  return {
+    x: (radiusB * centerA.x + radiusA * centerB.x) / denom,
+    y: (radiusB * centerA.y + radiusA * centerB.y) / denom,
+  };
+}
+
+function tangentPointsFromPointToCircle(
+  through: { x: number; y: number },
+  center: { x: number; y: number },
+  radius: number
+): Array<{ x: number; y: number }> {
+  const eps = 1e-10;
+  const vx = through.x - center.x;
+  const vy = through.y - center.y;
+  const d2 = vx * vx + vy * vy;
+  const r2 = radius * radius;
+  if (!(radius > 1e-12) || d2 <= 1e-12 || d2 < r2 - eps) return [];
+  const k = r2 / d2;
+  const perp = { x: -vy, y: vx };
+  if (Math.abs(d2 - r2) <= eps) {
+    return [
+      {
+        x: center.x + k * vx,
+        y: center.y + k * vy,
+      },
+    ];
+  }
+  const h = (radius * Math.sqrt(Math.max(0, d2 - r2))) / d2;
+  return [
+    {
+      x: center.x + k * vx + h * perp.x,
+      y: center.y + k * vy + h * perp.y,
+    },
+    {
+      x: center.x + k * vx - h * perp.x,
+      y: center.y + k * vy - h * perp.y,
+    },
+  ];
+}
+
 function lineLikeNamesFromRef(
   ref: GeometryObjectRef,
   resolveLineAnchorsById: (lineId: string) => { a: string; b: string },
@@ -1418,6 +1593,9 @@ function lineLikeNamesFromRef(
     }
     if (line.kind === "tangent") {
       return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId };
+    }
+    if (line.kind === "circleCircleTangent") {
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b };
     }
     if (line.kind === "angleBisector") {
       return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.bId };
@@ -1637,15 +1815,20 @@ function computeLineDrawPlacement(
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const dd = dx * dx + dy * dy;
+  const circleCircleAnchorId = line.kind === "circleCircleTangent" ? `${line.id}#a` : null;
   const anchorAId =
     line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent"
       ? line.throughId
+      : line.kind === "circleCircleTangent"
+        ? (circleCircleAnchorId as string)
       : line.kind === "angleBisector"
         ? line.bId
         : line.aId;
   const anchorBId =
     line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent"
       ? line.id
+      : line.kind === "circleCircleTangent"
+        ? line.id
       : line.kind === "angleBisector"
         ? line.id
         : line.bId;
@@ -1731,6 +1914,9 @@ function collectLineRelevantPointIds(
   const anchors = getLineWorldAnchors(line, scene);
   if (line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent") {
     pushPoint(line.throughId, getPointWorldPosCached(scene, line.throughId));
+    pushPoint(line.id, anchors?.b ?? null);
+  } else if (line.kind === "circleCircleTangent") {
+    pushPoint(`${line.id}#a`, anchors?.a ?? null);
     pushPoint(line.id, anchors?.b ?? null);
   } else if (line.kind === "angleBisector") {
     pushPoint(line.bId, getPointWorldPosCached(scene, line.bId));

@@ -83,19 +83,10 @@ const hit = hitTestTopObject(scene, camera, vp, { x: 400, y: 300 });
 assert(hit?.type === "point" && hit.id === "p1", "hitTestTopObject should hit point A at viewport center");
 
 let created = 0;
-constructFromClick({
-  screen: { x: 420, y: 320 },
-  activeTool: "point",
-  pendingSelection: null,
-  hits: {
-    hitPointId: null,
-    hitSegmentId: null,
-    hitObject: null,
-    shiftKey: false,
-    hasCopyStyleSource: false,
-    snap: null,
-  },
-  io: {
+let circleCircleTangents = 0;
+type TestIO = Parameters<typeof constructFromClick>[0]["io"];
+function makeIo(overrides: Partial<TestIO> = {}): TestIO {
+  return {
     setPendingSelection() {},
     clearPendingSelection() {},
     createFreePoint() {
@@ -131,6 +122,10 @@ constructFromClick({
     },
     createTangentLines() {
       return [];
+    },
+    createCircleTangentLines() {
+      circleCircleTangents += 1;
+      return ["l_t0", "l_t1", "l_t2", "l_t3"];
     },
     createAngleBisectorLine() {
       return null;
@@ -183,8 +178,40 @@ constructFromClick({
     },
     camera,
     vp,
+    ...overrides,
+  };
+}
+
+constructFromClick({
+  screen: { x: 420, y: 320 },
+  activeTool: "point",
+  pendingSelection: null,
+  hits: {
+    hitPointId: null,
+    hitSegmentId: null,
+    hitObject: null,
+    shiftKey: false,
+    hasCopyStyleSource: false,
+    snap: null,
   },
+  io: makeIo(),
 });
 assert(created === 1, "constructFromClick should delegate point creation");
+
+constructFromClick({
+  screen: { x: 420, y: 320 },
+  activeTool: "tangent_line",
+  pendingSelection: { tool: "tangent_line", step: 2, first: { type: "circle", id: "c1" } },
+  hits: {
+    hitPointId: null,
+    hitSegmentId: null,
+    hitObject: { type: "circle", id: "c2" },
+    shiftKey: false,
+    hasCopyStyleSource: false,
+    snap: null,
+  },
+  io: makeIo(),
+});
+assert(circleCircleTangents === 1, "tangent tool should delegate circle-circle selection to createCircleTangentLines");
 
 console.log("engine-boundary: ok");

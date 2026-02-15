@@ -229,6 +229,7 @@ export type GeoActions = {
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createTangentLines: (throughId: string, circleId: string) => string[];
+  createCircleTangentLines: (circleAId: string, circleBId: string) => string[];
   createAngleBisectorLine: (aId: string, bId: string, cId: string) => string | null;
   createAngle: (aId: string, bId: string, cId: string) => string | null;
   createSector: (centerId: string, startId: string, endId: string) => string | null;

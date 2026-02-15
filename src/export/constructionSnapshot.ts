@@ -72,12 +72,15 @@ export type SnapshotPoint = {
 
 export type SnapshotLine = {
   id: string;
-  kind?: "twoPoint" | "perpendicular" | "parallel" | "tangent" | "angleBisector";
+  kind?: "twoPoint" | "perpendicular" | "parallel" | "tangent" | "circleCircleTangent" | "angleBisector";
   aId?: string;
   bId?: string;
   cId?: string;
   throughId?: string;
   circleId?: string;
+  circleAId?: string;
+  circleBId?: string;
+  family?: "outer" | "inner";
   branchIndex?: 0 | 1;
   base?: { type: "line" | "segment"; id: string };
   visible: boolean;
@@ -175,6 +178,16 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
               kind: "tangent" as const,
               throughId: line.throughId,
               circleId: line.circleId,
+              branchIndex: line.branchIndex,
+              visible: line.visible,
+            }
+        : line.kind === "circleCircleTangent"
+          ? {
+              id: line.id,
+              kind: "circleCircleTangent" as const,
+              circleAId: line.circleAId,
+              circleBId: line.circleBId,
+              family: line.family,
               branchIndex: line.branchIndex,
               visible: line.visible,
             }

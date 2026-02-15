@@ -69,6 +69,13 @@ function describeSelectedConstruction(
         : `circle ${line.circleId}`;
       return `Tangent line through ${pointLabel(line.throughId, pointNameById)} to ${circleText}.`;
     }
+    if (line.kind === "circleCircleTangent") {
+      const circleA = circleById.get(line.circleAId);
+      const circleB = circleById.get(line.circleBId);
+      const circleAText = circleA ? describeCircleRef(circleA, pointNameById) : `circle ${line.circleAId}`;
+      const circleBText = circleB ? describeCircleRef(circleB, pointNameById) : `circle ${line.circleBId}`;
+      return `Common tangent line of ${circleAText} and ${circleBText}.`;
+    }
     if (line.kind === "angleBisector") {
       return `Internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
         line.bId,
@@ -201,6 +208,13 @@ function describePointConstruction(
         const circleText = circle ? describeCircleRef(circle, pointNameById) : `circle ${line.circleId}`;
         return `Point on tangent line through ${pointLabel(line.throughId, pointNameById)} to ${circleText}.`;
       }
+      if (line.kind === "circleCircleTangent") {
+        const circleA = circleById.get(line.circleAId);
+        const circleB = circleById.get(line.circleBId);
+        const circleAText = circleA ? describeCircleRef(circleA, pointNameById) : `circle ${line.circleAId}`;
+        const circleBText = circleB ? describeCircleRef(circleB, pointNameById) : `circle ${line.circleBId}`;
+        return `Point on common tangent line of ${circleAText} and ${circleBText}.`;
+      }
       return `Point on line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
     }
   if (point.kind === "pointOnSegment") {
@@ -250,6 +264,14 @@ function describePointConstruction(
           ? `tangent line through ${pointLabel(line.throughId, pointNameById)} to ${(() => {
               const circle = circleById.get(line.circleId);
               return circle ? describeCircleRef(circle, pointNameById) : `circle ${line.circleId}`;
+            })()}`
+        : line.kind === "circleCircleTangent"
+          ? `common tangent line of ${(() => {
+              const circleA = circleById.get(line.circleAId);
+              return circleA ? describeCircleRef(circleA, pointNameById) : `circle ${line.circleAId}`;
+            })()} and ${(() => {
+              const circleB = circleById.get(line.circleBId);
+              return circleB ? describeCircleRef(circleB, pointNameById) : `circle ${line.circleBId}`;
             })()}`
         : line.kind === "angleBisector"
           ? `internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(
@@ -317,6 +339,13 @@ function describeObjectRef(
       const circle = circleById.get(line.circleId);
       const circleText = circle ? describeCircleRef(circle, pointNameById) : `circle ${line.circleId}`;
       return `tangent line through ${pointLabel(line.throughId, pointNameById)} to ${circleText}`;
+    }
+    if (line?.kind === "circleCircleTangent") {
+      const circleA = circleById.get(line.circleAId);
+      const circleB = circleById.get(line.circleBId);
+      const circleAText = circleA ? describeCircleRef(circleA, pointNameById) : `circle ${line.circleAId}`;
+      const circleBText = circleB ? describeCircleRef(circleB, pointNameById) : `circle ${line.circleBId}`;
+      return `common tangent line of ${circleAText} and ${circleBText}`;
     }
     if (line?.kind === "angleBisector") {
       return `internal angle bisector of ${pointLabel(line.aId, pointNameById)}${pointLabel(

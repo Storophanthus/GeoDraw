@@ -249,6 +249,18 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
+  if (kind === "circleCircleTangent") {
+    return {
+      id: String(raw.id),
+      kind: "circleCircleTangent",
+      circleAId: String(raw.circleAId),
+      circleBId: String(raw.circleBId),
+      family: String(raw.family) === "inner" ? "inner" : "outer",
+      branchIndex: Number(raw.branchIndex) === 1 ? 1 : 0,
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      style: (raw.style as LineStyle) ?? defaultLineStyle,
+    };
+  }
   if (kind === "angleBisector") {
     return {
       id: String(raw.id),
@@ -399,6 +411,19 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("\\tkzDrawLine")) {
       throw new Error("Expected tangent fixture to draw tangent line.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefExtSimilitudeCenter") || !tikz.includes("\\tkzDefIntSimilitudeCenter")) {
+      throw new Error("Expected circle-circle tangent fixture to emit tkz similitude-center constructions.");
+    }
+    if (!tikz.includes("\\tkzDefLine[tangent from =")) {
+      throw new Error("Expected circle-circle tangent fixture to emit tangent-from-point line construction.");
+    }
+    if (!tikz.includes("\\tkzDrawLine")) {
+      throw new Error("Expected circle-circle tangent fixture to draw tangent lines.");
     }
   }
 

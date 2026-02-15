@@ -121,6 +121,9 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
     } else if (l.kind === "tangent") {
       addDependency(graph, child, key("point", l.throughId));
       addDependency(graph, child, key("circle", l.circleId));
+    } else if (l.kind === "circleCircleTangent") {
+      addDependency(graph, child, key("circle", l.circleAId));
+      addDependency(graph, child, key("circle", l.circleBId));
     } else if (l.kind === "angleBisector") {
       addDependency(graph, child, key("point", l.aId));
       addDependency(graph, child, key("point", l.bId));

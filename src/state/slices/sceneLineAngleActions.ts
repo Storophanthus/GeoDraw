@@ -22,12 +22,29 @@ export function createSceneLineAngleActions(
   | "createPerpendicularLine"
   | "createParallelLine"
   | "createTangentLines"
+  | "createCircleTangentLines"
   | "createAngleBisectorLine"
   | "createAngle"
   | "createSector"
   | "createAngleFixed"
 > {
   const edgeKey = (aId: string, bId: string) => (aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`);
+  const lineSignature = (anchors: { a: { x: number; y: number }; b: { x: number; y: number } }): string => {
+    const dx = anchors.b.x - anchors.a.x;
+    const dy = anchors.b.y - anchors.a.y;
+    const len = Math.hypot(dx, dy);
+    if (len <= 1e-12) return "";
+    let nx = -dy / len;
+    let ny = dx / len;
+    let c = nx * anchors.a.x + ny * anchors.a.y;
+    if (nx < -1e-12 || (Math.abs(nx) <= 1e-12 && ny < -1e-12)) {
+      nx = -nx;
+      ny = -ny;
+      c = -c;
+    }
+    const q = (v: number) => Math.round(v * 1e9);
+    return `${q(nx)}:${q(ny)}:${q(c)}`;
+  };
   return {
     createPerpendicularLine(throughId, base) {
       let id: string | null = null;
@@ -190,6 +207,69 @@ export function createSceneLineAngleActions(
           selectedObject: created.length > 0 ? { type: "line", id: created[created.length - 1] } : prev.selectedObject,
           recentCreatedObject:
             created.length > 0 ? { type: "line", id: created[created.length - 1] } : prev.recentCreatedObject,
+          nextLineId,
+        };
+      });
+      return created;
+    },
+
+    createCircleTangentLines(circleAId, circleBId) {
+      if (circleAId === circleBId) return [];
+      const created: string[] = [];
+      ctx.setState((prev) => {
+        const circleA = prev.scene.circles.find((c) => c.id === circleAId);
+        const circleB = prev.scene.circles.find((c) => c.id === circleBId);
+        if (!circleA || !circleB) return prev;
+
+        const nextLines = [...prev.scene.lines];
+        let nextLineId = prev.nextLineId;
+        const signatures = new Set<string>();
+        const candidates: Array<{ family: "outer" | "inner"; branchIndex: 0 | 1 }> = [
+          { family: "outer", branchIndex: 0 },
+          { family: "outer", branchIndex: 1 },
+          { family: "inner", branchIndex: 0 },
+          { family: "inner", branchIndex: 1 },
+        ];
+
+        for (let i = 0; i < candidates.length; i += 1) {
+          const candidate = candidates[i];
+          const tempLine: SceneModel["lines"][number] = {
+            id: `__temp_circle_tangent_${candidate.family}_${candidate.branchIndex}__`,
+            kind: "circleCircleTangent",
+            circleAId,
+            circleBId,
+            family: candidate.family,
+            branchIndex: candidate.branchIndex,
+            visible: true,
+            style: prev.lineDefaults,
+          };
+          const anchors = getLineWorldAnchors(tempLine, prev.scene);
+          if (!anchors) continue;
+          const signature = lineSignature(anchors);
+          if (!signature || signatures.has(signature)) continue;
+          signatures.add(signature);
+
+          const id = `l_${nextLineId++}`;
+          nextLines.push({
+            id,
+            kind: "circleCircleTangent",
+            circleAId,
+            circleBId,
+            family: candidate.family,
+            branchIndex: candidate.branchIndex,
+            visible: true,
+            style: { ...prev.lineDefaults },
+          });
+          created.push(id);
+        }
+
+        if (created.length === 0) return prev;
+        const lastId = created[created.length - 1];
+        return {
+          ...prev,
+          scene: { ...prev.scene, lines: nextLines },
+          selectedObject: { type: "line", id: lastId },
+          recentCreatedObject: { type: "line", id: lastId },
           nextLineId,
         };
       });

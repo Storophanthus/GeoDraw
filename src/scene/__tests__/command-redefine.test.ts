@@ -1,4 +1,6 @@
 import { commandBarApi, getGeoStore } from "../../state/geoStore";
+import { parseCommandInput, type ParseContext, type Symbol } from "../../CommandParser";
+import { getPointWorldPos } from "../../scene/points";
 
 function fail(message: string): never {
   throw new Error(message);
@@ -18,6 +20,44 @@ function aliasId(name: string): string {
   const alias = commandBarApi.getCommandObjectAliases()[name];
   if (!alias) fail(`Missing alias ${name}`);
   return alias.id;
+}
+
+function assertPointLabel(pointId: string, expected: string, context: string): void {
+  const point = getGeoStore().scene.points.find((p) => p.id === pointId);
+  if (!point) fail(`${context}: missing point ${pointId}`);
+  if (point.name !== expected) fail(`${context}: expected point.name=${expected}, got ${point.name}`);
+  if (point.captionTex !== expected) fail(`${context}: expected point.captionTex=${expected}, got ${point.captionTex}`);
+}
+
+function buildParseContext(): ParseContext {
+  const scene = getGeoStore().scene;
+  const symbolsByLabel = new Map<string, Symbol[]>();
+  const add = (symbol: Symbol) => {
+    const list = symbolsByLabel.get(symbol.label);
+    if (!list) symbolsByLabel.set(symbol.label, [symbol]);
+    else list.push(symbol);
+  };
+  for (let i = 0; i < scene.points.length; i += 1) {
+    const p = scene.points[i];
+    add({ kind: "point", id: p.id, label: p.name });
+  }
+  for (let i = 0; i < scene.numbers.length; i += 1) {
+    const n = scene.numbers[i];
+    add({ kind: "other", id: n.id, label: n.name, type: "number" });
+  }
+  const pointWorldById = new Map<string, { x: number; y: number }>();
+  for (let i = 0; i < scene.points.length; i += 1) {
+    const p = scene.points[i];
+    const w = getPointWorldPos(p, scene);
+    if (w) pointWorldById.set(p.id, w);
+  }
+  return {
+    symbolsByLabel,
+    pointWorldById,
+    scalarsByName: new Map(Object.entries(commandBarApi.getScalarVars())),
+    objectAliases: new Map(Object.entries(commandBarApi.getCommandObjectAliases())),
+    objectNames: new Set(Object.keys(commandBarApi.getCommandObjectAliases())),
+  };
 }
 
 function mustOk<T extends { ok: boolean }>(out: T, context: string): asserts out is T & { ok: true } {
@@ -44,9 +84,11 @@ mustOk(commandBarApi.applyObjectAssignment("rpt", { type: "CreatePointXY", x: 1,
 const pointAlias = getGeoStore().scene.points.find((p) => p.name === "rpt");
 assert(!!pointAlias, "missing named point after point assignment create");
 const pointAliasId = pointAlias.id;
+assertPointLabel(pointAliasId, "rpt", "create point alias");
 mustOk(commandBarApi.applyObjectAssignment("rpt", { type: "CreatePointXY", x: 3, y: 4 }), "update point alias");
 const pointAliasAfter = getGeoStore().scene.points.find((p) => p.name === "rpt");
 assert(!!pointAliasAfter && pointAliasAfter.id === pointAliasId, "point id changed on redefine");
+assertPointLabel(pointAliasId, "rpt", "update point alias");
 {
   const p = getGeoStore().scene.points.find((it) => it.id === pointAliasId);
   assert(!!p && p.kind === "free", "point alias target missing after redefine");
@@ -159,11 +201,26 @@ assert(JSON.stringify(segBefore) === JSON.stringify(segAfter), "segment mutated 
 // fail-closed: non-free point alias cannot be redefined
 mustOk(commandBarApi.applyObjectAssignment("rMid", { type: "CreateMidpointByPoints", aId: a, bId: b }), "create midpoint alias");
 const midId = aliasId("rMid");
+assertPointLabel(midId, "rMid", "create midpoint alias");
 const midBefore = getGeoStore().scene.points.find((it) => it.id === midId);
 const badPoint = commandBarApi.applyObjectAssignment("rMid", { type: "CreatePointXY", x: -9, y: -9 });
 assert(!badPoint.ok, "non-free point redefine unexpectedly succeeded");
 const midAfter = getGeoStore().scene.points.find((it) => it.id === midId);
 assert(JSON.stringify(midBefore) === JSON.stringify(midAfter), "non-free point mutated after failed redefine");
+
+mustOk(commandBarApi.applyObjectAssignment("rMidSeg", { type: "CreateMidpointBySegment", segId }), "create midpoint-by-segment alias");
+const midSegId = aliasId("rMidSeg");
+assertPointLabel(midSegId, "rMidSeg", "create midpoint-by-segment alias");
+
+// parser+assignment integration: assignment label must override midpoint auto-name
+mustOk(commandBarApi.setPointXY("A", -5, 0), "set A for parser integration");
+mustOk(commandBarApi.setPointXY("X", 5, 0), "set X for parser integration");
+{
+  const parsed = parseCommandInput("M=Midpoint(X,A)", buildParseContext());
+  if (parsed.kind !== "assignObject") fail(`unexpected parse kind: ${parsed.kind}`);
+  mustOk(commandBarApi.applyObjectAssignment(parsed.name, parsed.cmd), "apply parsed midpoint assignment");
+}
+assertPointLabel(aliasId("M"), "M", "parser midpoint assignment label");
 
 // stale alias safety: deleting aliased object then reassigning same alias should recreate, not fail.
 {

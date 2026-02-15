@@ -343,6 +343,63 @@ export function drawPendingPreview(
             ? hoveredHit.id
             : null;
     } else {
+      const hoveredCircleId =
+        hoverSnap?.kind === "onCircle" && hoverSnap.circleId
+          ? hoverSnap.circleId
+          : hoveredHit?.type === "circle"
+            ? hoveredHit.id
+            : null;
+      if (hoveredCircleId && hoveredCircleId !== pendingSelection.first.id) {
+        const fallbackStyle = { strokeColor: "#334155", strokeWidth: 1.2, dash: "solid" as const, opacity: 1 };
+        const previewStyle = scene.lines[0]?.style ?? fallbackStyle;
+        const signatures = new Set<string>();
+        const signatureFor = (a: Vec2, b: Vec2): string => {
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const len = Math.hypot(dx, dy);
+          if (len <= 1e-12) return "";
+          let nx = -dy / len;
+          let ny = dx / len;
+          let c = nx * a.x + ny * a.y;
+          if (nx < -1e-12 || (Math.abs(nx) <= 1e-12 && ny < -1e-12)) {
+            nx = -nx;
+            ny = -ny;
+            c = -c;
+          }
+          const q = (v: number) => Math.round(v * 1e9);
+          return `${q(nx)}:${q(ny)}:${q(c)}`;
+        };
+        const candidates: Array<{ family: "outer" | "inner"; branchIndex: 0 | 1 }> = [
+          { family: "outer", branchIndex: 0 },
+          { family: "outer", branchIndex: 1 },
+          { family: "inner", branchIndex: 0 },
+          { family: "inner", branchIndex: 1 },
+        ];
+        for (let i = 0; i < candidates.length; i += 1) {
+          const candidate = candidates[i];
+          const anchors = getLineWorldAnchors(
+            {
+              id: `__preview_tangent_${candidate.family}_${candidate.branchIndex}__`,
+              kind: "circleCircleTangent",
+              circleAId: pendingSelection.first.id,
+              circleBId: hoveredCircleId,
+              family: candidate.family,
+              branchIndex: candidate.branchIndex,
+              visible: true,
+              style: previewStyle,
+            },
+            scene
+          );
+          if (!anchors) continue;
+          const signature = signatureFor(anchors.a, anchors.b);
+          if (!signature || signatures.has(signature)) continue;
+          signatures.add(signature);
+          drawInfinitePreviewLine(anchors.a, sub(anchors.b, anchors.a));
+        }
+        ctx.restore();
+        return;
+      }
+
       circleId = pendingSelection.first.id;
       if (hoverSnap?.kind === "point" && hoverSnap.pointId) {
         const p = scene.points.find((pt) => pt.id === hoverSnap.pointId);
