@@ -1250,3 +1250,15 @@ When starting a new chat, provide:
 
 ## Risks / Constraints
 - Current smoke checks are deterministic string assertions; they intentionally do not prove full semantic equivalence.
+
+  - Polygon ownership stress validation (closure for homework #1 lifecycle hardening):
+    - Added `src/scene/__tests__/polygon-ownership-stress.test.ts`.
+    - Covers high-churn polygon redefine cycles, shared-edge owner integrity, and delete cleanup.
+    - Added to `npm run test:scene` so ownership lifecycle regressions are caught in routine scene tests.
+  EOF
+
+- Polygon ownership stress validation (closure for homework #1 lifecycle hardening):
+  - Added `src/scene/__tests__/polygon-ownership-stress.test.ts`.
+  - Covers high-churn polygon redefine cycles, shared-edge owner integrity,
+  and delete cleanup.
+  - Added to `npm run test:scene` so ownership lifecycle regressions are caught in routine scene tests.
