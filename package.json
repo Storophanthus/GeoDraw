@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "check:handoff": "node scripts/check-handoff-update.mjs",
-    "test:command": "node --import tsx src/scene/__tests__/command-parser.test.ts",
+    "test:command": "node --import tsx src/scene/__tests__/command-parser.test.ts && node --import tsx src/scene/__tests__/command-redefine.test.ts && node --import tsx src/scene/__tests__/command-redefine-export.test.ts",
     "test:export": "node scripts/test-export.mjs",
     "test:perf": "tsx src/scene/__tests__/eval-perf.test.ts",
     "test:zoom": "node --import tsx scripts/zoom-stress.ts",

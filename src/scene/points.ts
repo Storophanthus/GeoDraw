@@ -390,6 +390,9 @@ export type SceneSegment = {
   // Segment ownership created by polygon tool.
   // Manual segments keep this undefined.
   ownedByPolygonIds?: string[];
+  // Segment ownership created by sector tool (radial sides).
+  // Manual segments keep this undefined.
+  ownedBySectorIds?: string[];
   visible: boolean;
   showLabel: boolean;
   style: LineStyle;

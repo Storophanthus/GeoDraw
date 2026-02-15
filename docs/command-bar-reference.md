@@ -55,6 +55,15 @@ Notes:
   - `c3 = Circle3P(A,B,C)`
   - `c = Circle(O,r)`
 
+Redefine behavior (current):
+- `name = <numeric expr>`:
+  - if `name` is an existing constant number, it is updated in-place.
+  - if `name` is new, a new constant number is created.
+- `name = <point expr>` or `name = Point(...)`:
+  - if `name` is an existing free point, its coordinates are updated in-place.
+  - if `name` is new, a new point is created.
+- Non-free points and non-constant numbers are fail-closed (error).
+
 Notes:
 - `Tangent(P,c)` can create one or two tangent lines, so assignment is intentionally rejected.
 - Alias-based commands (`Midpoint(s)`, `Perpendicular`, `Parallel`, `Tangent`) require the referenced object to have a command alias from a prior assignment.

@@ -4,6 +4,7 @@ import { exportTikzWithOptions } from "../export/tikz";
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
 import type { Camera } from "../view/camera";
+import { IconGlobe, IconPoint, IconLine, IconType } from "./icons";
 
 type ExportPanelProps = {
   visible: boolean;
@@ -178,55 +179,67 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             Label glow
           </label>
         </div>
-        <div className="scaleBlock compactScaleBlock">
-          <label className="controlRow compactControlRow">
-            <span>Global Scale</span>
+        <div className="compactScaleGrid">
+          <div className="scaleGridItem">
+            <div className="scaleGridIcon">
+              <IconGlobe size={14} />
+            </div>
             <input
-              className="scaleInputCompact"
+              className="scaleGridInput"
               type="number"
               min={0.1}
               max={6}
               step={0.05}
               value={exportGlobalScale}
               onChange={(e) => setExportGlobalScale(e.target.value)}
+              title="Global Scale"
             />
-          </label>
-          <label className="controlRow compactControlRow">
-            <span>Point Scale</span>
+          </div>
+          <div className="scaleGridItem">
+            <div className="scaleGridIcon">
+              <IconPoint size={14} />
+            </div>
             <input
-              className="scaleInputCompact"
+              className="scaleGridInput"
               type="number"
               min={0.1}
               max={4}
               step={0.05}
               value={exportPointScale}
               onChange={(e) => setExportPointScale(e.target.value)}
+              title="Point Scale"
             />
-          </label>
-          <label className="controlRow compactControlRow">
-            <span>Line Scale</span>
+          </div>
+          <div className="scaleGridItem">
+            <div className="scaleGridIcon">
+              <IconLine size={14} />
+            </div>
             <input
-              className="scaleInputCompact"
+              className="scaleGridInput"
               type="number"
               min={0.1}
               max={4}
               step={0.05}
               value={exportLineScale}
               onChange={(e) => setExportLineScale(e.target.value)}
+              title="Line Scale"
             />
-          </label>
-          <label className="controlRow compactControlRow">
-            <span>Label Scale</span>
+          </div>
+          <div className="scaleGridItem">
+            <div className="scaleGridIcon">
+              <IconType size={14} />
+            </div>
             <input
-              className="scaleInputCompact"
+              className="scaleGridInput"
               type="number"
               min={0.1}
               max={4}
               step={0.05}
               value={exportLabelScale}
               onChange={(e) => setExportLabelScale(e.target.value)}
+              title="Label Scale"
             />
-          </label>
+          </div>
         </div>
         <div className="actionsRow">
           <button className="actionButton primary" onClick={generateTikz}>

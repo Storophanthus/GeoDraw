@@ -105,6 +105,11 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
         addDependency(graph, child, key("polygon", s.ownedByPolygonIds[i]));
       }
     }
+    if (Array.isArray(s.ownedBySectorIds)) {
+      for (let i = 0; i < s.ownedBySectorIds.length; i += 1) {
+        addDependency(graph, child, key("angle", s.ownedBySectorIds[i]));
+      }
+    }
   }
 
   for (const l of scene.lines) {
@@ -203,6 +208,17 @@ export function collectCascadeDelete(scene: SceneModel, selected: Exclude<Select
         if (segment && Array.isArray(segment.ownedByPolygonIds) && segment.ownedByPolygonIds.length > 0) {
           const allOwnersDeleted = segment.ownedByPolygonIds.every((ownerId) => deleted.has(key("polygon", ownerId)));
           if (!allOwnersDeleted) continue;
+        }
+      }
+      if (cur.startsWith("angle:") && child.startsWith("segment:")) {
+        const angleId = cur.slice("angle:".length);
+        const angle = scene.angles.find((a) => a.id === angleId);
+        if (angle?.kind === "sector") {
+          const segment = segmentById.get(child.slice("segment:".length));
+          if (segment && Array.isArray(segment.ownedBySectorIds) && segment.ownedBySectorIds.length > 0) {
+            const allOwnersDeleted = segment.ownedBySectorIds.every((ownerId) => deleted.has(key("angle", ownerId)));
+            if (!allOwnersDeleted) continue;
+          }
         }
       }
       queue.push(child);

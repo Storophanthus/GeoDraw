@@ -1,5 +1,5 @@
 import { distance } from "../../geo/geometry";
-import { isRightExactByProvenance, registerPerpendicularRelation } from "../../domain/rightAngleProvenance";
+import { isRightExactByProvenance, registerPerpendicularRelation, registerSegmentPair } from "../../domain/rightAngleProvenance";
 import {
   computeOrientedAngleRad,
   evaluateAngleExpressionDegrees,
@@ -27,6 +27,7 @@ export function createSceneLineAngleActions(
   | "createSector"
   | "createAngleFixed"
 > {
+  const edgeKey = (aId: string, bId: string) => (aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`);
   return {
     createPerpendicularLine(throughId, base) {
       let id: string | null = null;
@@ -296,7 +297,9 @@ export function createSceneLineAngleActions(
     createSector(centerId, startId, endId) {
       if (centerId === startId || centerId === endId || startId === endId) return null;
       let id: string | null = null;
+      let createdEdges: Array<{ id: string; aId: string; bId: string }> = [];
       ctx.setState((prev) => {
+        createdEdges = [];
         const pCenter = prev.scene.points.find((p) => p.id === centerId);
         const pStart = prev.scene.points.find((p) => p.id === startId);
         const pEnd = prev.scene.points.find((p) => p.id === endId);
@@ -315,10 +318,51 @@ export function createSceneLineAngleActions(
         const labelPosWorld = { x: wCenter.x + Math.cos(mid) * labelDist, y: wCenter.y + Math.sin(mid) * labelDist };
 
         id = `a_${prev.nextAngleId}`;
+        const edgeIndexByKey = new Map<string, number>();
+        const newSegments = [...prev.scene.segments];
+        for (let i = 0; i < newSegments.length; i += 1) {
+          const seg = newSegments[i];
+          edgeIndexByKey.set(edgeKey(seg.aId, seg.bId), i);
+        }
+        const radialPairs: Array<[string, string]> = [
+          [centerId, startId],
+          [centerId, endId],
+        ];
+        let nextSegmentId = prev.nextSegmentId;
+        for (let i = 0; i < radialPairs.length; i += 1) {
+          const [aId, bId] = radialPairs[i];
+          const k = edgeKey(aId, bId);
+          const existingIdx = edgeIndexByKey.get(k);
+          if (existingIdx !== undefined) {
+            const seg = newSegments[existingIdx];
+            if (Array.isArray(seg.ownedBySectorIds)) {
+              if (!seg.ownedBySectorIds.includes(id)) {
+                newSegments[existingIdx] = { ...seg, ownedBySectorIds: [...seg.ownedBySectorIds, id] };
+              }
+            } else {
+              newSegments[existingIdx] = { ...seg, ownedBySectorIds: [id] };
+            }
+            continue;
+          }
+          const segId = `s_${nextSegmentId}`;
+          nextSegmentId += 1;
+          newSegments.push({
+            id: segId,
+            aId,
+            bId,
+            ownedBySectorIds: [id],
+            visible: true,
+            showLabel: false,
+            style: { ...prev.segmentDefaults },
+          });
+          edgeIndexByKey.set(k, newSegments.length - 1);
+          createdEdges.push({ id: segId, aId, bId });
+        }
         return {
           ...prev,
           scene: {
             ...prev.scene,
+            segments: newSegments,
             angles: [
               ...prev.scene.angles,
               {
@@ -343,9 +387,14 @@ export function createSceneLineAngleActions(
           },
           selectedObject: { type: "angle", id },
           recentCreatedObject: { type: "angle", id },
+          nextSegmentId,
           nextAngleId: prev.nextAngleId + 1,
         };
       });
+      for (let i = 0; i < createdEdges.length; i += 1) {
+        const edge = createdEdges[i];
+        registerSegmentPair(edge.id, edge.aId, edge.bId);
+      }
       return id;
     },
 

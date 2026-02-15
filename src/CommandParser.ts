@@ -690,14 +690,6 @@ function parseCommandLike(input: string, ctx: ParseContext): ParseResult {
   return { kind: "expr", value: formatNumber(evaluated.value), numeric: evaluated.value };
 }
 
-function checkAssignmentNameAvailable(name: string, ctx: ParseContext): ParseResult | null {
-  if (ctx.scalarsByName.has(name)) return err(`Name already used: ${name}`);
-  if (ctx.objectNames.has(name)) return err(`Name already used: ${name}`);
-  const existing = ctx.symbolsByLabel.get(name);
-  if (existing && existing.length > 0) return err(`Name already used: ${name}`);
-  return null;
-}
-
 export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseResult {
   const input = rawInput.trim();
   if (!input) return err("Input is empty");
@@ -708,8 +700,6 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
   if (assignment) {
     const left = asIdentifier(assignment.left);
     if (!left) return err("Invalid assignment target");
-    const conflict = checkAssignmentNameAvailable(left, ctx);
-    if (conflict) return conflict;
 
     const commandMatch = assignment.right.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
     if (commandMatch) {

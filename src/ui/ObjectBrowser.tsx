@@ -1,16 +1,14 @@
 import { useState, useMemo } from "react";
 import {
-    Circle,
     Copy,
     Hash,
     Layers,
-    Minus
 } from "lucide-react";
 import type { SceneModel } from "../scene/points";
 import type { SelectedObject } from "../state/slices/storeTypes";
 import { getNumberValue } from "../scene/points";
-import { useGeoStore } from "../state/geoStore";
-import { IconAngle } from "./icons";
+import { commandBarApi, useGeoStore } from "../state/geoStore";
+import { IconAngle, IconPoint, IconLine, IconCircleRadius } from "./icons";
 
 type ObjectBrowserProps = {
     scene: SceneModel;
@@ -25,10 +23,29 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
     const setObjectVisibility = useGeoStore((store) => store.setObjectVisibility);
 
+    // Toggles state
+    const gridEnabled = useGeoStore((store) => store.gridEnabled);
+    const axesEnabled = useGeoStore((store) => store.axesEnabled);
+    const gridSnapEnabled = useGeoStore((store) => store.gridSnapEnabled);
+    const dependencyGlowEnabled = useGeoStore((store) => store.dependencyGlowEnabled);
+
+    const setGridEnabled = useGeoStore((store) => store.setGridEnabled);
+    const setAxesEnabled = useGeoStore((store) => store.setAxesEnabled);
+    const setGridSnapEnabled = useGeoStore((store) => store.setGridSnapEnabled);
+    const setDependencyGlowEnabled = useGeoStore((store) => store.setDependencyGlowEnabled);
+
     const pointNameById = useMemo(() => new Map(scene.points.map((p) => [p.id, p.name])), [scene.points]);
     const lineById = useMemo(() => new Map(scene.lines.map((l) => [l.id, l])), [scene.lines]);
     const segmentById = useMemo(() => new Map(scene.segments.map((s) => [s.id, s])), [scene.segments]);
     const circleById = useMemo(() => new Map(scene.circles.map((c) => [c.id, c])), [scene.circles]);
+    const commandAliases = useMemo(() => commandBarApi.getCommandObjectAliases(), [scene]);
+    const aliasByObjectKey = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const [alias, target] of Object.entries(commandAliases)) {
+            map.set(`${target.type}:${target.id}`, alias);
+        }
+        return map;
+    }, [commandAliases]);
 
     const pointLabel = (id: string): string => pointNameById.get(id) ?? id;
 
@@ -63,6 +80,11 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         } catch {
             setCopiedKey(null);
         }
+    };
+
+    const withAliasPrefix = (objectType: "point" | "segment" | "line" | "circle" | "polygon" | "angle", objectId: string, commandText: string): string => {
+        const alias = aliasByObjectKey.get(`${objectType}:${objectId}`);
+        return alias ? `${alias} = ${commandText}` : commandText;
     };
 
     const renderObjectRow = (
@@ -108,14 +130,14 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.polygons.length + scene.angles.length + scene.numbers.length },
         {
             id: "points",
-            icon: (props) => <Circle {...props} fill="currentColor" />,
+            icon: IconPoint as React.ElementType,
             label: "Points",
             description: "Filter by Points",
             count: scene.points.length
         },
-        { id: "lines", icon: Minus, label: "Lines", description: "Filter by Lines & Segments", count: scene.segments.length + scene.lines.length },
-        { id: "circles", icon: Circle, label: "Shapes", description: "Filter by Circles/Polygons", count: scene.circles.length + scene.polygons.length },
-        { id: "angles", icon: IconAngle, label: "Angles", description: "Filter by Angles", count: scene.angles.length },
+        { id: "lines", icon: IconLine as React.ElementType, label: "Lines", description: "Filter by Lines & Segments", count: scene.segments.length + scene.lines.length },
+        { id: "circles", icon: IconCircleRadius as React.ElementType, label: "Shapes", description: "Filter by Circles/Polygons", count: scene.circles.length + scene.polygons.length },
+        { id: "angles", icon: IconAngle as React.ElementType, label: "Angles", description: "Filter by Angles", count: scene.angles.length },
         { id: "numbers", icon: Hash, label: "Numbers", description: "Filter by Numbers & Values", count: scene.numbers.length },
     ];
 
@@ -138,30 +160,50 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         (next) => setObjectVisibility({ type: "point", id: point.id }, next),
                         `Point ${point.name}`,
                         point.kind === "free"
-                            ? `Point(${point.position.x.toFixed(4)},${point.position.y.toFixed(4)})`
+                            ? withAliasPrefix("point", point.id, `Point(${point.position.x.toFixed(4)},${point.position.y.toFixed(4)})`)
                             : point.kind === "midpointPoints"
-                                ? `Midpoint(${pointLabel(point.aId)},${pointLabel(point.bId)})`
+                                ? withAliasPrefix("point", point.id, `Midpoint(${pointLabel(point.aId)},${pointLabel(point.bId)})`)
                                 : point.kind === "midpointSegment"
-                                    ? `Midpoint(${lineLikeText({ type: "segment", id: point.segId })})`
+                                    ? withAliasPrefix("point", point.id, `Midpoint(${lineLikeText({ type: "segment", id: point.segId })})`)
                                     : point.kind === "pointByRotation"
-                                        ? `Rotate(${pointLabel(point.pointId)},${pointLabel(point.centerId)},${point.angleExpr ?? point.angleDeg},${point.direction})`
+                                        ? withAliasPrefix(
+                                            "point",
+                                            point.id,
+                                            `Rotate(${pointLabel(point.pointId)},${pointLabel(point.centerId)},${point.angleExpr ?? point.angleDeg},${point.direction})`
+                                        )
                                         : point.kind === "pointOnCircle"
-                                            ? `PointOn(${circleRefText(point.circleId)})`
+                                            ? withAliasPrefix("point", point.id, `PointOn(${circleRefText(point.circleId)})`)
                                             : point.kind === "pointOnLine"
-                                                ? `PointOn(${lineLikeText({ type: "line", id: point.lineId })})`
+                                                ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "line", id: point.lineId })})`)
                                                 : point.kind === "pointOnSegment"
-                                                    ? `PointOn(${lineLikeText({ type: "segment", id: point.segId })})`
+                                                    ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "segment", id: point.segId })})`)
                                                     : point.kind === "circleCenter"
-                                                        ? `Center(${circleRefText(point.circleId)})`
+                                                        ? withAliasPrefix("point", point.id, `Center(${circleRefText(point.circleId)})`)
                                                         : point.kind === "circleLineIntersectionPoint"
-                                                            ? `Intersect(${circleRefText(point.circleId)},${lineLikeText({ type: "line", id: point.lineId })})`
+                                                            ? withAliasPrefix(
+                                                                "point",
+                                                                point.id,
+                                                                `Intersect(${circleRefText(point.circleId)},${lineLikeText({ type: "line", id: point.lineId })})`
+                                                            )
                                                             : point.kind === "circleSegmentIntersectionPoint"
-                                                                ? `Intersect(${circleRefText(point.circleId)},${lineLikeText({ type: "segment", id: point.segId })})`
+                                                                ? withAliasPrefix(
+                                                                    "point",
+                                                                    point.id,
+                                                                    `Intersect(${circleRefText(point.circleId)},${lineLikeText({ type: "segment", id: point.segId })})`
+                                                                )
                                                                 : point.kind === "circleCircleIntersectionPoint"
-                                                                    ? `Intersect(${circleRefText(point.circleAId)},${circleRefText(point.circleBId)})`
+                                                                    ? withAliasPrefix(
+                                                                        "point",
+                                                                        point.id,
+                                                                        `Intersect(${circleRefText(point.circleAId)},${circleRefText(point.circleBId)})`
+                                                                    )
                                                                     : point.kind === "lineLikeIntersectionPoint"
-                                                                        ? `Intersect(${lineLikeText(point.objA)},${lineLikeText(point.objB)})`
-                                                                        : "Point(...)"
+                                                                        ? withAliasPrefix(
+                                                                            "point",
+                                                                            point.id,
+                                                                            `Intersect(${lineLikeText(point.objA)},${lineLikeText(point.objB)})`
+                                                                        )
+                                                                        : withAliasPrefix("point", point.id, "Point(...)")
                     )
                 ))}
 
@@ -173,7 +215,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         segment.visible,
                         (next) => setObjectVisibility({ type: "segment", id: segment.id }, next),
                         `Segment ${pointLabel(segment.aId)}${pointLabel(segment.bId)}`,
-                        `Segment(${pointLabel(segment.aId)},${pointLabel(segment.bId)})`
+                        withAliasPrefix("segment", segment.id, `Segment(${pointLabel(segment.aId)},${pointLabel(segment.bId)})`)
                     )
                 ))}
 
@@ -185,7 +227,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         line.visible,
                         (next) => setObjectVisibility({ type: "line", id: line.id }, next),
                         line.kind === "twoPoint" ? `Line ${pointLabel(line.aId)}${pointLabel(line.bId)}` : `Line ${line.id}`,
-                        lineLikeText({ type: "line", id: line.id })
+                        withAliasPrefix("line", line.id, lineLikeText({ type: "line", id: line.id }))
                     )
                 ))}
 
@@ -197,7 +239,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         circle.visible,
                         (next) => setObjectVisibility({ type: "circle", id: circle.id }, next),
                         `Circle ${circle.id}`,
-                        circleRefText(circle.id)
+                        withAliasPrefix("circle", circle.id, circleRefText(circle.id))
                     )
                 ))}
 
@@ -209,7 +251,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         polygon.visible,
                         (next) => setObjectVisibility({ type: "polygon", id: polygon.id }, next),
                         `Polygon ${polygon.id}`,
-                        `Polygon(${polygon.pointIds.map((id) => pointLabel(id)).join(",")})`
+                        withAliasPrefix("polygon", polygon.id, `Polygon(${polygon.pointIds.map((id) => pointLabel(id)).join(",")})`)
                     )
                 ))}
 
@@ -223,9 +265,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         angle.kind === "sector"
                             ? `Sector ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`
                             : `Angle ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`,
-                        angle.kind === "sector"
+                        withAliasPrefix("angle", angle.id, angle.kind === "sector"
                             ? `Sector(${pointLabel(angle.bId)},${pointLabel(angle.aId)},${pointLabel(angle.cId)})`
-                            : `Angle(${pointLabel(angle.aId)},${pointLabel(angle.bId)},${pointLabel(angle.cId)})`
+                            : `Angle(${pointLabel(angle.aId)},${pointLabel(angle.bId)},${pointLabel(angle.cId)})`)
                     )
                 ))}
 
@@ -264,6 +306,44 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
 
     return (
         <div className="objectBrowser">
+            <div className="objectBrowserHeader">
+                <span className="objectBrowserTitle">OBJECTS</span>
+                <div className="tinyToggleGroup">
+                    <label className="tinyToggle" title="Toggle Grid">
+                        <input
+                            type="checkbox"
+                            checked={gridEnabled}
+                            onChange={(e) => setGridEnabled(e.target.checked)}
+                        />
+                        Grid
+                    </label>
+                    <label className="tinyToggle" title="Toggle Axes">
+                        <input
+                            type="checkbox"
+                            checked={axesEnabled}
+                            onChange={(e) => setAxesEnabled(e.target.checked)}
+                        />
+                        Axes
+                    </label>
+                    <label className="tinyToggle" title="Toggle Snap">
+                        <input
+                            type="checkbox"
+                            checked={gridSnapEnabled}
+                            onChange={(e) => setGridSnapEnabled(e.target.checked)}
+                        />
+                        Snap
+                    </label>
+                    <label className="tinyToggle" title="Toggle Dependency Glow">
+                        <input
+                            type="checkbox"
+                            checked={dependencyGlowEnabled}
+                            onChange={(e) => setDependencyGlowEnabled && setDependencyGlowEnabled(e.target.checked)}
+                        />
+                        Glow
+                    </label>
+                </div>
+            </div>
+
             <div className="objectBrowserTabs">
                 {tabs.map((tab) => (
                     <button
@@ -272,8 +352,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         onClick={() => setActiveTab(tab.id)}
                         title={tab.description}
                     >
-                        <tab.icon size={16} />
-                        {/* Optional: <span className="tabCount">{tab.count}</span> */}
+                        <tab.icon size={18} strokeWidth={2} />
                     </button>
                 ))}
             </div>

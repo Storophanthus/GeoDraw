@@ -146,6 +146,13 @@
     - `Circle3P(A,B,C)` (`CircleThreePoint` alias)
   - Parser now resolves point aliases through command alias table as fallback.
   - Added parser tests for new commands and assignment guard on tangent multi-create.
+- Command redefine/edit (homework #3 slice 1):
+  - Assignment redefinition is enabled for:
+    - existing constant numbers (`n = ...` updates value in place),
+    - existing free points (`A = Point(...)` or point-expression assignment updates coordinates in place).
+  - Parser no longer blocks same-name assignments at parse-time; execution layer enforces fail-closed updates.
+  - Non-free points and non-constant numbers reject redefinition explicitly.
+  - Parser regression tests updated for same-name assignment semantics.
 - Export now auto-emits optional TikZ pattern libraries only when needed:
   - no pattern styles => no `\\usetikzlibrary{patterns}` line emitted
   - classic pattern styles (`pattern=...`, `pattern color=...`) => emits exactly `\\usetikzlibrary{patterns}`
@@ -259,6 +266,8 @@
 - Command Bar Phase 2 candidates:
   - optional overwrite semantics (`set`, `:=`, `let`, `del`) if desired.
   - parametric dependencies (Phase 3) where objects depend on scalars dynamically.
+  - Redefine/edit next slices:
+    - in-place redefine for line/segment/circle/angle aliases with dependency preservation rules.
 - Tool-Command parity backlog (homework):
   - Optional/non-goal parity:
     - `move`, `copyStyle`, `export_clip` (UI workflow tools; no strict command mapping required).
@@ -1085,3 +1094,139 @@ When starting a new chat, provide:
 ## Risks / Constraints
 - Command alias labeling for polygons is command-level alias only (same behavior as line/segment/circle aliases), not scene object renaming.
 - Polygon export uses raw `\draw[...] ... -- cycle;` (deterministic and compile-safe), not tkz-specific polygon macros.
+
+## Latest Done (Command Redefine Slice 2: Aliased Objects)
+- Added `commandBarApi.applyObjectAssignment(name, cmd)` as the single execution path for `assignObject` in the command bar.
+- Extended command assignment behavior from create-only to create-or-update for command aliases:
+  - If alias name does not exist: object is created with existing `*WithLabel` helpers.
+  - If alias exists: object is updated in-place (same id) for supported types.
+- Supported in-place redefine by alias:
+  - `line`: `Line(A,B)`, `Perpendicular(...)`, `Parallel(...)`, `AngleBisector(...)`
+  - `segment`: `Segment(A,B)`
+  - `circle`: `Circle(O,A)`, `Circle(O,r)`, `Circle(A,B,C)`
+  - `polygon`: `Polygon(A,B,C,...)`
+  - `angle`: `Angle(A,B,C)` and `Sector(O,A,B)`
+- Free-point and scalar redefine from slice 1 remain unchanged:
+  - `P = Point(x,y)` updates existing free point `P` in place.
+  - `n = <expr>` updates existing constant scalar `n`.
+- Fail-closed behavior retained:
+  - incompatible redefine command for an existing alias returns explicit error (no partial mutation).
+- Right-angle provenance consistency retained:
+  - line redefine path triggers provenance rebuild to keep exact-right metadata consistent.
+
+## Next
+- Add parser/store tests for alias redefine updates across line/segment/circle/polygon/angle to lock behavior.
+- Expand object-browser text rendering to display command-style definitions for aliased objects.
+
+## Risks / Constraints
+- Alias redefine currently supports in-place updates only for explicitly implemented command/object pairs; unsupported pairs fail closed.
+- Alias map is command-level metadata; manual scene renames outside command flow are not auto-synced into alias entries.
+
+## Latest Done (Command Redefine Regression Tests)
+- Added `src/scene/__tests__/command-redefine.test.ts`.
+- Covers create-then-update in-place behavior for command aliases:
+  - line, segment, circle, polygon, angle.
+- Covers fail-closed incompatible redefine (`segment` alias with `Line(...)`) and verifies no mutation.
+- Updated `npm run test:command` to run both parser and redefine tests.
+
+## Next
+- Add a small UI smoke test checklist for command redefine (alias id stability + dependency updates) for manual QA.
+
+## Risks / Constraints
+- Test suite runs against singleton store state in one process; keep test labels unique to avoid collisions.
+
+## Latest Done (Object Browser: Alias Command Definitions)
+- Object Browser command text now surfaces command-assignment form for aliased objects.
+- For any object created/managed via Command Bar alias assignment, the browser shows:
+  - `<alias> = <command>`
+  - examples: `l = Line(A,B)`, `c = Circle(O,5)`, `poly = Polygon(A,B,C)`.
+- Applied across browser rows for:
+  - points, segments, lines, circles, polygons, angles.
+- Non-aliased objects continue to show plain command form without alias prefix.
+
+## Next
+- Optional: show alias badge in object title row (not only in command text) if you want stronger visual differentiation.
+
+## Risks / Constraints
+- Alias display depends on command-level alias map; manual scene renames done outside command assignment do not create alias entries.
+
+## Latest Done (Redefine Hardening: Fail-Closed + Dependency Safety)
+- Hardened command alias redefine path in `geoStore`.
+- Added stale-alias pruning:
+  - command alias entries are now pruned when their target object no longer exists.
+  - avoids dead alias collisions and allows deterministic re-creation with same alias after delete.
+- Hardened in-place segment redefine:
+  - segment aliases cannot redefine polygon-owned segments (`ownedByPolygonIds`), fail-closed.
+- Fixed polygon alias redefine dependency behavior:
+  - redefining `Polygon(...)` now updates polygon-owned edge membership deterministically.
+  - creates missing owned edges, removes no-longer-used owned edges, preserves shared-owned edges.
+  - new edges are registered in right-angle provenance segment pair index.
+- Added regression coverage in `command-redefine.test.ts`:
+  - stale alias recreate after deletion.
+  - polygon-owned edge set correctness after polygon redefine.
+
+## Next
+- Add a tiny export smoke scenario for redefine-created polygon ownership transitions (no UI changes).
+
+## Risks / Constraints
+- Alias map remains command-level metadata; manual object renames still do not auto-remap aliases.
+
+## Latest Done (Redefine Export Smoke Validation)
+- Added `src/scene/__tests__/command-redefine-export.test.ts`.
+- Test builds scene state via command alias create+redefine calls and verifies TikZ export reflects post-redefine state.
+- Assertions include:
+  - redefined polygon path emitted (and stale pre-redefine path absent),
+  - redefined fixed-radius circle export emitted (`\tkzDefCircle[R](...)`).
+- Updated `test:command` to include this export-smoke redefine test.
+
+## Next
+- Add one additional smoke for angle/sector redefine export mapping if needed.
+
+## Risks / Constraints
+- Export smoke test intentionally checks deterministic string signatures; it is not a full symbolic equivalence checker.
+
+## Latest Done (Angle/Sector Redefine Export Smoke)
+- Extended `command-redefine-export.test.ts` to cover angle alias redefine from `Angle(...)` to `Sector(...)`.
+- Export assertions now verify post-redefine behavior for this case:
+  - sector export macro present (`\tkzDrawSector`),
+  - angle-mark macro absent (`\tkzMarkAngle`) in this smoke scene.
+
+## Next
+- Optional: add one smoke for `Sector -> Angle` redefine if bidirectional behavior is needed.
+
+## Risks / Constraints
+- Export smoke remains signature-based and intentionally minimal/deterministic.
+
+## Latest Done (Sector-Owned Radial Segments)
+- Sector construction now creates/reuses two owned radial segments:
+  - `Segment(center,start)` and `Segment(center,end)`.
+- Added `ownedBySectorIds` ownership metadata on `SceneSegment`.
+- Sector ownership integrated into integrity/dependency/cascade systems:
+  - `sceneIntegrity` now normalizes both polygon and sector ownership arrays.
+  - dependency graph now includes segment -> sector ownership edges.
+  - cascade delete now handles sector-owned segment multi-owner logic (same pattern as polygon owners).
+- Command alias redefine integration:
+  - `Sector -> Sector` updates radial ownership deterministically.
+  - `Sector -> Angle` releases sector-owned radial ownership.
+  - orphaned ownership-generated segments are removed when no owners remain.
+- Added regression coverage:
+  - `command-redefine.test.ts`: sector ownership creation + release checks.
+  - `geometry-graph-delete-regression.test.ts`: delete sector cascades owned edge, shared-owner edge remains.
+
+## Next
+- Optional: expose sector radial sides in object browser as derived/owned edges if desired (UI-facing).
+
+## Risks / Constraints
+- Manual segments reused by sector become owner-tagged; deleting sector will only delete them when no remaining owners exist.
+
+## Latest Done (Redefine Export Smoke: Bidirectional Angle/Sector)
+- Extended `command-redefine-export.test.ts` to cover both directions:
+  - `Angle -> Sector`
+  - `Sector -> Angle`
+- Export smoke now asserts sector macros and angle-mark macros are both represented when expected after redefine transitions.
+
+## Next
+- Optional: add a dedicated fixture-driven export case for mixed angle+sector redefine in one saved scene.
+
+## Risks / Constraints
+- Current smoke checks are deterministic string assertions; they intentionally do not prove full semantic equivalence.

@@ -23,14 +23,6 @@ export function RightSidebar({
   const scene = useGeoStore((store) => store.scene);
   const selectedObject = useGeoStore((store) => store.selectedObject);
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
-  const dependencyGlowEnabled = useGeoStore((store) => store.dependencyGlowEnabled);
-  const setDependencyGlowEnabled = useGeoStore((store) => store.setDependencyGlowEnabled);
-  const gridEnabled = useGeoStore((store) => store.gridEnabled);
-  const setGridEnabled = useGeoStore((store) => store.setGridEnabled);
-  const axesEnabled = useGeoStore((store) => store.axesEnabled);
-  const setAxesEnabled = useGeoStore((store) => store.setAxesEnabled);
-  const gridSnapEnabled = useGeoStore((store) => store.gridSnapEnabled);
-  const setGridSnapEnabled = useGeoStore((store) => store.setGridSnapEnabled);
   const [rightTab, setRightTab] = useState<RightTab>("algebra");
 
   return (
@@ -75,35 +67,6 @@ export function RightSidebar({
 
           {rightTab === "algebra" && (
             <section className="sidebarSection">
-              <div className="sectionTitleRow">
-                <h2 className="sectionTitle">Objects</h2>
-                <div className="tinyToggleGroup">
-                  <label className="tinyToggle" title="Show or hide grid">
-                    <input type="checkbox" checked={gridEnabled} onChange={(e) => setGridEnabled(e.target.checked)} />
-                    <span>Grid</span>
-                  </label>
-                  <label className="tinyToggle" title="Show or hide coordinate axes">
-                    <input type="checkbox" checked={axesEnabled} onChange={(e) => setAxesEnabled(e.target.checked)} />
-                    <span>Axes</span>
-                  </label>
-                  <label className="tinyToggle" title="Snap newly created free points to grid intersections">
-                    <input
-                      type="checkbox"
-                      checked={gridSnapEnabled}
-                      onChange={(e) => setGridSnapEnabled(e.target.checked)}
-                    />
-                    <span>Snap</span>
-                  </label>
-                  <label className="tinyToggle" title="Toggle dependency category glow on canvas">
-                    <input
-                      type="checkbox"
-                      checked={dependencyGlowEnabled}
-                      onChange={(e) => setDependencyGlowEnabled(e.target.checked)}
-                    />
-                    <span>Dependency Glow</span>
-                  </label>
-                </div>
-              </div>
               <ObjectBrowser scene={scene} selectedObject={selectedObject} setSelectedObject={setSelectedObject} />
             </section>
           )}

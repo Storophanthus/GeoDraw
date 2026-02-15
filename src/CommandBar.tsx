@@ -123,166 +123,31 @@ export function CommandBar() {
         setStatus({ kind: "error", text: out.error });
         return;
       }
-      setStatus({ kind: "ok", text: `${parsed.name} = ${parsed.value}` });
+      setStatus({ kind: "ok", text: `${parsed.name} = ${parsed.value}${out.mode === "updated" ? " (updated)" : ""}` });
       return;
     }
 
     if (parsed.kind === "assignObject") {
       const { name, cmd } = parsed;
-      if (cmd.type === "CreatePointXY") {
-        const id = commandBarApi.createPointXYWithLabel(cmd.x, cmd.y, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct point" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Point created` });
+      const out = commandBarApi.applyObjectAssignment(name, cmd);
+      if (!out.ok) {
+        setStatus({ kind: "error", text: out.error });
         return;
       }
-      if (cmd.type === "CreateLineXY") {
-        const id = commandBarApi.createLineXYWithLabel(cmd.x1, cmd.y1, cmd.x2, cmd.y2, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct line" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Line created` });
-        return;
-      }
-      if (cmd.type === "CreateLineByPoints") {
-        const id = commandBarApi.createLineThroughPointsWithLabel(cmd.aId, cmd.bId, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct line" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Line created` });
-        return;
-      }
-      if (cmd.type === "CreateSegmentByPoints") {
-        const id = commandBarApi.createSegmentThroughPointsWithLabel(cmd.aId, cmd.bId, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct segment" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Segment created` });
-        return;
-      }
-      if (cmd.type === "CreatePolygonByPoints") {
-        const id = commandBarApi.createPolygonWithLabel(cmd.pointIds, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct polygon" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Polygon created` });
-        return;
-      }
-      if (cmd.type === "CreatePerpendicularLine") {
-        const id = commandBarApi.createPerpendicularLineWithLabel(cmd.throughId, cmd.base, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct line" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Line created` });
-        return;
-      }
-      if (cmd.type === "CreateParallelLine") {
-        const id = commandBarApi.createParallelLineWithLabel(cmd.throughId, cmd.base, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct line" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Line created` });
-        return;
-      }
-      if (cmd.type === "CreateAngleBisector") {
-        const id = commandBarApi.createAngleBisectorWithLabel(cmd.aId, cmd.bId, cmd.cId, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct line" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Line created` });
-        return;
-      }
-      if (cmd.type === "CreateAngle") {
-        const id = commandBarApi.createAngleWithLabel(cmd.aId, cmd.bId, cmd.cId, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct angle" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Angle created` });
-        return;
-      }
-      if (cmd.type === "CreateSector") {
-        const id = commandBarApi.createSectorWithLabel(cmd.centerId, cmd.startId, cmd.endId, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct sector" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Sector created` });
-        return;
-      }
-      if (cmd.type === "CreateCircleThreePoint") {
-        const id = commandBarApi.createCircleThreePointWithLabel(cmd.aId, cmd.bId, cmd.cId, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct circle" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Circle created` });
-        return;
-      }
-      if (cmd.type === "CreateMidpointByPoints") {
-        const id = commandBarApi.createMidpointByPointsWithLabel(cmd.aId, cmd.bId, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct point" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Point created` });
-        return;
-      }
-      if (cmd.type === "CreateMidpointBySegment") {
-        const id = commandBarApi.createMidpointBySegmentWithLabel(cmd.segId, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct point" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Point created` });
-        return;
-      }
-      if (cmd.type === "CreateAngleFixed") {
-        const id = commandBarApi.createAngleFixedWithLabel(cmd.vertexId, cmd.basePointId, cmd.angleExpr, cmd.direction, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct fixed angle" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Angle created` });
-        return;
-      }
-      if (cmd.type === "CreateCircleCenterThrough") {
-        const id = commandBarApi.createCircleCenterThroughWithLabel(cmd.centerId, cmd.throughId, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct circle" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Circle created` });
-        return;
-      }
-      if (cmd.type === "CreateCircleCenterRadius") {
-        const id = commandBarApi.createCircleCenterRadiusWithLabel(cmd.centerId, cmd.r, name, cmd.rExpr);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct circle" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Circle created` });
-        return;
-      }
-      if (cmd.type === "CreateCircleXYR") {
-        const centerId = createFreePoint({ x: cmd.x, y: cmd.y });
-        const id = commandBarApi.createCircleCenterRadiusWithLabel(centerId, cmd.r, name);
-        if (!id) {
-          setStatus({ kind: "error", text: "Cannot construct circle" });
-          return;
-        }
-        setStatus({ kind: "ok", text: `${name}: Circle created` });
-        return;
-      }
+      const noun =
+        out.objectType === "point"
+          ? "Point"
+          : out.objectType === "line"
+            ? "Line"
+            : out.objectType === "segment"
+              ? "Segment"
+              : out.objectType === "circle"
+                ? "Circle"
+                : out.objectType === "polygon"
+                  ? "Polygon"
+                  : "Angle";
+      setStatus({ kind: "ok", text: `${name}: ${noun} ${out.mode === "updated" ? "updated" : "created"}` });
+      return;
     }
 
     const cmd = parsed.cmd;

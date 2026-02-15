@@ -203,3 +203,19 @@ export const IconFitView = createIcon(() => (
         <rect x="7.5" y="7.5" width="9" height="9" rx="1.5" strokeWidth={1.8} />
     </>
 ), "IconFitView");
+
+export const IconGlobe = createIcon(() => (
+    <>
+        <circle cx="12" cy="12" r="10" strokeWidth={2} />
+        <path d="M2 12h20" strokeWidth={2} />
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" strokeWidth={2} />
+    </>
+), "IconGlobe");
+
+export const IconType = createIcon(() => (
+    <>
+        <path d="M4 7V4h16v3" strokeWidth={2.2} />
+        <path d="M9 20h6" strokeWidth={2.2} />
+        <path d="M12 4v16" strokeWidth={2.2} />
+    </>
+), "IconType");
