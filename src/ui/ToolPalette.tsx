@@ -67,7 +67,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
-  { id: "circles", label: "CIRCLES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon"] },
+  { id: "circles", label: "SHAPES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
 ];
 

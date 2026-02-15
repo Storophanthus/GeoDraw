@@ -49,6 +49,11 @@ const baseCtx: ParseContext = {
     ["pO", { x: 1, y: 1 }],
   ]),
   scalarsByName: new Map(),
+  objectAliases: new Map([
+    ["sAB", { type: "segment", id: "sAB" }],
+    ["lAB", { type: "line", id: "lAB" }],
+    ["c1", { type: "circle", id: "c1" }],
+  ]),
   objectNames: new Set(),
 };
 
@@ -78,6 +83,16 @@ if (polyABO.type !== "CreatePolygonByPoints" || polyABO.pointIds.join(",") !== "
   throw new Error("Polygon(A,B,O) IDs mismatch");
 }
 
+const midAB = mustCmd("Midpoint(A,B)", baseCtx, "CreateMidpointByPoints");
+if (midAB.type !== "CreateMidpointByPoints" || midAB.aId !== "pA" || midAB.bId !== "pB") {
+  throw new Error("Midpoint(A,B) mismatch");
+}
+
+const midSeg = mustCmd("Midpoint(sAB)", baseCtx, "CreateMidpointBySegment");
+if (midSeg.type !== "CreateMidpointBySegment" || midSeg.segId !== "sAB") {
+  throw new Error("Midpoint(sAB) mismatch");
+}
+
 const circleOA = mustCmd("Circle(O,A)", baseCtx, "CreateCircleCenterThrough");
 if (circleOA.type !== "CreateCircleCenterThrough" || circleOA.centerId !== "pO" || circleOA.throughId !== "pA") {
   throw new Error("Circle(O,A) mismatch");
@@ -86,6 +101,52 @@ if (circleOA.type !== "CreateCircleCenterThrough" || circleOA.centerId !== "pO" 
 const circleOR = mustCmd("Circle(O,5)", baseCtx, "CreateCircleCenterRadius");
 if (circleOR.type !== "CreateCircleCenterRadius" || circleOR.centerId !== "pO" || circleOR.r !== 5 || circleOR.rExpr !== "5") {
   throw new Error("Circle(O,5) mismatch");
+}
+
+const circle3p = mustCmd("Circle3P(A,B,O)", baseCtx, "CreateCircleThreePoint");
+if (circle3p.type !== "CreateCircleThreePoint" || circle3p.aId !== "pA" || circle3p.bId !== "pB" || circle3p.cId !== "pO") {
+  throw new Error("Circle3P(A,B,O) mismatch");
+}
+
+const perp = mustCmd("Perpendicular(A,lAB)", baseCtx, "CreatePerpendicularLine");
+if (perp.type !== "CreatePerpendicularLine" || perp.throughId !== "pA" || perp.base.type !== "line" || perp.base.id !== "lAB") {
+  throw new Error("Perpendicular(A,lAB) mismatch");
+}
+
+const parallel = mustCmd("Parallel(B,sAB)", baseCtx, "CreateParallelLine");
+if (parallel.type !== "CreateParallelLine" || parallel.throughId !== "pB" || parallel.base.type !== "segment" || parallel.base.id !== "sAB") {
+  throw new Error("Parallel(B,sAB) mismatch");
+}
+
+const tangent = mustCmd("Tangent(A,c1)", baseCtx, "CreateTangentLines");
+if (tangent.type !== "CreateTangentLines" || tangent.throughId !== "pA" || tangent.circleId !== "c1") {
+  throw new Error("Tangent(A,c1) mismatch");
+}
+
+const bis = mustCmd("AngleBisector(A,B,O)", baseCtx, "CreateAngleBisector");
+if (bis.type !== "CreateAngleBisector" || bis.aId !== "pA" || bis.bId !== "pB" || bis.cId !== "pO") {
+  throw new Error("AngleBisector(A,B,O) mismatch");
+}
+
+const angle = mustCmd("Angle(A,B,O)", baseCtx, "CreateAngle");
+if (angle.type !== "CreateAngle" || angle.aId !== "pA" || angle.bId !== "pB" || angle.cId !== "pO") {
+  throw new Error("Angle(A,B,O) mismatch");
+}
+
+const angleFixed = mustCmd("AngleFixed(B,A,30,CW)", baseCtx, "CreateAngleFixed");
+if (
+  angleFixed.type !== "CreateAngleFixed" ||
+  angleFixed.vertexId !== "pB" ||
+  angleFixed.basePointId !== "pA" ||
+  angleFixed.angleExpr !== "30" ||
+  angleFixed.direction !== "CW"
+) {
+  throw new Error("AngleFixed(B,A,30,CW) mismatch");
+}
+
+const sector = mustCmd("Sector(O,A,B)", baseCtx, "CreateSector");
+if (sector.type !== "CreateSector" || sector.centerId !== "pO" || sector.startId !== "pA" || sector.endId !== "pB") {
+  throw new Error("Sector(O,A,B) mismatch");
 }
 
 mustExpr("Distance(A,B)", baseCtx, "5");
@@ -112,6 +173,11 @@ if (assignPointAffine.type !== "CreatePointXY" || Math.abs(assignPointAffine.x -
 const assignLine = mustAssignObject("l = Line(A,B)", baseCtx, "l", "CreateLineByPoints");
 if (assignLine.type !== "CreateLineByPoints" || assignLine.aId !== "pA" || assignLine.bId !== "pB") {
   throw new Error("l = Line(A,B) mismatch");
+}
+
+const assignMidpoint = mustAssignObject("M = Midpoint(A,B)", baseCtx, "M", "CreateMidpointByPoints");
+if (assignMidpoint.type !== "CreateMidpointByPoints" || assignMidpoint.aId !== "pA" || assignMidpoint.bId !== "pB") {
+  throw new Error("M = Midpoint(A,B) mismatch");
 }
 
 const withScalarR: ParseContext = {
@@ -152,6 +218,7 @@ const nonPointCtx: ParseContext = {
 };
 mustError("Line(X,A)", nonPointCtx, "Not a point: X");
 mustError("import('x')", baseCtx, "disallowed token");
+mustError("t = Tangent(A,c1)", baseCtx, "Assignment is not supported for Tangent");
 
 const overwriteScalarCtx: ParseContext = {
   ...baseCtx,

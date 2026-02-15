@@ -133,6 +133,19 @@
   - Added constant aliases: `Pi`, `PI` (in addition to `pi`).
   - Added trig aliases: `Sin`, `Cos`, `Tan` (in addition to lowercase).
   - Added concise user reference doc: `docs/command-bar-reference.md`.
+- Command Bar parity expansion (homework #2 complete):
+  - Added tool-command counterparts:
+    - `Midpoint(A,B)` and `Midpoint(s)`
+    - `Perpendicular(P,l)`
+    - `Parallel(P,l)`
+    - `Tangent(P,c)` (non-assignable; may create 2 lines)
+    - `AngleBisector(A,B,C)`
+    - `Angle(A,B,C)`
+    - `AngleFixed(V,A,expr[,CW|CCW])`
+    - `Sector(O,A,B)`
+    - `Circle3P(A,B,C)` (`CircleThreePoint` alias)
+  - Parser now resolves point aliases through command alias table as fallback.
+  - Added parser tests for new commands and assignment guard on tangent multi-create.
 - Export now auto-emits optional TikZ pattern libraries only when needed:
   - no pattern styles => no `\\usetikzlibrary{patterns}` line emitted
   - classic pattern styles (`pattern=...`, `pattern color=...`) => emits exactly `\\usetikzlibrary{patterns}`
@@ -247,16 +260,6 @@
   - optional overwrite semantics (`set`, `:=`, `let`, `del`) if desired.
   - parametric dependencies (Phase 3) where objects depend on scalars dynamically.
 - Tool-Command parity backlog (homework):
-  - Missing command counterparts for existing tools:
-    - `midpoint`
-    - `circle_3p`
-    - `sector`
-    - `perp_line`
-    - `parallel_line`
-    - `tangent_line`
-    - `angle_bisector`
-    - `angle`
-    - `angle_fixed`
   - Optional/non-goal parity:
     - `move`, `copyStyle`, `export_clip` (UI workflow tools; no strict command mapping required).
 

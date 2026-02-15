@@ -17,7 +17,7 @@ function buildParseContext(
   scene: SceneModel,
   ans: number | null,
   scalarVars: Record<string, number>,
-  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon"; id: string }>
+  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }>
 ): ParseContext {
   const symbolsByLabel = new Map<string, Symbol[]>();
   const add = (symbol: Symbol) => {
@@ -46,6 +46,7 @@ function buildParseContext(
     symbolsByLabel,
     pointWorldById,
     scalarsByName: new Map(Object.entries(scalarVars)),
+    objectAliases: new Map(Object.entries(objectAliases)),
     objectNames: new Set(Object.keys(objectAliases)),
     ans: ans ?? undefined,
   };
@@ -58,7 +59,17 @@ export function CommandBar() {
   const createSegment = useGeoStore((store) => store.createSegment);
   const createPolygon = useGeoStore((store) => store.createPolygon);
   const createCircle = useGeoStore((store) => store.createCircle);
+  const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
+  const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
+  const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
+  const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
+  const createParallelLine = useGeoStore((store) => store.createParallelLine);
+  const createTangentLines = useGeoStore((store) => store.createTangentLines);
+  const createAngleBisectorLine = useGeoStore((store) => store.createAngleBisectorLine);
+  const createAngle = useGeoStore((store) => store.createAngle);
+  const createAngleFixed = useGeoStore((store) => store.createAngleFixed);
+  const createSector = useGeoStore((store) => store.createSector);
 
   const [input, setInput] = useState("");
   const [ans, setAns] = useState<number | null>(null);
@@ -163,6 +174,87 @@ export function CommandBar() {
         setStatus({ kind: "ok", text: `${name}: Polygon created` });
         return;
       }
+      if (cmd.type === "CreatePerpendicularLine") {
+        const id = commandBarApi.createPerpendicularLineWithLabel(cmd.throughId, cmd.base, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct line" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Line created` });
+        return;
+      }
+      if (cmd.type === "CreateParallelLine") {
+        const id = commandBarApi.createParallelLineWithLabel(cmd.throughId, cmd.base, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct line" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Line created` });
+        return;
+      }
+      if (cmd.type === "CreateAngleBisector") {
+        const id = commandBarApi.createAngleBisectorWithLabel(cmd.aId, cmd.bId, cmd.cId, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct line" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Line created` });
+        return;
+      }
+      if (cmd.type === "CreateAngle") {
+        const id = commandBarApi.createAngleWithLabel(cmd.aId, cmd.bId, cmd.cId, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct angle" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Angle created` });
+        return;
+      }
+      if (cmd.type === "CreateSector") {
+        const id = commandBarApi.createSectorWithLabel(cmd.centerId, cmd.startId, cmd.endId, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct sector" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Sector created` });
+        return;
+      }
+      if (cmd.type === "CreateCircleThreePoint") {
+        const id = commandBarApi.createCircleThreePointWithLabel(cmd.aId, cmd.bId, cmd.cId, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct circle" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Circle created` });
+        return;
+      }
+      if (cmd.type === "CreateMidpointByPoints") {
+        const id = commandBarApi.createMidpointByPointsWithLabel(cmd.aId, cmd.bId, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct point" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Point created` });
+        return;
+      }
+      if (cmd.type === "CreateMidpointBySegment") {
+        const id = commandBarApi.createMidpointBySegmentWithLabel(cmd.segId, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct point" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Point created` });
+        return;
+      }
+      if (cmd.type === "CreateAngleFixed") {
+        const id = commandBarApi.createAngleFixedWithLabel(cmd.vertexId, cmd.basePointId, cmd.angleExpr, cmd.direction, name);
+        if (!id) {
+          setStatus({ kind: "error", text: "Cannot construct fixed angle" });
+          return;
+        }
+        setStatus({ kind: "ok", text: `${name}: Angle created` });
+        return;
+      }
       if (cmd.type === "CreateCircleCenterThrough") {
         const id = commandBarApi.createCircleCenterThroughWithLabel(cmd.centerId, cmd.throughId, name);
         if (!id) {
@@ -239,6 +331,106 @@ export function CommandBar() {
         return;
       }
       setStatus({ kind: "ok", text: `Created polygon ${polygonId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateMidpointByPoints") {
+      const pointId = createMidpointFromPoints(cmd.aId, cmd.bId);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct midpoint" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateMidpointBySegment") {
+      const pointId = createMidpointFromSegment(cmd.segId);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct midpoint" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePerpendicularLine") {
+      const lineId = createPerpendicularLine(cmd.throughId, cmd.base);
+      if (!lineId) {
+        setStatus({ kind: "error", text: "Cannot construct line" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created line ${lineId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateParallelLine") {
+      const lineId = createParallelLine(cmd.throughId, cmd.base);
+      if (!lineId) {
+        setStatus({ kind: "error", text: "Cannot construct line" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created line ${lineId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateTangentLines") {
+      const lineIds = createTangentLines(cmd.throughId, cmd.circleId);
+      if (lineIds.length === 0) {
+        setStatus({ kind: "error", text: "Cannot construct tangent line" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created tangent line${lineIds.length > 1 ? "s" : ""} ${lineIds.join(", ")}` });
+      return;
+    }
+
+    if (cmd.type === "CreateAngleBisector") {
+      const lineId = createAngleBisectorLine(cmd.aId, cmd.bId, cmd.cId);
+      if (!lineId) {
+        setStatus({ kind: "error", text: "Cannot construct angle bisector" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created line ${lineId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateAngle") {
+      const angleId = createAngle(cmd.aId, cmd.bId, cmd.cId);
+      if (!angleId) {
+        setStatus({ kind: "error", text: "Cannot construct angle" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created angle ${angleId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateAngleFixed") {
+      const created = createAngleFixed(cmd.vertexId, cmd.basePointId, cmd.angleExpr, cmd.direction);
+      if (!created) {
+        setStatus({ kind: "error", text: "Cannot construct fixed angle" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created angle ${created.angleId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateSector") {
+      const angleId = createSector(cmd.centerId, cmd.startId, cmd.endId);
+      if (!angleId) {
+        setStatus({ kind: "error", text: "Cannot construct sector" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created sector ${angleId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateCircleThreePoint") {
+      const circleId = createCircleThreePoint(cmd.aId, cmd.bId, cmd.cId);
+      if (!circleId) {
+        setStatus({ kind: "error", text: "Cannot construct circle" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created circle ${circleId}` });
       return;
     }
 
@@ -358,7 +550,7 @@ export function CommandBar() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Command: 5*5, X=A+B, Point(x,y), Line(A,B), Segment(A,B), Circle(O,A), Circle(O,3), Distance(A,B)"
+            placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Line(A,B), Circle(O,A), Sector(O,A,B), AngleFixed(B,A,30,CW)"
             style={{
               width: "100%",
               minWidth: 0,

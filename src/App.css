@@ -823,8 +823,8 @@ textarea {
 .objectListScrollArea .objectItem {
   border: none; /* Cleaner look in list */
   background: #f8fafc; /* Slight contrast against white bg */
-  min-height: 36px;
-  padding: 6px 10px;
+  min-height: 44px;
+  padding: 6px 9px;
   font-size: 13px;
   font-weight: 500;
   border-radius: 9px;
@@ -840,6 +840,58 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.objectItemText {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.objectItemCommand {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.objectItemActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.objectCommandCopy {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #dbe4ef;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.objectListScrollArea .objectItem:hover .objectCommandCopy,
+.objectListScrollArea .objectItem.active .objectCommandCopy,
+.objectCommandCopy:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.objectCommandCopy:hover {
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .objectVisibilityToggle {

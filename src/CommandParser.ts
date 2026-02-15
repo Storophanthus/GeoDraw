@@ -27,16 +27,27 @@ export type ParseContext = {
   symbolsByLabel: Map<string, Symbol[]>;
   pointWorldById?: Map<string, { x: number; y: number }>;
   scalarsByName: Map<string, number>;
+  objectAliases: Map<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }>;
   objectNames: Set<string>;
   ans?: number;
 };
 
 export type Command =
   | { type: "CreatePointXY"; x: number; y: number }
+  | { type: "CreateMidpointByPoints"; aId: string; bId: string }
+  | { type: "CreateMidpointBySegment"; segId: string }
   | { type: "CreateLineXY"; x1: number; y1: number; x2: number; y2: number }
   | { type: "CreateLineByPoints"; aId: string; bId: string }
+  | { type: "CreatePerpendicularLine"; throughId: string; base: { type: "line" | "segment"; id: string } }
+  | { type: "CreateParallelLine"; throughId: string; base: { type: "line" | "segment"; id: string } }
+  | { type: "CreateTangentLines"; throughId: string; circleId: string }
+  | { type: "CreateAngleBisector"; aId: string; bId: string; cId: string }
+  | { type: "CreateAngle"; aId: string; bId: string; cId: string }
+  | { type: "CreateAngleFixed"; vertexId: string; basePointId: string; angleExpr: string; direction: "CCW" | "CW" }
+  | { type: "CreateSector"; centerId: string; startId: string; endId: string }
   | { type: "CreateSegmentByPoints"; aId: string; bId: string }
   | { type: "CreatePolygonByPoints"; pointIds: string[] }
+  | { type: "CreateCircleThreePoint"; aId: string; bId: string; cId: string }
   | { type: "CreateCircleXYR"; x: number; y: number; r: number }
   | { type: "CreateCircleCenterRadius"; centerId: string; r: number; rExpr?: string }
   | { type: "CreateCircleCenterThrough"; centerId: string; throughId: string };
@@ -341,10 +352,26 @@ function asIdentifier(value: string): string | null {
 
 function resolvePointIdentifier(label: string, ctx: ParseContext): { ok: true; id: string } | { ok: false; message: string } {
   const symbols = ctx.symbolsByLabel.get(label);
-  if (!symbols || symbols.length === 0) return { ok: false, message: `Unknown point: ${label}` };
-  if (symbols.length > 1) return { ok: false, message: `Ambiguous identifier: ${label}` };
-  if (symbols[0].kind !== "point") return { ok: false, message: `Not a point: ${label}` };
-  return { ok: true, id: symbols[0].id };
+  if (symbols && symbols.length > 0) {
+    if (symbols.length > 1) return { ok: false, message: `Ambiguous identifier: ${label}` };
+    if (symbols[0].kind !== "point") return { ok: false, message: `Not a point: ${label}` };
+    return { ok: true, id: symbols[0].id };
+  }
+  const alias = ctx.objectAliases.get(label);
+  if (alias?.type === "point") return { ok: true, id: alias.id };
+  if (alias) return { ok: false, message: `Not a point: ${label}` };
+  return { ok: false, message: `Unknown point: ${label}` };
+}
+
+function resolveObjectAlias(
+  label: string,
+  ctx: ParseContext,
+  expected: "line" | "segment" | "circle"
+): { ok: true; id: string } | { ok: false; message: string } {
+  const alias = ctx.objectAliases.get(label);
+  if (!alias) return { ok: false, message: `Unknown ${expected}: ${label}` };
+  if (alias.type !== expected) return { ok: false, message: `Not a ${expected}: ${label}` };
+  return { ok: true, id: alias.id };
 }
 
 function resolveScalarIdentifier(label: string, ctx: ParseContext): { ok: true; value: number } | { ok: false; message: string } {
@@ -396,6 +423,27 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return { kind: "cmd", cmd: { type: "CreatePointXY", x, y } };
   }
 
+  if (name === "Midpoint") {
+    if (args.length === 2) {
+      const aLabel = asIdentifier(args[0]);
+      const bLabel = asIdentifier(args[1]);
+      if (!aLabel || !bLabel) return err("Midpoint(A, B) expects point labels");
+      const a = resolvePointIdentifier(aLabel, ctx);
+      if (!a.ok) return err(a.message);
+      const b = resolvePointIdentifier(bLabel, ctx);
+      if (!b.ok) return err(b.message);
+      return { kind: "cmd", cmd: { type: "CreateMidpointByPoints", aId: a.id, bId: b.id } };
+    }
+    if (args.length === 1) {
+      const segLabel = asIdentifier(args[0]);
+      if (!segLabel) return err("Midpoint(s) expects a segment alias");
+      const seg = resolveObjectAlias(segLabel, ctx, "segment");
+      if (!seg.ok) return err(seg.message);
+      return { kind: "cmd", cmd: { type: "CreateMidpointBySegment", segId: seg.id } };
+    }
+    return err("Midpoint expects Midpoint(A,B) or Midpoint(s)");
+  }
+
   if (name === "Line") {
     if (args.length === 2) {
       const aLabel = asIdentifier(args[0]);
@@ -416,6 +464,115 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
       return { kind: "cmd", cmd: { type: "CreateLineXY", x1, y1, x2, y2 } };
     }
     return err("Line expects either Line(A,B) or Line(x1,y1,x2,y2)");
+  }
+
+  if (name === "Perpendicular") {
+    if (args.length !== 2) return err("Perpendicular(P, l) expects 2 arguments");
+    const throughLabel = asIdentifier(args[0]);
+    const baseLabel = asIdentifier(args[1]);
+    if (!throughLabel || !baseLabel) return err("Perpendicular(P, l) expects point and line/segment aliases");
+    const through = resolvePointIdentifier(throughLabel, ctx);
+    if (!through.ok) return err(through.message);
+    const baseAlias = ctx.objectAliases.get(baseLabel);
+    if (!baseAlias) return err(`Unknown line/segment: ${baseLabel}`);
+    if (baseAlias.type !== "line" && baseAlias.type !== "segment") return err(`Not a line/segment: ${baseLabel}`);
+    return {
+      kind: "cmd",
+      cmd: { type: "CreatePerpendicularLine", throughId: through.id, base: { type: baseAlias.type, id: baseAlias.id } },
+    };
+  }
+
+  if (name === "Parallel") {
+    if (args.length !== 2) return err("Parallel(P, l) expects 2 arguments");
+    const throughLabel = asIdentifier(args[0]);
+    const baseLabel = asIdentifier(args[1]);
+    if (!throughLabel || !baseLabel) return err("Parallel(P, l) expects point and line/segment aliases");
+    const through = resolvePointIdentifier(throughLabel, ctx);
+    if (!through.ok) return err(through.message);
+    const baseAlias = ctx.objectAliases.get(baseLabel);
+    if (!baseAlias) return err(`Unknown line/segment: ${baseLabel}`);
+    if (baseAlias.type !== "line" && baseAlias.type !== "segment") return err(`Not a line/segment: ${baseLabel}`);
+    return {
+      kind: "cmd",
+      cmd: { type: "CreateParallelLine", throughId: through.id, base: { type: baseAlias.type, id: baseAlias.id } },
+    };
+  }
+
+  if (name === "Tangent") {
+    if (args.length !== 2) return err("Tangent(P, c) expects 2 arguments");
+    const throughLabel = asIdentifier(args[0]);
+    const circleLabel = asIdentifier(args[1]);
+    if (!throughLabel || !circleLabel) return err("Tangent(P, c) expects point and circle aliases");
+    const through = resolvePointIdentifier(throughLabel, ctx);
+    if (!through.ok) return err(through.message);
+    const circle = resolveObjectAlias(circleLabel, ctx, "circle");
+    if (!circle.ok) return err(circle.message);
+    return { kind: "cmd", cmd: { type: "CreateTangentLines", throughId: through.id, circleId: circle.id } };
+  }
+
+  if (name === "AngleBisector") {
+    if (args.length !== 3) return err("AngleBisector(A,B,C) expects 3 point labels");
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    const cLabel = asIdentifier(args[2]);
+    if (!aLabel || !bLabel || !cLabel) return err("AngleBisector(A,B,C) expects point labels");
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const c = resolvePointIdentifier(cLabel, ctx);
+    if (!c.ok) return err(c.message);
+    return { kind: "cmd", cmd: { type: "CreateAngleBisector", aId: a.id, bId: b.id, cId: c.id } };
+  }
+
+  if (name === "Angle") {
+    if (args.length !== 3) return err("Angle(A,B,C) expects 3 point labels");
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    const cLabel = asIdentifier(args[2]);
+    if (!aLabel || !bLabel || !cLabel) return err("Angle(A,B,C) expects point labels");
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const c = resolvePointIdentifier(cLabel, ctx);
+    if (!c.ok) return err(c.message);
+    return { kind: "cmd", cmd: { type: "CreateAngle", aId: a.id, bId: b.id, cId: c.id } };
+  }
+
+  if (name === "AngleFixed") {
+    if (args.length !== 3 && args.length !== 4) return err("AngleFixed(V,A,expr[,CW|CCW]) expects 3 or 4 arguments");
+    const vLabel = asIdentifier(args[0]);
+    const aLabel = asIdentifier(args[1]);
+    if (!vLabel || !aLabel) return err("AngleFixed(V,A,expr[,CW|CCW]) expects point labels for first two arguments");
+    const vertex = resolvePointIdentifier(vLabel, ctx);
+    if (!vertex.ok) return err(vertex.message);
+    const basePoint = resolvePointIdentifier(aLabel, ctx);
+    if (!basePoint.ok) return err(basePoint.message);
+    const dirRaw = args.length === 4 ? args[3].trim() : "CCW";
+    const direction = dirRaw === "CW" ? "CW" : dirRaw === "CCW" ? "CCW" : null;
+    if (!direction) return err("AngleFixed direction must be CW or CCW");
+    const angleEval = evaluateExpression(args[2], ctx);
+    if (!angleEval.ok) return err("AngleFixed expression must evaluate to a finite number");
+    return {
+      kind: "cmd",
+      cmd: { type: "CreateAngleFixed", vertexId: vertex.id, basePointId: basePoint.id, angleExpr: args[2].trim(), direction },
+    };
+  }
+
+  if (name === "Sector") {
+    if (args.length !== 3) return err("Sector(O,A,B) expects 3 point labels");
+    const centerLabel = asIdentifier(args[0]);
+    const startLabel = asIdentifier(args[1]);
+    const endLabel = asIdentifier(args[2]);
+    if (!centerLabel || !startLabel || !endLabel) return err("Sector(O,A,B) expects point labels");
+    const center = resolvePointIdentifier(centerLabel, ctx);
+    if (!center.ok) return err(center.message);
+    const start = resolvePointIdentifier(startLabel, ctx);
+    if (!start.ok) return err(start.message);
+    const end = resolvePointIdentifier(endLabel, ctx);
+    if (!end.ok) return err(end.message);
+    return { kind: "cmd", cmd: { type: "CreateSector", centerId: center.id, startId: start.id, endId: end.id } };
   }
 
   if (name === "Segment") {
@@ -492,6 +649,21 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return err("Circle expects Circle(x,y,r), Circle(O,A), or Circle(O,r)");
   }
 
+  if (name === "Circle3P" || name === "CircleThreePoint") {
+    if (args.length !== 3) return err(`${name}(A,B,C) expects 3 point labels`);
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    const cLabel = asIdentifier(args[2]);
+    if (!aLabel || !bLabel || !cLabel) return err(`${name}(A,B,C) expects point labels`);
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const c = resolvePointIdentifier(cLabel, ctx);
+    if (!c.ok) return err(c.message);
+    return { kind: "cmd", cmd: { type: "CreateCircleThreePoint", aId: a.id, bId: b.id, cId: c.id } };
+  }
+
   if (name === "Distance") {
     return parseDistanceResult(args, ctx);
   }
@@ -545,7 +717,10 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
       if (!args) return err("Invalid command arguments");
       const rhsCmd = parseCommand(commandMatch[1], args, ctx);
       if (rhsCmd.kind === "error") return rhsCmd;
-      if (rhsCmd.kind === "cmd") return { kind: "assignObject", name: left, cmd: rhsCmd.cmd };
+      if (rhsCmd.kind === "cmd") {
+        if (rhsCmd.cmd.type === "CreateTangentLines") return err("Assignment is not supported for Tangent(P,c) because it may create multiple lines");
+        return { kind: "assignObject", name: left, cmd: rhsCmd.cmd };
+      }
       if (rhsCmd.kind === "expr") {
         if (typeof rhsCmd.numeric !== "number" || !Number.isFinite(rhsCmd.numeric)) {
           return err("Assignment right-hand side must evaluate to a finite number");

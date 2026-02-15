@@ -60,7 +60,10 @@ const runtime = createStoreRuntime({
   normalizeScene: normalizeSceneIntegrity,
 });
 const setState: (updater: (prev: GeoState) => GeoState, options?: SetStateOptions) => void = runtime.setState;
-const commandBarObjectAliases = new Map<string, { type: "point" | "segment" | "line" | "circle" | "polygon"; id: string }>();
+const commandBarObjectAliases = new Map<
+  string,
+  { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }
+>();
 
 const actions: GeoActions = {
   ...createInteractionActions({
@@ -133,7 +136,7 @@ export const commandBarApi = {
     if (!id) return { ok: false as const, error: `Name already used: ${trimmed}` };
     return { ok: true as const };
   },
-  getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon"; id: string }> {
+  getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }> {
     return Object.fromEntries(commandBarObjectAliases.entries());
   },
   createPointXYWithLabel(x: number, y: number, label: string): string | null {
@@ -189,6 +192,50 @@ export const commandBarApi = {
     commandBarObjectAliases.set(name, { type: "line", id: lineId });
     return lineId;
   },
+  createPerpendicularLineWithLabel(
+    throughId: string,
+    base: { type: "line" | "segment"; id: string },
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const lineId = actions.createPerpendicularLine(throughId, base);
+    if (!lineId) return null;
+    commandBarObjectAliases.set(name, { type: "line", id: lineId });
+    return lineId;
+  },
+  createParallelLineWithLabel(
+    throughId: string,
+    base: { type: "line" | "segment"; id: string },
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const lineId = actions.createParallelLine(throughId, base);
+    if (!lineId) return null;
+    commandBarObjectAliases.set(name, { type: "line", id: lineId });
+    return lineId;
+  },
+  createAngleBisectorWithLabel(aId: string, bId: string, cId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const lineId = actions.createAngleBisectorLine(aId, bId, cId);
+    if (!lineId) return null;
+    commandBarObjectAliases.set(name, { type: "line", id: lineId });
+    return lineId;
+  },
   createLineXYWithLabel(x1: number, y1: number, x2: number, y2: number, label: string): string | null {
     const name = label.trim();
     if (!name) return null;
@@ -215,6 +262,30 @@ export const commandBarApi = {
     commandBarObjectAliases.set(name, { type: "segment", id: segId });
     return segId;
   },
+  createMidpointByPointsWithLabel(aId: string, bId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const pointId = actions.createMidpointFromPoints(aId, bId);
+    if (!pointId) return null;
+    commandBarObjectAliases.set(name, { type: "point", id: pointId });
+    return pointId;
+  },
+  createMidpointBySegmentWithLabel(segId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const pointId = actions.createMidpointFromSegment(segId);
+    if (!pointId) return null;
+    commandBarObjectAliases.set(name, { type: "point", id: pointId });
+    return pointId;
+  },
   createCircleCenterThroughWithLabel(centerId: string, throughId: string, label: string): string | null {
     const name = label.trim();
     if (!name) return null;
@@ -223,6 +294,18 @@ export const commandBarApi = {
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
     const circleId = actions.createCircle(centerId, throughId);
+    if (!circleId) return null;
+    commandBarObjectAliases.set(name, { type: "circle", id: circleId });
+    return circleId;
+  },
+  createCircleThreePointWithLabel(aId: string, bId: string, cId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const circleId = actions.createCircleThreePoint(aId, bId, cId);
     if (!circleId) return null;
     commandBarObjectAliases.set(name, { type: "circle", id: circleId });
     return circleId;
@@ -251,6 +334,48 @@ export const commandBarApi = {
     if (!polygonId) return null;
     commandBarObjectAliases.set(name, { type: "polygon", id: polygonId });
     return polygonId;
+  },
+  createAngleWithLabel(aId: string, bId: string, cId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const angleId = actions.createAngle(aId, bId, cId);
+    if (!angleId) return null;
+    commandBarObjectAliases.set(name, { type: "angle", id: angleId });
+    return angleId;
+  },
+  createAngleFixedWithLabel(
+    vertexId: string,
+    basePointId: string,
+    angleExpr: string,
+    direction: "CCW" | "CW",
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const created = actions.createAngleFixed(vertexId, basePointId, angleExpr, direction);
+    if (!created) return null;
+    commandBarObjectAliases.set(name, { type: "angle", id: created.angleId });
+    return created.angleId;
+  },
+  createSectorWithLabel(centerId: string, startId: string, endId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const angleId = actions.createSector(centerId, startId, endId);
+    if (!angleId) return null;
+    commandBarObjectAliases.set(name, { type: "angle", id: angleId });
+    return angleId;
   },
 };
 
