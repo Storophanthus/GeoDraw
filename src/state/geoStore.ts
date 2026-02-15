@@ -257,6 +257,11 @@ export const commandBarApi = {
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         return { ok: true as const, mode: "created", objectType: "polygon", id };
       }
+      if (cmd.type === "CreateRegularPolygonFromEdge") {
+        const id = commandBarApi.createRegularPolygonWithLabel(cmd.aId, cmd.bId, cmd.sides, cmd.direction, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "polygon", id };
+      }
       if (cmd.type === "CreateCircleCenterThrough") {
         const id = commandBarApi.createCircleCenterThroughWithLabel(cmd.centerId, cmd.throughId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
@@ -849,6 +854,25 @@ export const commandBarApi = {
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
     const polygonId = actions.createPolygon(pointIds);
+    if (!polygonId) return null;
+    commandBarObjectAliases.set(name, { type: "polygon", id: polygonId });
+    return polygonId;
+  },
+  createRegularPolygonWithLabel(
+    aId: string,
+    bId: string,
+    sides: number,
+    direction: "CCW" | "CW",
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const polygonId = actions.createRegularPolygon(aId, bId, sides, direction);
     if (!polygonId) return null;
     commandBarObjectAliases.set(name, { type: "polygon", id: polygonId });
     return polygonId;

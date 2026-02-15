@@ -21,6 +21,7 @@ export type ToolClickIO = {
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
   createPolygon: (pointIds: string[]) => string | null;
+  createRegularPolygon: (aId: string, bId: string, sides: number, direction: "CCW" | "CW") => string | null;
   createCircle: (centerId: string, throughId: string) => string | null;
   createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
@@ -55,6 +56,7 @@ export type ToolClickIO = {
   setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
+  regularPolygonTool: { sides: number; direction: "CCW" | "CW" };
   getPointWorldById: (id: string) => Vec2 | null;
   gridSnapEnabled: boolean;
   snapWorldToGrid: (world: Vec2) => Vec2;
@@ -208,6 +210,20 @@ export function handleToolClick(
       step: 2,
       points: [...pendingSelection.points, { type: "point", id: nextPointId }],
     });
+    return;
+  }
+
+  if (activeTool === "regular_polygon") {
+    if (!pendingSelection || pendingSelection.tool !== "regular_polygon") {
+      io.setPendingSelection({ tool: "regular_polygon", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+    const bId = resolveOrCreatePointAtCursor();
+    if (bId === pendingSelection.first.id) return;
+    const sides = Math.max(3, Math.min(64, Math.round(io.regularPolygonTool.sides)));
+    const created = io.createRegularPolygon(pendingSelection.first.id, bId, sides, io.regularPolygonTool.direction);
+    if (!created) return;
+    io.clearPendingSelection();
     return;
   }
 
@@ -504,6 +520,7 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     activeTool === "circle_3p" ||
     activeTool === "circle_fixed" ||
     activeTool === "polygon" ||
+    activeTool === "regular_polygon" ||
     activeTool === "sector" ||
     activeTool === "midpoint" ||
     activeTool === "angle_bisector" ||
@@ -526,6 +543,7 @@ export function isValidTarget(
   if (activeTool === "circle_3p") return hoveredHit.type === "point";
   if (activeTool === "circle_fixed") return hoveredHit.type === "point";
   if (activeTool === "polygon") return hoveredHit.type === "point";
+  if (activeTool === "regular_polygon") return hoveredHit.type === "point";
   if (activeTool === "angle_bisector") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";
   if (activeTool === "sector") return hoveredHit.type === "point";

@@ -58,6 +58,7 @@ export function CommandBar() {
   const createLine = useGeoStore((store) => store.createLine);
   const createSegment = useGeoStore((store) => store.createSegment);
   const createPolygon = useGeoStore((store) => store.createPolygon);
+  const createRegularPolygon = useGeoStore((store) => store.createRegularPolygon);
   const createCircle = useGeoStore((store) => store.createCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
@@ -193,6 +194,16 @@ export function CommandBar() {
       const polygonId = createPolygon(cmd.pointIds);
       if (!polygonId) {
         setStatus({ kind: "error", text: "Cannot construct polygon" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created polygon ${polygonId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateRegularPolygonFromEdge") {
+      const polygonId = createRegularPolygon(cmd.aId, cmd.bId, cmd.sides, cmd.direction);
+      if (!polygonId) {
+        setStatus({ kind: "error", text: "Cannot construct regular polygon" });
         return;
       }
       setStatus({ kind: "ok", text: `Created polygon ${polygonId}` });

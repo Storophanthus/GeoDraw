@@ -14,6 +14,10 @@ export type UiSliceState = {
   circleFixedTool: {
     radius: string;
   };
+  regularPolygonTool: {
+    sides: number;
+    direction: AngleFixedDirection;
+  };
   dependencyGlowEnabled: boolean;
   exportClipWorld: import("./storeTypes").ExportClipWorld | null;
   copyStyle: {
@@ -41,6 +45,10 @@ export function createUiSliceState(): UiSliceState {
     },
     circleFixedTool: {
       radius: "3",
+    },
+    regularPolygonTool: {
+      sides: 5,
+      direction: "CCW",
     },
     dependencyGlowEnabled: true,
     exportClipWorld: null,

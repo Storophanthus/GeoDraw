@@ -95,6 +95,7 @@ export function CanvasView() {
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
   const createPolygon = useGeoStore((store) => store.createPolygon);
+  const createRegularPolygon = useGeoStore((store) => store.createRegularPolygon);
   const createCircle = useGeoStore((store) => store.createCircle);
   const createAuxiliaryCircle = useGeoStore((store) => store.createAuxiliaryCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
@@ -121,6 +122,7 @@ export function CanvasView() {
   const setExportClipWorld = useGeoStore((store) => store.setExportClipWorld);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
+  const regularPolygonTool = useGeoStore((store) => store.regularPolygonTool);
 
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
@@ -151,6 +153,7 @@ export function CanvasView() {
       createSegment,
       createLine,
       createPolygon,
+      createRegularPolygon,
       createCircle,
       createAuxiliaryCircle,
       createCircleThreePoint,
@@ -173,6 +176,7 @@ export function CanvasView() {
       setCopyStyleSource,
       applyCopyStyleTo,
       setExportClipWorld,
+      regularPolygonTool,
       getPointWorldById: (id) => {
         const point = scene.points.find((p) => p.id === id);
         return point ? getPointWorldPos(point, scene) : null;
@@ -187,6 +191,7 @@ export function CanvasView() {
       createSegment,
       createLine,
       createPolygon,
+      createRegularPolygon,
       createCircle,
       createAuxiliaryCircle,
       createCircleThreePoint,
@@ -209,6 +214,7 @@ export function CanvasView() {
       setCopyStyleSource,
       applyCopyStyleTo,
       setExportClipWorld,
+      regularPolygonTool,
       effectiveGridSnapEnabled,
       camera,
       gridSettings,
@@ -295,8 +301,8 @@ export function CanvasView() {
         vp,
         dpr,
         gridSettings,
-        activeTool,
-        pendingSelection,
+      activeTool,
+      pendingSelection,
         cursorWorld,
         hoverScreen,
         hoverSnap,
@@ -304,8 +310,9 @@ export function CanvasView() {
         hoveredTargetValid,
         resolvedPoints,
         resolvedAngles,
-        angleFixedTool,
-        circleFixedTool,
+      angleFixedTool,
+      regularPolygonTool,
+      circleFixedTool,
         anglePreviewArcRadius: angleDefaults.arcRadius,
         pendingPreviewTolerances: {
           linePx: LINE_HIT_TOLERANCE_PX,
@@ -340,6 +347,7 @@ export function CanvasView() {
       dependencyGlowEnabled,
       exportClipWorld,
       gridSettings,
+      regularPolygonTool,
       vp,
     ]
   );
@@ -371,6 +379,7 @@ export function CanvasView() {
     hoveredHit,
     pointLabelOffsetPx: pointDefaults.labelOffsetPx,
     angleFixedTool,
+    regularPolygonTool,
     circleFixedTool,
     constructClickIo,
     tolerances: hitTolerances,

@@ -59,6 +59,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   circle_3p: { icon: IconCircle3Point, tooltip: "Circle through 3 Points", ariaLabel: "Circle through three points tool" },
   circle_fixed: { icon: IconCircleRadius, tooltip: "Circle with Fixed Radius", ariaLabel: "Circle with fixed radius tool" },
   polygon: { icon: IconPolygon, tooltip: "Polygon", ariaLabel: "Polygon tool" },
+  regular_polygon: { icon: IconPolygon, tooltip: "Regular Polygon", ariaLabel: "Regular polygon tool" },
   sector: { icon: IconSector, tooltip: "Circular Sector", ariaLabel: "Circular sector tool" },
 };
 
@@ -67,7 +68,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
-  { id: "circles", label: "SHAPES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon"] },
+  { id: "circles", label: "SHAPES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon", "regular_polygon"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
 ];
 

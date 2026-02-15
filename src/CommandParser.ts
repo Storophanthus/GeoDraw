@@ -47,6 +47,7 @@ export type Command =
   | { type: "CreateSector"; centerId: string; startId: string; endId: string }
   | { type: "CreateSegmentByPoints"; aId: string; bId: string }
   | { type: "CreatePolygonByPoints"; pointIds: string[] }
+  | { type: "CreateRegularPolygonFromEdge"; aId: string; bId: string; sides: number; direction: "CCW" | "CW" }
   | { type: "CreateCircleThreePoint"; aId: string; bId: string; cId: string }
   | { type: "CreateCircleXYR"; x: number; y: number; r: number }
   | { type: "CreateCircleCenterRadius"; centerId: string; r: number; rExpr?: string }
@@ -602,6 +603,26 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     }
     if (pointIds.length < 3) return err("Polygon requires at least 3 distinct points");
     return { kind: "cmd", cmd: { type: "CreatePolygonByPoints", pointIds } };
+  }
+
+  if (name === "RegularPolygon") {
+    if (args.length !== 3 && args.length !== 4) return err("RegularPolygon(A, B, n[,CW|CCW]) expects 3 or 4 arguments");
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    if (!aLabel || !bLabel) return err("RegularPolygon(A, B, n) expects point labels for A and B");
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const nEval = evaluateExpression(args[2], ctx);
+    if (!nEval.ok) return err("RegularPolygon side count must be numeric");
+    const sides = Math.round(nEval.value);
+    if (Math.abs(sides - nEval.value) > 1e-9) return err("RegularPolygon side count must be an integer");
+    if (sides < 3 || sides > 64) return err("RegularPolygon side count must be in [3, 64]");
+    const dirRaw = args.length === 4 ? args[3].trim() : "CCW";
+    const direction = dirRaw === "CW" ? "CW" : dirRaw === "CCW" ? "CCW" : null;
+    if (!direction) return err("RegularPolygon direction must be CW or CCW");
+    return { kind: "cmd", cmd: { type: "CreateRegularPolygonFromEdge", aId: a.id, bId: b.id, sides, direction } };
   }
 
   if (name === "Circle") {

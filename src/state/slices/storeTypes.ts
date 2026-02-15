@@ -25,6 +25,7 @@ export type ActiveTool =
   | "circle_3p"
   | "circle_fixed"
   | "polygon"
+  | "regular_polygon"
   | "sector"
   | "perp_line"
   | "parallel_line"
@@ -88,6 +89,11 @@ export type PendingSelection =
     tool: "polygon";
     step: 2;
     points: Array<{ type: "point"; id: string }>;
+  }
+  | {
+    tool: "regular_polygon";
+    step: 2;
+    first: { type: "point"; id: string };
   }
   | {
     tool: "circle_3p";
@@ -183,6 +189,10 @@ export type GeoState = {
   circleFixedTool: {
     radius: string;
   };
+  regularPolygonTool: {
+    sides: number;
+    direction: AngleFixedDirection;
+  };
   dependencyGlowEnabled: boolean;
   exportClipWorld: ExportClipWorld | null;
   copyStyle: {
@@ -233,6 +243,7 @@ export type GeoActions = {
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
   createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
   createPolygon: (pointIds: string[]) => string | null;
+  createRegularPolygon: (aId: string, bId: string, sides: number, direction: AngleFixedDirection) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number) => string | null;
@@ -259,6 +270,7 @@ export type GeoActions = {
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
   setCircleFixedTool: (next: Partial<GeoState["circleFixedTool"]>) => void;
+  setRegularPolygonTool: (next: Partial<GeoState["regularPolygonTool"]>) => void;
   setGridEnabled: (enabled: boolean) => void;
   setAxesEnabled: (enabled: boolean) => void;
   setGridSnapEnabled: (enabled: boolean) => void;

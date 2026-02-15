@@ -13,6 +13,9 @@ type ToolInfoSectionProps = {
   circleFixedRadius: string;
   setCircleFixedTool: (next: { radius?: string }) => void;
   circleFixedPreview: NumberExpressionEvalResult;
+  regularPolygonSides: number;
+  regularPolygonDirection: "CCW" | "CW";
+  setRegularPolygonTool: (next: { sides?: number; direction?: "CCW" | "CW" }) => void;
   pendingSelection: PendingSelection;
   pendingCircleFixedCenterLabel: string | null;
   createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
@@ -29,6 +32,9 @@ export function ToolInfoSection({
   circleFixedRadius,
   setCircleFixedTool,
   circleFixedPreview,
+  regularPolygonSides,
+  regularPolygonDirection,
+  setRegularPolygonTool,
   pendingSelection,
   pendingCircleFixedCenterLabel,
   createCircleFixedRadius,
@@ -122,6 +128,39 @@ export function ToolInfoSection({
               ? `Resolved: r = ${circleFixedPreview.value.toFixed(6)}`
               : "Radius must be > 0 (supports expressions like r_1/2)"}
           </div>
+        </div>
+      )}
+      {activeTool === "regular_polygon" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Regular Polygon</div>
+          <div className="controlRow">
+            <label className="controlLabel">Sides</label>
+            <input
+              className="renameInput"
+              type="number"
+              min={3}
+              max={64}
+              step={1}
+              value={regularPolygonSides}
+              onChange={(e) => {
+                const parsed = Number.parseInt(e.target.value, 10);
+                if (!Number.isFinite(parsed)) return;
+                setRegularPolygonTool({ sides: Math.max(3, Math.min(64, parsed)) });
+              }}
+            />
+          </div>
+          <div className="controlRow">
+            <label className="controlLabel">Direction</label>
+            <select
+              className="selectInput"
+              value={regularPolygonDirection}
+              onChange={(e) => setRegularPolygonTool({ direction: e.target.value as "CCW" | "CW" })}
+            >
+              <option value="CCW">CCW</option>
+              <option value="CW">CW</option>
+            </select>
+          </div>
+          <div className="statusText">Click first vertex, then second vertex (first side).</div>
         </div>
       )}
       {activeTool === "export_clip" && (

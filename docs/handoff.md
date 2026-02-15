@@ -146,6 +146,18 @@
     - `Circle3P(A,B,C)` (`CircleThreePoint` alias)
   - Parser now resolves point aliases through command alias table as fallback.
   - Added parser tests for new commands and assignment guard on tangent multi-create.
+- Regular Polygon tool + command parity (new):
+  - New tool id: `regular_polygon` in SHAPES group.
+  - Tool flow: click point A, click point B, create regular `n`-gon from edge `AB` (deterministic CCW build).
+  - New tool setting in state/UI: `regularPolygonTool.sides` (integer clamped to `[3,64]`), editable from Properties panel tool info.
+  - New core creation action: `createRegularPolygon(aId,bId,sides)` (atomic, fail-closed, no partial writes).
+  - Vertex generation is dependency-safe:
+    - creates derived vertices as `pointByRotation` chain (`radiusMode:"keep"`) so dragging base points updates polygon.
+  - Polygon edges are auto-created as owned segments (`ownedByPolygonIds`) using the same ownership semantics as standard polygon creation.
+  - Command Bar support:
+    - `RegularPolygon(A,B,n)` -> `CreateRegularPolygonFromEdge`
+    - assignment form supported: `rp = RegularPolygon(A,B,n)`.
+  - Preview/highlight support added for pending regular polygon construction.
 - Command redefine/edit (homework #3 slice 1):
   - Assignment redefinition is enabled for:
     - existing constant numbers (`n = ...` updates value in place),
@@ -253,6 +265,7 @@
   - Regression fixture `regression-line-coverage-j-o.json` was upgraded to semantic intersection kinds (`lineLikeIntersectionPoint`, `circleSegmentIntersectionPoint`, `circleCircleIntersectionPoint`) with explicit branch indices.
 - Active homework focus (correctness-first):
   1. Validate on dense construction scenes and guard against regressions.
+  2. Regular polygon follow-up: optional orientation toggle (CW/CCW) if needed.
 - Performance track is secondary and must not alter intersection semantics.
 - Performance follow-up now is measurement/tuning only:
   - run `npm run test:zoom` and dense-scene checks

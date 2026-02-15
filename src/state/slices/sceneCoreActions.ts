@@ -1,4 +1,4 @@
-import { nextLabelFromIndex } from "../../scene/points";
+import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
 import type { ShowLabelMode } from "../../scene/points";
 import { registerLinePair, registerSegmentPair } from "../../domain/rightAngleProvenance";
 import type { SetStateOptions } from "./historySlice";
@@ -29,6 +29,7 @@ export function createSceneCoreActions(
   | "createSegment"
   | "createLine"
   | "createPolygon"
+  | "createRegularPolygon"
   | "createCircleCenterPoint"
 > {
   const edgeKey = (aId: string, bId: string) => (aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`);
@@ -291,6 +292,137 @@ export function createSceneCoreActions(
           },
           selectedObject: { type: "polygon", id },
           recentCreatedObject: { type: "polygon", id },
+          nextSegmentId,
+          nextPolygonId: prev.nextPolygonId + 1,
+        };
+      });
+      for (let i = 0; i < createdEdges.length; i += 1) {
+        const edge = createdEdges[i];
+        registerSegmentPair(edge.id, edge.aId, edge.bId);
+      }
+      return id;
+    },
+
+    createRegularPolygon(aId, bId, sides, direction) {
+      if (aId === bId) return null;
+      if (!Number.isInteger(sides) || sides < 3 || sides > 64) return null;
+      if (direction !== "CCW" && direction !== "CW") return null;
+      let id: string | null = null;
+      let createdEdges: Array<{ id: string; aId: string; bId: string }> = [];
+      ctx.setState((prev) => {
+        createdEdges = [];
+        const a = prev.scene.points.find((p) => p.id === aId);
+        const b = prev.scene.points.find((p) => p.id === bId);
+        if (!a || !b) return prev;
+        const aw = getPointWorldPos(a, prev.scene);
+        const bw = getPointWorldPos(b, prev.scene);
+        if (!aw || !bw) return prev;
+        if (Math.hypot(aw.x - bw.x, aw.y - bw.y) <= 1e-12) return prev;
+
+        const polygonId = `pg_${prev.nextPolygonId}`;
+        const newPoints = [...prev.scene.points];
+        const usedNames = new Set(newPoints.map((point) => point.name));
+        let nextPointId = prev.nextPointId;
+        // pointByRotation rotates the previous vertex around the current one.
+        // To advance edge direction by orientation-selected exterior angle, we
+        // rotate by interior angle and flip direction due to reversed base vector.
+        const angleDeg = 180 - 360 / sides;
+        const rotationDirection = direction === "CCW" ? "CW" : "CCW";
+        const pointIds: string[] = [aId, bId];
+
+        for (let i = 2; i < sides; i += 1) {
+          let idx = 0;
+          let name = nextLabelFromIndex(idx);
+          while (usedNames.has(name)) {
+            idx += 1;
+            name = nextLabelFromIndex(idx);
+          }
+          usedNames.add(name);
+          const pointId = `p_${nextPointId}`;
+          nextPointId += 1;
+          const centerId = pointIds[i - 1];
+          const basePointId = pointIds[i - 2];
+          newPoints.push({
+            id: pointId,
+            kind: "pointByRotation",
+            name,
+            captionTex: name,
+            visible: true,
+            showLabel: "name",
+            locked: true,
+            auxiliary: true,
+            centerId,
+            pointId: basePointId,
+                angleDeg,
+                direction: rotationDirection,
+                radiusMode: "keep",
+            style: {
+              ...prev.pointDefaults,
+              labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+            },
+          });
+          pointIds.push(pointId);
+        }
+
+        const edgeIndexByKey = new Map<string, number>();
+        for (let i = 0; i < prev.scene.segments.length; i += 1) {
+          const seg = prev.scene.segments[i];
+          edgeIndexByKey.set(edgeKey(seg.aId, seg.bId), i);
+        }
+
+        const newSegments = [...prev.scene.segments];
+        let nextSegmentId = prev.nextSegmentId;
+        for (let i = 0; i < pointIds.length; i += 1) {
+          const pa = pointIds[i];
+          const pb = pointIds[(i + 1) % pointIds.length];
+          if (pa === pb) continue;
+          const key = edgeKey(pa, pb);
+          const existingIdx = edgeIndexByKey.get(key);
+          if (existingIdx !== undefined) {
+            const existingSeg = newSegments[existingIdx];
+            if (Array.isArray(existingSeg.ownedByPolygonIds) && !existingSeg.ownedByPolygonIds.includes(polygonId)) {
+              newSegments[existingIdx] = {
+                ...existingSeg,
+                ownedByPolygonIds: [...existingSeg.ownedByPolygonIds, polygonId],
+              };
+            }
+            continue;
+          }
+          const segId = `s_${nextSegmentId}`;
+          nextSegmentId += 1;
+          newSegments.push({
+            id: segId,
+            aId: pa,
+            bId: pb,
+            ownedByPolygonIds: [polygonId],
+            visible: true,
+            showLabel: false,
+            style: { ...prev.segmentDefaults },
+          });
+          edgeIndexByKey.set(key, newSegments.length - 1);
+          createdEdges.push({ id: segId, aId: pa, bId: pb });
+        }
+
+        id = polygonId;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: newPoints,
+            segments: newSegments,
+            polygons: [
+              ...prev.scene.polygons,
+              {
+                id: polygonId,
+                pointIds,
+                visible: true,
+                style: { ...prev.polygonDefaults },
+              },
+            ],
+          },
+          selectedObject: { type: "polygon", id: polygonId },
+          recentCreatedObject: { type: "polygon", id: polygonId },
+          nextPointId,
           nextSegmentId,
           nextPolygonId: prev.nextPolygonId + 1,
         };

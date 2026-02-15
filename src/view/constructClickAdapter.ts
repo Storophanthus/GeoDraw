@@ -6,7 +6,10 @@ import { findBestSnap } from "./snapEngine";
 import type { SceneModel } from "../scene/points";
 
 type ConstructFromClickArgs = Parameters<typeof constructFromClick>[0];
-export type ConstructClickIo = Omit<ConstructFromClickArgs["io"], "angleFixedTool" | "camera" | "vp">;
+export type ConstructClickIo = Omit<
+  ConstructFromClickArgs["io"],
+  "angleFixedTool" | "regularPolygonTool" | "camera" | "vp"
+>;
 
 type RunConstructClickParams = {
   screen: Vec2;
@@ -19,6 +22,7 @@ type RunConstructClickParams = {
   camera: Camera;
   vp: Viewport;
   angleFixedTool: ConstructFromClickArgs["io"]["angleFixedTool"];
+  regularPolygonTool: ConstructFromClickArgs["io"]["regularPolygonTool"];
   tolerances: {
     point: number;
     angle: number;
@@ -41,6 +45,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     camera,
     vp,
     angleFixedTool,
+    regularPolygonTool,
     tolerances,
     io,
   } = params;
@@ -72,6 +77,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     io: {
       ...io,
       angleFixedTool,
+      regularPolygonTool,
       camera,
       vp,
     },

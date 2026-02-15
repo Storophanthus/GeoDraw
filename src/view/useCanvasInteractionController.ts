@@ -25,7 +25,7 @@ import {
   hitTestSegmentId as engineHitTestSegmentId,
 } from "../engine";
 import type { SceneModel, ScenePoint } from "../scene/points";
-import type { AngleFixedToolState, CircleFixedToolState } from "./previews/pendingPreview";
+import type { AngleFixedToolState, CircleFixedToolState, RegularPolygonToolState } from "./previews/pendingPreview";
 
 export type PointerState = {
   active: boolean;
@@ -78,6 +78,7 @@ type InteractionDeps = {
   pointLabelOffsetPx: Vec2;
   angleFixedTool: AngleFixedToolState;
   circleFixedTool: CircleFixedToolState;
+  regularPolygonTool: RegularPolygonToolState;
   constructClickIo: ConstructClickIo;
   tolerances: { point: number; angle: number; segment: number; line: number; circle: number };
   clickEpsilonPx: number;
@@ -102,6 +103,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     pointLabelOffsetPx,
     angleFixedTool,
     circleFixedTool,
+    regularPolygonTool,
     constructClickIo,
     tolerances,
     clickEpsilonPx,
@@ -226,9 +228,12 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           camera,
           vp,
           angleFixedTool,
+          regularPolygonTool,
           tolerances,
           io: constructClickIo,
         }),
+      zoomAtScreenPoint: (screen, factor) => actions.zoomAtScreenPoint(vp, screen, factor),
+      panByScreenDelta: actions.panByScreenDelta,
     });
 
     const { onWheel, onLeave, cancelPendingWheelZoom } = createCanvasAuxHandlers({
@@ -265,6 +270,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     copyStyleSource,
     angleFixedTool,
     circleFixedTool,
+    regularPolygonTool,
     tolerances,
     actions,
     clickEpsilonPx,

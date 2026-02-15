@@ -31,6 +31,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const angleDefaults = useGeoStore((store) => store.angleDefaults);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
+  const regularPolygonTool = useGeoStore((store) => store.regularPolygonTool);
   const pendingSelection = useGeoStore((store) => store.pendingSelection);
   const setPointDefaults = useGeoStore((store) => store.setPointDefaults);
   const setSegmentDefaults = useGeoStore((store) => store.setSegmentDefaults);
@@ -40,6 +41,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const setAngleDefaults = useGeoStore((store) => store.setAngleDefaults);
   const setAngleFixedTool = useGeoStore((store) => store.setAngleFixedTool);
   const setCircleFixedTool = useGeoStore((store) => store.setCircleFixedTool);
+  const setRegularPolygonTool = useGeoStore((store) => store.setRegularPolygonTool);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
   const clearPendingSelection = useGeoStore((store) => store.clearPendingSelection);
   const updateSelectedPointStyle = useGeoStore((store) => store.updateSelectedPointStyle);
@@ -207,6 +209,9 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   circleFixedRadius={circleFixedTool.radius}
   setCircleFixedTool={setCircleFixedTool}
   circleFixedPreview={circleFixedPreview}
+  regularPolygonSides={regularPolygonTool.sides}
+  regularPolygonDirection={regularPolygonTool.direction}
+  setRegularPolygonTool={setRegularPolygonTool}
   pendingSelection={pendingSelection}
   pendingCircleFixedCenterLabel={
     pendingSelection && pendingSelection.tool === "circle_fixed"

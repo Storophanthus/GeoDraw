@@ -82,6 +82,21 @@ const polyABO = mustCmd("Polygon(A,B,O)", baseCtx, "CreatePolygonByPoints");
 if (polyABO.type !== "CreatePolygonByPoints" || polyABO.pointIds.join(",") !== "pA,pB,pO") {
   throw new Error("Polygon(A,B,O) IDs mismatch");
 }
+const regularPoly = mustCmd("RegularPolygon(A,B,5)", baseCtx, "CreateRegularPolygonFromEdge");
+if (
+  regularPoly.type !== "CreateRegularPolygonFromEdge" ||
+  regularPoly.aId !== "pA" ||
+  regularPoly.bId !== "pB" ||
+  regularPoly.sides !== 5 ||
+  regularPoly.direction !== "CCW"
+) {
+  throw new Error("RegularPolygon(A,B,5) mismatch");
+}
+const regularPolyCW = mustCmd("RegularPolygon(A,B,5,CW)", baseCtx, "CreateRegularPolygonFromEdge");
+if (regularPolyCW.type !== "CreateRegularPolygonFromEdge" || regularPolyCW.direction !== "CW") {
+  throw new Error("RegularPolygon(A,B,5,CW) mismatch");
+}
+mustError("RegularPolygon(A,B,2)", baseCtx, "side count must be in [3, 64]");
 
 const midAB = mustCmd("Midpoint(A,B)", baseCtx, "CreateMidpointByPoints");
 if (midAB.type !== "CreateMidpointByPoints" || midAB.aId !== "pA" || midAB.bId !== "pB") {
@@ -173,6 +188,16 @@ if (assignPointAffine.type !== "CreatePointXY" || Math.abs(assignPointAffine.x -
 const assignLine = mustAssignObject("l = Line(A,B)", baseCtx, "l", "CreateLineByPoints");
 if (assignLine.type !== "CreateLineByPoints" || assignLine.aId !== "pA" || assignLine.bId !== "pB") {
   throw new Error("l = Line(A,B) mismatch");
+}
+const assignRegularPolygon = mustAssignObject("rp = RegularPolygon(A,B,6)", baseCtx, "rp", "CreateRegularPolygonFromEdge");
+if (
+  assignRegularPolygon.type !== "CreateRegularPolygonFromEdge" ||
+  assignRegularPolygon.aId !== "pA" ||
+  assignRegularPolygon.bId !== "pB" ||
+  assignRegularPolygon.sides !== 6 ||
+  assignRegularPolygon.direction !== "CCW"
+) {
+  throw new Error("rp = RegularPolygon(A,B,6) mismatch");
 }
 
 const assignMidpoint = mustAssignObject("M = Midpoint(A,B)", baseCtx, "M", "CreateMidpointByPoints");

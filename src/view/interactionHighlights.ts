@@ -35,6 +35,7 @@ export function drawInteractionHighlights(
     if (
       pendingSelection.tool === "angle" ||
       pendingSelection.tool === "sector" ||
+      pendingSelection.tool === "regular_polygon" ||
       pendingSelection.tool === "angle_fixed" ||
       pendingSelection.tool === "angle_bisector"
     ) {

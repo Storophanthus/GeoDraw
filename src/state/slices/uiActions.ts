@@ -17,6 +17,7 @@ export function createUiActions(
   | "setAngleDefaults"
   | "setAngleFixedTool"
   | "setCircleFixedTool"
+  | "setRegularPolygonTool"
   | "setGridEnabled"
   | "setAxesEnabled"
   | "setGridSnapEnabled"
@@ -100,6 +101,16 @@ export function createUiActions(
         ...prev,
         circleFixedTool: {
           ...prev.circleFixedTool,
+          ...next,
+        },
+      }));
+    },
+
+    setRegularPolygonTool(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        regularPolygonTool: {
+          ...prev.regularPolygonTool,
           ...next,
         },
       }));

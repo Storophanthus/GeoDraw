@@ -120,6 +120,9 @@ constructFromClick({
     createPolygon() {
       return null;
     },
+    createRegularPolygon() {
+      return null;
+    },
     createPerpendicularLine() {
       return null;
     },
@@ -173,6 +176,7 @@ constructFromClick({
       return null;
     },
     angleFixedTool: { angleExpr: "45", direction: "CCW" },
+    regularPolygonTool: { sides: 5, direction: "CCW" },
     gridSnapEnabled: false,
     snapWorldToGrid(world) {
       return world;

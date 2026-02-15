@@ -26,6 +26,7 @@ import {
 
 export type AngleFixedToolState = { angleExpr: string; direction: "CCW" | "CW" };
 export type CircleFixedToolState = { radius: string };
+export type RegularPolygonToolState = { sides: number; direction: "CCW" | "CW" };
 
 function circumcircleFromThreePoints(a: Vec2, b: Vec2, c: Vec2): { center: Vec2; radius: number } | null {
   const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
@@ -42,6 +43,24 @@ function circumcircleFromThreePoints(a: Vec2, b: Vec2, c: Vec2): { center: Vec2;
   return { center, radius };
 }
 
+function rotateAround(center: Vec2, p: Vec2, angleRad: number): Vec2 {
+  const dx = p.x - center.x;
+  const dy = p.y - center.y;
+  const cs = Math.cos(angleRad);
+  const sn = Math.sin(angleRad);
+  return {
+    x: center.x + dx * cs - dy * sn,
+    y: center.y + dx * sn + dy * cs,
+  };
+}
+
+function signedAngleRad(toolDirection: "CCW" | "CW", interiorAngleRad: number): number {
+  // pointByRotation rotates previous vertex around current one; due reversed edge
+  // vector, requested polygon orientation requires flipped rotation sign.
+  const rotationDirection = toolDirection === "CCW" ? "CW" : "CCW";
+  return rotationDirection === "CCW" ? interiorAngleRad : -interiorAngleRad;
+}
+
 export function drawPendingPreview(
   ctx: CanvasRenderingContext2D,
   pendingSelection: PendingSelection,
@@ -53,6 +72,7 @@ export function drawPendingPreview(
   camera: Camera,
   vp: Viewport,
   angleFixedTool: AngleFixedToolState,
+  regularPolygonTool: RegularPolygonToolState,
   circleFixedTool: CircleFixedToolState,
   anglePreviewArcRadius: number,
   tolerances: { linePx: number; segmentPx: number }
@@ -150,6 +170,38 @@ export function drawPendingPreview(
       }
       ctx.stroke();
     }
+    ctx.restore();
+    return;
+  }
+
+  if (pendingSelection.tool === "regular_polygon" && p1 && cursorWorld) {
+    const n = Math.max(3, Math.min(64, Math.round(regularPolygonTool.sides)));
+    const first = firstWorld;
+    const second = cursorWorld;
+    if (!first) {
+      ctx.restore();
+      return;
+    }
+    if (Math.hypot(second.x - first.x, second.y - first.y) <= 1e-9) {
+      ctx.restore();
+      return;
+    }
+    const interior = Math.PI - (Math.PI * 2) / n;
+    const angleStep = signedAngleRad(regularPolygonTool.direction, interior);
+    const poly: Vec2[] = [first, second];
+    while (poly.length < n) {
+      const center = poly[poly.length - 1];
+      const base = poly[poly.length - 2];
+      poly.push(rotateAround(center, base, angleStep));
+    }
+    const polyScreen = poly.map((world) => camMath.worldToScreen(world, camera, vp));
+    ctx.beginPath();
+    ctx.moveTo(polyScreen[0].x, polyScreen[0].y);
+    for (let i = 1; i < polyScreen.length; i += 1) {
+      ctx.lineTo(polyScreen[i].x, polyScreen[i].y);
+    }
+    ctx.closePath();
+    ctx.stroke();
     ctx.restore();
     return;
   }
