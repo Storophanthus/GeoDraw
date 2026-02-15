@@ -1184,3 +1184,15 @@ When starting a new chat, provide:
 
 ## Risks / Constraints
 - Export smoke test intentionally checks deterministic string signatures; it is not a full symbolic equivalence checker.
+
+## Latest Done (Angle/Sector Redefine Export Smoke)
+- Extended `command-redefine-export.test.ts` to cover angle alias redefine from `Angle(...)` to `Sector(...)`.
+- Export assertions now verify post-redefine behavior for this case:
+  - sector export macro present (`\tkzDrawSector`),
+  - angle-mark macro absent (`\tkzMarkAngle`) in this smoke scene.
+
+## Next
+- Optional: add one smoke for `Sector -> Angle` redefine if bidirectional behavior is needed.
+
+## Risks / Constraints
+- Export smoke remains signature-based and intentionally minimal/deterministic.

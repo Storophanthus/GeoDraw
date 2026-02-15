@@ -40,6 +40,10 @@ mustOk(commandBarApi.applyObjectAssignment("circX", { type: "CreateCircleCenterR
 mustOk(commandBarApi.applyObjectAssignment("lineX", { type: "CreateLineByPoints", aId: a, bId: b }), "create lineX");
 mustOk(commandBarApi.applyObjectAssignment("lineX", { type: "CreateLineByPoints", aId: b, bId: d }), "redefine lineX");
 
+// angle alias redefine: angle -> sector should export as sector drawing, not angle mark.
+mustOk(commandBarApi.applyObjectAssignment("angX", { type: "CreateAngle", aId: b, bId: a, cId: c }), "create angX");
+mustOk(commandBarApi.applyObjectAssignment("angX", { type: "CreateSector", centerId: a, startId: b, endId: d }), "redefine angX");
+
 const tikz = exportTikz(getGeoStore().scene);
 
 // Polygon should use redefined vertex sequence X_A -> X_C -> X_D
@@ -48,5 +52,9 @@ assert(!/\(X_A\)\s*--\s*\(X_B\)\s*--\s*\(X_C\)\s*--\s*cycle;/.test(tikz), "Found
 
 // Circle should export as fixed-radius from center X_C with radius 2
 assert(/\\tkzDefCircle\[R\]\(X_C,2\)/.test(tikz), "Expected redefined fixed-radius circle in export");
+
+// Redefined angle alias should export as sector
+assert(/\\tkzDrawSector/.test(tikz), "Expected redefined sector alias to emit \\\\tkzDrawSector");
+assert(!/\\tkzMarkAngle/.test(tikz), "Did not expect angle mark export after angle->sector redefine");
 
 console.log("command-redefine-export tests: OK");
