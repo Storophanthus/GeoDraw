@@ -113,6 +113,28 @@ assert(aliasId("ra") === angleId, "angle alias id changed on redefine");
   assert(angle.aId === d && angle.bId === c && angle.cId === b, "angle points not updated");
 }
 
+// sector ownership: create sector alias should sprout radial owned segments.
+mustOk(commandBarApi.applyObjectAssignment("rsct", { type: "CreateSector", centerId: a, startId: b, endId: c }), "create sector");
+const sectorId = aliasId("rsct");
+{
+  const owned = getGeoStore().scene.segments.filter(
+    (s) => Array.isArray(s.ownedBySectorIds) && s.ownedBySectorIds.includes(sectorId)
+  );
+  const ownedKeys = new Set(owned.map((s) => edgeKey(s.aId, s.bId)));
+  const expected = new Set([edgeKey(a, b), edgeKey(a, c)]);
+  assert(ownedKeys.size === 2, "sector should own exactly two radial segments");
+  for (const key of expected) assert(ownedKeys.has(key), `missing sector-owned radial edge ${key}`);
+}
+
+// sector -> angle redefine should release sector-owned radial segments.
+mustOk(commandBarApi.applyObjectAssignment("rsct", { type: "CreateAngle", aId: b, bId: a, cId: c }), "sector to angle");
+{
+  const stillOwned = getGeoStore().scene.segments.some(
+    (s) => Array.isArray(s.ownedBySectorIds) && s.ownedBySectorIds.includes(sectorId)
+  );
+  assert(!stillOwned, "sector-owned radial edges were not released on sector->angle redefine");
+}
+
 // fail-closed: incompatible redefine must error and not mutate
 const segBefore = getGeoStore().scene.segments.find((it) => it.id === segId);
 const bad = commandBarApi.applyObjectAssignment("rs", { type: "CreateLineByPoints", aId: a, bId: b });

@@ -46,21 +46,43 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       (polygon) => polygon.pointIds.length >= 3 && polygon.pointIds.every((pointId) => pointIds.has(pointId))
     );
     const nextPolygonIds = new Set(nextPolygons.map((polygon) => polygon.id));
+    const nextSectorIds = new Set(nextAngles.filter((angle) => angle.kind === "sector").map((angle) => angle.id));
     const nextSegmentsNormalized = nextSegments.map((segment) => {
-      if (!Array.isArray(segment.ownedByPolygonIds)) return segment;
-      const ownerIds = segment.ownedByPolygonIds.filter((id) => nextPolygonIds.has(id));
-      if (ownerIds.length === 0) {
-        return { ...segment, ownedByPolygonIds: undefined };
-      }
-      const deduped: string[] = [];
-      for (let i = 0; i < ownerIds.length; i += 1) {
-        const id = ownerIds[i];
-        if (!deduped.includes(id)) deduped.push(id);
-      }
-      return deduped.length === segment.ownedByPolygonIds.length &&
-        deduped.every((id, idx) => id === segment.ownedByPolygonIds?.[idx])
-        ? segment
-        : { ...segment, ownedByPolygonIds: deduped };
+      const polygonOwners = Array.isArray(segment.ownedByPolygonIds)
+        ? segment.ownedByPolygonIds.filter((id) => nextPolygonIds.has(id))
+        : undefined;
+      const sectorOwners = Array.isArray(segment.ownedBySectorIds)
+        ? segment.ownedBySectorIds.filter((id) => nextSectorIds.has(id))
+        : undefined;
+      const dedupe = (ids: string[] | undefined): string[] | undefined => {
+        if (!ids || ids.length === 0) return undefined;
+        const out: string[] = [];
+        for (let i = 0; i < ids.length; i += 1) {
+          const id = ids[i];
+          if (!out.includes(id)) out.push(id);
+        }
+        return out.length > 0 ? out : undefined;
+      };
+      const polyNext = dedupe(polygonOwners);
+      const sectorNext = dedupe(sectorOwners);
+      const samePoly =
+        (polyNext === undefined && segment.ownedByPolygonIds === undefined) ||
+        (Array.isArray(polyNext) &&
+          Array.isArray(segment.ownedByPolygonIds) &&
+          polyNext.length === segment.ownedByPolygonIds.length &&
+          polyNext.every((id, idx) => id === segment.ownedByPolygonIds?.[idx]));
+      const sameSector =
+        (sectorNext === undefined && segment.ownedBySectorIds === undefined) ||
+        (Array.isArray(sectorNext) &&
+          Array.isArray(segment.ownedBySectorIds) &&
+          sectorNext.length === segment.ownedBySectorIds.length &&
+          sectorNext.every((id, idx) => id === segment.ownedBySectorIds?.[idx]));
+      if (samePoly && sameSector) return segment;
+      return {
+        ...segment,
+        ownedByPolygonIds: polyNext,
+        ownedBySectorIds: sectorNext,
+      };
     });
 
     const nextSegmentIds = new Set(nextSegmentsNormalized.map((s) => s.id));

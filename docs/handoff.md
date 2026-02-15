@@ -1196,3 +1196,25 @@ When starting a new chat, provide:
 
 ## Risks / Constraints
 - Export smoke remains signature-based and intentionally minimal/deterministic.
+
+## Latest Done (Sector-Owned Radial Segments)
+- Sector construction now creates/reuses two owned radial segments:
+  - `Segment(center,start)` and `Segment(center,end)`.
+- Added `ownedBySectorIds` ownership metadata on `SceneSegment`.
+- Sector ownership integrated into integrity/dependency/cascade systems:
+  - `sceneIntegrity` now normalizes both polygon and sector ownership arrays.
+  - dependency graph now includes segment -> sector ownership edges.
+  - cascade delete now handles sector-owned segment multi-owner logic (same pattern as polygon owners).
+- Command alias redefine integration:
+  - `Sector -> Sector` updates radial ownership deterministically.
+  - `Sector -> Angle` releases sector-owned radial ownership.
+  - orphaned ownership-generated segments are removed when no owners remain.
+- Added regression coverage:
+  - `command-redefine.test.ts`: sector ownership creation + release checks.
+  - `geometry-graph-delete-regression.test.ts`: delete sector cascades owned edge, shared-owner edge remains.
+
+## Next
+- Optional: expose sector radial sides in object browser as derived/owned edges if desired (UI-facing).
+
+## Risks / Constraints
+- Manual segments reused by sector become owner-tagged; deleting sector will only delete them when no remaining owners exist.

@@ -199,8 +199,59 @@ function testDeletePolygonKeepsSharedOwnedEdges(): void {
   assert(next.segments.some((s) => s.id === "sShared"), "shared owned segment should remain");
 }
 
+function testDeleteSectorCascadesOwnedEdges(): void {
+  const scene: SceneModel = {
+    ...baseScene(),
+    segments: [
+      { id: "sSector", aId: "pB", bId: "pC", ownedBySectorIds: ["aSector"], visible: true, showLabel: false, style: lineStyle },
+      { id: "sKeep", aId: "pA", bId: "pB", visible: true, showLabel: false, style: lineStyle },
+    ],
+    angles: [
+      ...baseScene().angles,
+      { id: "aSector", kind: "sector", aId: "pB", bId: "pA", cId: "pC", visible: true, style: angleStyle },
+    ],
+    numbers: [{ id: "nSector", name: "l_sector", visible: true, definition: { kind: "segmentLength", segId: "sSector" } }],
+  };
+  const deleted = collectCascadeDelete(scene, { type: "angle", id: "aSector" });
+  const next = applyDeletion(scene, deleted);
+  assert(!next.angles.some((a) => a.id === "aSector"), "sector should be deleted");
+  assert(!next.segments.some((s) => s.id === "sSector"), "sector-owned segment should be deleted with sector");
+  assert(next.segments.some((s) => s.id === "sKeep"), "unowned segment should remain");
+  assert(!next.numbers.some((n) => n.id === "nSector"), "dependents of sector-owned segment should cascade-delete");
+}
+
+function testDeleteSectorKeepsSharedOwnedEdges(): void {
+  const scene: SceneModel = {
+    ...baseScene(),
+    segments: [
+      {
+        id: "sSharedSector",
+        aId: "pB",
+        bId: "pC",
+        ownedBySectorIds: ["aSector1", "aSector2"],
+        visible: true,
+        showLabel: false,
+        style: lineStyle,
+      },
+    ],
+    angles: [
+      ...baseScene().angles,
+      { id: "aSector1", kind: "sector", aId: "pB", bId: "pA", cId: "pC", visible: true, style: angleStyle },
+      { id: "aSector2", kind: "sector", aId: "pB", bId: "pA", cId: "pC", visible: true, style: angleStyle },
+    ],
+    numbers: [],
+  };
+  const deleted = collectCascadeDelete(scene, { type: "angle", id: "aSector1" });
+  const next = applyDeletion(scene, deleted);
+  assert(!next.angles.some((a) => a.id === "aSector1"), "target sector should be deleted");
+  assert(next.angles.some((a) => a.id === "aSector2"), "other owner sector should remain");
+  assert(next.segments.some((s) => s.id === "sSharedSector"), "shared sector-owned segment should remain");
+}
+
 testDeleteLineCascadesDependents();
 testDeletePointCascadesGraph();
 testDeletePolygonCascadesOwnedEdges();
 testDeletePolygonKeepsSharedOwnedEdges();
+testDeleteSectorCascadesOwnedEdges();
+testDeleteSectorKeepsSharedOwnedEdges();
 console.log("geometry-graph-delete-regression: ok");

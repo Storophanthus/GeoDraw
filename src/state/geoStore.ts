@@ -360,7 +360,12 @@ export const commandBarApi = {
       setState((prev) => {
         const oldSeg = prev.scene.segments.find((s) => s.id === existing.id);
         if (!oldSeg) return prev;
-        if (Array.isArray(oldSeg.ownedByPolygonIds) && oldSeg.ownedByPolygonIds.length > 0) return prev;
+        if (
+          (Array.isArray(oldSeg.ownedByPolygonIds) && oldSeg.ownedByPolygonIds.length > 0) ||
+          (Array.isArray(oldSeg.ownedBySectorIds) && oldSeg.ownedBySectorIds.length > 0)
+        ) {
+          return prev;
+        }
         const hasA = prev.scene.points.some((p) => p.id === cmd.aId);
         const hasB = prev.scene.points.some((p) => p.id === cmd.bId);
         if (!hasA || !hasB) return prev;
@@ -530,26 +535,108 @@ export const commandBarApi = {
 
     if (existing.type === "angle") {
       let updated = false;
+      let createdEdges: Array<{ id: string; aId: string; bId: string }> = [];
       setState((prev) => {
+        createdEdges = [];
         const oldAngle = prev.scene.angles.find((a) => a.id === existing.id);
         if (!oldAngle) return prev;
         const hasPoint = (id: string) => prev.scene.points.some((p) => p.id === id);
         let nextAngle: typeof oldAngle | null = null;
+        let nextSectorTriple: { centerId: string; startId: string; endId: string } | null = null;
         if (cmd.type === "CreateAngle" && hasPoint(cmd.aId) && hasPoint(cmd.bId) && hasPoint(cmd.cId)) {
           nextAngle = { ...oldAngle, kind: "angle", aId: cmd.aId, bId: cmd.bId, cId: cmd.cId };
         } else if (cmd.type === "CreateSector" && hasPoint(cmd.centerId) && hasPoint(cmd.startId) && hasPoint(cmd.endId)) {
           nextAngle = { ...oldAngle, kind: "sector", aId: cmd.startId, bId: cmd.centerId, cId: cmd.endId };
+          nextSectorTriple = { centerId: cmd.centerId, startId: cmd.startId, endId: cmd.endId };
         } else {
           return prev;
         }
+        const angleId = oldAngle.id;
+        const edgeIndexByKey = new Map<string, number>();
+        const edgeKeyFor = (aId: string, bId: string) => (aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`);
+        const newSegments = [...prev.scene.segments];
+        for (let i = 0; i < newSegments.length; i += 1) {
+          const seg = newSegments[i];
+          edgeIndexByKey.set(edgeKeyFor(seg.aId, seg.bId), i);
+        }
+        let nextSegmentId = prev.nextSegmentId;
+        const removeSectorOwner = (seg: typeof newSegments[number]) => {
+          if (!Array.isArray(seg.ownedBySectorIds) || !seg.ownedBySectorIds.includes(angleId)) return seg;
+          const remaining = seg.ownedBySectorIds.filter((id) => id !== angleId);
+          if (remaining.length === 0) {
+            return { ...seg, ownedBySectorIds: undefined };
+          }
+          return { ...seg, ownedBySectorIds: remaining };
+        };
+        // If old object was sector, remove current ownership from all segments first.
+        if (oldAngle.kind === "sector") {
+          for (let i = 0; i < newSegments.length; i += 1) {
+            newSegments[i] = removeSectorOwner(newSegments[i]);
+          }
+        }
+        // If redefining to sector, add ownership to the new radial sides (create if absent).
+        if (nextSectorTriple) {
+          const radialPairs: Array<[string, string]> = [
+            [nextSectorTriple.centerId, nextSectorTriple.startId],
+            [nextSectorTriple.centerId, nextSectorTriple.endId],
+          ];
+          for (let i = 0; i < radialPairs.length; i += 1) {
+            const [aId, bId] = radialPairs[i];
+            const key = edgeKeyFor(aId, bId);
+            const existingIdx = edgeIndexByKey.get(key);
+            if (existingIdx !== undefined) {
+              const seg = newSegments[existingIdx];
+              if (Array.isArray(seg.ownedBySectorIds)) {
+                if (!seg.ownedBySectorIds.includes(angleId)) {
+                  newSegments[existingIdx] = { ...seg, ownedBySectorIds: [...seg.ownedBySectorIds, angleId] };
+                }
+              } else {
+                newSegments[existingIdx] = { ...seg, ownedBySectorIds: [angleId] };
+              }
+              continue;
+            }
+            const segId = `s_${nextSegmentId}`;
+            nextSegmentId += 1;
+            newSegments.push({
+              id: segId,
+              aId,
+              bId,
+              ownedBySectorIds: [angleId],
+              visible: true,
+              showLabel: false,
+              style: { ...prev.segmentDefaults },
+            });
+            edgeIndexByKey.set(key, newSegments.length - 1);
+            createdEdges.push({ id: segId, aId, bId });
+          }
+        }
+        // Drop segments that have no owners left (sector + polygon) only if they were ownership-generated.
+        const filteredSegments = newSegments.filter((seg) => {
+          const hadOwnership =
+            Array.isArray(seg.ownedBySectorIds) ||
+            Array.isArray(seg.ownedByPolygonIds);
+          if (!hadOwnership) return true;
+          const hasSectorOwners = Array.isArray(seg.ownedBySectorIds) && seg.ownedBySectorIds.length > 0;
+          const hasPolygonOwners = Array.isArray(seg.ownedByPolygonIds) && seg.ownedByPolygonIds.length > 0;
+          return hasSectorOwners || hasPolygonOwners;
+        });
         updated = true;
         return {
           ...prev,
-          scene: { ...prev.scene, angles: prev.scene.angles.map((a) => (a.id === oldAngle.id ? nextAngle! : a)) },
+          scene: {
+            ...prev.scene,
+            segments: filteredSegments,
+            angles: prev.scene.angles.map((a) => (a.id === oldAngle.id ? nextAngle! : a)),
+          },
           selectedObject: { type: "angle", id: oldAngle.id },
           recentCreatedObject: { type: "angle", id: oldAngle.id },
+          nextSegmentId,
         };
       });
+      for (let i = 0; i < createdEdges.length; i += 1) {
+        const edge = createdEdges[i];
+        registerSegmentPair(edge.id, edge.aId, edge.bId);
+      }
       return updated
         ? { ok: true as const, mode: "updated", objectType: "angle", id: existing.id }
         : { ok: false as const, error: `Cannot redefine angle ${label} with this command` };
