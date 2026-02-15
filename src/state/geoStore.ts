@@ -40,7 +40,7 @@ import { createSceneRenameActions } from "./slices/sceneRenameActions";
 import { createStoreRuntime } from "./slices/storeRuntime";
 import { geoStoreHelpers } from "./geoStoreHelpers";
 import { isNameUnique } from "../scene/pointBasics";
-import { rebuildRightAngleProvenance } from "../domain/rightAngleProvenance";
+import { rebuildRightAngleProvenance, registerSegmentPair } from "../domain/rightAngleProvenance";
 import type { Command } from "../CommandParser";
 
 export type {
@@ -65,6 +65,28 @@ const commandBarObjectAliases = new Map<
   string,
   { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }
 >();
+type CommandAliasTarget = { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string };
+
+function edgeKey(aId: string, bId: string): string {
+  return aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`;
+}
+
+function isAliasTargetAlive(scene: GeoState["scene"], target: CommandAliasTarget): boolean {
+  if (target.type === "point") return scene.points.some((p) => p.id === target.id);
+  if (target.type === "segment") return scene.segments.some((s) => s.id === target.id);
+  if (target.type === "line") return scene.lines.some((l) => l.id === target.id);
+  if (target.type === "circle") return scene.circles.some((c) => c.id === target.id);
+  if (target.type === "polygon") return scene.polygons.some((pg) => pg.id === target.id);
+  return scene.angles.some((a) => a.id === target.id);
+}
+
+function pruneStaleCommandAliases(scene: GeoState["scene"]): void {
+  for (const [name, target] of commandBarObjectAliases.entries()) {
+    if (!isAliasTargetAlive(scene, target)) {
+      commandBarObjectAliases.delete(name);
+    }
+  }
+}
 
 const actions: GeoActions = {
   ...createInteractionActions({
@@ -113,6 +135,7 @@ const actions: GeoActions = {
 export const commandBarApi = {
   getScalarVars(): Record<string, number> {
     const scene = runtime.getState().scene;
+    pruneStaleCommandAliases(scene);
     const out: Record<string, number> = {};
     for (let i = 0; i < scene.numbers.length; i += 1) {
       const n = scene.numbers[i];
@@ -126,6 +149,7 @@ export const commandBarApi = {
     if (!trimmed) return { ok: false as const, error: "Scalar name is empty" };
     if (!Number.isFinite(value)) return { ok: false as const, error: "Scalar value must be finite" };
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     const existingNumber = state.scene.numbers.find((n) => n.name === trimmed);
     if (existingNumber) {
       if (existingNumber.definition.kind !== "constant") {
@@ -155,6 +179,7 @@ export const commandBarApi = {
     if (!trimmed) return { ok: false as const, error: "Point name is empty" };
     if (!Number.isFinite(x) || !Number.isFinite(y)) return { ok: false as const, error: "Point coordinates must be finite" };
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     const existingPoints = state.scene.points.filter((p) => p.name === trimmed);
     if (existingPoints.length > 1) return { ok: false as const, error: `Ambiguous point name: ${trimmed}` };
     if (existingPoints.length === 1) {
@@ -178,6 +203,7 @@ export const commandBarApi = {
     return { ok: true as const, mode: "created", id: created };
   },
   getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }> {
+    pruneStaleCommandAliases(runtime.getState().scene);
     return Object.fromEntries(commandBarObjectAliases.entries());
   },
   applyObjectAssignment(
@@ -186,6 +212,8 @@ export const commandBarApi = {
   ): { ok: true; mode: "created" | "updated"; objectType: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | { ok: false; error: string } {
     const label = name.trim();
     if (!label) return { ok: false as const, error: "Assignment name is empty" };
+    const scene = runtime.getState().scene;
+    pruneStaleCommandAliases(scene);
     const existing = commandBarObjectAliases.get(label);
     if (!existing) {
       if (cmd.type === "CreatePointXY") {
@@ -332,6 +360,7 @@ export const commandBarApi = {
       setState((prev) => {
         const oldSeg = prev.scene.segments.find((s) => s.id === existing.id);
         if (!oldSeg) return prev;
+        if (Array.isArray(oldSeg.ownedByPolygonIds) && oldSeg.ownedByPolygonIds.length > 0) return prev;
         const hasA = prev.scene.points.some((p) => p.id === cmd.aId);
         const hasB = prev.scene.points.some((p) => p.id === cmd.bId);
         if (!hasA || !hasB) return prev;
@@ -403,20 +432,97 @@ export const commandBarApi = {
     if (existing.type === "polygon") {
       if (cmd.type !== "CreatePolygonByPoints") return { ok: false as const, error: `Cannot redefine polygon ${label} with this command` };
       let updated = false;
+      let createdEdges: Array<{ id: string; aId: string; bId: string }> = [];
       setState((prev) => {
+        createdEdges = [];
         const oldPolygon = prev.scene.polygons.find((pg) => pg.id === existing.id);
         if (!oldPolygon) return prev;
         const unique = Array.from(new Set(cmd.pointIds));
         if (unique.length < 3) return prev;
         if (unique.some((id) => !prev.scene.points.some((p) => p.id === id))) return prev;
+        const polygonId = oldPolygon.id;
+        const nextEdgeKeys = new Set<string>();
+        for (let i = 0; i < unique.length; i += 1) {
+          const aId = unique[i];
+          const bId = unique[(i + 1) % unique.length];
+          if (aId === bId) continue;
+          nextEdgeKeys.add(edgeKey(aId, bId));
+        }
+        const currentEdgeIndexByKey = new Map<string, number>();
+        const newSegments = [...prev.scene.segments];
+        for (let i = 0; i < newSegments.length; i += 1) {
+          const seg = newSegments[i];
+          currentEdgeIndexByKey.set(edgeKey(seg.aId, seg.bId), i);
+        }
+        let nextSegmentId = prev.nextSegmentId;
+        for (let i = 0; i < unique.length; i += 1) {
+          const aId = unique[i];
+          const bId = unique[(i + 1) % unique.length];
+          if (aId === bId) continue;
+          const key = edgeKey(aId, bId);
+          const existingIdx = currentEdgeIndexByKey.get(key);
+          if (existingIdx !== undefined) {
+            const seg = newSegments[existingIdx];
+            if (Array.isArray(seg.ownedByPolygonIds) && !seg.ownedByPolygonIds.includes(polygonId)) {
+              newSegments[existingIdx] = {
+                ...seg,
+                ownedByPolygonIds: [...seg.ownedByPolygonIds, polygonId],
+              };
+            }
+            continue;
+          }
+          const segId = `s_${nextSegmentId}`;
+          nextSegmentId += 1;
+          newSegments.push({
+            id: segId,
+            aId,
+            bId,
+            ownedByPolygonIds: [polygonId],
+            visible: true,
+            showLabel: false,
+            style: { ...prev.segmentDefaults },
+          });
+          currentEdgeIndexByKey.set(key, newSegments.length - 1);
+          createdEdges.push({ id: segId, aId, bId });
+        }
+        const filteredSegments: typeof newSegments = [];
+        for (let i = 0; i < newSegments.length; i += 1) {
+          const seg = newSegments[i];
+          if (!Array.isArray(seg.ownedByPolygonIds) || !seg.ownedByPolygonIds.includes(polygonId)) {
+            filteredSegments.push(seg);
+            continue;
+          }
+          const segKey = edgeKey(seg.aId, seg.bId);
+          if (nextEdgeKeys.has(segKey)) {
+            filteredSegments.push(seg);
+            continue;
+          }
+          const nextOwners = seg.ownedByPolygonIds.filter((owner) => owner !== polygonId);
+          if (nextOwners.length > 0) {
+            filteredSegments.push({ ...seg, ownedByPolygonIds: nextOwners });
+          }
+        }
         updated = true;
         return {
           ...prev,
-          scene: { ...prev.scene, polygons: prev.scene.polygons.map((pg) => (pg.id === oldPolygon.id ? { ...oldPolygon, pointIds: unique } : pg)) },
+          scene: {
+            ...prev.scene,
+            segments: filteredSegments.map((seg) =>
+              Array.isArray(seg.ownedByPolygonIds) && seg.ownedByPolygonIds.length === 0
+                ? { ...seg, ownedByPolygonIds: undefined }
+                : seg
+            ),
+            polygons: prev.scene.polygons.map((pg) => (pg.id === oldPolygon.id ? { ...oldPolygon, pointIds: unique } : pg)),
+          },
           selectedObject: { type: "polygon", id: oldPolygon.id },
           recentCreatedObject: { type: "polygon", id: oldPolygon.id },
+          nextSegmentId,
         };
       });
+      for (let i = 0; i < createdEdges.length; i += 1) {
+        const edge = createdEdges[i];
+        registerSegmentPair(edge.id, edge.aId, edge.bId);
+      }
       return updated
         ? { ok: true as const, mode: "updated", objectType: "polygon", id: existing.id }
         : { ok: false as const, error: `Cannot redefine polygon ${label}` };
@@ -455,6 +561,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -496,6 +603,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -512,6 +620,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -528,6 +637,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -540,6 +650,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -552,6 +663,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -566,6 +678,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -578,6 +691,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -590,6 +704,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -602,6 +717,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -614,6 +730,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -626,6 +743,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name || !Number.isFinite(r) || r <= 0) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -639,6 +757,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -651,6 +770,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -669,6 +789,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
@@ -681,6 +802,7 @@ export const commandBarApi = {
     const name = label.trim();
     if (!name) return null;
     const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
     if (commandBarObjectAliases.has(name)) return null;
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;

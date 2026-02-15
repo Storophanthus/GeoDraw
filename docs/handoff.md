@@ -1149,3 +1149,24 @@ When starting a new chat, provide:
 
 ## Risks / Constraints
 - Alias display depends on command-level alias map; manual scene renames done outside command assignment do not create alias entries.
+
+## Latest Done (Redefine Hardening: Fail-Closed + Dependency Safety)
+- Hardened command alias redefine path in `geoStore`.
+- Added stale-alias pruning:
+  - command alias entries are now pruned when their target object no longer exists.
+  - avoids dead alias collisions and allows deterministic re-creation with same alias after delete.
+- Hardened in-place segment redefine:
+  - segment aliases cannot redefine polygon-owned segments (`ownedByPolygonIds`), fail-closed.
+- Fixed polygon alias redefine dependency behavior:
+  - redefining `Polygon(...)` now updates polygon-owned edge membership deterministically.
+  - creates missing owned edges, removes no-longer-used owned edges, preserves shared-owned edges.
+  - new edges are registered in right-angle provenance segment pair index.
+- Added regression coverage in `command-redefine.test.ts`:
+  - stale alias recreate after deletion.
+  - polygon-owned edge set correctness after polygon redefine.
+
+## Next
+- Add a tiny export smoke scenario for redefine-created polygon ownership transitions (no UI changes).
+
+## Risks / Constraints
+- Alias map remains command-level metadata; manual object renames still do not auto-remap aliases.

@@ -24,6 +24,10 @@ function mustOk<T extends { ok: boolean }>(out: T, context: string): asserts out
   if (!out.ok) fail(`${context}: ${JSON.stringify(out)}`);
 }
 
+function edgeKey(aId: string, bId: string): string {
+  return aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`;
+}
+
 // Base points
 mustOk(commandBarApi.setPointXY("RA", 0, 0), "set RA");
 mustOk(commandBarApi.setPointXY("RB", 4, 0), "set RB");
@@ -81,6 +85,23 @@ assert(aliasId("rp") === polygonId, "polygon alias id changed on redefine");
   assert(polygon.pointIds.join(",") === [a, c, d].join(","), "polygon point ids not updated");
 }
 
+// polygon ownership safety: redefine updates owned edge set deterministically
+mustOk(commandBarApi.setPointXY("RE", -2, 1), "set RE");
+const e = pointIdByName("RE");
+mustOk(commandBarApi.applyObjectAssignment("rp2", { type: "CreatePolygonByPoints", pointIds: [a, b, c] }), "create polygon rp2");
+const polygon2Id = aliasId("rp2");
+mustOk(commandBarApi.applyObjectAssignment("rp2", { type: "CreatePolygonByPoints", pointIds: [a, c, e] }), "update polygon rp2");
+{
+  const ownedKeys = new Set(
+    getGeoStore().scene.segments
+      .filter((s) => Array.isArray(s.ownedByPolygonIds) && s.ownedByPolygonIds.includes(polygon2Id))
+      .map((s) => edgeKey(s.aId, s.bId))
+  );
+  const expected = new Set([edgeKey(a, c), edgeKey(c, e), edgeKey(e, a)]);
+  assert(ownedKeys.size === expected.size, "polygon owned edge count mismatch after redefine");
+  for (const key of expected) assert(ownedKeys.has(key), `missing polygon-owned edge ${key}`);
+}
+
 // angle: create then update in-place
 mustOk(commandBarApi.applyObjectAssignment("ra", { type: "CreateAngle", aId: a, bId: b, cId: c }), "create angle");
 const angleId = aliasId("ra");
@@ -98,5 +119,16 @@ const bad = commandBarApi.applyObjectAssignment("rs", { type: "CreateLineByPoint
 assert(!bad.ok, "incompatible redefine unexpectedly succeeded");
 const segAfter = getGeoStore().scene.segments.find((it) => it.id === segId);
 assert(JSON.stringify(segBefore) === JSON.stringify(segAfter), "segment mutated after failed redefine");
+
+// stale alias safety: deleting aliased object then reassigning same alias should recreate, not fail.
+{
+  const store = getGeoStore();
+  store.setSelectedObject({ type: "line", id: lineId });
+  store.deleteSelectedObject();
+}
+assert(!getGeoStore().scene.lines.some((l) => l.id === lineId), "expected line to be deleted");
+mustOk(commandBarApi.applyObjectAssignment("rl", { type: "CreateLineByPoints", aId: a, bId: d }), "recreate stale alias");
+const recreatedLineId = aliasId("rl");
+assert(recreatedLineId !== lineId, "stale alias did not remap to recreated object");
 
 console.log("command-redefine tests: OK");
