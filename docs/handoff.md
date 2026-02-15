@@ -1134,3 +1134,18 @@ When starting a new chat, provide:
 
 ## Risks / Constraints
 - Test suite runs against singleton store state in one process; keep test labels unique to avoid collisions.
+
+## Latest Done (Object Browser: Alias Command Definitions)
+- Object Browser command text now surfaces command-assignment form for aliased objects.
+- For any object created/managed via Command Bar alias assignment, the browser shows:
+  - `<alias> = <command>`
+  - examples: `l = Line(A,B)`, `c = Circle(O,5)`, `poly = Polygon(A,B,C)`.
+- Applied across browser rows for:
+  - points, segments, lines, circles, polygons, angles.
+- Non-aliased objects continue to show plain command form without alias prefix.
+
+## Next
+- Optional: show alias badge in object title row (not only in command text) if you want stronger visual differentiation.
+
+## Risks / Constraints
+- Alias display depends on command-level alias map; manual scene renames done outside command assignment do not create alias entries.
