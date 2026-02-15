@@ -39,6 +39,20 @@ const b = pointIdByName("RB");
 const c = pointIdByName("RC");
 const d = pointIdByName("RD");
 
+// point alias: create then redefine in-place
+mustOk(commandBarApi.applyObjectAssignment("rpt", { type: "CreatePointXY", x: 1, y: 2 }), "create point alias");
+const pointAlias = getGeoStore().scene.points.find((p) => p.name === "rpt");
+assert(!!pointAlias, "missing named point after point assignment create");
+const pointAliasId = pointAlias.id;
+mustOk(commandBarApi.applyObjectAssignment("rpt", { type: "CreatePointXY", x: 3, y: 4 }), "update point alias");
+const pointAliasAfter = getGeoStore().scene.points.find((p) => p.name === "rpt");
+assert(!!pointAliasAfter && pointAliasAfter.id === pointAliasId, "point id changed on redefine");
+{
+  const p = getGeoStore().scene.points.find((it) => it.id === pointAliasId);
+  assert(!!p && p.kind === "free", "point alias target missing after redefine");
+  assert(Math.abs(p.position.x - 3) < 1e-9 && Math.abs(p.position.y - 4) < 1e-9, "point alias position not updated");
+}
+
 // line: create then update in-place
 mustOk(commandBarApi.applyObjectAssignment("rl", { type: "CreateLineByPoints", aId: a, bId: b }), "create line");
 const lineId = aliasId("rl");
@@ -141,6 +155,15 @@ const bad = commandBarApi.applyObjectAssignment("rs", { type: "CreateLineByPoint
 assert(!bad.ok, "incompatible redefine unexpectedly succeeded");
 const segAfter = getGeoStore().scene.segments.find((it) => it.id === segId);
 assert(JSON.stringify(segBefore) === JSON.stringify(segAfter), "segment mutated after failed redefine");
+
+// fail-closed: non-free point alias cannot be redefined
+mustOk(commandBarApi.applyObjectAssignment("rMid", { type: "CreateMidpointByPoints", aId: a, bId: b }), "create midpoint alias");
+const midId = aliasId("rMid");
+const midBefore = getGeoStore().scene.points.find((it) => it.id === midId);
+const badPoint = commandBarApi.applyObjectAssignment("rMid", { type: "CreatePointXY", x: -9, y: -9 });
+assert(!badPoint.ok, "non-free point redefine unexpectedly succeeded");
+const midAfter = getGeoStore().scene.points.find((it) => it.id === midId);
+assert(JSON.stringify(midBefore) === JSON.stringify(midAfter), "non-free point mutated after failed redefine");
 
 // stale alias safety: deleting aliased object then reassigning same alias should recreate, not fail.
 {

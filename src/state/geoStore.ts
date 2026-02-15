@@ -42,6 +42,7 @@ import { geoStoreHelpers } from "./geoStoreHelpers";
 import { isNameUnique } from "../scene/pointBasics";
 import { rebuildRightAngleProvenance, registerSegmentPair } from "../domain/rightAngleProvenance";
 import type { Command } from "../CommandParser";
+import { planAliasRedefine, type CommandAliasTarget } from "../domain/redefinePlanner";
 
 export type {
   ActiveTool,
@@ -65,7 +66,6 @@ const commandBarObjectAliases = new Map<
   string,
   { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }
 >();
-type CommandAliasTarget = { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string };
 
 function edgeKey(aId: string, bId: string): string {
   return aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`;
@@ -309,6 +309,31 @@ export const commandBarApi = {
         return { ok: true as const, mode: "created", objectType: "circle", id };
       }
       return { ok: false as const, error: `Unsupported assignment target for ${label}` };
+    }
+
+    const redefinePlan = planAliasRedefine(scene, label, existing, cmd);
+    if (!redefinePlan.ok) return { ok: false as const, error: redefinePlan.error };
+
+    if (existing.type === "point") {
+      if (cmd.type !== "CreatePointXY") return { ok: false as const, error: `Cannot redefine point ${label} with this command` };
+      let updated = false;
+      setState((prev) => {
+        const point = prev.scene.points.find((p) => p.id === existing.id);
+        if (!point || point.kind !== "free" || point.locked) return prev;
+        updated = true;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: prev.scene.points.map((p) => (p.id === point.id ? { ...p, position: { x: cmd.x, y: cmd.y } } : p)),
+          },
+          selectedObject: { type: "point", id: point.id },
+          recentCreatedObject: { type: "point", id: point.id },
+        };
+      });
+      return updated
+        ? { ok: true as const, mode: "updated", objectType: "point", id: existing.id }
+        : { ok: false as const, error: `Cannot redefine point ${label}` };
     }
 
     if (existing.type === "line") {

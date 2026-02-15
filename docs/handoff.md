@@ -165,6 +165,13 @@
   - Parser no longer blocks same-name assignments at parse-time; execution layer enforces fail-closed updates.
   - Non-free points and non-constant numbers reject redefinition explicitly.
   - Parser regression tests updated for same-name assignment semantics.
+- Command redefine core planner (homework #5 checkpoint):
+  - Added `src/domain/redefinePlanner.ts` as the validate-first redefine core for alias-targeted assignments.
+  - `commandBarApi.applyObjectAssignment(...)` now performs planner preflight before any mutate path.
+  - Added point-alias redefine support for free-point aliases; non-free point aliases remain fail-closed.
+  - Added redefine regression coverage:
+    - free point alias updates in place
+    - non-free point alias redefine rejects with no mutation.
 - Export now auto-emits optional TikZ pattern libraries only when needed:
   - no pattern styles => no `\\usetikzlibrary{patterns}` line emitted
   - classic pattern styles (`pattern=...`, `pattern color=...`) => emits exactly `\\usetikzlibrary{patterns}`
