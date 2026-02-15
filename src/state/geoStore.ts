@@ -41,6 +41,7 @@ import { createStoreRuntime } from "./slices/storeRuntime";
 import { geoStoreHelpers } from "./geoStoreHelpers";
 import { isNameUnique } from "../scene/pointBasics";
 import { rebuildRightAngleProvenance } from "../domain/rightAngleProvenance";
+import type { Command } from "../CommandParser";
 
 export type {
   ActiveTool,
@@ -178,6 +179,277 @@ export const commandBarApi = {
   },
   getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }> {
     return Object.fromEntries(commandBarObjectAliases.entries());
+  },
+  applyObjectAssignment(
+    name: string,
+    cmd: Command
+  ): { ok: true; mode: "created" | "updated"; objectType: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | { ok: false; error: string } {
+    const label = name.trim();
+    if (!label) return { ok: false as const, error: "Assignment name is empty" };
+    const existing = commandBarObjectAliases.get(label);
+    if (!existing) {
+      if (cmd.type === "CreatePointXY") {
+        const out = commandBarApi.setPointXY(label, cmd.x, cmd.y);
+        return out.ok
+          ? { ok: true as const, mode: out.mode, objectType: "point" as const, id: out.id }
+          : { ok: false as const, error: out.error };
+      }
+      if (cmd.type === "CreateLineByPoints") {
+        const id = commandBarApi.createLineThroughPointsWithLabel(cmd.aId, cmd.bId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "line", id };
+      }
+      if (cmd.type === "CreateLineXY") {
+        const id = commandBarApi.createLineXYWithLabel(cmd.x1, cmd.y1, cmd.x2, cmd.y2, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "line", id };
+      }
+      if (cmd.type === "CreatePerpendicularLine") {
+        const id = commandBarApi.createPerpendicularLineWithLabel(cmd.throughId, cmd.base, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "line", id };
+      }
+      if (cmd.type === "CreateParallelLine") {
+        const id = commandBarApi.createParallelLineWithLabel(cmd.throughId, cmd.base, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "line", id };
+      }
+      if (cmd.type === "CreateAngleBisector") {
+        const id = commandBarApi.createAngleBisectorWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "line", id };
+      }
+      if (cmd.type === "CreateSegmentByPoints") {
+        const id = commandBarApi.createSegmentThroughPointsWithLabel(cmd.aId, cmd.bId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "segment", id };
+      }
+      if (cmd.type === "CreatePolygonByPoints") {
+        const id = commandBarApi.createPolygonWithLabel(cmd.pointIds, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "polygon", id };
+      }
+      if (cmd.type === "CreateCircleCenterThrough") {
+        const id = commandBarApi.createCircleCenterThroughWithLabel(cmd.centerId, cmd.throughId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "circle", id };
+      }
+      if (cmd.type === "CreateCircleCenterRadius") {
+        const id = commandBarApi.createCircleCenterRadiusWithLabel(cmd.centerId, cmd.r, label, cmd.rExpr);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "circle", id };
+      }
+      if (cmd.type === "CreateCircleThreePoint") {
+        const id = commandBarApi.createCircleThreePointWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "circle", id };
+      }
+      if (cmd.type === "CreateAngle") {
+        const id = commandBarApi.createAngleWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "angle", id };
+      }
+      if (cmd.type === "CreateSector") {
+        const id = commandBarApi.createSectorWithLabel(cmd.centerId, cmd.startId, cmd.endId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "angle", id };
+      }
+      if (cmd.type === "CreateAngleFixed") {
+        const id = commandBarApi.createAngleFixedWithLabel(cmd.vertexId, cmd.basePointId, cmd.angleExpr, cmd.direction, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "angle", id };
+      }
+      if (cmd.type === "CreateMidpointByPoints") {
+        const id = commandBarApi.createMidpointByPointsWithLabel(cmd.aId, cmd.bId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreateMidpointBySegment") {
+        const id = commandBarApi.createMidpointBySegmentWithLabel(cmd.segId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreateCircleXYR") {
+        const centerId = actions.createFreePoint({ x: cmd.x, y: cmd.y });
+        const id = commandBarApi.createCircleCenterRadiusWithLabel(centerId, cmd.r, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "circle", id };
+      }
+      return { ok: false as const, error: `Unsupported assignment target for ${label}` };
+    }
+
+    if (existing.type === "line") {
+      let updated = false;
+      setState((prev) => {
+        const oldLine = prev.scene.lines.find((l) => l.id === existing.id);
+        if (!oldLine) return prev;
+        const hasPoint = (id: string) => prev.scene.points.some((p) => p.id === id);
+        const hasBase = (base: { type: "line" | "segment"; id: string }) =>
+          base.type === "line" ? prev.scene.lines.some((l) => l.id === base.id) : prev.scene.segments.some((s) => s.id === base.id);
+        let nextLine: typeof oldLine | null = null;
+        if (cmd.type === "CreateLineByPoints" && hasPoint(cmd.aId) && hasPoint(cmd.bId)) {
+          nextLine = { id: oldLine.id, kind: "twoPoint", aId: cmd.aId, bId: cmd.bId, visible: oldLine.visible, style: { ...oldLine.style } };
+        } else if (cmd.type === "CreatePerpendicularLine" && hasPoint(cmd.throughId) && hasBase(cmd.base)) {
+          nextLine = {
+            id: oldLine.id,
+            kind: "perpendicular",
+            throughId: cmd.throughId,
+            base: cmd.base,
+            visible: oldLine.visible,
+            style: { ...oldLine.style },
+          };
+        } else if (cmd.type === "CreateParallelLine" && hasPoint(cmd.throughId) && hasBase(cmd.base)) {
+          nextLine = { id: oldLine.id, kind: "parallel", throughId: cmd.throughId, base: cmd.base, visible: oldLine.visible, style: { ...oldLine.style } };
+        } else if (cmd.type === "CreateAngleBisector" && hasPoint(cmd.aId) && hasPoint(cmd.bId) && hasPoint(cmd.cId)) {
+          nextLine = {
+            id: oldLine.id,
+            kind: "angleBisector",
+            aId: cmd.aId,
+            bId: cmd.bId,
+            cId: cmd.cId,
+            visible: oldLine.visible,
+            style: { ...oldLine.style },
+          };
+        } else {
+          return prev;
+        }
+        updated = true;
+        return {
+          ...prev,
+          scene: { ...prev.scene, lines: prev.scene.lines.map((l) => (l.id === oldLine.id ? nextLine! : l)) },
+          selectedObject: { type: "line", id: oldLine.id },
+          recentCreatedObject: { type: "line", id: oldLine.id },
+        };
+      });
+      if (!updated) return { ok: false as const, error: `Cannot redefine line ${label} with this command` };
+      rebuildRightAngleProvenance(runtime.getState().scene);
+      return { ok: true as const, mode: "updated", objectType: "line", id: existing.id };
+    }
+
+    if (existing.type === "segment") {
+      if (cmd.type !== "CreateSegmentByPoints") return { ok: false as const, error: `Cannot redefine segment ${label} with this command` };
+      let updated = false;
+      setState((prev) => {
+        const oldSeg = prev.scene.segments.find((s) => s.id === existing.id);
+        if (!oldSeg) return prev;
+        const hasA = prev.scene.points.some((p) => p.id === cmd.aId);
+        const hasB = prev.scene.points.some((p) => p.id === cmd.bId);
+        if (!hasA || !hasB) return prev;
+        updated = true;
+        return {
+          ...prev,
+          scene: { ...prev.scene, segments: prev.scene.segments.map((s) => (s.id === oldSeg.id ? { ...oldSeg, aId: cmd.aId, bId: cmd.bId } : s)) },
+          selectedObject: { type: "segment", id: oldSeg.id },
+          recentCreatedObject: { type: "segment", id: oldSeg.id },
+        };
+      });
+      return updated
+        ? { ok: true as const, mode: "updated", objectType: "segment", id: existing.id }
+        : { ok: false as const, error: `Cannot redefine segment ${label}` };
+    }
+
+    if (existing.type === "circle") {
+      let updated = false;
+      setState((prev) => {
+        const oldCircle = prev.scene.circles.find((c) => c.id === existing.id);
+        if (!oldCircle) return prev;
+        const hasPoint = (id: string) => prev.scene.points.some((p) => p.id === id);
+        let nextCircle: typeof oldCircle | null = null;
+        if (cmd.type === "CreateCircleCenterThrough" && hasPoint(cmd.centerId) && hasPoint(cmd.throughId)) {
+          nextCircle = {
+            id: oldCircle.id,
+            kind: "twoPoint",
+            centerId: cmd.centerId,
+            throughId: cmd.throughId,
+            visible: oldCircle.visible,
+            style: { ...oldCircle.style },
+          };
+        } else if (cmd.type === "CreateCircleCenterRadius" && hasPoint(cmd.centerId) && cmd.r > 0) {
+          nextCircle = {
+            id: oldCircle.id,
+            kind: "fixedRadius",
+            centerId: cmd.centerId,
+            radius: cmd.r,
+            radiusExpr: cmd.rExpr ?? String(cmd.r),
+            visible: oldCircle.visible,
+            style: { ...oldCircle.style },
+          };
+        } else if (cmd.type === "CreateCircleThreePoint" && hasPoint(cmd.aId) && hasPoint(cmd.bId) && hasPoint(cmd.cId)) {
+          nextCircle = {
+            id: oldCircle.id,
+            kind: "threePoint",
+            aId: cmd.aId,
+            bId: cmd.bId,
+            cId: cmd.cId,
+            visible: oldCircle.visible,
+            style: { ...oldCircle.style },
+          };
+        } else {
+          return prev;
+        }
+        updated = true;
+        return {
+          ...prev,
+          scene: { ...prev.scene, circles: prev.scene.circles.map((c) => (c.id === oldCircle.id ? nextCircle! : c)) },
+          selectedObject: { type: "circle", id: oldCircle.id },
+          recentCreatedObject: { type: "circle", id: oldCircle.id },
+        };
+      });
+      return updated
+        ? { ok: true as const, mode: "updated", objectType: "circle", id: existing.id }
+        : { ok: false as const, error: `Cannot redefine circle ${label} with this command` };
+    }
+
+    if (existing.type === "polygon") {
+      if (cmd.type !== "CreatePolygonByPoints") return { ok: false as const, error: `Cannot redefine polygon ${label} with this command` };
+      let updated = false;
+      setState((prev) => {
+        const oldPolygon = prev.scene.polygons.find((pg) => pg.id === existing.id);
+        if (!oldPolygon) return prev;
+        const unique = Array.from(new Set(cmd.pointIds));
+        if (unique.length < 3) return prev;
+        if (unique.some((id) => !prev.scene.points.some((p) => p.id === id))) return prev;
+        updated = true;
+        return {
+          ...prev,
+          scene: { ...prev.scene, polygons: prev.scene.polygons.map((pg) => (pg.id === oldPolygon.id ? { ...oldPolygon, pointIds: unique } : pg)) },
+          selectedObject: { type: "polygon", id: oldPolygon.id },
+          recentCreatedObject: { type: "polygon", id: oldPolygon.id },
+        };
+      });
+      return updated
+        ? { ok: true as const, mode: "updated", objectType: "polygon", id: existing.id }
+        : { ok: false as const, error: `Cannot redefine polygon ${label}` };
+    }
+
+    if (existing.type === "angle") {
+      let updated = false;
+      setState((prev) => {
+        const oldAngle = prev.scene.angles.find((a) => a.id === existing.id);
+        if (!oldAngle) return prev;
+        const hasPoint = (id: string) => prev.scene.points.some((p) => p.id === id);
+        let nextAngle: typeof oldAngle | null = null;
+        if (cmd.type === "CreateAngle" && hasPoint(cmd.aId) && hasPoint(cmd.bId) && hasPoint(cmd.cId)) {
+          nextAngle = { ...oldAngle, kind: "angle", aId: cmd.aId, bId: cmd.bId, cId: cmd.cId };
+        } else if (cmd.type === "CreateSector" && hasPoint(cmd.centerId) && hasPoint(cmd.startId) && hasPoint(cmd.endId)) {
+          nextAngle = { ...oldAngle, kind: "sector", aId: cmd.startId, bId: cmd.centerId, cId: cmd.endId };
+        } else {
+          return prev;
+        }
+        updated = true;
+        return {
+          ...prev,
+          scene: { ...prev.scene, angles: prev.scene.angles.map((a) => (a.id === oldAngle.id ? nextAngle! : a)) },
+          selectedObject: { type: "angle", id: oldAngle.id },
+          recentCreatedObject: { type: "angle", id: oldAngle.id },
+        };
+      });
+      return updated
+        ? { ok: true as const, mode: "updated", objectType: "angle", id: existing.id }
+        : { ok: false as const, error: `Cannot redefine angle ${label} with this command` };
+    }
+
+    return { ok: false as const, error: `Cannot redefine alias ${label}` };
   },
   createPointXYWithLabel(x: number, y: number, label: string): string | null {
     const name = label.trim();

@@ -1094,3 +1094,30 @@ When starting a new chat, provide:
 ## Risks / Constraints
 - Command alias labeling for polygons is command-level alias only (same behavior as line/segment/circle aliases), not scene object renaming.
 - Polygon export uses raw `\draw[...] ... -- cycle;` (deterministic and compile-safe), not tkz-specific polygon macros.
+
+## Latest Done (Command Redefine Slice 2: Aliased Objects)
+- Added `commandBarApi.applyObjectAssignment(name, cmd)` as the single execution path for `assignObject` in the command bar.
+- Extended command assignment behavior from create-only to create-or-update for command aliases:
+  - If alias name does not exist: object is created with existing `*WithLabel` helpers.
+  - If alias exists: object is updated in-place (same id) for supported types.
+- Supported in-place redefine by alias:
+  - `line`: `Line(A,B)`, `Perpendicular(...)`, `Parallel(...)`, `AngleBisector(...)`
+  - `segment`: `Segment(A,B)`
+  - `circle`: `Circle(O,A)`, `Circle(O,r)`, `Circle(A,B,C)`
+  - `polygon`: `Polygon(A,B,C,...)`
+  - `angle`: `Angle(A,B,C)` and `Sector(O,A,B)`
+- Free-point and scalar redefine from slice 1 remain unchanged:
+  - `P = Point(x,y)` updates existing free point `P` in place.
+  - `n = <expr>` updates existing constant scalar `n`.
+- Fail-closed behavior retained:
+  - incompatible redefine command for an existing alias returns explicit error (no partial mutation).
+- Right-angle provenance consistency retained:
+  - line redefine path triggers provenance rebuild to keep exact-right metadata consistent.
+
+## Next
+- Add parser/store tests for alias redefine updates across line/segment/circle/polygon/angle to lock behavior.
+- Expand object-browser text rendering to display command-style definitions for aliased objects.
+
+## Risks / Constraints
+- Alias redefine currently supports in-place updates only for explicitly implemented command/object pairs; unsupported pairs fail closed.
+- Alias map is command-level metadata; manual scene renames outside command flow are not auto-synced into alias entries.
