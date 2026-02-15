@@ -837,7 +837,13 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       b: bName,
       style: segmentStyleToTikz(seg.style, options),
     });
-    const markStyle = segmentMarkToTikz(seg.style.segmentMark, seg.style.strokeColor, seg.style.opacity, options);
+    const markStyle = segmentMarkToTikz(
+      seg.style.segmentMark,
+      seg.style.strokeColor,
+      seg.style.strokeWidth,
+      seg.style.opacity,
+      options
+    );
     if (markStyle) {
       draws.push({
         kind: "MarkSegment",
@@ -1884,13 +1890,13 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
 }
 
 function segmentStyleToTikz(style: SceneModel["segments"][number]["style"], options: TikzExportOptions): string {
-  const segmentStrokeScale = clampPositive(options.segmentStrokeScale ?? 1, 0.01, 100);
-  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth * segmentStrokeScale, style.dash, style.opacity, options);
+  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.dash, style.opacity, options);
 }
 
 function segmentMarkToTikz(
   mark: SceneModel["segments"][number]["style"]["segmentMark"],
   segmentStrokeColor: string,
+  segmentStrokeWidth: number,
   segmentOpacity: number,
   options: TikzExportOptions
 ): string | null {
@@ -1920,6 +1926,8 @@ function segmentMarkToTikz(
       throw new Error("Unsupported SegmentMark: lineWidthPt");
     }
     opts.push(`line width=${fmt(mark.lineWidthPt * widthScale)}pt`);
+  } else {
+    opts.push(`line width=${fmt(strokeWidthToTikzPt(segmentStrokeWidth, options))}pt`);
   }
   return opts.join(", ");
 }
@@ -2051,11 +2059,6 @@ function angleMarkStyleToTikz(
   }
   const opacity = clamp01(style.strokeOpacity);
   const isRightArcDot = isRightAngle && markKind === "rightArcDot";
-  const strokeScale = isRightArcDot
-    ? clampPositive(options.angleArcStrokeScale ?? 1, 0.01, 100)
-    : isRightAngle
-    ? clampPositive(options.rightAngleStrokeScale ?? 1, 0.01, 100)
-    : clampPositive(options.angleArcStrokeScale ?? 1, 0.01, 100);
   const sizeScale = isRightArcDot
     ? clampPositive(options.angleArcSizeScale ?? 1, 0.01, 100)
     : isRightAngle
@@ -2068,7 +2071,7 @@ function angleMarkStyleToTikz(
     : nonSectorAngleRadiusWorldFromStyle(style, options);
   const opts: string[] = [
     `color=${rgbColorExpr(style.strokeColor)}`,
-    `line width=${fmt(Math.max(0.1, style.strokeWidth * strokeScale))}pt`,
+    `line width=${fmt(strokeWidthToTikzPt(style.strokeWidth, options))}pt`,
     `size=${fmt(baseSizeWorld * sizeScale)}`,
   ];
   if (isRightArcDot) {
@@ -2176,13 +2179,7 @@ function angleLabelStyleToTikz(
 }
 
 function sectorDrawStyleToTikz(style: SceneModel["angles"][number]["style"], options: TikzExportOptions): string {
-  return lineLikeStyleToTikz(
-    style.strokeColor,
-    style.strokeWidth * clampPositive(options.angleArcStrokeScale ?? 1, 0.01, 100),
-    style.strokeDash ?? "solid",
-    style.strokeOpacity,
-    { ...options, lineScale: 1, matchCanvas: false }
-  );
+  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash ?? "solid", style.strokeOpacity, options);
 }
 
 function nonSectorAngleRadiusWorldFromStyle(
@@ -2254,9 +2251,7 @@ function lineLikeStyleToTikz(
   opacity: number,
   options: TikzExportOptions
 ): string {
-  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
-  const matchCanvas = options.matchCanvas ?? false;
-  const widthPt = Math.max(0.1, strokeWidth * lineScale * (matchCanvas ? 0.75 : 1));
+  const widthPt = strokeWidthToTikzPt(strokeWidth, options);
   const opts: string[] = [
     `color=${rgbColorExpr(strokeColor)}`,
     `line width=${fmt(widthPt)}pt`,
@@ -2269,6 +2264,12 @@ function lineLikeStyleToTikz(
   if (dash === "dotted") opts.push("dotted");
   if (opacity < 0.999) opts.push(`opacity=${fmt(clamp01(opacity))}`);
   return opts.join(", ");
+}
+
+function strokeWidthToTikzPt(strokeWidth: number, options: TikzExportOptions): number {
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const matchCanvas = options.matchCanvas ?? false;
+  return Math.max(0.1, strokeWidth * lineScale * (matchCanvas ? 0.75 : 1));
 }
 
 function mapPointShape(shape: ScenePoint["style"]["shape"]): string {

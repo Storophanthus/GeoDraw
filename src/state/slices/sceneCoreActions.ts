@@ -232,11 +232,12 @@ export function createSceneCoreActions(
         for (let i = 0; i < uniqueIds.length; i += 1) {
           if (!prev.scene.points.some((p) => p.id === uniqueIds[i])) return prev;
         }
+        const polygonId = `pg_${prev.nextPolygonId}`;
 
-        const existingEdgeKeys = new Set<string>();
+        const edgeIndexByKey = new Map<string, number>();
         for (let i = 0; i < prev.scene.segments.length; i += 1) {
           const seg = prev.scene.segments[i];
-          existingEdgeKeys.add(edgeKey(seg.aId, seg.bId));
+          edgeIndexByKey.set(edgeKey(seg.aId, seg.bId), i);
         }
 
         const newSegments = [...prev.scene.segments];
@@ -246,22 +247,33 @@ export function createSceneCoreActions(
           const bId = uniqueIds[(i + 1) % uniqueIds.length];
           if (aId === bId) continue;
           const key = edgeKey(aId, bId);
-          if (existingEdgeKeys.has(key)) continue;
-          existingEdgeKeys.add(key);
+          const existingIdx = edgeIndexByKey.get(key);
+          if (existingIdx !== undefined) {
+            const existingSeg = newSegments[existingIdx];
+            if (Array.isArray(existingSeg.ownedByPolygonIds) && !existingSeg.ownedByPolygonIds.includes(polygonId)) {
+              newSegments[existingIdx] = {
+                ...existingSeg,
+                ownedByPolygonIds: [...existingSeg.ownedByPolygonIds, polygonId],
+              };
+            }
+            continue;
+          }
           const segId = `s_${nextSegmentId}`;
           nextSegmentId += 1;
           newSegments.push({
             id: segId,
             aId,
             bId,
+            ownedByPolygonIds: [polygonId],
             visible: true,
             showLabel: false,
             style: { ...prev.segmentDefaults },
           });
+          edgeIndexByKey.set(key, newSegments.length - 1);
           createdEdges.push({ id: segId, aId, bId });
         }
 
-        id = `pg_${prev.nextPolygonId}`;
+        id = polygonId;
         return {
           ...prev,
           scene: {

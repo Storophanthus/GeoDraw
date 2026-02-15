@@ -153,13 +153,22 @@ export function PointPropertiesSection({
           )}
         </div>
 
-        <div className="controlRow">
+        <div className="controlRow controlRowWithNumeric">
           <label className="controlLabel">Size</label>
           <input
             className="sizeSlider"
             type="range"
             min={2}
             max={18}
+            value={selectedPoint.style.sizePx}
+            onChange={(e) => updateSelectedPointStyle({ sizePx: Number(e.target.value) })}
+          />
+          <input
+            className="scaleInputCompact"
+            type="number"
+            min={2}
+            max={18}
+            step={1}
             value={selectedPoint.style.sizePx}
             onChange={(e) => updateSelectedPointStyle({ sizePx: Number(e.target.value) })}
           />
@@ -175,11 +184,20 @@ export function PointPropertiesSection({
           />
         </div>
 
-        <div className="controlRow">
+        <div className="controlRow controlRowWithNumeric">
           <label className="controlLabel">Stroke Width</label>
           <input
             className="sizeSlider"
             type="range"
+            min={0.5}
+            max={6}
+            step={0.1}
+            value={selectedPoint.style.strokeWidth}
+            onChange={(e) => updateSelectedPointStyle({ strokeWidth: Number(e.target.value) })}
+          />
+          <input
+            className="scaleInputCompact"
+            type="number"
             min={0.5}
             max={6}
             step={0.1}

@@ -327,9 +327,10 @@ textarea {
 }
 
 .tinyToggle input {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   margin: 0;
+  accent-color: #2563eb;
 }
 
 .tinyToggleGroup {
@@ -461,9 +462,12 @@ textarea {
   flex: 1;
   min-width: 0;
   border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 7px 9px;
   font-size: 13px;
+  height: 36px;
+  box-sizing: border-box;
+  background: #fff;
 }
 
 .renameInput:focus-visible {
@@ -474,10 +478,17 @@ textarea {
 .selectInput {
   width: 100%;
   border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 7px 9px;
   font-size: 13px;
   background: #fff;
+  height: 36px;
+  box-sizing: border-box;
+}
+
+.controlRow .renameInput,
+.controlRow .selectInput {
+  width: 100%;
 }
 
 .checkboxRow {
@@ -487,6 +498,13 @@ textarea {
   margin-top: 10px;
   font-size: 12px;
   color: #334155;
+}
+
+.checkboxRow input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2563eb;
 }
 
 .actionButton,
@@ -601,10 +619,14 @@ textarea {
 
 .controlRow {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(92px, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   margin-top: 10px;
+}
+
+.controlRowWithNumeric {
+  grid-template-columns: minmax(92px, 1fr) minmax(0, 1fr) auto;
 }
 
 .controlLabel {
@@ -645,11 +667,13 @@ textarea {
 
 .scaleInputCompact {
   width: 76px;
-  height: 26px;
-  padding: 2px 6px;
-  font-size: 11px;
+  height: 36px;
+  padding: 6px 8px;
+  font-size: 12px;
   border: 1px solid #cbd5e1;
-  border-radius: 7px;
+  border-radius: 10px;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .shapeButton {
@@ -698,13 +722,31 @@ textarea {
   width: 140px;
 }
 
-.colorInput {
-  width: 34px;
-  height: 24px;
+.controlRowWithNumeric .sizeSlider {
+  width: 100%;
+  min-width: 92px;
+}
+
+.controlRow input[type="number"]:not(.scaleInputCompact) {
+  width: 100%;
+  min-width: 110px;
+  height: 36px;
+  padding: 6px 10px;
+  font-size: 12px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: 10px;
   background: #fff;
-  padding: 0;
+  box-sizing: border-box;
+}
+
+.colorInput {
+  width: 52px;
+  height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 3px;
+  box-sizing: border-box;
 }
 
 .detailsSection {
@@ -806,6 +848,7 @@ textarea {
   margin: 0;
   cursor: pointer;
   flex: 0 0 auto;
+  accent-color: #2563eb;
 }
 
 .objectListScrollArea .objectItem:hover {

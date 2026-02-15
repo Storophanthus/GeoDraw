@@ -1,5 +1,5 @@
 import { applyDeletion, collectCascadeDelete } from "../../domain/geometryGraph";
-import type { AngleStyle, CircleStyle, LineStyle, PointStyle, SceneModel } from "../points";
+import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneModel } from "../points";
 
 const pointStyle: PointStyle = {
   shape: "circle",
@@ -28,6 +28,15 @@ const circleStyle: CircleStyle = {
   strokeWidth: 1.5,
   strokeDash: "solid",
   strokeOpacity: 1,
+};
+
+const polygonStyle: PolygonStyle = {
+  strokeColor: "#334155",
+  strokeWidth: 1.5,
+  strokeDash: "solid",
+  strokeOpacity: 1,
+  fillColor: "#60a5fa",
+  fillOpacity: 0.2,
 };
 
 const angleStyle: AngleStyle = {
@@ -153,6 +162,45 @@ function testDeletePointCascadesGraph(): void {
   assert(!next.numbers.some((n) => n.id === "n2"), "expression number depending on n1 by name should be deleted");
 }
 
+function testDeletePolygonCascadesOwnedEdges(): void {
+  const scene: SceneModel = {
+    ...baseScene(),
+    segments: [
+      { id: "sOwned", aId: "pA", bId: "pB", ownedByPolygonIds: ["pg1"], visible: true, showLabel: false, style: lineStyle },
+      { id: "sKeep", aId: "pB", bId: "pC", visible: true, showLabel: false, style: lineStyle },
+    ],
+    polygons: [{ id: "pg1", pointIds: ["pA", "pB", "pC"], visible: true, style: polygonStyle }],
+    numbers: [{ id: "nOwned", name: "l_owned", visible: true, definition: { kind: "segmentLength", segId: "sOwned" } }],
+  };
+  const deleted = collectCascadeDelete(scene, { type: "polygon", id: "pg1" });
+  const next = applyDeletion(scene, deleted);
+  assert(!next.polygons.some((p) => p.id === "pg1"), "polygon should be deleted");
+  assert(!next.segments.some((s) => s.id === "sOwned"), "owned segment should be deleted with polygon");
+  assert(next.segments.some((s) => s.id === "sKeep"), "unowned segment should remain");
+  assert(!next.numbers.some((n) => n.id === "nOwned"), "dependents of owned segment should cascade-delete");
+}
+
+function testDeletePolygonKeepsSharedOwnedEdges(): void {
+  const scene: SceneModel = {
+    ...baseScene(),
+    segments: [
+      { id: "sShared", aId: "pA", bId: "pB", ownedByPolygonIds: ["pg1", "pg2"], visible: true, showLabel: false, style: lineStyle },
+    ],
+    polygons: [
+      { id: "pg1", pointIds: ["pA", "pB", "pC"], visible: true, style: polygonStyle },
+      { id: "pg2", pointIds: ["pA", "pB", "pC"], visible: true, style: polygonStyle },
+    ],
+    numbers: [],
+  };
+  const deleted = collectCascadeDelete(scene, { type: "polygon", id: "pg1" });
+  const next = applyDeletion(scene, deleted);
+  assert(!next.polygons.some((p) => p.id === "pg1"), "target polygon should be deleted");
+  assert(next.polygons.some((p) => p.id === "pg2"), "other owner polygon should remain");
+  assert(next.segments.some((s) => s.id === "sShared"), "shared owned segment should remain");
+}
+
 testDeleteLineCascadesDependents();
 testDeletePointCascadesGraph();
+testDeletePolygonCascadesOwnedEdges();
+testDeletePolygonKeepsSharedOwnedEdges();
 console.log("geometry-graph-delete-regression: ok");

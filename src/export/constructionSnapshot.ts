@@ -87,6 +87,7 @@ export type SnapshotSegment = {
   id: string;
   aId: string;
   bId: string;
+  ownedByPolygonIds?: string[];
   visible: boolean;
 };
 
@@ -201,6 +202,7 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
       id: seg.id,
       aId: seg.aId,
       bId: seg.bId,
+      ownedByPolygonIds: Array.isArray(seg.ownedByPolygonIds) ? [...seg.ownedByPolygonIds] : undefined,
       visible: seg.visible,
     }))
     .sort((a, b) => a.id.localeCompare(b.id));

@@ -387,6 +387,9 @@ export type SceneSegment = {
   id: string;
   aId: string;
   bId: string;
+  // Segment ownership created by polygon tool.
+  // Manual segments keep this undefined.
+  ownedByPolygonIds?: string[];
   visible: boolean;
   showLabel: boolean;
   style: LineStyle;

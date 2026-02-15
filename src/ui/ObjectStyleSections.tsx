@@ -122,11 +122,20 @@ export function ObjectStyleSections({
               onChange={(e) => updateSelectedSegmentStyle({ strokeColor: e.target.value })}
             />
           </div>
-          <div className="controlRow">
+          <div className="controlRow controlRowWithNumeric">
             <label className="controlLabel">Stroke Width</label>
             <input
               className="sizeSlider"
               type="range"
+              min={0.5}
+              max={6}
+              step={0.1}
+              value={selectedSegment.style.strokeWidth}
+              onChange={(e) => updateSelectedSegmentStyle({ strokeWidth: Number(e.target.value) })}
+            />
+            <input
+              className="scaleInputCompact"
+              type="number"
               min={0.5}
               max={6}
               step={0.1}
@@ -227,10 +236,30 @@ export function ObjectStyleSections({
                 }
               />
             </div>
-            <div className="controlRow">
+            <div className="controlRow controlRowWithNumeric">
               <label className="controlLabel">Mark Size</label>
               <input
                 className="sizeSlider"
+                type="range"
+                min={0}
+                max={24}
+                step={0.1}
+                value={selectedSegment.style.segmentMark?.sizePt ?? 4}
+                onChange={(e) =>
+                  updateSelectedSegmentStyle({
+                    segmentMark: {
+                      ...(selectedSegment.style.segmentMark ?? {
+                        enabled: true,
+                        mark: "|",
+                        pos: 0.5,
+                      }),
+                      sizePt: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+              <input
+                className="scaleInputCompact"
                 type="number"
                 min={0}
                 max={24}
@@ -271,15 +300,36 @@ export function ObjectStyleSections({
                 }
               />
             </div>
-            <div className="controlRow">
+            <div className="controlRow controlRowWithNumeric">
               <label className="controlLabel">Mark Width</label>
               <input
                 className="sizeSlider"
+                type="range"
+                min={0}
+                max={12}
+                step={0.1}
+                value={selectedSegment.style.segmentMark?.lineWidthPt ?? selectedSegment.style.strokeWidth}
+                onChange={(e) =>
+                  updateSelectedSegmentStyle({
+                    segmentMark: {
+                      ...(selectedSegment.style.segmentMark ?? {
+                        enabled: true,
+                        mark: "|",
+                        pos: 0.5,
+                        sizePt: 4,
+                      }),
+                      lineWidthPt: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+              <input
+                className="scaleInputCompact"
                 type="number"
                 min={0}
                 max={12}
                 step={0.1}
-                value={selectedSegment.style.segmentMark?.lineWidthPt ?? 1}
+                value={selectedSegment.style.segmentMark?.lineWidthPt ?? selectedSegment.style.strokeWidth}
                 onChange={(e) =>
                   updateSelectedSegmentStyle({
                     segmentMark: {
@@ -429,10 +479,38 @@ export function ObjectStyleSections({
                 }
               />
             </div>
-            <div className="controlRow">
+            <div className="controlRow controlRowWithNumeric">
               <label className="controlLabel">Arrow Width</label>
               <input
                 className="sizeSlider"
+                type="range"
+                min={0}
+                max={12}
+                step={0.05}
+                value={
+                  (selectedSegment.style.segmentArrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                  SEGMENT_ARROW_WIDTH_UI_FACTOR
+                }
+                onChange={(e) =>
+                  updateSelectedSegmentStyle({
+                    segmentArrowMark: {
+                      ...(selectedSegment.style.segmentArrowMark ?? {
+                        enabled: true,
+                        mode: "end",
+                        direction: "->",
+                        distribution: "single",
+                        pos: 0.5,
+                        startPos: 0.45,
+                        endPos: 0.55,
+                        step: 0.05,
+                      }),
+                      lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                    },
+                  })
+                }
+              />
+              <input
+                className="scaleInputCompact"
                 type="number"
                 min={0}
                 max={12}
@@ -460,10 +538,36 @@ export function ObjectStyleSections({
                 }
               />
             </div>
-            <div className="controlRow">
+            <div className="controlRow controlRowWithNumeric">
               <label className="controlLabel">Arrow Size</label>
               <input
                 className="sizeSlider"
+                type="range"
+                min={0.2}
+                max={8}
+                step={0.1}
+                value={selectedSegment.style.segmentArrowMark?.sizeScale ?? 1}
+                onChange={(e) =>
+                  updateSelectedSegmentStyle({
+                    segmentArrowMark: {
+                      ...(selectedSegment.style.segmentArrowMark ?? {
+                        enabled: true,
+                        mode: "end",
+                        direction: "->",
+                        distribution: "single",
+                        pos: 0.5,
+                        startPos: 0.45,
+                        endPos: 0.55,
+                        step: 0.05,
+                        lineWidthPt: SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                      }),
+                      sizeScale: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+              <input
+                className="scaleInputCompact"
                 type="number"
                 min={0.2}
                 max={8}
@@ -620,11 +724,20 @@ export function ObjectStyleSections({
               onChange={(e) => updateSelectedLineStyle({ strokeColor: e.target.value })}
             />
           </div>
-          <div className="controlRow">
+          <div className="controlRow controlRowWithNumeric">
             <label className="controlLabel">Stroke Width</label>
             <input
               className="sizeSlider"
               type="range"
+              min={0.5}
+              max={6}
+              step={0.1}
+              value={selectedLine.style.strokeWidth}
+              onChange={(e) => updateSelectedLineStyle({ strokeWidth: Number(e.target.value) })}
+            />
+            <input
+              className="scaleInputCompact"
+              type="number"
               min={0.5}
               max={6}
               step={0.1}
@@ -671,11 +784,20 @@ export function ObjectStyleSections({
               onChange={(e) => updateSelectedAreaStyle({ strokeColor: e.target.value })}
             />
           </div>
-          <div className="controlRow">
+          <div className="controlRow controlRowWithNumeric">
             <label className="controlLabel">Stroke Width</label>
             <input
               className="sizeSlider"
               type="range"
+              min={0.5}
+              max={6}
+              step={0.1}
+              value={selectedAreaStyle.strokeWidth}
+              onChange={(e) => updateSelectedAreaStyle({ strokeWidth: Number(e.target.value) })}
+            />
+            <input
+              className="scaleInputCompact"
+              type="number"
               min={0.5}
               max={6}
               step={0.1}
@@ -839,11 +961,20 @@ export function ObjectStyleSections({
                   Promote to solid
                 </label>
               )}
-              <div className="controlRow">
+              <div className="controlRow controlRowWithNumeric">
                 <label className="controlLabel">Arc Radius</label>
                 <input
                   className="sizeSlider"
                   type="range"
+                  min={0.2}
+                  max={5.5}
+                  step={0.05}
+                  value={selectedAngle.style.arcRadius}
+                  onChange={(e) => updateSelectedAngleStyle({ arcRadius: Number(e.target.value) })}
+                />
+                <input
+                  className="scaleInputCompact"
+                  type="number"
                   min={0.2}
                   max={5.5}
                   step={0.05}
@@ -865,11 +996,20 @@ export function ObjectStyleSections({
                       onChange={(e) => updateSelectedAngleStyle({ markPos: Number(e.target.value) })}
                     />
                   </div>
-                  <div className="controlRow">
+                  <div className="controlRow controlRowWithNumeric">
                     <label className="controlLabel">Mark Size</label>
                     <input
                       className="sizeSlider"
                       type="range"
+                      min={1}
+                      max={20}
+                      step={0.1}
+                      value={selectedAngle.style.markSize ?? 4}
+                      onChange={(e) => updateSelectedAngleStyle({ markSize: Number(e.target.value) })}
+                    />
+                    <input
+                      className="scaleInputCompact"
+                      type="number"
                       min={1}
                       max={20}
                       step={0.1}
@@ -899,13 +1039,22 @@ export function ObjectStyleSections({
               onChange={(e) => updateSelectedAngleStyle({ strokeColor: e.target.value })}
             />
           </div>
-          <div className="controlRow">
+          <div className="controlRow controlRowWithNumeric">
             <label className="controlLabel">Stroke Width</label>
             <input
               className="sizeSlider"
               type="range"
               min={0.5}
-              max={2}
+              max={6}
+              step={0.1}
+              value={selectedAngle.style.strokeWidth}
+              onChange={(e) => updateSelectedAngleStyle({ strokeWidth: Number(e.target.value) })}
+            />
+            <input
+              className="scaleInputCompact"
+              type="number"
+              min={0.5}
+              max={6}
               step={0.1}
               value={selectedAngle.style.strokeWidth}
               onChange={(e) => updateSelectedAngleStyle({ strokeWidth: Number(e.target.value) })}
@@ -990,11 +1139,20 @@ export function ObjectStyleSections({
               onChange={(e) => updateSelectedAngleStyle({ textColor: e.target.value })}
             />
           </div>
-          <div className="controlRow">
+          <div className="controlRow controlRowWithNumeric">
             <label className="controlLabel">Text Size</label>
             <input
               className="sizeSlider"
               type="range"
+              min={8}
+              max={32}
+              step={1}
+              value={selectedAngle.style.textSize}
+              onChange={(e) => updateSelectedAngleStyle({ textSize: Number(e.target.value) })}
+            />
+            <input
+              className="scaleInputCompact"
+              type="number"
               min={8}
               max={32}
               step={1}

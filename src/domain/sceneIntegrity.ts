@@ -45,8 +45,25 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     const nextPolygons = polygons.filter(
       (polygon) => polygon.pointIds.length >= 3 && polygon.pointIds.every((pointId) => pointIds.has(pointId))
     );
+    const nextPolygonIds = new Set(nextPolygons.map((polygon) => polygon.id));
+    const nextSegmentsNormalized = nextSegments.map((segment) => {
+      if (!Array.isArray(segment.ownedByPolygonIds)) return segment;
+      const ownerIds = segment.ownedByPolygonIds.filter((id) => nextPolygonIds.has(id));
+      if (ownerIds.length === 0) {
+        return { ...segment, ownedByPolygonIds: undefined };
+      }
+      const deduped: string[] = [];
+      for (let i = 0; i < ownerIds.length; i += 1) {
+        const id = ownerIds[i];
+        if (!deduped.includes(id)) deduped.push(id);
+      }
+      return deduped.length === segment.ownedByPolygonIds.length &&
+        deduped.every((id, idx) => id === segment.ownedByPolygonIds?.[idx])
+        ? segment
+        : { ...segment, ownedByPolygonIds: deduped };
+    });
 
-    const nextSegmentIds = new Set(nextSegments.map((s) => s.id));
+    const nextSegmentIds = new Set(nextSegmentsNormalized.map((s) => s.id));
     const nextLineIds = new Set(lines.map((l) => l.id));
     const nextCircleIds = new Set(nextCircles.map((c) => c.id));
 
@@ -132,7 +149,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     const nextPointIds = new Set(nextPoints.map((p) => p.id));
     const nextAngleIds = new Set(nextAngles.map((a) => a.id));
     const nextCircleIdsAfter = new Set(nextCircles.map((c) => c.id));
-    const nextSegmentIdsAfter = new Set(nextSegments.map((s) => s.id));
+    const nextSegmentIdsAfter = new Set(nextSegmentsNormalized.map((s) => s.id));
     const numbersPreFiltered = numbers.filter((num) => {
       const def = num.definition;
       if (def.kind === "constant") return Number.isFinite(def.value);
@@ -150,16 +167,17 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
 
     const anyChanged =
       !sameIds(nextPoints, points) ||
-      !sameIds(nextSegments, segments) ||
+      !sameIds(nextSegmentsNormalized, segments) ||
       !sameIds(nextLines, lines) ||
       !sameIds(nextCircles, circles) ||
       !sameIds(nextPolygons, polygons) ||
       !sameIds(nextAngles, angles) ||
       !sameIds(nextNumbers, numbers) ||
-      nextPoints.some((point, idx) => point !== points[idx]);
+      nextPoints.some((point, idx) => point !== points[idx]) ||
+      nextSegmentsNormalized.some((segment, idx) => segment !== segments[idx]);
 
     points = nextPoints;
-    segments = nextSegments;
+    segments = nextSegmentsNormalized;
     lines = nextLines;
     circles = nextCircles;
     polygons = nextPolygons;

@@ -100,6 +100,11 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
     ensureNode(graph, child);
     addDependency(graph, child, key("point", s.aId));
     addDependency(graph, child, key("point", s.bId));
+    if (Array.isArray(s.ownedByPolygonIds)) {
+      for (let i = 0; i < s.ownedByPolygonIds.length; i += 1) {
+        addDependency(graph, child, key("polygon", s.ownedByPolygonIds[i]));
+      }
+    }
   }
 
   for (const l of scene.lines) {
@@ -179,6 +184,7 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
 
 export function collectCascadeDelete(scene: SceneModel, selected: Exclude<SelectedObject, null>): Set<NodeKey> {
   const graph = buildDependencyGraph(scene);
+  const segmentById = new Map(scene.segments.map((s) => [s.id, s]));
   const start = selectedToKey(selected);
   const deleted = new Set<NodeKey>();
   const queue: NodeKey[] = [start];
@@ -189,7 +195,17 @@ export function collectCascadeDelete(scene: SceneModel, selected: Exclude<Select
     const deps = graph.dependents.get(cur);
     if (!deps) continue;
     for (const child of deps) {
-      if (!deleted.has(child)) queue.push(child);
+      if (deleted.has(child)) continue;
+      // Segment ownership is multi-owner. If traversal comes from polygon deletion,
+      // only delete segment when all owners are also in deleted set.
+      if (cur.startsWith("polygon:") && child.startsWith("segment:")) {
+        const segment = segmentById.get(child.slice("segment:".length));
+        if (segment && Array.isArray(segment.ownedByPolygonIds) && segment.ownedByPolygonIds.length > 0) {
+          const allOwnersDeleted = segment.ownedByPolygonIds.every((ownerId) => deleted.has(key("polygon", ownerId)));
+          if (!allOwnersDeleted) continue;
+        }
+      }
+      queue.push(child);
     }
   }
   return deleted;
