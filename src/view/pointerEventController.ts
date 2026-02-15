@@ -32,13 +32,13 @@ type MoveDecision = {
   mode: PointerMode;
   pointId: string | null;
   selectedObject:
-    | { type: "point"; id: string }
-    | { type: "segment"; id: string }
-    | { type: "line"; id: string }
-    | { type: "circle"; id: string }
-    | { type: "polygon"; id: string }
-    | { type: "angle"; id: string }
-    | null;
+  | { type: "point"; id: string }
+  | { type: "segment"; id: string }
+  | { type: "line"; id: string }
+  | { type: "circle"; id: string }
+  | { type: "polygon"; id: string }
+  | { type: "angle"; id: string }
+  | null;
 };
 
 type CreatePointerHandlersDeps = {
@@ -74,11 +74,17 @@ type CreatePointerHandlersDeps = {
   resolveHits: (screen: Vec2, e: PointerEvent) => PointerHits;
   decideMovePointerDown: (hits: PointerHits) => MoveDecision;
   onToolClickRelease: (screen: Vec2, e: PointerEvent) => void;
+  zoomAtScreenPoint: (screen: Vec2, factor: number) => void;
+  panByScreenDelta: (delta: Vec2) => void;
 };
 
 export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
   let hoverRafId: number | null = null;
   let pendingHover: { screen: Vec2; shiftKey: boolean } | null = null;
+
+  const activePointers = new Map<number, { x: number; y: number }>();
+  let lastPinchDist: number | null = null;
+  let lastPinchCenter: Vec2 | null = null;
 
   const flushHoverUpdate = () => {
     hoverRafId = null;
@@ -107,7 +113,48 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
     }
   };
 
+  const updatePinchState = () => {
+    if (activePointers.size !== 2) {
+      lastPinchDist = null;
+      lastPinchCenter = null;
+      return;
+    }
+    const points = Array.from(activePointers.values());
+    const p1 = points[0];
+    const p2 = points[1];
+    const dx = p1.x - p2.x;
+    const dy = p1.y - p2.y;
+    lastPinchDist = Math.sqrt(dx * dx + dy * dy);
+    lastPinchCenter = {
+      x: (p1.x + p2.x) / 2,
+      y: (p1.y + p2.y) / 2,
+    };
+  };
+
   const onDown = (e: PointerEvent) => {
+    e.preventDefault();
+    if (activePointers.size > 1 && !activePointers.has(e.pointerId)) {
+      // More than 2 fingers not supported or logic should ignore?
+      // Let's stick to 2 for now. But we should track all.
+    }
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try {
+      deps.canvas.setPointerCapture(e.pointerId);
+    } catch (err) { }
+
+    if (activePointers.size === 2) {
+      updatePinchState();
+      // Cancel any single-pointer interaction if pinch starts
+      const st = deps.pointerRef.current;
+      if (st.active) {
+        deps.pointerRef.current = { ...st, active: false, mode: "idle" };
+        resetDragBuffers(deps.dragBuffers);
+      }
+      return;
+    }
+
+    if (activePointers.size > 1) return;
+
     cancelPendingHoverUpdate();
     const screen = deps.readScreen(e);
     deps.setHoverScreen(screen);
@@ -129,7 +176,6 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       mode = "tool-click";
     }
 
-    deps.canvas.setPointerCapture(e.pointerId);
     deps.pointerRef.current = {
       active: true,
       pid: e.pointerId,
@@ -145,6 +191,42 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
   };
 
   const onMove = (e: PointerEvent) => {
+    e.preventDefault();
+    if (activePointers.has(e.pointerId)) {
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (activePointers.size === 2) {
+      if (lastPinchDist !== null && lastPinchCenter !== null) {
+        const points = Array.from(activePointers.values());
+        const p1 = points[0];
+        const p2 = points[1];
+        const dx = p1.x - p2.x;
+        const dy = p1.y - p2.y;
+        const newDist = Math.sqrt(dx * dx + dy * dy);
+        const newCenter = {
+          x: (p1.x + p2.x) / 2,
+          y: (p1.y + p2.y) / 2,
+        };
+
+        const zoomFactor = newDist / lastPinchDist;
+        const panDx = newCenter.x - lastPinchCenter.x;
+        const panDy = newCenter.y - lastPinchCenter.y;
+
+        deps.zoomAtScreenPoint(lastPinchCenter, zoomFactor);
+        deps.panByScreenDelta({ x: panDx, y: panDy });
+
+        // Update state for next frame
+        lastPinchDist = newDist;
+        lastPinchCenter = newCenter; // Re-center zoom around new center? Or keep old?
+        // Usually, zoomAtScreenPoint zooms around the point provided.
+        // If we pan, the content moves under the finger.
+      } else {
+        updatePinchState();
+      }
+      return;
+    }
+
     const screen = deps.readScreen(e);
     const st = deps.pointerRef.current;
     if (st.active && st.pid === e.pointerId && st.mode !== "tool-click") {
@@ -184,6 +266,14 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
   };
 
   const finish = (e: PointerEvent) => {
+    activePointers.delete(e.pointerId);
+    try {
+      if (deps.canvas.hasPointerCapture(e.pointerId)) {
+        deps.canvas.releasePointerCapture(e.pointerId);
+      }
+    } catch (err) { }
+    updatePinchState();
+
     const st = deps.pointerRef.current;
     if (!st.active || st.pid !== e.pointerId) return;
     if (deps.dragFrameRef.current !== null) {

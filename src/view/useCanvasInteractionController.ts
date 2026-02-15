@@ -229,6 +229,8 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           tolerances,
           io: constructClickIo,
         }),
+      zoomAtScreenPoint: (screen, factor) => actions.zoomAtScreenPoint(vp, screen, factor),
+      panByScreenDelta: actions.panByScreenDelta,
     });
 
     const { onWheel, onLeave, cancelPendingWheelZoom } = createCanvasAuxHandlers({
