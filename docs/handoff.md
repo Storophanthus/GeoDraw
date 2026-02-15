@@ -1121,3 +1121,16 @@ When starting a new chat, provide:
 ## Risks / Constraints
 - Alias redefine currently supports in-place updates only for explicitly implemented command/object pairs; unsupported pairs fail closed.
 - Alias map is command-level metadata; manual scene renames outside command flow are not auto-synced into alias entries.
+
+## Latest Done (Command Redefine Regression Tests)
+- Added `src/scene/__tests__/command-redefine.test.ts`.
+- Covers create-then-update in-place behavior for command aliases:
+  - line, segment, circle, polygon, angle.
+- Covers fail-closed incompatible redefine (`segment` alias with `Line(...)`) and verifies no mutation.
+- Updated `npm run test:command` to run both parser and redefine tests.
+
+## Next
+- Add a small UI smoke test checklist for command redefine (alias id stability + dependency updates) for manual QA.
+
+## Risks / Constraints
+- Test suite runs against singleton store state in one process; keep test labels unique to avoid collisions.

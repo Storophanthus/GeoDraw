@@ -1,0 +1,102 @@
+import { commandBarApi, getGeoStore } from "../../state/geoStore";
+
+function fail(message: string): never {
+  throw new Error(message);
+}
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) fail(message);
+}
+
+function pointIdByName(name: string): string {
+  const point = getGeoStore().scene.points.find((p) => p.name === name);
+  if (!point) fail(`Missing point ${name}`);
+  return point.id;
+}
+
+function aliasId(name: string): string {
+  const alias = commandBarApi.getCommandObjectAliases()[name];
+  if (!alias) fail(`Missing alias ${name}`);
+  return alias.id;
+}
+
+function mustOk<T extends { ok: boolean }>(out: T, context: string): asserts out is T & { ok: true } {
+  if (!out.ok) fail(`${context}: ${JSON.stringify(out)}`);
+}
+
+// Base points
+mustOk(commandBarApi.setPointXY("RA", 0, 0), "set RA");
+mustOk(commandBarApi.setPointXY("RB", 4, 0), "set RB");
+mustOk(commandBarApi.setPointXY("RC", 0, 3), "set RC");
+mustOk(commandBarApi.setPointXY("RD", 2, 5), "set RD");
+
+const a = pointIdByName("RA");
+const b = pointIdByName("RB");
+const c = pointIdByName("RC");
+const d = pointIdByName("RD");
+
+// line: create then update in-place
+mustOk(commandBarApi.applyObjectAssignment("rl", { type: "CreateLineByPoints", aId: a, bId: b }), "create line");
+const lineId = aliasId("rl");
+mustOk(commandBarApi.applyObjectAssignment("rl", { type: "CreateLineByPoints", aId: b, bId: c }), "update line");
+assert(aliasId("rl") === lineId, "line alias id changed on redefine");
+{
+  const line = getGeoStore().scene.lines.find((it) => it.id === lineId);
+  assert(line?.kind === "twoPoint", "line kind mismatch after redefine");
+  assert(line.aId === b && line.bId === c, "line endpoints not updated");
+}
+
+// segment: create then update in-place
+mustOk(commandBarApi.applyObjectAssignment("rs", { type: "CreateSegmentByPoints", aId: a, bId: c }), "create segment");
+const segId = aliasId("rs");
+mustOk(commandBarApi.applyObjectAssignment("rs", { type: "CreateSegmentByPoints", aId: b, bId: d }), "update segment");
+assert(aliasId("rs") === segId, "segment alias id changed on redefine");
+{
+  const seg = getGeoStore().scene.segments.find((it) => it.id === segId);
+  assert(seg?.aId === b && seg.bId === d, "segment endpoints not updated");
+}
+
+// circle: create through-point then redefine to center-radius
+mustOk(commandBarApi.applyObjectAssignment("rc", { type: "CreateCircleCenterThrough", centerId: a, throughId: b }), "create circle");
+const circleId = aliasId("rc");
+mustOk(
+  commandBarApi.applyObjectAssignment("rc", { type: "CreateCircleCenterRadius", centerId: c, r: 2, rExpr: "2" }),
+  "update circle"
+);
+assert(aliasId("rc") === circleId, "circle alias id changed on redefine");
+{
+  const circle = getGeoStore().scene.circles.find((it) => it.id === circleId);
+  assert(circle?.kind === "fixedRadius", "circle kind mismatch after redefine");
+  assert(circle.centerId === c && Math.abs(circle.radius - 2) < 1e-9, "circle center/radius not updated");
+}
+
+// polygon: create then update in-place
+mustOk(commandBarApi.applyObjectAssignment("rp", { type: "CreatePolygonByPoints", pointIds: [a, b, c] }), "create polygon");
+const polygonId = aliasId("rp");
+mustOk(commandBarApi.applyObjectAssignment("rp", { type: "CreatePolygonByPoints", pointIds: [a, c, d] }), "update polygon");
+assert(aliasId("rp") === polygonId, "polygon alias id changed on redefine");
+{
+  const polygon = getGeoStore().scene.polygons.find((it) => it.id === polygonId);
+  assert(!!polygon, "missing polygon after redefine");
+  assert(polygon.pointIds.join(",") === [a, c, d].join(","), "polygon point ids not updated");
+}
+
+// angle: create then update in-place
+mustOk(commandBarApi.applyObjectAssignment("ra", { type: "CreateAngle", aId: a, bId: b, cId: c }), "create angle");
+const angleId = aliasId("ra");
+mustOk(commandBarApi.applyObjectAssignment("ra", { type: "CreateAngle", aId: d, bId: c, cId: b }), "update angle");
+assert(aliasId("ra") === angleId, "angle alias id changed on redefine");
+{
+  const angle = getGeoStore().scene.angles.find((it) => it.id === angleId);
+  assert(angle?.kind === "angle", "angle kind mismatch after redefine");
+  assert(angle.aId === d && angle.bId === c && angle.cId === b, "angle points not updated");
+}
+
+// fail-closed: incompatible redefine must error and not mutate
+const segBefore = getGeoStore().scene.segments.find((it) => it.id === segId);
+const bad = commandBarApi.applyObjectAssignment("rs", { type: "CreateLineByPoints", aId: a, bId: b });
+assert(!bad.ok, "incompatible redefine unexpectedly succeeded");
+const segAfter = getGeoStore().scene.segments.find((it) => it.id === segId);
+assert(JSON.stringify(segBefore) === JSON.stringify(segAfter), "segment mutated after failed redefine");
+
+console.log("command-redefine tests: OK");
