@@ -1170,3 +1170,17 @@ When starting a new chat, provide:
 
 ## Risks / Constraints
 - Alias map remains command-level metadata; manual object renames still do not auto-remap aliases.
+
+## Latest Done (Redefine Export Smoke Validation)
+- Added `src/scene/__tests__/command-redefine-export.test.ts`.
+- Test builds scene state via command alias create+redefine calls and verifies TikZ export reflects post-redefine state.
+- Assertions include:
+  - redefined polygon path emitted (and stale pre-redefine path absent),
+  - redefined fixed-radius circle export emitted (`\tkzDefCircle[R](...)`).
+- Updated `test:command` to include this export-smoke redefine test.
+
+## Next
+- Add one additional smoke for angle/sector redefine export mapping if needed.
+
+## Risks / Constraints
+- Export smoke test intentionally checks deterministic string signatures; it is not a full symbolic equivalence checker.
