@@ -1,7 +1,7 @@
 import type { Vec2 } from "../geo/vec2";
 import { constructFromClick, hitTestPointId, hitTestSegmentId, hitTestTopObject } from "../engine";
 import type { ActiveTool, PendingSelection } from "../state/geoStore";
-import type { Camera, Viewport } from "./camera";
+import { camera as camMath, type Camera, type Viewport } from "./camera";
 import { findBestSnap } from "./snapEngine";
 import type { SceneModel } from "../scene/points";
 
@@ -57,17 +57,36 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     lineTolPx: tolerances.line,
     circleTolPx: tolerances.circle,
   });
-  const snap =
+  const cursorWorld = camMath.screenToWorld(screen, camera, vp);
+  const snappedWorld =
+    !pointerEvent.shiftKey && io.gridSnapEnabled
+      ? io.snapWorldToGrid(cursorWorld)
+      : null;
+  const snappedScreen = snappedWorld ? camMath.worldToScreen(snappedWorld, camera, vp) : null;
+  const rawHitPointId = hitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point);
+  const snappedHitPointId = snappedScreen ? hitTestPointId(snappedScreen, resolvedPoints, camera, vp, tolerances.point) : null;
+
+  let snap =
     !pointerEvent.shiftKey && activeTool !== "move" && activeTool !== "copyStyle"
       ? findBestSnap(screen, camera, vp, scene, tolerances.point)
       : null;
+  if (snappedHitPointId && (!snap || snap.kind !== "point")) {
+    const pointWorld = io.getPointWorldById(snappedHitPointId) ?? snappedWorld ?? cursorWorld;
+    const screenDistPx = snappedScreen ? Math.hypot(screen.x - snappedScreen.x, screen.y - snappedScreen.y) : 0;
+    snap = {
+      kind: "point",
+      pointId: snappedHitPointId,
+      world: pointWorld,
+      screenDistPx,
+    };
+  }
 
   constructFromClick({
     screen,
     activeTool,
     pendingSelection,
     hits: {
-      hitPointId: hitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
+      hitPointId: rawHitPointId ?? snappedHitPointId,
       hitSegmentId: hitTestSegmentId(screen, scene, camera, vp, tolerances.segment),
       hitObject,
       shiftKey: pointerEvent.shiftKey,
