@@ -1,6 +1,8 @@
 import type { ArrowDirection, ArrowTipStyle, PathArrowMark, SegmentArrowMark } from "../scene/points";
 import type { Vec2 } from "../geo/vec2";
 
+const PATH_ARROW_CANVAS_WIDTH_UI_FACTOR = 8;
+
 export type ArrowHeadPlacement = {
   tip: Vec2;
   dirX: number;
@@ -101,8 +103,15 @@ export function segmentArrowHeadSize(
 ): { headSize: number; separation: number } {
   const scale = Math.max(0.2, Math.min(8, sizeScale ?? 1));
   const headSize = Math.max(6, (7 + lineWidth * 1.2) * scale);
-  const separation = Math.max(2, headSize * 0.72);
+  // Wider center-pair spacing so <-> and >-< are visually distinct.
+  const separation = Math.max(3, headSize * 1.6);
   return { headSize, separation };
+}
+
+export function arrowCanvasLineWidthFromStoredPt(lineWidthPt: number): number {
+  if (!Number.isFinite(lineWidthPt) || lineWidthPt <= 0) return 0.5;
+  const width = lineWidthPt / PATH_ARROW_CANVAS_WIDTH_UI_FACTOR;
+  return Math.max(0.5, width);
 }
 
 export function isSupportedArrowDirection(direction: unknown): direction is ArrowDirection {

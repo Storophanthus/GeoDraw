@@ -2,6 +2,7 @@ import { sub } from "../geo/geometry";
 import type { Vec2 } from "../geo/vec2";
 import type { SceneModel } from "../scene/points";
 import {
+  arrowCanvasLineWidthFromStoredPt,
   clamp01,
   collectArrowPositions,
   drawArrowPlacements,
@@ -137,7 +138,7 @@ export function drawSegmentArrowOverlay(
   const fallbackWidth = Number.isFinite(style.strokeWidth) && style.strokeWidth > 0 ? style.strokeWidth : 1;
   const lineWidthPt =
     typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) ? arrow.lineWidthPt : fallbackWidth;
-  const lineWidth = Math.max(0.5, lineWidthPt);
+  const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
   const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
 
   ctx.save();

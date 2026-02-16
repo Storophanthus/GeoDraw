@@ -153,6 +153,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
   const viewport = options.viewport ?? computeExportViewport(scene);
+  const exportPxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
   let coordScale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
   const labelScale = clampPositive(options.labelScale ?? 1, 0.1, 10);
   // Auto-fit viewport for document embedding when canvas-match export is enabled.
@@ -178,9 +179,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const globalAdd = options.globalLineAdd ?? 5;
   defs.push({ kind: "SetupLine", addLeft: globalAdd, addRight: globalAdd });
   if (options.clipRectWorld) {
-    const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
     // Slightly expand explicit clip rectangle to avoid antialias/stroke edge shaving.
-    const clipPadWorld = 14 / pxPerWorld;
+    const clipPadWorld = 14 / exportPxPerWorld;
     defs.push({
       kind: "ClipRect",
       xmin: Math.min(options.clipRectWorld.xmin, options.clipRectWorld.xmax) - clipPadWorld,
@@ -190,8 +190,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     });
   }
   if (options.clipPolygonWorld && options.clipPolygonWorld.length >= 3) {
-    const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
-    const clipPadWorld = 14 / pxPerWorld;
+    const clipPadWorld = 14 / exportPxPerWorld;
     const points = options.clipPolygonWorld.map((p) => ({ x: p.x, y: p.y }));
     const center = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
     center.x /= points.length;
@@ -1022,11 +1021,23 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         style: markStyle,
       });
     }
-    const arrowOverlay = segmentArrowOverlayToTikz(seg.style.segmentArrowMark, aName, bName, {
-      strokeColor: seg.style.strokeColor,
-      strokeWidth: seg.style.strokeWidth,
-      opacity: seg.style.opacity,
-    });
+    const aWorld = getPointWorldPosCached(scene, seg.aId);
+    const bWorld = getPointWorldPosCached(scene, seg.bId);
+    const segmentLengthWorld = aWorld && bWorld ? distance(aWorld, bWorld) : undefined;
+    const arrowOverlay = segmentArrowOverlayToTikz(
+      seg.style.segmentArrowMark,
+      aName,
+      bName,
+      {
+        strokeColor: seg.style.strokeColor,
+        strokeWidth: seg.style.strokeWidth,
+        opacity: seg.style.opacity,
+      },
+      {
+        pathLengthWorld: segmentLengthWorld,
+        screenPxPerWorld: exportPxPerWorld,
+      }
+    );
     if (arrowOverlay) {
       if (arrowOverlay.kind === "tkz") {
         draws.push({
@@ -1113,28 +1124,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       });
     }
     const circleGeom = circleGeomById(circle.id);
-    const circleThroughName = ensureCircleThroughName(circle.id);
-    let throughWorld: { x: number; y: number } | null = null;
-    if (circle.kind === "fixedRadius") {
-      throughWorld = { x: circleGeom.center.x + circleGeom.radius, y: circleGeom.center.y };
-    } else if (circle.kind === "threePoint") {
-      throughWorld = getPointWorldPosCached(scene, circle.aId);
-    } else {
-      throughWorld = getPointWorldPosCached(scene, circle.throughId);
-    }
-    if (!throughWorld) {
-      throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
-    }
-    const circleStartRad = Math.atan2(throughWorld.y - circleGeom.center.y, throughWorld.x - circleGeom.center.x);
     const circleArrowOverlay = pathArrowOverlayToTikz(
       circle.style.arrowMark,
-      circlePathExprFromNamedStart(circleThroughName, circleGeom.radius, circleStartRad),
+      circlePathExprFromCenterClockwise(circleGeom.center, circleGeom.radius),
       {
         strokeColor: circle.style.strokeColor,
         strokeWidth: circle.style.strokeWidth,
         opacity: circle.style.strokeOpacity,
       },
-      0.5
+      0.5,
+      {
+        pathLengthWorld: 2 * Math.PI * circleGeom.radius,
+        screenPxPerWorld: exportPxPerWorld,
+      }
     );
     if (circleArrowOverlay) {
       draws.push({ kind: "DrawRaw", tex: circleArrowOverlay });
@@ -1197,7 +1199,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           strokeWidth: angle.style.strokeWidth,
           opacity: angle.style.strokeOpacity,
         },
-        angle.style.markPos ?? 0.5
+        angle.style.markPos ?? 0.5,
+        {
+          pathLengthWorld: Math.abs(theta) * sectorRadius,
+          screenPxPerWorld: exportPxPerWorld,
+        }
       );
       if (sectorArrowOverlay) {
         draws.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
@@ -1232,7 +1238,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           strokeWidth: angle.style.strokeWidth,
           opacity: angle.style.strokeOpacity,
         },
-        angle.style.markPos ?? 0.5
+        angle.style.markPos ?? 0.5,
+        {
+          pathLengthWorld: Math.abs(theta) * arcRadius,
+          screenPxPerWorld: exportPxPerWorld,
+        }
       );
       if (arcArrowOverlay) {
         draws.push({ kind: "DrawRaw", tex: arcArrowOverlay });
@@ -2272,11 +2282,12 @@ function segmentArrowOverlayToTikz(
   arrow: SceneModel["segments"][number]["style"]["segmentArrowMark"],
   aName: string,
   bName: string,
-  base: { strokeColor: string; strokeWidth: number; opacity: number }
+  base: { strokeColor: string; strokeWidth: number; opacity: number },
+  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number }
 ): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
   if (!arrow?.enabled) return null;
   if (arrow.mode === "mid") {
-    const midOverlay = pathArrowOverlayToTikz(arrow, `(${aName}) -- (${bName})`, base, arrow.pos ?? 0.5);
+    const midOverlay = pathArrowOverlayToTikz(arrow, `(${aName}) -- (${bName})`, base, arrow.pos ?? 0.5, metrics);
     if (!midOverlay) return null;
     return { kind: "raw", tex: midOverlay };
   }
@@ -2334,7 +2345,8 @@ function pathArrowOverlayToTikz(
     | SceneModel["angles"][number]["style"]["arcArrowMark"],
   pathExpr: string,
   base: { strokeColor: string; strokeWidth: number; opacity: number },
-  fallbackPos: number
+  fallbackPos: number,
+  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number }
 ): string | null {
   if (!arrow?.enabled) return null;
   ensureSupportedArrowDirection(arrow.direction, "PathArrowMark");
@@ -2352,7 +2364,12 @@ function pathArrowOverlayToTikz(
   }`;
   const forwardCmd = `\\arrow[${arrowOpts}]{${tip}}`;
   const reverseCmd = `\\arrowreversed[${arrowOpts}]{${tip}}`;
-  const pairDelta = Math.max(0.003, Math.min(0.035, 0.009 + 0.003 * arrowScale));
+  const pairDelta = computePathArrowPairDelta(
+    sourceWidth,
+    arrowScale,
+    metrics?.pathLengthWorld,
+    metrics?.screenPxPerWorld
+  );
   const positions = collectPathArrowPositions(arrow, fallbackPos);
   const marks: string[] = [];
 
@@ -2379,6 +2396,27 @@ function pathArrowOverlayToTikz(
   const opts: string[] = ["postaction=decorate", `decoration={markings,${marks.join(",")}}`];
   if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
   return `\\path[${opts.join(", ")}] ${pathExpr};`;
+}
+
+function computePathArrowPairDelta(
+  lineWidth: number,
+  arrowScale: number,
+  pathLengthWorld: number | undefined,
+  screenPxPerWorld: number | undefined
+): number {
+  // Mirror canvas sizing logic so export mid-pairs match on-screen spacing.
+  const safeLineWidth = Math.max(0.5, lineWidth);
+  const headSizePx = Math.max(6, (7 + safeLineWidth * 1.2) * arrowScale);
+  const separationPx = Math.max(3, headSizePx * 1.6);
+  if (Number.isFinite(pathLengthWorld) && (pathLengthWorld as number) > 1e-9) {
+    const pxPerWorld = clampPositive(screenPxPerWorld ?? 80, 1, 20000);
+    const pathLengthPx = (pathLengthWorld as number) * pxPerWorld;
+    if (pathLengthPx > 1e-9) {
+      return Math.max(0.002, Math.min(0.24, separationPx / pathLengthPx));
+    }
+  }
+  // Fallback when path length is not known at call site.
+  return Math.max(0.015, Math.min(0.08, 0.02 + 0.006 * arrowScale));
 }
 
 function collectPathArrowPositions(
@@ -2433,17 +2471,14 @@ function normalizedOpacity(value: unknown): number {
   return Number.isFinite(value) ? clamp01(value as number) : 1;
 }
 
-function circlePathExprFromNamedStart(startName: string, radius: number, startRad: number): string {
+function circlePathExprFromCenterClockwise(center: { x: number; y: number }, radius: number): string {
   if (!Number.isFinite(radius) || radius <= 0) {
     throw new Error("Unsupported PathArrowMark: circle radius");
   }
-  if (!Number.isFinite(startRad)) {
-    throw new Error("Unsupported PathArrowMark: circle start angle");
-  }
-  const startDeg = (startRad * 180) / Math.PI;
-  const endDeg = startDeg - 360;
-  // Canvas circle path direction is clockwise (screen +theta). Export clockwise to keep arrow direction parity.
-  return `(${startName}) arc[start angle=${fmt(startDeg)},end angle=${fmt(endDeg)},radius=${fmt(radius)}]`;
+  // Canvas full-circle overlay parameterization: t=0 at rightmost point, clockwise.
+  const sx = center.x + radius;
+  const sy = center.y;
+  return `(${fmt(sx)},${fmt(sy)}) arc[start angle=0,end angle=-360,radius=${fmt(radius)}]`;
 }
 
 function arcPathExprFromWorld(

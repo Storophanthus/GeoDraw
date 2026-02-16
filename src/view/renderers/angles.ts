@@ -11,10 +11,10 @@ import {
 } from "../angleRender";
 import { resolveCanvasFillStyle } from "../patternFill";
 import {
+  arrowCanvasLineWidthFromStoredPt,
   clamp01,
   collectArrowPositions,
   drawArrowPlacements,
-  resolveMidArrowPlacements,
   segmentArrowHeadSize,
 } from "../pathArrowRender";
 import type { DrawableObjectSelection } from "./types";
@@ -192,10 +192,12 @@ function drawArcArrowOverlay(
   const safeFallbackWidth = Number.isFinite(fallbackLineWidth) && fallbackLineWidth > 0 ? fallbackLineWidth : 1;
   const lineWidthPt =
     typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) ? arrow.lineWidthPt : safeFallbackWidth;
-  const lineWidth = Math.max(0.5, lineWidthPt);
+  const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
   const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
   const positions = collectArrowPositions(arrow, 0.5);
   const sweep = Math.max(1e-6, theta);
+  const pathLengthPx = Math.max(1e-6, sweep * radiusPx);
+  const pairOffset = Math.max(0.002, Math.min(0.24, separation / pathLengthPx));
   ctx.save();
   ctx.setLineDash([]);
   ctx.globalAlpha = Number.isFinite(opacity) ? clamp01(opacity) : 1;
@@ -204,8 +206,12 @@ function drawArcArrowOverlay(
   ctx.lineWidth = lineWidth;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  for (let i = 0; i < positions.length; i += 1) {
-    const t = clamp01(positions[i]);
+  const pushPlacement = (
+    out: Array<{ tip: Vec2; dirX: number; dirY: number }>,
+    tRaw: number,
+    reversed: boolean
+  ) => {
+    const t = clamp01(tRaw);
     const phi = startAngle - sweep * t;
     const tip = {
       x: center.x + Math.cos(phi) * radiusPx,
@@ -214,7 +220,26 @@ function drawArcArrowOverlay(
     // Arc is drawn with decreasing screen angle (anticlockwise=true).
     const tangentX = Math.sin(phi);
     const tangentY = -Math.cos(phi);
-    const placements = resolveMidArrowPlacements(tip, tangentX, tangentY, arrow.direction, separation);
+    out.push({
+      tip,
+      dirX: reversed ? -tangentX : tangentX,
+      dirY: reversed ? -tangentY : tangentY,
+    });
+  };
+  for (let i = 0; i < positions.length; i += 1) {
+    const t = clamp01(positions[i]);
+    const placements: Array<{ tip: Vec2; dirX: number; dirY: number }> = [];
+    if (arrow.direction === "->") {
+      pushPlacement(placements, t, false);
+    } else if (arrow.direction === "<-") {
+      pushPlacement(placements, t, true);
+    } else if (arrow.direction === "<->") {
+      pushPlacement(placements, t - pairOffset, true);
+      pushPlacement(placements, t + pairOffset, false);
+    } else {
+      pushPlacement(placements, t - pairOffset, false);
+      pushPlacement(placements, t + pairOffset, true);
+    }
     drawArrowPlacements(ctx, placements, headSize, arrow.tip);
   }
   ctx.restore();

@@ -733,6 +733,19 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (markCount < 2) {
       throw new Error("Expected segment bidirectional mid-arrow to emit separated mark positions.");
     }
+    const marks = extractMarkCommands(tikz);
+    if (marks.length < 2) {
+      throw new Error("Expected segment bidirectional mid-arrow to emit parseable mark commands.");
+    }
+    const [left, right] = marks
+      .slice(0, 2)
+      .sort((a, b) => a.position - b.position);
+    if (left.cmd !== "arrowreversed" || right.cmd !== "arrow") {
+      throw new Error("Expected segment <-> mid-arrow to emit outward command order: reversed then forward.");
+    }
+    if (right.position - left.position < 0.04) {
+      throw new Error("Expected segment <-> mid-arrow marks to be separated enough to be visually distinct.");
+    }
   }
 
   if (fileName === "segment-mark-arrow-mid-multi.json") {
@@ -760,13 +773,23 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("{Latex}")) {
       throw new Error("Expected inward mid-arrow fixture to emit Latex tip style.");
     }
+    const marks = extractMarkCommands(tikz);
+    if (marks.length < 2) {
+      throw new Error("Expected inward mid-arrow fixture to emit parseable mark commands.");
+    }
+    const [left, right] = marks
+      .slice(0, 2)
+      .sort((a, b) => a.position - b.position);
+    if (left.cmd !== "arrow" || right.cmd !== "arrowreversed") {
+      throw new Error("Expected segment >-< mid-arrow to emit inward command order: forward then reversed.");
+    }
+    if (right.position - left.position < 0.04) {
+      throw new Error("Expected segment >-< mid-arrow marks to be separated enough to be visually distinct.");
+    }
   }
 
   if (fileName === "circle-arrow-basic.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("(A) arc[start angle=0,end angle=-360,radius=")) {
-      throw new Error("Expected circle arrow fixture to anchor overlay at named through-point A.");
-    }
     if (!tikz.includes("arc[start angle=0,end angle=-360,radius=")) {
       throw new Error("Expected circle arrow fixture to emit clockwise full-arc path arrow overlay.");
     }
@@ -775,6 +798,26 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("{Latex}")) {
       throw new Error("Expected circle arrow fixture to emit Latex arrow tip.");
+    }
+  }
+
+  if (fileName === "circle-arrow-mid-position-parity.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("(0.5,-2.5) arc[start angle=0,end angle=-360,radius=2.5]")) {
+      throw new Error("Expected circle mid-arrow parity fixture to anchor full-circle overlay at center+radius (+x) start.");
+    }
+    if (tikz.includes("(D) arc[start angle=")) {
+      throw new Error("Expected circle mid-arrow parity fixture to avoid through-point-based full-circle start.");
+    }
+    const marks = extractMarkCommands(tikz);
+    if (marks.length < 2) {
+      throw new Error("Expected circle mid-arrow parity fixture to emit parseable paired mark commands.");
+    }
+    const [left, right] = marks
+      .slice(0, 2)
+      .sort((a, b) => a.position - b.position);
+    if (left.cmd !== "arrow" || right.cmd !== "arrowreversed") {
+      throw new Error("Expected circle >-< parity fixture to emit inward command order.");
     }
   }
 
@@ -814,6 +857,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     fileName === "segment-mark-arrow-mid.json" ||
     fileName === "segment-mark-arrow-mid-inward.json" ||
     fileName === "circle-arrow-basic.json" ||
+    fileName === "circle-arrow-mid-position-parity.json" ||
     fileName === "sector-arrow-basic.json" ||
     fileName === "angle-arc-arrow-basic.json"
   ) {
@@ -885,6 +929,17 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (exportError) throw exportError;
+}
+
+function extractMarkCommands(tikz: string): Array<{ position: number; cmd: "arrow" | "arrowreversed" }> {
+  const marks: Array<{ position: number; cmd: "arrow" | "arrowreversed" }> = [];
+  const regex = /mark=at position\s+([0-9]*\.?[0-9]+)\s+with\s+\{\\(arrow|arrowreversed)\[/g;
+  for (const match of tikz.matchAll(regex)) {
+    const position = Number(match[1]);
+    const cmd = match[2] === "arrowreversed" ? "arrowreversed" : "arrow";
+    if (Number.isFinite(position)) marks.push({ position, cmd });
+  }
+  return marks;
 }
 
 function parseDrawLines(

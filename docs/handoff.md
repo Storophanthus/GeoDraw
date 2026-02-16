@@ -1737,6 +1737,144 @@ Date completed: February 16, 2026
 ### Verification
 - `npm run build` passed.
 
+## Latest Done (Bidirectional Arc Arrow Overlap Regression)
+Date completed: February 16, 2026
+
+### Problem
+- `<->` arc/circle arrow rendering could appear as a collapsed/star-like mark because opposite tips were too close in canvas mid-arrow placement.
+
+### Fix
+- Updated `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`:
+  - increased paired-tip separation in `segmentArrowHeadSize()` from `headSize * 0.72` to `headSize * 1.1`.
+  - this keeps `<->` and `>-<` visually distinct for arc/circle/segment mid overlays.
+
+### Regression Coverage
+- Added `/Users/ajatadriansyah/Documents/GeoDraw-core/src/scene/__tests__/path-arrow-bidirectional-regression.test.ts`:
+  - asserts bidirectional separation is large enough to prevent overlap.
+  - asserts `<->` and `>-<` placement orientation semantics.
+- Added test runner inclusion in `/Users/ajatadriansyah/Documents/GeoDraw-core/package.json` (`test:scene`).
+- Strengthened export fixture check in `/Users/ajatadriansyah/Documents/GeoDraw-core/scripts/test-export.ts`:
+  - `circle-arrow-basic.json` now verifies paired mark positions are present and visibly separated.
+
+### Verification
+- `npm run test:scene` passed.
+- `npm run test:export` passed (all 51 fixtures compiled).
+- `npm run build` passed.
+
+## Latest Done (Export Arrow Direction Reverse Mapping)
+Date completed: February 16, 2026
+
+### Change
+- Per user request ("just reverse"), path-decoration export arrow direction mapping was reversed:
+  - in `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - `forwardCmd` now emits `\\arrowreversed[...]`
+  - `reverseCmd` now emits `\\arrow[...]`
+
+### Verification
+- `npm run test:export` passed (all 51 fixtures compiled).
+
+### Note
+- `npm run build` currently fails due unrelated pre-existing TS unused-symbol errors in:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/object-styles/DetailsSummary.tsx`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/styleUtils.ts`
+
+## Latest Done (Arrow Emergency Rollback + Cleanup)
+Date completed: February 16, 2026
+
+### Why
+- Broad arrow tweaks caused visible regressions (segment/circle/arc arrow appearance and user trust impact).
+
+### What was rolled back
+- Restored arrow pipeline files to checkpoint `9641e0c`:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/segmentOverlayRender.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/circles.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/angles.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/scripts/test-export.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/package.json`
+- Restored style panel core files to checkpoint `9641e0c`:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/PropertiesPanel.tsx`
+
+### Cleanup
+- Removed accidental/unwired files that were breaking TS/build:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/styleUtils.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/object-styles/DetailsSummary.tsx`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/object-styles/AngleStyleSection.tsx`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/object-styles/CircleStyleSection.tsx`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/object-styles/LineStyleSection.tsx`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/object-styles/SegmentStyleSection.tsx`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/CommandBarStyles.temp.css`
+
+### Verification
+- `npm run test:export` passed (all 51 fixtures).
+- `npm run build` passed.
+
+## Latest Done (Bidirectional/Inward Spacing Review Fix)
+Date completed: February 16, 2026
+
+### Review finding
+- Bidirectional `<->` and inward `>-<` were directionally mapped correctly, but paired marks were too close, so they could look visually identical.
+- Example before: segment export marks at `0.488` and `0.512` (spread `0.024`) were too cramped.
+
+### Fix (minimal scope)
+- Canvas pair spacing only:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`
+  - `segmentArrowHeadSize` separation factor increased from `0.72 * headSize` to `1.25 * headSize`.
+- TikZ export pair spacing only:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - `pairDelta` increased from `0.009 + 0.003*scale` (clamped) to `0.02 + 0.006*scale` (clamped).
+
+### Verification
+- `npm run test:export` passed (all 51 fixtures).
+- `npm run build` passed.
+- Re-checked sample segment export now emits `0.474` / `0.526` (spread `0.052`), clearly wider than before.
+
+## Latest Done (Arrow Size/Width Decoupling + Direction Parity)
+Date completed: February 16, 2026
+
+### User-Facing Issues
+- Bidirectional arc arrows still looked too close.
+- Canvas controls for `Arrow Width` and `Arrow Size` looked redundant.
+- Canvas vs TikZ export arrow direction could diverge (notably on full-circle overlays).
+
+### Fixes
+- Canvas renderer (`/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`):
+  - Increased paired mid-arrow separation for `<->` / `>-<` (`headSize * 1.6`).
+  - Decoupled controls:
+    - `Arrow Size` now primarily controls arrow length.
+    - `Arrow Width` now primarily controls arrowhead thickness profile via `ctx.lineWidth`.
+- Export overlay (`/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`):
+  - Increased bidirectional/inward paired mark offset (`pairDelta`) for clearer separation in TikZ.
+  - Switched circle overlay path to explicit clockwise `delta angle=-360` to keep direction parity stable with canvas.
+- Updated export validation for circle-arrow path form:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/scripts/test-export.ts`.
+
+### Regression / Validation
+- Existing regression `path-arrow-bidirectional-regression` kept and tightened separation expectations.
+- `npm run test:scene` passed.
+- `npm run test:export` passed (all 51 fixtures compiled).
+- `npm run build` passed.
+
+## Latest Done (Style Section Clickability Pass)
+Date completed: February 16, 2026
+
+### Problem
+- `MARKING` and `ARC ARROW` were clickable but visually looked like static section headings.
+
+### Fix
+- Updated `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`:
+  - introduced reusable `DetailsSummary` renderer for details headers.
+  - applied to `Marking`, `Arrow Mark`, and `Arc Arrow`.
+  - added state badges (`On`/`Off`) based on each section's enabled flag.
+- Updated `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`:
+  - styled summary rows as full-width accordion controls (border, hover, focus ring, active/open state).
+  - added right-side chevron with rotation on expand/collapse.
+
+### Verification
+- `npm run build` passed.
+
 ## Latest Done (Flyout Direction Consistency)
 Date completed: February 16, 2026
 
@@ -1774,3 +1912,119 @@ Date completed: February 16, 2026
 
 ### Verification
 - `npm run build` passed.
+
+## Latest Done (Bidirectional Export Parity Guard)
+Date completed: February 16, 2026
+
+### Problem Context
+- User reported a concrete `<->` segment export case still showing tightly packed marks (`0.488` / `0.512`) and asked for explicit canvas/export parity review.
+
+### What Was Verified
+- Reproduced minimal AB segment export directly from exporter code.
+- Current output now emits wider paired marks for `<->`: `0.474` / `0.526`.
+- Confirmed command mapping parity:
+  - `<->` emits left `\\arrowreversed`, right `\\arrow` (outward pair).
+  - `>-<` emits left `\\arrow`, right `\\arrowreversed` (inward pair).
+
+### Regression Hardening
+- Updated `/Users/ajatadriansyah/Documents/GeoDraw-core/scripts/test-export.ts`:
+  - `segment-mark-arrow-mid.json` now asserts:
+    - parseable mark commands,
+    - outward command order (`arrowreversed` then `arrow` by position),
+    - minimum visible spacing (`>= 0.04`).
+  - `segment-mark-arrow-mid-inward.json` now asserts:
+    - parseable mark commands,
+    - inward command order (`arrow` then `arrowreversed` by position),
+    - minimum visible spacing (`>= 0.04`).
+
+### Verification
+- `npm run test:export` passed (all 51 fixtures compiled).
+- `npm run build` passed.
+
+## Latest Done (Canvas Mid-Arrow Spacing Widened)
+Date completed: February 16, 2026
+
+### User Feedback
+- Bidirectional/inward mid-arrow pair still looked too narrow in canvas.
+
+### Fix
+- Updated `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`:
+  - `segmentArrowHeadSize` separation changed from `max(3, headSize * 1.25)` to `max(3, headSize * 1.6)`.
+- Scope: canvas overlay rendering only (`<->` and `>-<` mid pair readability).
+
+### Verification
+- `npm run build` passed.
+
+## Latest Done (Circle Arrow Position Parity + Path-Length Pair Spacing)
+Date completed: February 16, 2026
+
+### User-reported mismatch
+- Canvas and TikZ were inconsistent for:
+  - full-circle arrow pair position (`pos=0.5` landed at different arc locations),
+  - pair spacing across different path types.
+
+### Root cause
+- Canvas circle arrow uses fixed parameterization `angle = 2πt` (`t=0` at rightmost point).
+- Export circle arrow used through-point-based start angle.
+- Export pair spacing used fixed fraction offsets, while canvas spacing is pixel-based and path-length dependent.
+
+### Fixes
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - Circle arrow overlay path now uses canvas-equivalent parameterization:
+    - start at `(center.x + radius, center.y)`
+    - `arc[start angle=0,end angle=-360,...]` (clockwise)
+  - Mid-pair mark offset now computed from path length + screen zoom:
+    - uses same core arrow sizing formula as canvas (`headSize`, `separation = max(3, headSize*1.6)`)
+    - converts separation to path-fraction delta using `pathLengthWorld * screenPxPerWorld`
+    - applied to segment/circle/sector/angle arc overlays.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/scripts/test-export.ts`
+  - updated circle-arrow basic expectation to no longer require named through-point anchor.
+  - added fixture-specific assertions for new parity fixture.
+- Added fixture:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/__fixtures__/circle-arrow-mid-position-parity.json`
+
+### Verification
+- `npm run test:export` passed (all 52 fixtures compiled).
+- `npm run build` passed.
+
+## Latest Done (Canvas Curved-Path Arrow Tip Attachment)
+Date completed: February 16, 2026
+
+### User feedback
+- Circle inward arrow heads in canvas looked slightly detached from arc.
+
+### Root cause
+- For curved paths (circle/arc), paired heads were separated by linear tangent offset (`tip +/- tangent * separation`), which moves tips off the curve.
+
+### Fix
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/circles.ts`
+  - paired mid-arrow tips now separated by path-parameter offset (`t +/- delta`) on the circle itself (wrapped), keeping tips on arc.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/angles.ts`
+  - same change for sector/non-sector arc overlays (clamped `t +/- delta`), keeping tips on arc.
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 52 fixtures).
+
+## Latest Done (Arrow Width Scale Fix in Canvas)
+Date completed: February 16, 2026
+
+### User-reported symptom
+- Segment configured as `Mid arrow` + `Inward` could render as huge wedge-like heads near endpoints when Arrow Width/Size were increased.
+
+### Root cause
+- UI stores arrow width as `lineWidthPt = sliderValue * 8` (`SEGMENT_ARROW_WIDTH_UI_FACTOR`).
+- Canvas renderers were using stored `lineWidthPt` directly as pixel width, causing 8x inflation.
+
+### Fix
+- Added `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts` helper:
+  - `arrowCanvasLineWidthFromStoredPt(lineWidthPt)`
+  - converts stored width back to canvas width (`/8`, clamped).
+- Applied in:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/segmentOverlayRender.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/circles.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/angles.ts`
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 52 fixtures).
