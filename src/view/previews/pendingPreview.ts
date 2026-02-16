@@ -159,6 +159,23 @@ export function drawPendingPreview(
       .filter((world): world is Vec2 => Boolean(world));
     if (polyWorld.length > 0) {
       const polyScreen = polyWorld.map((world) => camMath.worldToScreen(world, camera, vp));
+      const previewPath = [...polyScreen];
+      if (cursorWorld) {
+        previewPath.push(camMath.worldToScreen(cursorWorld, camera, vp));
+      }
+      if (previewPath.length >= 3) {
+        const prevAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = 0.14;
+        ctx.fillStyle = "#0ea5e9";
+        ctx.beginPath();
+        ctx.moveTo(previewPath[0].x, previewPath[0].y);
+        for (let i = 1; i < previewPath.length; i += 1) {
+          ctx.lineTo(previewPath[i].x, previewPath[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = prevAlpha;
+      }
       ctx.beginPath();
       ctx.moveTo(polyScreen[0].x, polyScreen[0].y);
       for (let i = 1; i < polyScreen.length; i += 1) {

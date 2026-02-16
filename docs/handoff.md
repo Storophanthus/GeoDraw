@@ -1,7 +1,7 @@
 # GeoDraw Handoff (Stability Contract)
 
 ## Branch / Baseline
-- Active branch: `feature/next-heavy`
+- Active branch: `feat/core-redefine-engine`
 - Keep commits small and scoped.
 - Do not bundle unrelated files in feature commits.
 - Architecture map reference: `docs/architecture-snapshot.md`
@@ -25,6 +25,29 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-02-16 stability + UX batch:
+  - Assignment label propagation for created points is enforced in command assignment flow:
+    - assigned point aliases now overwrite point `name` and `captionTex` to assignment label.
+    - anchor: `src/state/geoStore.ts` (`applyAssignedPointLabel` usage in object assignment paths).
+  - Grid-snap duplicate point regression fixed for line/segment continuation click flow:
+    - reuses snapped existing point IDs instead of creating duplicate free points at same snapped world.
+    - regression: `src/scene/__tests__/grid-snap-point-reuse.test.ts`.
+  - Perpendicular tool now resolves polygon edges as segments (both click orders):
+    - hit-test priority changed so polygon boundary clicks resolve to edge segment first.
+    - files: `src/engine/hitTest.ts`, `src/view/canvasInteractionHelpers.ts`.
+    - regression: `src/scene/__tests__/perp-line-polygon-edge.test.ts`.
+  - Polygon tool now renders translucent in-progress fill preview (GeoGebra-like):
+    - file: `src/view/previews/pendingPreview.ts`.
+    - regression: `src/scene/__tests__/polygon-preview-fill.test.ts`.
+  - Polygon border rendering now respects owned-segment visibility:
+    - hiding polygon-owned segments hides corresponding polygon border edges while preserving fill.
+    - file: `src/view/renderers/polygons.ts`.
+    - regression: `src/scene/__tests__/polygon-owned-segment-visibility.test.ts`.
+  - Validation:
+    - `npm run test:scene`
+    - `npm run test:command`
+    - `npm run test:export`
+    - `npm run build`
 - Camera/zoom stability batch completed (commit `0e2c62a`):
   - Expanded camera zoom bounds in `src/view/camera.ts` for better infinite-zoom behavior (`1e-30..1e30`).
   - Added viewport/LOD guards for huge/offscreen circles in:

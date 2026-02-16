@@ -273,12 +273,12 @@ export function hitTestTopObject(
 
   const pointId = hitTestPointId(screenPoint, resolvedPoints, camera, vp, pointTolPx);
   if (pointId) return { type: "point", id: pointId };
+  const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx);
+  if (segmentId) return { type: "segment", id: segmentId };
   const polygonId = hitTestPolygonId(screenPoint, scene, camera, vp, segmentTolPx);
   if (polygonId) return { type: "polygon", id: polygonId };
   const angleId = hitTestAngleId(screenPoint, resolveVisibleAngles(scene), camera, vp, angleTolPx);
   if (angleId) return { type: "angle", id: angleId };
-  const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx);
-  if (segmentId) return { type: "segment", id: segmentId };
   const lineId = hitTestLineId(screenPoint, scene, camera, vp, lineTolPx);
   if (lineId) return { type: "line", id: lineId };
   const circleId = hitTestCircleId(screenPoint, scene, camera, vp, circleTolPx);

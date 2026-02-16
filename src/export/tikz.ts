@@ -323,9 +323,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const geomB = circleGeomById(circleB.id);
       const simMode: "outer" | "inner" = line.family === "outer" ? "outer" : "inner";
       const simWorld = resolveCircleSimilitudeCenter(geomA.center, geomA.radius, geomB.center, geomB.radius, simMode);
-      const tangentCandidates = simWorld ? tangentPointsFromPointToCircle(simWorld, geomA.center, geomA.radius) : [];
+      const tangentCandidatesA = simWorld ? tangentPointsFromPointToCircle(simWorld, geomA.center, geomA.radius) : [];
+      const tangentCandidatesB = simWorld ? tangentPointsFromPointToCircle(simWorld, geomB.center, geomB.radius) : [];
 
-      if (simWorld && tangentCandidates.length > 0) {
+      if (simWorld && tangentCandidatesA.length > 0 && tangentCandidatesB.length > 0) {
         const circleAO = ensureCircleCenterName(line.circleAId);
         const circleAX = ensureCircleThroughName(line.circleAId);
         const circleBO = ensureCircleCenterName(line.circleBId);
@@ -356,13 +357,32 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           secondName: tangentSecondName,
         });
 
-        let tangentName = tangentFirstName;
-        if (tangentCandidates.length > 1) {
-          const d0 = distance(tangentCandidates[0], anchorsWorld.a);
-          const d1 = distance(tangentCandidates[1], anchorsWorld.a);
-          tangentName = d1 < d0 ? tangentSecondName : tangentFirstName;
+        derivedAuxIndex += 1;
+        const tangentBFirstName = `tkzTanCC_${derivedAuxIndex}_1`;
+        derivedAuxIndex += 1;
+        const tangentBSecondName = `tkzTanCC_${derivedAuxIndex}_2`;
+        constructions.push({
+          kind: "DefCircleTangentsFromPoint",
+          from: simName,
+          circleO: circleBO,
+          circleX: circleBX,
+          firstName: tangentBFirstName,
+          secondName: tangentBSecondName,
+        });
+
+        let tangentAName = tangentFirstName;
+        if (tangentCandidatesA.length > 1) {
+          const d0 = distance(tangentCandidatesA[0], anchorsWorld.a);
+          const d1 = distance(tangentCandidatesA[1], anchorsWorld.a);
+          tangentAName = d1 < d0 ? tangentSecondName : tangentFirstName;
         }
-        const anchors = { a: simName, b: tangentName };
+        let tangentBName = tangentBFirstName;
+        if (tangentCandidatesB.length > 1) {
+          const d0 = distance(tangentCandidatesB[0], anchorsWorld.b);
+          const d1 = distance(tangentCandidatesB[1], anchorsWorld.b);
+          tangentBName = d1 < d0 ? tangentBSecondName : tangentBFirstName;
+        }
+        const anchors = { a: tangentAName, b: tangentBName };
         lineAnchorNames.set(lineId, anchors);
         return anchors;
       }

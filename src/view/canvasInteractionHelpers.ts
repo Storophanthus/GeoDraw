@@ -59,12 +59,12 @@ export function createHoveredHitResolver({
   return (screen: Vec2): HoveredHit => {
     const pointId = engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point);
     if (pointId) return { type: "point", id: pointId };
+    const segmentId = engineHitTestSegmentId(screen, scene, camera, vp, tolerances.segment);
+    if (segmentId) return { type: "segment", id: segmentId };
     const polygonId = engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment);
     if (polygonId) return { type: "polygon", id: polygonId };
     const angleId = engineHitTestAngleId(screen, resolvedAngles, camera, vp, tolerances.angle);
     if (angleId) return { type: "angle", id: angleId };
-    const segmentId = engineHitTestSegmentId(screen, scene, camera, vp, tolerances.segment);
-    if (segmentId) return { type: "segment", id: segmentId };
     const lineId = engineHitTestLineId(screen, scene, camera, vp, tolerances.line);
     if (lineId) return { type: "line2p", id: lineId };
     const circleId = engineHitTestCircleId(screen, scene, camera, vp, tolerances.circle);
