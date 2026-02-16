@@ -259,12 +259,17 @@ Circle and arc overlays use the same `PathArrowMark` semantics as segment mid-ar
 Circle overlay path form:
 
 ```tex
-\path[postaction=decorate,decoration={markings,...}] (<cx>,<cy>) circle[radius=<r>];
+\path[postaction=decorate,decoration={markings,...}]
+  (<through-point>) arc[start angle=<a0>,end angle=<a0-360>,radius=<r>];
 ```
 
 Arc overlay path form (sector/non-sector angle):
 
 ```tex
 \path[postaction=decorate,decoration={markings,...}]
-  (<sx>,<sy>) arc[start angle=<a0>,end angle=<a1>,radius=<r>];
+  (<start-point-or-coord>) arc[start angle=<a0>,end angle=<a1>,radius=<r>];
 ```
+
+Notes:
+- Sector overlays must anchor to the named sector start point (for example `(A)`) instead of raw numeric coordinates.
+  This avoids known `tkzDrawSector` + `decorations.markings` frame-shift behavior under `\tkzClip`.

@@ -189,13 +189,16 @@ function drawArcArrowOverlay(
 ): void {
   if (!Number.isFinite(radiusPx) || radiusPx <= 1e-9) return;
   const color = arrow.color ?? fallbackColor;
-  const lineWidth = Math.max(0.5, arrow.lineWidthPt ?? fallbackLineWidth);
+  const safeFallbackWidth = Number.isFinite(fallbackLineWidth) && fallbackLineWidth > 0 ? fallbackLineWidth : 1;
+  const lineWidthPt =
+    typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) ? arrow.lineWidthPt : safeFallbackWidth;
+  const lineWidth = Math.max(0.5, lineWidthPt);
   const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
   const positions = collectArrowPositions(arrow, 0.5);
   const sweep = Math.max(1e-6, theta);
   ctx.save();
   ctx.setLineDash([]);
-  ctx.globalAlpha = clamp01(opacity);
+  ctx.globalAlpha = Number.isFinite(opacity) ? clamp01(opacity) : 1;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = lineWidth;

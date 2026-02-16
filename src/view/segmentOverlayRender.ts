@@ -134,12 +134,15 @@ export function drawSegmentArrowOverlay(
   const ux = d.x / len;
   const uy = d.y / len;
   const color = arrow.color ?? style.strokeColor;
-  const lineWidth = Math.max(0.5, arrow.lineWidthPt ?? style.strokeWidth);
+  const fallbackWidth = Number.isFinite(style.strokeWidth) && style.strokeWidth > 0 ? style.strokeWidth : 1;
+  const lineWidthPt =
+    typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) ? arrow.lineWidthPt : fallbackWidth;
+  const lineWidth = Math.max(0.5, lineWidthPt);
   const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
 
   ctx.save();
   ctx.setLineDash([]);
-  ctx.globalAlpha = style.opacity;
+  ctx.globalAlpha = Number.isFinite(style.opacity) ? clamp01(style.opacity) : 1;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = lineWidth;

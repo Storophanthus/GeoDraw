@@ -1339,3 +1339,27 @@ When starting a new chat, provide:
 - `npm run test:export` passed (all fixtures compiled).
 - `npm run test:scene` passed.
 - `npm run test:command` passed.
+
+## Latest Done (Arrow Follow-up Bugfixes)
+- Fixed circle arrow direction mismatch between canvas and TikZ export:
+  - Circle arrow overlay export now uses clockwise full-arc path anchored to named through-points
+    `(Through) arc[start angle=<a0>,end angle=<a0-360>,radius=<r>]`
+    to match canvas path direction semantics.
+- Fixed missing sector arc arrows in "sector-only" exports under `\tkzClip`:
+  - Root cause: `\tkzDrawSector` + raw numeric arc-start coordinates can shift decoration marks out of clipped viewport.
+  - Fix: sector arrow overlays are now anchored at the named sector start point
+    `(A) arc[start angle=<a0>,end angle=<a1>,radius=<r>]`
+    instead of numeric `(<sx>,<sy>)`.
+- Hardened canvas arrow rendering against legacy/non-finite style values:
+  - segment/circle/angle arrow overlays now default opacity to `1` when style opacity is missing/non-finite.
+  - arrow width fallback now resolves safely even if source style width is missing/non-finite.
+  - prevents silent arrow disappearance from invalid alpha/width propagation.
+- Updated export regression expectations:
+  - circle arrow fixture now asserts named through-point anchoring for clockwise overlay path.
+  - sector arrow fixture now asserts named start-point anchoring (guards against sector-only missing-arrow regression).
+
+## Verification
+- `npm run build` passed.
+- `npm run test:export` passed.
+- `npm run test:scene` passed.
+- `npm run test:command` passed.

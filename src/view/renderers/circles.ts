@@ -102,13 +102,16 @@ function drawCircleArrowOverlay(
   if (!arrow?.enabled) return;
   if (!Number.isFinite(radius) || radius <= 1e-9) return;
   const color = arrow.color ?? style.strokeColor;
-  const lineWidth = Math.max(0.5, arrow.lineWidthPt ?? style.strokeWidth);
+  const fallbackWidth = Number.isFinite(style.strokeWidth) && style.strokeWidth > 0 ? style.strokeWidth : 1;
+  const lineWidthPt =
+    typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) ? arrow.lineWidthPt : fallbackWidth;
+  const lineWidth = Math.max(0.5, lineWidthPt);
   const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
   const positions = collectArrowPositions(arrow, 0.5);
 
   ctx.save();
   ctx.setLineDash([]);
-  ctx.globalAlpha = style.strokeOpacity;
+  ctx.globalAlpha = Number.isFinite(style.strokeOpacity) ? clamp01(style.strokeOpacity) : 1;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = lineWidth;

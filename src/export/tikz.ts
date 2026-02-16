@@ -1061,9 +1061,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       });
     }
     const circleGeom = circleGeomById(circle.id);
+    const circleThroughName = ensureCircleThroughName(circle.id);
+    let throughWorld: { x: number; y: number } | null = null;
+    if (circle.kind === "fixedRadius") {
+      throughWorld = { x: circleGeom.center.x + circleGeom.radius, y: circleGeom.center.y };
+    } else if (circle.kind === "threePoint") {
+      throughWorld = getPointWorldPosCached(scene, circle.aId);
+    } else {
+      throughWorld = getPointWorldPosCached(scene, circle.throughId);
+    }
+    if (!throughWorld) {
+      throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
+    }
+    const circleStartRad = Math.atan2(throughWorld.y - circleGeom.center.y, throughWorld.x - circleGeom.center.x);
     const circleArrowOverlay = pathArrowOverlayToTikz(
       circle.style.arrowMark,
-      circlePathExprFromWorld(circleGeom.center, circleGeom.radius),
+      circlePathExprFromNamedStart(circleThroughName, circleGeom.radius, circleStartRad),
       {
         strokeColor: circle.style.strokeColor,
         strokeWidth: circle.style.strokeWidth,
@@ -1126,7 +1139,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const sectorStart = Math.atan2(aWorld.y - bWorld.y, aWorld.x - bWorld.x);
       const sectorArrowOverlay = pathArrowOverlayToTikz(
         angle.style.arcArrowMark,
-        arcPathExprFromWorld(bWorld, sectorRadius, sectorStart, theta),
+        arcPathExprFromWorld(bWorld, sectorRadius, sectorStart, theta, `(${aName})`),
         {
           strokeColor: angle.style.strokeColor,
           strokeWidth: angle.style.strokeWidth,
@@ -2200,8 +2213,8 @@ function segmentArrowOverlayToTikz(
   ensureSupportedArrowDirection(arrow.direction, "SegmentArrowMark");
   const tip = resolveArrowTipName(arrow.tip, "SegmentArrowMark");
   const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
-  const opacity = clamp01(base.opacity);
-  const sourceWidth = arrow.lineWidthPt ?? base.strokeWidth;
+  const opacity = normalizedOpacity(base.opacity);
+  const sourceWidth = resolveArrowSourceWidth(arrow.lineWidthPt, base.strokeWidth);
   if (arrow.lineWidthPt !== undefined && (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0)) {
     throw new Error("Unsupported SegmentArrowMark: lineWidthPt");
   }
@@ -2259,8 +2272,8 @@ function pathArrowOverlayToTikz(
     throw new Error("Unsupported PathArrowMark: lineWidthPt");
   }
   const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
-  const opacity = clamp01(base.opacity);
-  const sourceWidth = arrow.lineWidthPt ?? base.strokeWidth;
+  const opacity = normalizedOpacity(base.opacity);
+  const sourceWidth = resolveArrowSourceWidth(arrow.lineWidthPt, base.strokeWidth);
   const arrowWidth = Math.max(0.1, sourceWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
   const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
   const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScale)}${
@@ -2339,14 +2352,36 @@ function resolveArrowTipName(
   throw new Error(`Unsupported ${context}: tip=${String(tip)}`);
 }
 
-function circlePathExprFromWorld(center: { x: number; y: number }, radius: number): string {
+function resolveArrowSourceWidth(lineWidthPt: unknown, baseStrokeWidth: unknown): number {
+  if (Number.isFinite(lineWidthPt) && (lineWidthPt as number) > 0) return lineWidthPt as number;
+  if (Number.isFinite(baseStrokeWidth) && (baseStrokeWidth as number) > 0) return baseStrokeWidth as number;
+  return 1;
+}
+
+function normalizedOpacity(value: unknown): number {
+  return Number.isFinite(value) ? clamp01(value as number) : 1;
+}
+
+function circlePathExprFromNamedStart(startName: string, radius: number, startRad: number): string {
   if (!Number.isFinite(radius) || radius <= 0) {
     throw new Error("Unsupported PathArrowMark: circle radius");
   }
-  return `(${fmt(center.x)},${fmt(center.y)}) circle[radius=${fmt(radius)}]`;
+  if (!Number.isFinite(startRad)) {
+    throw new Error("Unsupported PathArrowMark: circle start angle");
+  }
+  const startDeg = (startRad * 180) / Math.PI;
+  const endDeg = startDeg - 360;
+  // Canvas circle path direction is clockwise (screen +theta). Export clockwise to keep arrow direction parity.
+  return `(${startName}) arc[start angle=${fmt(startDeg)},end angle=${fmt(endDeg)},radius=${fmt(radius)}]`;
 }
 
-function arcPathExprFromWorld(center: { x: number; y: number }, radius: number, startRad: number, sweepRad: number): string {
+function arcPathExprFromWorld(
+  center: { x: number; y: number },
+  radius: number,
+  startRad: number,
+  sweepRad: number,
+  startPointExpr?: string
+): string {
   if (!Number.isFinite(radius) || radius <= 0) {
     throw new Error("Unsupported PathArrowMark: arc radius");
   }
@@ -2355,6 +2390,9 @@ function arcPathExprFromWorld(center: { x: number; y: number }, radius: number, 
   }
   const startDeg = (startRad * 180) / Math.PI;
   const endDeg = ((startRad + sweepRad) * 180) / Math.PI;
+  if (startPointExpr) {
+    return `${startPointExpr} arc[start angle=${fmt(startDeg)},end angle=${fmt(endDeg)},radius=${fmt(radius)}]`;
+  }
   const sx = center.x + Math.cos(startRad) * radius;
   const sy = center.y + Math.sin(startRad) * radius;
   return `(${fmt(sx)},${fmt(sy)}) arc[start angle=${fmt(startDeg)},end angle=${fmt(endDeg)},radius=${fmt(radius)}]`;

@@ -764,8 +764,11 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "circle-arrow-basic.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("circle[radius=")) {
-      throw new Error("Expected circle arrow fixture to emit circle path arrow overlay.");
+    if (!tikz.includes("(A) arc[start angle=0,end angle=-360,radius=")) {
+      throw new Error("Expected circle arrow fixture to anchor overlay at named through-point A.");
+    }
+    if (!tikz.includes("arc[start angle=0,end angle=-360,radius=")) {
+      throw new Error("Expected circle arrow fixture to emit clockwise full-arc path arrow overlay.");
     }
     if (!tikz.includes("postaction=decorate")) {
       throw new Error("Expected circle arrow fixture to emit decoration-based arrow overlay.");
@@ -779,6 +782,9 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (exportError) throw exportError;
     if (!tikz.includes("\\tkzDrawSector")) {
       throw new Error("Expected sector arrow fixture to emit sector draw command.");
+    }
+    if (!tikz.includes("] (A) arc[start angle=")) {
+      throw new Error("Expected sector arrow fixture to anchor arc overlay to named sector start point A.");
     }
     if (!tikz.includes("arc[start angle=")) {
       throw new Error("Expected sector arrow fixture to emit arc path overlay.");
