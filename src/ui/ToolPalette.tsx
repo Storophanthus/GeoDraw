@@ -40,7 +40,7 @@ type ToolDef = {
   ariaLabel: string;
 };
 
-type ToolGroupId = "move" | "points" | "lines" | "angle" | "circles" | "styles";
+type ToolGroupId = "move" | "points" | "transform" | "lines" | "angle" | "circles" | "styles";
 
 const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   move: { icon: IconMove, tooltip: "Move / Select (V)", ariaLabel: "Move tool" },
@@ -67,7 +67,8 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
 
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
   { id: "move", label: "MOVE", tools: ["move", "export_clip"] },
-  { id: "points", label: "POINTS", tools: ["point", "midpoint", "transform"] },
+  { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
+  { id: "transform", label: "TRANSFORM", tools: ["transform"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "SHAPES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon", "regular_polygon"] },
@@ -97,6 +98,7 @@ export function ToolPalette({
   const [groupLastSelected, setGroupLastSelected] = useState<Record<ToolGroupId, ActiveTool>>({
     move: "move",
     points: "point",
+    transform: "transform",
     lines: "segment",
     angle: "angle",
     circles: "circle_cp",

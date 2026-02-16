@@ -39,6 +39,8 @@
     - `src/scene/__tests__/transform-tool-workflow.test.ts`
   - Test runner hardening:
     - `test:scene` switched to `node --import tsx ...` (avoids `tsx` IPC EPERM in restricted environments).
+- 2026-02-16 transform discoverability update:
+  - `transform` is now a standalone visible toolbar group (`TRANSFORM`) instead of being hidden inside the `POINTS` flyout.
 - 2026-02-16 stability + UX batch:
   - Assignment label propagation for created points is enforced in command assignment flow:
     - assigned point aliases now overwrite point `name` and `captionTex` to assignment label.
