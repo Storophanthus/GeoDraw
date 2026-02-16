@@ -88,24 +88,27 @@ export function drawArrowPlacements(
   ctx: CanvasRenderingContext2D,
   placements: ArrowHeadPlacement[],
   headSize: number,
-  tipStyle: ArrowTipStyle | undefined
+  tipStyle: ArrowTipStyle | undefined,
+  widthScale = 1
 ): void {
   const resolvedTipStyle = resolveArrowTipStyle(tipStyle);
   for (let i = 0; i < placements.length; i += 1) {
     const placement = placements[i];
-    drawArrowHead(ctx, placement.tip, placement.dirX, placement.dirY, headSize, resolvedTipStyle);
+    drawArrowHead(ctx, placement.tip, placement.dirX, placement.dirY, headSize, resolvedTipStyle, widthScale);
   }
 }
 
 export function segmentArrowHeadSize(
   lineWidth: number,
   sizeScale: number | undefined
-): { headSize: number; separation: number } {
+): { headSize: number; separation: number; widthScale: number } {
   const scale = Math.max(0.2, Math.min(8, sizeScale ?? 1));
-  const headSize = Math.max(6, (7 + lineWidth * 1.2) * scale);
-  // Wider center-pair spacing so <-> and >-< are visually distinct.
-  const separation = Math.max(3, headSize * 1.6);
-  return { headSize, separation };
+  const widthScale = Math.sqrt(Math.max(0.2, Math.min(12, lineWidth)));
+  // Size controls tip length. Width is handled separately via wing scale.
+  const headSize = Math.max(6, 8 * scale);
+  // Keep clear separation between paired arrows; include width contribution.
+  const separation = Math.max(3, Math.max(headSize * 1.6, headSize * 1.2 * widthScale));
+  return { headSize, separation, widthScale };
 }
 
 export function arrowCanvasLineWidthFromStoredPt(lineWidthPt: number): number {
@@ -128,7 +131,8 @@ function drawArrowHead(
   dirX: number,
   dirY: number,
   headSize: number,
-  tipStyle: ArrowTipStyle
+  tipStyle: ArrowTipStyle,
+  widthScale: number
 ): void {
   const profile =
     tipStyle === "Latex"
@@ -137,7 +141,7 @@ function drawArrowHead(
       ? { lengthMul: 1.02, wingMul: 0.58, notchMul: 0 }
       : { lengthMul: 1.05, wingMul: 0.47, notchMul: 0.2 };
   const len = headSize * profile.lengthMul;
-  const wing = headSize * profile.wingMul;
+  const wing = headSize * profile.wingMul * widthScale;
   const backX = tip.x - dirX * len;
   const backY = tip.y - dirY * len;
   const nx = -dirY;

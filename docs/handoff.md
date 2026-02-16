@@ -2028,3 +2028,44 @@ Date completed: February 16, 2026
 ### Verification
 - `npm run build` passed.
 - `npm run test:export` passed (all 52 fixtures).
+
+## Latest Done (Arrow Width/Size Remap Experiment)
+Date completed: February 16, 2026
+
+### Goal
+- Decouple arrow controls:
+  - `Arrow Size` controls tip length.
+  - `Arrow Width` controls tip width (not tip length).
+- Keep pair-gap logic explicit and separate from single-arrow placement.
+
+### Canvas changes
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`
+  - `segmentArrowHeadSize(...)` now computes length from `sizeScale` and width influence via `widthScale = sqrt(widthUi)`.
+  - pair separation now includes width contribution: `max(headSize*1.6, headSize*1.2*widthScale)`.
+  - `drawArrowPlacements(...)` now accepts `widthScale` so `drawArrowHead(...)` widens only the wing/base.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/segmentOverlayRender.ts`
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/circles.ts`
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/angles.ts`
+  - pass `widthScale` into arrow drawing.
+
+### Export changes
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - Added arrow tip geometry mapping for export:
+    - tip spec now emitted as `Tip[length=...pt,width=...pt]` (e.g. `Stealth[length=...,width=...]`).
+  - `arrow.lineWidthPt` now maps to tip width UI scale (`/8`) rather than directly driving tip length.
+  - path-arrow `scale=...` removed from `\\arrow[...]` options to avoid double-scaling when explicit tip length/width are present.
+  - pair-gap (`pairDelta`) now derives from computed pair separation px + path length.
+  - improved library detection regex to include `\\arrow{Tip[length=...,width=...]}` forms.
+
+### Export test updates
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/scripts/test-export.ts`
+  - tip assertions updated from exact `{Latex}` / `{Triangle}` to option-capable forms (`{Latex[...]}`, `{Triangle[...]}`).
+
+### Validation
+- `npm run build` passed.
+- `npm run test:export` passed (all 52 fixtures compiled).
+
+### Rollback checkpoint
+- checkpoint commit before this remap experiment:
+  - `834d948` (`checkpoint: arrow parity before width-size remap`)
+  - tag: `checkpoint/arrow-parity-2026-02-16`

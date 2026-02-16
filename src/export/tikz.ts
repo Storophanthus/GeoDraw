@@ -133,10 +133,14 @@ type LabelPlacement = {
   bubbleRadiusPt: number;
 };
 
-// Canvas arrow-width slider values are visually calibrated in canvas pixels.
-// Export them to TikZ pt using this empirically matched conversion:
-// 7.6 (canvas) -> 0.6pt (TikZ).
+// Canvas stroke widths are calibrated in canvas pixels. Keep exported arrow outline
+// stroke near line stroke via this empirical conversion:
+// 7.6px (canvas) -> 0.6pt (TikZ).
 const PATH_ARROW_WIDTH_EXPORT_SCALE = 0.6 / 7.6;
+// Arrow width UI is stored as lineWidthPt = sliderValue * 8.
+const PATH_ARROW_WIDTH_UI_FACTOR = 8;
+// Approximate conversion for tip geometry parity (canvas px -> TikZ pt).
+const CANVAS_PX_TO_TIKZ_PT = 0.75;
 
 export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}): TikzCommand[] {
   const pointById = new Map(scene.points.map((p) => [p.id, p]));
@@ -2296,16 +2300,19 @@ function segmentArrowOverlayToTikz(
   const tip = resolveArrowTipName(arrow.tip, "SegmentArrowMark");
   const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
   const opacity = normalizedOpacity(base.opacity);
-  const sourceWidth = resolveArrowSourceWidth(arrow.lineWidthPt, base.strokeWidth);
+  const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
   if (arrow.lineWidthPt !== undefined && (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0)) {
     throw new Error("Unsupported SegmentArrowMark: lineWidthPt");
   }
-  const arrowWidth = Math.max(0.1, sourceWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
+  const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
   const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
+  const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
+  const tipMetrics = resolvePathArrowTipMetricsPx(tip, arrowScale, arrowWidthUi);
+  const tipSpec = resolveArrowTipSpec(tip, tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT, tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT);
   const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * arrowScale));
   const t = fmt(1 - tailFrac);
   const tNeg = fmt(-tailFrac);
-  const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{${tip}[scale=${fmt(arrowScale)}]}${
+  const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{${tipSpec}}${
     opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
   }`;
   if (arrow.direction === "->") {
@@ -2356,20 +2363,18 @@ function pathArrowOverlayToTikz(
   }
   const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
   const opacity = normalizedOpacity(base.opacity);
-  const sourceWidth = resolveArrowSourceWidth(arrow.lineWidthPt, base.strokeWidth);
-  const arrowWidth = Math.max(0.1, sourceWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
+  const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
+  const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
   const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
-  const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScale)}${
+  const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
+  const tipMetrics = resolvePathArrowTipMetricsPx(tip, arrowScale, arrowWidthUi);
+  const tipSpec = resolveArrowTipSpec(tip, tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT, tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT);
+  const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt${
     opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
   }`;
-  const forwardCmd = `\\arrow[${arrowOpts}]{${tip}}`;
-  const reverseCmd = `\\arrowreversed[${arrowOpts}]{${tip}}`;
-  const pairDelta = computePathArrowPairDelta(
-    sourceWidth,
-    arrowScale,
-    metrics?.pathLengthWorld,
-    metrics?.screenPxPerWorld
-  );
+  const forwardCmd = `\\arrow[${arrowOpts}]{${tipSpec}}`;
+  const reverseCmd = `\\arrowreversed[${arrowOpts}]{${tipSpec}}`;
+  const pairDelta = computePathArrowPairDelta(tipMetrics.pairSeparationPx, metrics?.pathLengthWorld, metrics?.screenPxPerWorld);
   const positions = collectPathArrowPositions(arrow, fallbackPos);
   const marks: string[] = [];
 
@@ -2399,15 +2404,11 @@ function pathArrowOverlayToTikz(
 }
 
 function computePathArrowPairDelta(
-  lineWidth: number,
-  arrowScale: number,
+  pairSeparationPx: number,
   pathLengthWorld: number | undefined,
   screenPxPerWorld: number | undefined
 ): number {
-  // Mirror canvas sizing logic so export mid-pairs match on-screen spacing.
-  const safeLineWidth = Math.max(0.5, lineWidth);
-  const headSizePx = Math.max(6, (7 + safeLineWidth * 1.2) * arrowScale);
-  const separationPx = Math.max(3, headSizePx * 1.6);
+  const separationPx = Math.max(3, pairSeparationPx);
   if (Number.isFinite(pathLengthWorld) && (pathLengthWorld as number) > 1e-9) {
     const pxPerWorld = clampPositive(screenPxPerWorld ?? 80, 1, 20000);
     const pathLengthPx = (pathLengthWorld as number) * pxPerWorld;
@@ -2416,7 +2417,7 @@ function computePathArrowPairDelta(
     }
   }
   // Fallback when path length is not known at call site.
-  return Math.max(0.015, Math.min(0.08, 0.02 + 0.006 * arrowScale));
+  return Math.max(0.01, Math.min(0.1, separationPx / 240));
 }
 
 function collectPathArrowPositions(
@@ -2459,6 +2460,39 @@ function resolveArrowTipName(
   if (tip === undefined || tip === null || tip === "") return "Stealth";
   if (tip === "Stealth" || tip === "Latex" || tip === "Triangle") return tip;
   throw new Error(`Unsupported ${context}: tip=${String(tip)}`);
+}
+
+function resolveArrowTipSpec(
+  tip: "Stealth" | "Latex" | "Triangle",
+  lengthPt: number,
+  widthPt: number
+): string {
+  return `${tip}[length=${fmt(Math.max(0.5, lengthPt))}pt,width=${fmt(Math.max(0.4, widthPt))}pt]`;
+}
+
+function resolvePathArrowWidthUi(lineWidthPt: unknown): number {
+  if (!Number.isFinite(lineWidthPt) || (lineWidthPt as number) <= 0) return 1;
+  return clampPositive((lineWidthPt as number) / PATH_ARROW_WIDTH_UI_FACTOR, 0.2, 12);
+}
+
+function resolvePathArrowTipMetricsPx(
+  tip: "Stealth" | "Latex" | "Triangle",
+  arrowScale: number,
+  widthUi: number
+): { lengthPx: number; widthPx: number; pairSeparationPx: number } {
+  const baseSize = Math.max(6, 8 * arrowScale);
+  const widthScale = Math.sqrt(Math.max(0.2, Math.min(12, widthUi)));
+  const profile =
+    tip === "Latex"
+      ? { lengthMul: 0.92, wingMul: 0.35 }
+      : tip === "Triangle"
+      ? { lengthMul: 1.02, wingMul: 0.58 }
+      : { lengthMul: 1.05, wingMul: 0.47 };
+  const lengthPx = Math.max(4, baseSize * profile.lengthMul);
+  const halfWidthPx = Math.max(1.2, baseSize * profile.wingMul * widthScale);
+  const widthPx = halfWidthPx * 2;
+  const pairSeparationPx = Math.max(3, Math.max(baseSize * 1.6, baseSize * 1.2 * widthScale));
+  return { lengthPx, widthPx, pairSeparationPx };
 }
 
 function resolveArrowSourceWidth(lineWidthPt: unknown, baseStrokeWidth: unknown): number {
@@ -2995,7 +3029,8 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
   const patternRegex = /pattern\s*=|pattern color\s*=/;
   const patternMetaRegex = /pattern\s*=\s*\{/;
   const decorationRegex = /postaction\s*=\s*decorate|decoration\s*=\s*\{markings/i;
-  const arrowTipRegex = /-\{(?:Stealth|Latex|Triangle)\[|\\arrow(?:reversed)?\[[^\]]*\]\{(?:Stealth|Latex|Triangle)\}/;
+  const arrowTipRegex =
+    /-\{(?:Stealth|Latex|Triangle)\[[^\]]*\]|\\arrow(?:reversed)?\[[^\]]*\]\{(?:Stealth|Latex|Triangle)(?:\[[^\]]*\])?\}/;
   for (const line of lines) {
     if (patternMetaRegex.test(line)) {
       needsPatternsMeta = true;

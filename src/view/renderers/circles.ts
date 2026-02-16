@@ -106,7 +106,7 @@ function drawCircleArrowOverlay(
   const lineWidthPt =
     typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) ? arrow.lineWidthPt : fallbackWidth;
   const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
-  const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
+  const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
   const positions = collectArrowPositions(arrow, 0.5);
   const pathLengthPx = Math.max(1e-6, 2 * Math.PI * radius);
   const pairOffset = Math.max(0.002, Math.min(0.24, separation / pathLengthPx));
@@ -153,7 +153,7 @@ function drawCircleArrowOverlay(
       pushPlacement(placements, t - pairOffset, false);
       pushPlacement(placements, t + pairOffset, true);
     }
-    drawArrowPlacements(ctx, placements, headSize, arrow.tip);
+    drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
   }
   ctx.restore();
 }

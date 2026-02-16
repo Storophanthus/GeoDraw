@@ -193,7 +193,7 @@ function drawArcArrowOverlay(
   const lineWidthPt =
     typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) ? arrow.lineWidthPt : safeFallbackWidth;
   const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
-  const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
+  const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
   const positions = collectArrowPositions(arrow, 0.5);
   const sweep = Math.max(1e-6, theta);
   const pathLengthPx = Math.max(1e-6, sweep * radiusPx);
@@ -240,7 +240,7 @@ function drawArcArrowOverlay(
       pushPlacement(placements, t - pairOffset, false);
       pushPlacement(placements, t + pairOffset, true);
     }
-    drawArrowPlacements(ctx, placements, headSize, arrow.tip);
+    drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
   }
   ctx.restore();
 }

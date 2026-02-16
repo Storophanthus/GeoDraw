@@ -770,7 +770,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("\\arrowreversed[")) {
       throw new Error("Expected inward mid-arrow fixture to include reversed arrow command.");
     }
-    if (!tikz.includes("{Latex}")) {
+    if (!tikz.includes("{Latex[")) {
       throw new Error("Expected inward mid-arrow fixture to emit Latex tip style.");
     }
     const marks = extractMarkCommands(tikz);
@@ -796,7 +796,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("postaction=decorate")) {
       throw new Error("Expected circle arrow fixture to emit decoration-based arrow overlay.");
     }
-    if (!tikz.includes("{Latex}")) {
+    if (!tikz.includes("{Latex[")) {
       throw new Error("Expected circle arrow fixture to emit Latex arrow tip.");
     }
   }
@@ -832,7 +832,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("arc[start angle=")) {
       throw new Error("Expected sector arrow fixture to emit arc path overlay.");
     }
-    if (!tikz.includes("{Triangle}")) {
+    if (!tikz.includes("{Triangle[")) {
       throw new Error("Expected sector arrow fixture to emit Triangle arrow tip.");
     }
   }
@@ -845,7 +845,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("arc[start angle=")) {
       throw new Error("Expected non-sector angle arrow fixture to emit arc path arrow overlay.");
     }
-    if (!tikz.includes("{Latex}")) {
+    if (!tikz.includes("{Latex[")) {
       throw new Error("Expected non-sector angle arrow fixture to emit Latex arrow tip.");
     }
     if (!tikz.includes("\\arrow[") || !tikz.includes("\\arrowreversed[")) {

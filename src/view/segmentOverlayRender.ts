@@ -139,7 +139,7 @@ export function drawSegmentArrowOverlay(
   const lineWidthPt =
     typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) ? arrow.lineWidthPt : fallbackWidth;
   const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
-  const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
+  const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
 
   ctx.save();
   ctx.setLineDash([]);
@@ -152,7 +152,7 @@ export function drawSegmentArrowOverlay(
 
   if (arrow.mode === "end") {
     const placements = resolveEndArrowPlacements(p1, p2, ux, uy, arrow.direction);
-    drawArrowPlacements(ctx, placements, headSize, arrow.tip);
+    drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
     ctx.restore();
     return;
   }
@@ -161,7 +161,7 @@ export function drawSegmentArrowOverlay(
     const t = clamp01(positions[i]);
     const tip = { x: p1.x + ux * len * t, y: p1.y + uy * len * t };
     const placements = resolveMidArrowPlacements(tip, ux, uy, arrow.direction, separation);
-    drawArrowPlacements(ctx, placements, headSize, arrow.tip);
+    drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
   }
   ctx.restore();
 }
