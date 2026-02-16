@@ -1,6 +1,6 @@
 import type { Vec2 } from "../../geo/vec2";
 import { projectPointToCircle, projectPointToLine, projectPointToSegment } from "../../geo/geometry";
-import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos, type AngleStyle, type CircleStyle, type LineStyle, type PointStyle, type PolygonStyle, type SceneModel } from "../../scene/points";
+import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos, type AngleStyle, type CircleStyle, type LineStyle, type PathArrowMark, type PointStyle, type PolygonStyle, type SceneModel, type SegmentArrowMark } from "../../scene/points";
 import { applyDeletion, collectCascadeDelete, isSelectedObjectAlive } from "../../domain/geometryGraph";
 import { rebuildRightAngleProvenance } from "../../domain/rightAngleProvenance";
 import type { SetStateOptions } from "./historySlice";
@@ -714,6 +714,7 @@ function circleStyleFromLineStyle(style: LineStyle): CircleStyle {
     strokeWidth: style.strokeWidth,
     strokeDash: style.dash,
     strokeOpacity: style.opacity,
+    arrowMark: pathArrowMarkFromSegmentArrow(style.segmentArrowMark),
   };
 }
 
@@ -723,6 +724,7 @@ function polygonStyleFromLineStyle(style: LineStyle): PolygonStyle {
     strokeWidth: style.strokeWidth,
     strokeDash: style.dash,
     strokeOpacity: style.opacity,
+    arrowMark: pathArrowMarkFromSegmentArrow(style.segmentArrowMark),
   };
 }
 
@@ -732,6 +734,7 @@ function lineStyleFromCircleStyle(style: CircleStyle): LineStyle {
     strokeWidth: style.strokeWidth,
     dash: style.strokeDash,
     opacity: style.strokeOpacity,
+    segmentArrowMark: segmentArrowMarkFromPathArrow(style.arrowMark, "mid"),
   };
 }
 
@@ -741,6 +744,7 @@ function lineStyleFromPolygonStyle(style: PolygonStyle): LineStyle {
     strokeWidth: style.strokeWidth,
     dash: style.strokeDash,
     opacity: style.strokeOpacity,
+    segmentArrowMark: segmentArrowMarkFromPathArrow(style.arrowMark, "mid"),
   };
 }
 
@@ -754,6 +758,7 @@ function circleStyleFromPolygonStyle(style: PolygonStyle): CircleStyle {
     fillOpacity: style.fillOpacity,
     pattern: style.pattern,
     patternColor: style.patternColor,
+    arrowMark: style.arrowMark ? { ...style.arrowMark } : undefined,
   };
 }
 
@@ -767,6 +772,7 @@ function polygonStyleFromCircleStyle(style: CircleStyle): PolygonStyle {
     fillOpacity: style.fillOpacity,
     pattern: style.pattern,
     patternColor: style.patternColor,
+    arrowMark: style.arrowMark ? { ...style.arrowMark } : undefined,
   };
 }
 
@@ -785,6 +791,7 @@ function circleStyleFromPointStyle(style: PointStyle): CircleStyle {
     strokeWidth: style.strokeWidth,
     strokeDash: "solid",
     strokeOpacity: style.strokeOpacity,
+    arrowMark: undefined,
   };
 }
 
@@ -813,6 +820,7 @@ function angleStyleFromLineStyle(style: LineStyle): Partial<AngleStyle> {
     strokeColor: style.strokeColor,
     strokeWidth: style.strokeWidth,
     strokeOpacity: style.opacity,
+    arcArrowMark: pathArrowMarkFromSegmentArrow(style.segmentArrowMark),
   };
 }
 
@@ -825,6 +833,7 @@ function angleStyleFromCircleStyle(style: CircleStyle): Partial<AngleStyle> {
     fillOpacity: style.fillOpacity ?? style.strokeOpacity,
     pattern: style.pattern ?? "",
     patternColor: style.patternColor,
+    arcArrowMark: style.arrowMark ? { ...style.arrowMark } : undefined,
   };
 }
 
@@ -837,5 +846,33 @@ function angleStyleFromPointStyle(style: PointStyle): Partial<AngleStyle> {
     textSize: style.labelFontPx,
     fillColor: style.fillColor,
     fillOpacity: style.fillOpacity,
+  };
+}
+
+function pathArrowMarkFromSegmentArrow(arrow: LineStyle["segmentArrowMark"] | undefined): PathArrowMark | undefined {
+  if (!arrow) return undefined;
+  const { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt } = arrow;
+  return { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt };
+}
+
+function segmentArrowMarkFromPathArrow(
+  arrow: CircleStyle["arrowMark"] | PolygonStyle["arrowMark"] | undefined,
+  mode: SegmentArrowMark["mode"]
+): SegmentArrowMark | undefined {
+  if (!arrow) return undefined;
+  const { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt } = arrow;
+  return {
+    enabled,
+    mode,
+    direction,
+    tip,
+    pos,
+    distribution,
+    startPos,
+    endPos,
+    step,
+    sizeScale,
+    color,
+    lineWidthPt,
   };
 }

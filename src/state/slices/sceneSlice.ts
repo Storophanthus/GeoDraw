@@ -30,6 +30,7 @@ export const defaultSegmentStyle: LineStyle = {
     enabled: false,
     mode: "end",
     direction: "->",
+    tip: "Stealth",
     distribution: "single",
     pos: 0.5,
     startPos: 0.45,
@@ -54,6 +55,18 @@ export const defaultCircleStyle: CircleStyle = {
   strokeOpacity: 1,
   fillOpacity: 0,
   pattern: "",
+  arrowMark: {
+    enabled: false,
+    direction: "->",
+    tip: "Stealth",
+    distribution: "single",
+    pos: 0.5,
+    startPos: 0.45,
+    endPos: 0.55,
+    step: 0.05,
+    sizeScale: 1,
+    lineWidthPt: 8,
+  },
 };
 
 export const defaultPolygonStyle: PolygonStyle = {
@@ -89,6 +102,18 @@ export const defaultAngleStyle: AngleStyle = {
   showLabel: true,
   showValue: true,
   promoteToSolid: false,
+  arcArrowMark: {
+    enabled: false,
+    direction: "->",
+    tip: "Stealth",
+    distribution: "single",
+    pos: 0.5,
+    startPos: 0.45,
+    endPos: 0.55,
+    step: 0.05,
+    sizeScale: 1,
+    lineWidthPt: 8,
+  },
 };
 
 export function createSceneSliceState() {

@@ -1,8 +1,11 @@
 import type {
+  ArrowDirection,
+  ArrowTipStyle,
   AngleMarkSymbol,
   AngleStyle,
   CircleStyle,
   LineStyle,
+  PathArrowMark,
   SceneAngle,
   SceneCircle,
   SceneLine,
@@ -11,7 +14,17 @@ import type {
 } from "../scene/points";
 
 const SEGMENT_MARK_OPTIONS = ["none", "|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"] as const;
-const SEGMENT_ARROW_DIRECTIONS = ["->", "<-", "<->"] as const;
+const ARROW_DIRECTION_OPTIONS: Array<{ value: ArrowDirection; label: string }> = [
+  { value: "->", label: "Forward (A→B)" },
+  { value: "<-", label: "Backward (A←B)" },
+  { value: "<->", label: "Bidirectional (A↔B)" },
+  { value: ">-<", label: "Inward (A>-<B)" },
+];
+const ARROW_TIP_OPTIONS: Array<{ value: ArrowTipStyle; label: string }> = [
+  { value: "Stealth", label: "Stealth" },
+  { value: "Latex", label: "Latex" },
+  { value: "Triangle", label: "Triangle" },
+];
 const SEGMENT_ARROW_DISTRIBUTIONS = ["single", "multi"] as const;
 const FILL_PATTERN_OPTIONS = [
   { value: "", label: "None" },
@@ -22,6 +35,18 @@ const FILL_PATTERN_OPTIONS = [
   { value: "dots", label: "Dots" },
 ] as const;
 const SEGMENT_ARROW_WIDTH_UI_FACTOR = 8;
+const DEFAULT_PATH_ARROW_MARK: PathArrowMark = {
+  enabled: true,
+  direction: "->",
+  tip: "Stealth",
+  distribution: "single",
+  pos: 0.5,
+  startPos: 0.45,
+  endPos: 0.55,
+  step: 0.05,
+  sizeScale: 1,
+  lineWidthPt: SEGMENT_ARROW_WIDTH_UI_FACTOR,
+};
 const ARC_VARIANT_OPTIONS = [
   { value: "vanilla", label: "Vanilla Arc" },
   { value: "bars1", label: 'Arc + "|"' },
@@ -74,6 +99,8 @@ export function ObjectStyleSections({
     }
     updateSelectedCircleStyle(style);
   };
+  const areaArrowDefaults = selectedCircle?.style.arrowMark ?? DEFAULT_PATH_ARROW_MARK;
+  const angleArrowDefaults = selectedAngle?.style.arcArrowMark ?? DEFAULT_PATH_ARROW_MARK;
   const angleArcVariant =
     selectedAngle?.style.markStyle === "none"
       ? "none"
@@ -414,15 +441,46 @@ export function ObjectStyleSections({
                         startPos: 0.45,
                         endPos: 0.55,
                         step: 0.05,
+                        tip: "Stealth",
                       }),
-                      direction: e.target.value as (typeof SEGMENT_ARROW_DIRECTIONS)[number],
+                      direction: e.target.value as ArrowDirection,
                     },
                   })
                 }
               >
-                {SEGMENT_ARROW_DIRECTIONS.map((direction: string) => (
-                  <option key={direction} value={direction}>
-                    {direction}
+                {ARROW_DIRECTION_OPTIONS.map((direction) => (
+                  <option key={direction.value} value={direction.value}>
+                    {direction.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="controlRow">
+              <label className="controlLabel">Tip Style</label>
+              <select
+                className="selectInput"
+                value={selectedSegment.style.segmentArrowMark?.tip ?? "Stealth"}
+                onChange={(e) =>
+                  updateSelectedSegmentStyle({
+                    segmentArrowMark: {
+                      ...(selectedSegment.style.segmentArrowMark ?? {
+                        enabled: true,
+                        mode: "end",
+                        direction: "->",
+                        distribution: "single",
+                        pos: 0.5,
+                        startPos: 0.45,
+                        endPos: 0.55,
+                        step: 0.05,
+                      }),
+                      tip: e.target.value as ArrowTipStyle,
+                    },
+                  })
+                }
+              >
+                {ARROW_TIP_OPTIONS.map((tip) => (
+                  <option key={tip.value} value={tip.value}>
+                    {tip.label}
                   </option>
                 ))}
               </select>
@@ -882,6 +940,261 @@ export function ObjectStyleSections({
               />
             </div>
           )}
+          {!selectedPolygon && selectedCircle && (
+            <details className="detailsSection">
+              <summary className="subSectionTitle detailsSummary">Arrow Mark</summary>
+              <label className="checkboxRow">
+                <input
+                  type="checkbox"
+                  checked={selectedCircle.style.arrowMark?.enabled ?? false}
+                  onChange={(e) =>
+                    updateSelectedCircleStyle({
+                      arrowMark: {
+                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                        enabled: e.target.checked,
+                      },
+                    })
+                  }
+                />
+                Enable circle arrow
+              </label>
+              <div className="controlRow">
+                <label className="controlLabel">Direction</label>
+                <select
+                  className="selectInput"
+                  value={selectedCircle.style.arrowMark?.direction ?? "->"}
+                  onChange={(e) =>
+                    updateSelectedCircleStyle({
+                      arrowMark: {
+                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                        direction: e.target.value as ArrowDirection,
+                      },
+                    })
+                  }
+                >
+                  {ARROW_DIRECTION_OPTIONS.map((direction) => (
+                    <option key={direction.value} value={direction.value}>
+                      {direction.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="controlRow">
+                <label className="controlLabel">Tip Style</label>
+                <select
+                  className="selectInput"
+                  value={selectedCircle.style.arrowMark?.tip ?? "Stealth"}
+                  onChange={(e) =>
+                    updateSelectedCircleStyle({
+                      arrowMark: {
+                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                        tip: e.target.value as ArrowTipStyle,
+                      },
+                    })
+                  }
+                >
+                  {ARROW_TIP_OPTIONS.map((tip) => (
+                    <option key={tip.value} value={tip.value}>
+                      {tip.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="controlRow">
+                <label className="controlLabel">Arrow Pos</label>
+                <input
+                  className="sizeSlider"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={selectedCircle.style.arrowMark?.pos ?? 0.5}
+                  onChange={(e) =>
+                    updateSelectedCircleStyle({
+                      arrowMark: {
+                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                        pos: Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className="controlRow">
+                <label className="controlLabel">Arrow Color</label>
+                <input
+                  className="colorInput"
+                  type="color"
+                  value={selectedCircle.style.arrowMark?.color ?? selectedCircle.style.strokeColor}
+                  onChange={(e) =>
+                    updateSelectedCircleStyle({
+                      arrowMark: {
+                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                        color: e.target.value,
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className="controlRow controlRowWithNumeric">
+                <label className="controlLabel">Arrow Width</label>
+                <input
+                  className="sizeSlider"
+                  type="range"
+                  min={0}
+                  max={12}
+                  step={0.05}
+                  value={
+                    (selectedCircle.style.arrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                    SEGMENT_ARROW_WIDTH_UI_FACTOR
+                  }
+                  onChange={(e) =>
+                    updateSelectedCircleStyle({
+                      arrowMark: {
+                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                        lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                      },
+                    })
+                  }
+                />
+                <input
+                  className="scaleInputCompact"
+                  type="number"
+                  min={0}
+                  max={12}
+                  step={0.05}
+                  value={
+                    (selectedCircle.style.arrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                    SEGMENT_ARROW_WIDTH_UI_FACTOR
+                  }
+                  onChange={(e) =>
+                    updateSelectedCircleStyle({
+                      arrowMark: {
+                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                        lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className="controlRow controlRowWithNumeric">
+                <label className="controlLabel">Arrow Size</label>
+                <input
+                  className="sizeSlider"
+                  type="range"
+                  min={0.2}
+                  max={8}
+                  step={0.1}
+                  value={selectedCircle.style.arrowMark?.sizeScale ?? 1}
+                  onChange={(e) =>
+                    updateSelectedCircleStyle({
+                      arrowMark: {
+                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                        sizeScale: Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+                <input
+                  className="scaleInputCompact"
+                  type="number"
+                  min={0.2}
+                  max={8}
+                  step={0.1}
+                  value={selectedCircle.style.arrowMark?.sizeScale ?? 1}
+                  onChange={(e) =>
+                    updateSelectedCircleStyle({
+                      arrowMark: {
+                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                        sizeScale: Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className="controlRow">
+                <label className="controlLabel">Distribution</label>
+                <select
+                  className="selectInput"
+                  value={selectedCircle.style.arrowMark?.distribution ?? "single"}
+                  onChange={(e) =>
+                    updateSelectedCircleStyle({
+                      arrowMark: {
+                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                        distribution: e.target.value as (typeof SEGMENT_ARROW_DISTRIBUTIONS)[number],
+                      },
+                    })
+                  }
+                >
+                  {SEGMENT_ARROW_DISTRIBUTIONS.map((distribution) => (
+                    <option key={distribution} value={distribution}>
+                      {distribution}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {(selectedCircle.style.arrowMark?.distribution ?? "single") === "multi" && (
+                <>
+                  <div className="controlRow">
+                    <label className="controlLabel">Start</label>
+                    <input
+                      className="sizeSlider"
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={selectedCircle.style.arrowMark?.startPos ?? 0.45}
+                      onChange={(e) =>
+                        updateSelectedCircleStyle({
+                          arrowMark: {
+                            ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                            startPos: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">End</label>
+                    <input
+                      className="sizeSlider"
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={selectedCircle.style.arrowMark?.endPos ?? 0.55}
+                      onChange={(e) =>
+                        updateSelectedCircleStyle({
+                          arrowMark: {
+                            ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                            endPos: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="controlRow">
+                    <label className="controlLabel">Step</label>
+                    <input
+                      className="sizeSlider"
+                      type="number"
+                      min={0.01}
+                      max={1}
+                      step={0.01}
+                      value={selectedCircle.style.arrowMark?.step ?? 0.05}
+                      onChange={(e) =>
+                        updateSelectedCircleStyle({
+                          arrowMark: {
+                            ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                            step: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                </>
+              )}
+            </details>
+          )}
         </div>
       )}
 
@@ -1076,6 +1389,259 @@ export function ObjectStyleSections({
               </select>
             </div>
           )}
+          <details className="detailsSection">
+            <summary className="subSectionTitle detailsSummary">Arc Arrow</summary>
+            <label className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={selectedAngle.style.arcArrowMark?.enabled ?? false}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      enabled: e.target.checked,
+                    },
+                  })
+                }
+              />
+              Enable arc arrow
+            </label>
+            <div className="controlRow">
+              <label className="controlLabel">Direction</label>
+              <select
+                className="selectInput"
+                value={selectedAngle.style.arcArrowMark?.direction ?? "->"}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      direction: e.target.value as ArrowDirection,
+                    },
+                  })
+                }
+              >
+                {ARROW_DIRECTION_OPTIONS.map((direction) => (
+                  <option key={direction.value} value={direction.value}>
+                    {direction.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="controlRow">
+              <label className="controlLabel">Tip Style</label>
+              <select
+                className="selectInput"
+                value={selectedAngle.style.arcArrowMark?.tip ?? "Stealth"}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      tip: e.target.value as ArrowTipStyle,
+                    },
+                  })
+                }
+              >
+                {ARROW_TIP_OPTIONS.map((tip) => (
+                  <option key={tip.value} value={tip.value}>
+                    {tip.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="controlRow">
+              <label className="controlLabel">Arrow Pos</label>
+              <input
+                className="sizeSlider"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={selectedAngle.style.arcArrowMark?.pos ?? selectedAngle.style.markPos ?? 0.5}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      pos: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </div>
+            <div className="controlRow">
+              <label className="controlLabel">Arrow Color</label>
+              <input
+                className="colorInput"
+                type="color"
+                value={selectedAngle.style.arcArrowMark?.color ?? selectedAngle.style.strokeColor}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      color: e.target.value,
+                    },
+                  })
+                }
+              />
+            </div>
+            <div className="controlRow controlRowWithNumeric">
+              <label className="controlLabel">Arrow Width</label>
+              <input
+                className="sizeSlider"
+                type="range"
+                min={0}
+                max={12}
+                step={0.05}
+                value={
+                  (selectedAngle.style.arcArrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                  SEGMENT_ARROW_WIDTH_UI_FACTOR
+                }
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                    },
+                  })
+                }
+              />
+              <input
+                className="scaleInputCompact"
+                type="number"
+                min={0}
+                max={12}
+                step={0.05}
+                value={
+                  (selectedAngle.style.arcArrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                  SEGMENT_ARROW_WIDTH_UI_FACTOR
+                }
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                    },
+                  })
+                }
+              />
+            </div>
+            <div className="controlRow controlRowWithNumeric">
+              <label className="controlLabel">Arrow Size</label>
+              <input
+                className="sizeSlider"
+                type="range"
+                min={0.2}
+                max={8}
+                step={0.1}
+                value={selectedAngle.style.arcArrowMark?.sizeScale ?? 1}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      sizeScale: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+              <input
+                className="scaleInputCompact"
+                type="number"
+                min={0.2}
+                max={8}
+                step={0.1}
+                value={selectedAngle.style.arcArrowMark?.sizeScale ?? 1}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      sizeScale: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </div>
+            <div className="controlRow">
+              <label className="controlLabel">Distribution</label>
+              <select
+                className="selectInput"
+                value={selectedAngle.style.arcArrowMark?.distribution ?? "single"}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      distribution: e.target.value as (typeof SEGMENT_ARROW_DISTRIBUTIONS)[number],
+                    },
+                  })
+                }
+              >
+                {SEGMENT_ARROW_DISTRIBUTIONS.map((distribution) => (
+                  <option key={distribution} value={distribution}>
+                    {distribution}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {(selectedAngle.style.arcArrowMark?.distribution ?? "single") === "multi" && (
+              <>
+                <div className="controlRow">
+                  <label className="controlLabel">Start</label>
+                  <input
+                    className="sizeSlider"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={selectedAngle.style.arcArrowMark?.startPos ?? 0.45}
+                    onChange={(e) =>
+                      updateSelectedAngleStyle({
+                        arcArrowMark: {
+                          ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                          startPos: Number(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <div className="controlRow">
+                  <label className="controlLabel">End</label>
+                  <input
+                    className="sizeSlider"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={selectedAngle.style.arcArrowMark?.endPos ?? 0.55}
+                    onChange={(e) =>
+                      updateSelectedAngleStyle({
+                        arcArrowMark: {
+                          ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                          endPos: Number(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <div className="controlRow">
+                  <label className="controlLabel">Step</label>
+                  <input
+                    className="sizeSlider"
+                    type="number"
+                    min={0.01}
+                    max={1}
+                    step={0.01}
+                    value={selectedAngle.style.arcArrowMark?.step ?? 0.05}
+                    onChange={(e) =>
+                      updateSelectedAngleStyle({
+                        arcArrowMark: {
+                          ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                          step: Number(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </>
+            )}
+          </details>
           <label className="checkboxRow">
             <input
               type="checkbox"

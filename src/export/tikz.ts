@@ -132,7 +132,7 @@ type LabelPlacement = {
 // Canvas arrow-width slider values are visually calibrated in canvas pixels.
 // Export them to TikZ pt using this empirically matched conversion:
 // 7.6 (canvas) -> 0.6pt (TikZ).
-const SEGMENT_ARROW_WIDTH_EXPORT_SCALE = 0.6 / 7.6;
+const PATH_ARROW_WIDTH_EXPORT_SCALE = 0.6 / 7.6;
 
 export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}): TikzCommand[] {
   const pointById = new Map(scene.points.map((p) => [p.id, p]));
@@ -1060,6 +1060,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         style: circleStyleToTikz(circle.style, options),
       });
     }
+    const circleGeom = circleGeomById(circle.id);
+    const circleArrowOverlay = pathArrowOverlayToTikz(
+      circle.style.arrowMark,
+      circlePathExprFromWorld(circleGeom.center, circleGeom.radius),
+      {
+        strokeColor: circle.style.strokeColor,
+        strokeWidth: circle.style.strokeWidth,
+        opacity: circle.style.strokeOpacity,
+      },
+      0.5
+    );
+    if (circleArrowOverlay) {
+      draws.push({ kind: "DrawRaw", tex: circleArrowOverlay });
+    }
   }
   for (const polygon of scene.polygons) {
     if (!polygon.visible) continue;
@@ -1108,6 +1122,21 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         b: cName,
         style: sectorDrawStyleToTikz(angle.style, options),
       });
+      const sectorRadius = distance(aWorld, bWorld);
+      const sectorStart = Math.atan2(aWorld.y - bWorld.y, aWorld.x - bWorld.x);
+      const sectorArrowOverlay = pathArrowOverlayToTikz(
+        angle.style.arcArrowMark,
+        arcPathExprFromWorld(bWorld, sectorRadius, sectorStart, theta),
+        {
+          strokeColor: angle.style.strokeColor,
+          strokeWidth: angle.style.strokeWidth,
+          opacity: angle.style.strokeOpacity,
+        },
+        angle.style.markPos ?? 0.5
+      );
+      if (sectorArrowOverlay) {
+        draws.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
+      }
       continue;
     }
     const rightStatus = resolveAngleRightStatus(scene, angle);
@@ -1127,10 +1156,27 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const markStyle = angleMarkStyleToTikz(angle.style, false, options, markKind);
       draws.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
     }
+    if (markKind === "arc" || markKind === "rightArcDot") {
+      const angleStart = Math.atan2(aWorld.y - bWorld.y, aWorld.x - bWorld.x);
+      const arcRadius = nonSectorAngleRadiusWorldFromStyle(angle.style, options);
+      const arcArrowOverlay = pathArrowOverlayToTikz(
+        angle.style.arcArrowMark,
+        arcPathExprFromWorld(bWorld, arcRadius, angleStart, theta),
+        {
+          strokeColor: angle.style.strokeColor,
+          strokeWidth: angle.style.strokeWidth,
+          opacity: angle.style.strokeOpacity,
+        },
+        angle.style.markPos ?? 0.5
+      );
+      if (arcArrowOverlay) {
+        draws.push({ kind: "DrawRaw", tex: arcArrowOverlay });
+      }
+    }
     if (angle.style.showLabel || angle.style.showValue) {
       const labelText = buildAngleLabelTex(angle.style.labelText, angle.style.showLabel, angle.style.showValue, theta);
       if (labelText) {
-      const labelStyle = angleLabelStyleToTikz(angle.style, bWorld, options);
+        const labelStyle = angleLabelStyleToTikz(angle.style, bWorld, options);
         draws.push({ kind: "LabelAngle", a: aName, b: bName, c: cName, text: labelText, style: labelStyle });
       }
     }
@@ -2145,56 +2191,26 @@ function segmentArrowOverlayToTikz(
   base: { strokeColor: string; strokeWidth: number; opacity: number }
 ): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
   if (!arrow?.enabled) return null;
-  if (arrow.direction !== "->" && arrow.direction !== "<-" && arrow.direction !== "<->") {
-    throw new Error(`Unsupported SegmentArrowMark: direction=${String(arrow.direction)}`);
-  }
   if (arrow.mode === "mid") {
-    const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
-    const opacity = clamp01(base.opacity);
-    const sourceWidth = arrow.lineWidthPt ?? base.strokeWidth;
-    const arrowWidth = Math.max(0.1, sourceWidth * SEGMENT_ARROW_WIDTH_EXPORT_SCALE);
-    const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
-    const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScale)}${
-      opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
-    }`;
-    const markCode =
-      arrow.direction === "->"
-        ? `{\\arrow[${arrowOpts}]{Stealth}}`
-        : arrow.direction === "<-"
-        ? `{\\arrowreversed[${arrowOpts}]{Stealth}}`
-        : `{\\arrow[${arrowOpts}]{Stealth};\\arrowreversed[${arrowOpts}]{Stealth}}`;
-    const distribution = arrow.distribution ?? "single";
-    let start = clamp01(arrow.startPos ?? 0.45);
-    let end = clamp01(arrow.endPos ?? 0.55);
-    if (end < start) {
-      const t = start;
-      start = end;
-      end = t;
-    }
-    const opts: string[] = [
-      "postaction=decorate",
-      distribution === "multi"
-        ? `decoration={markings,mark=between positions ${fmt(start)} and ${fmt(end)} step ${fmt(
-            Math.max(0.001, arrow.step ?? 0.05)
-          )} with ${markCode}}`
-        : `decoration={markings,mark=at position ${fmt(clamp01(arrow.pos ?? 0.5))} with ${markCode}}`,
-    ];
-    if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
-    if (arrow.lineWidthPt !== undefined && (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0)) {
-      throw new Error("Unsupported SegmentArrowMark: lineWidthPt");
-    }
-    // Use \path so the segment itself is not re-drawn (avoids black/thick overlay artifacts).
-    return { kind: "raw", tex: `\\path[${opts.join(", ")}] (${aName}) -- (${bName});` };
+    const midOverlay = pathArrowOverlayToTikz(arrow, `(${aName}) -- (${bName})`, base, arrow.pos ?? 0.5);
+    if (!midOverlay) return null;
+    return { kind: "raw", tex: midOverlay };
   }
 
+  ensureSupportedArrowDirection(arrow.direction, "SegmentArrowMark");
+  const tip = resolveArrowTipName(arrow.tip, "SegmentArrowMark");
   const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
   const opacity = clamp01(base.opacity);
   const sourceWidth = arrow.lineWidthPt ?? base.strokeWidth;
-  const arrowWidth = Math.max(0.1, sourceWidth * SEGMENT_ARROW_WIDTH_EXPORT_SCALE);
+  if (arrow.lineWidthPt !== undefined && (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0)) {
+    throw new Error("Unsupported SegmentArrowMark: lineWidthPt");
+  }
+  const arrowWidth = Math.max(0.1, sourceWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
   const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
   const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * arrowScale));
   const t = fmt(1 - tailFrac);
-  const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{Stealth[scale=${fmt(arrowScale)}]}${
+  const tNeg = fmt(-tailFrac);
+  const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{${tip}[scale=${fmt(arrowScale)}]}${
     opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
   }`;
   if (arrow.direction === "->") {
@@ -2209,13 +2225,139 @@ function segmentArrowOverlayToTikz(
       tex: `\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`,
     };
   }
+  if (arrow.direction === "<->") {
+    return {
+      kind: "raw",
+      tex: [
+        `\\draw[${drawStyle}] ($(${aName})!${t}!(${bName})$) -- (${bName});`,
+        `\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`,
+      ].join("\n"),
+    };
+  }
   return {
     kind: "raw",
     tex: [
-      `\\draw[${drawStyle}] ($(${aName})!${t}!(${bName})$) -- (${bName});`,
-      `\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`,
+      `\\draw[${drawStyle}] ($(${aName})!${tNeg}!(${bName})$) -- (${aName});`,
+      `\\draw[${drawStyle}] ($(${bName})!${tNeg}!(${aName})$) -- (${bName});`,
     ].join("\n"),
   };
+}
+
+function pathArrowOverlayToTikz(
+  arrow:
+    | SceneModel["segments"][number]["style"]["segmentArrowMark"]
+    | SceneModel["circles"][number]["style"]["arrowMark"]
+    | SceneModel["angles"][number]["style"]["arcArrowMark"],
+  pathExpr: string,
+  base: { strokeColor: string; strokeWidth: number; opacity: number },
+  fallbackPos: number
+): string | null {
+  if (!arrow?.enabled) return null;
+  ensureSupportedArrowDirection(arrow.direction, "PathArrowMark");
+  const tip = resolveArrowTipName(arrow.tip, "PathArrowMark");
+  if (arrow.lineWidthPt !== undefined && (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0)) {
+    throw new Error("Unsupported PathArrowMark: lineWidthPt");
+  }
+  const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
+  const opacity = clamp01(base.opacity);
+  const sourceWidth = arrow.lineWidthPt ?? base.strokeWidth;
+  const arrowWidth = Math.max(0.1, sourceWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
+  const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
+  const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScale)}${
+    opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
+  }`;
+  const forwardCmd = `\\arrow[${arrowOpts}]{${tip}}`;
+  const reverseCmd = `\\arrowreversed[${arrowOpts}]{${tip}}`;
+  const pairDelta = Math.max(0.003, Math.min(0.035, 0.009 + 0.003 * arrowScale));
+  const positions = collectPathArrowPositions(arrow, fallbackPos);
+  const marks: string[] = [];
+
+  const addMark = (pos: number, command: string) => {
+    marks.push(`mark=at position ${fmt(clamp01(pos))} with {${command}}`);
+  };
+
+  for (let i = 0; i < positions.length; i += 1) {
+    const p = positions[i];
+    if (arrow.direction === "->") {
+      addMark(p, forwardCmd);
+    } else if (arrow.direction === "<-") {
+      addMark(p, reverseCmd);
+    } else if (arrow.direction === "<->") {
+      addMark(p - pairDelta, reverseCmd);
+      addMark(p + pairDelta, forwardCmd);
+    } else {
+      addMark(p - pairDelta, forwardCmd);
+      addMark(p + pairDelta, reverseCmd);
+    }
+  }
+
+  if (marks.length === 0) return null;
+  const opts: string[] = ["postaction=decorate", `decoration={markings,${marks.join(",")}}`];
+  if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
+  return `\\path[${opts.join(", ")}] ${pathExpr};`;
+}
+
+function collectPathArrowPositions(
+  arrow: Pick<
+    NonNullable<SceneModel["circles"][number]["style"]["arrowMark"]>,
+    "distribution" | "pos" | "startPos" | "endPos" | "step"
+  >,
+  fallbackPos: number
+): number[] {
+  const distribution = arrow.distribution ?? "single";
+  if (distribution !== "multi") return [clamp01(arrow.pos ?? fallbackPos)];
+  let start = clamp01(arrow.startPos ?? 0.45);
+  let end = clamp01(arrow.endPos ?? 0.55);
+  if (end < start) {
+    const t = start;
+    start = end;
+    end = t;
+  }
+  const step = Math.max(0.001, Math.min(1, arrow.step ?? 0.05));
+  const out: number[] = [];
+  for (let t = start; t <= end + 1e-9 && out.length < 600; t += step) {
+    out.push(clamp01(t));
+  }
+  if (out.length === 0) out.push(clamp01(arrow.pos ?? fallbackPos));
+  return out;
+}
+
+function ensureSupportedArrowDirection(
+  direction: unknown,
+  context: "SegmentArrowMark" | "PathArrowMark"
+): asserts direction is "->" | "<-" | "<->" | ">-<" {
+  if (direction === "->" || direction === "<-" || direction === "<->" || direction === ">-<") return;
+  throw new Error(`Unsupported ${context}: direction=${String(direction)}`);
+}
+
+function resolveArrowTipName(
+  tip: unknown,
+  context: "SegmentArrowMark" | "PathArrowMark"
+): "Stealth" | "Latex" | "Triangle" {
+  if (tip === undefined || tip === null || tip === "") return "Stealth";
+  if (tip === "Stealth" || tip === "Latex" || tip === "Triangle") return tip;
+  throw new Error(`Unsupported ${context}: tip=${String(tip)}`);
+}
+
+function circlePathExprFromWorld(center: { x: number; y: number }, radius: number): string {
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw new Error("Unsupported PathArrowMark: circle radius");
+  }
+  return `(${fmt(center.x)},${fmt(center.y)}) circle[radius=${fmt(radius)}]`;
+}
+
+function arcPathExprFromWorld(center: { x: number; y: number }, radius: number, startRad: number, sweepRad: number): string {
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw new Error("Unsupported PathArrowMark: arc radius");
+  }
+  if (!Number.isFinite(startRad) || !Number.isFinite(sweepRad)) {
+    throw new Error("Unsupported PathArrowMark: arc angles");
+  }
+  const startDeg = (startRad * 180) / Math.PI;
+  const endDeg = ((startRad + sweepRad) * 180) / Math.PI;
+  const sx = center.x + Math.cos(startRad) * radius;
+  const sy = center.y + Math.sin(startRad) * radius;
+  return `(${fmt(sx)},${fmt(sy)}) arc[start angle=${fmt(startDeg)},end angle=${fmt(endDeg)},radius=${fmt(radius)}]`;
 }
 
 function lineStyleToTikz(style: SceneModel["lines"][number]["style"], options: TikzExportOptions): string {
@@ -2704,28 +2846,43 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
 
   let needsPatterns = false;
   let needsPatternsMeta = false;
+  let needsDecorationsMarkings = false;
+  let needsArrowsMeta = false;
   const patternRegex = /pattern\s*=|pattern color\s*=/;
   const patternMetaRegex = /pattern\s*=\s*\{/;
+  const decorationRegex = /postaction\s*=\s*decorate|decoration\s*=\s*\{markings/i;
+  const arrowTipRegex = /-\{(?:Stealth|Latex|Triangle)\[|\\arrow(?:reversed)?\[[^\]]*\]\{(?:Stealth|Latex|Triangle)\}/;
   for (const line of lines) {
     if (patternMetaRegex.test(line)) {
       needsPatternsMeta = true;
       needsPatterns = true;
-      break;
-    }
-    if (patternRegex.test(line)) {
+    } else if (patternRegex.test(line)) {
       needsPatterns = true;
     }
+    if (decorationRegex.test(line)) needsDecorationsMarkings = true;
+    if (arrowTipRegex.test(line)) needsArrowsMeta = true;
   }
 
-  if (!needsPatterns) return lines;
+  const libraryLines: string[] = [];
+  if (needsPatterns) {
+    libraryLines.push(needsPatternsMeta ? "\\usetikzlibrary{patterns,patterns.meta}" : "\\usetikzlibrary{patterns}");
+  }
+  if (needsDecorationsMarkings) {
+    const suffix = needsArrowsMeta ? ",arrows.meta" : "";
+    libraryLines.push(`\\usetikzlibrary{decorations.markings${suffix}}`);
+  } else if (needsArrowsMeta) {
+    libraryLines.push("\\usetikzlibrary{arrows.meta}");
+  }
 
-  const libraryLine = needsPatternsMeta
-    ? "\\usetikzlibrary{patterns,patterns.meta}"
-    : "\\usetikzlibrary{patterns}";
-
-  if (lines.some((line) => line.trim() === libraryLine)) return lines;
+  if (libraryLines.length === 0) return lines;
   const out = [...lines];
-  out.splice(beginIdx, 0, libraryLine);
+  let insertIdx = beginIdx;
+  for (let i = 0; i < libraryLines.length; i += 1) {
+    const libraryLine = libraryLines[i];
+    if (out.some((line) => line.trim() === libraryLine)) continue;
+    out.splice(insertIdx, 0, libraryLine);
+    insertIdx += 1;
+  }
   return out;
 }
 

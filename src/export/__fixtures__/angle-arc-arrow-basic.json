@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p_1", "name": "A", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 0, "y": 0 } },
+    { "id": "p_2", "name": "B", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 1.4, "y": 0.2 } },
+    { "id": "p_3", "name": "C", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 2.2, "y": 1.4 } }
+  ],
+  "numbers": [],
+  "lines": [],
+  "segments": [],
+  "circles": [],
+  "angles": [
+    {
+      "id": "a_1",
+      "kind": "angle",
+      "aId": "p_1",
+      "bId": "p_2",
+      "cId": "p_3",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.7,
+        "strokeOpacity": 1,
+        "textColor": "#0f172a",
+        "textSize": 16,
+        "fillEnabled": false,
+        "fillColor": "#93c5fd",
+        "fillOpacity": 0.2,
+        "markStyle": "arc",
+        "markSymbol": "none",
+        "arcMultiplicity": 1,
+        "markPos": 0.55,
+        "markSize": 4,
+        "markColor": "#334155",
+        "arcRadius": 1.4,
+        "labelText": "",
+        "labelPosWorld": { "x": 1.7, "y": 0.7 },
+        "showLabel": true,
+        "showValue": true,
+        "arcArrowMark": {
+          "enabled": true,
+          "direction": ">-<",
+          "tip": "Latex",
+          "distribution": "single",
+          "pos": 0.55
+        }
+      }
+    }
+  ]
+}

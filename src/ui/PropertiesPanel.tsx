@@ -372,7 +372,8 @@ function circleStyleEqual(a: SceneModel["circles"][number]["style"], b: SceneMod
     (a.fillColor ?? "") === (b.fillColor ?? "") &&
     (a.fillOpacity ?? 0) === (b.fillOpacity ?? 0) &&
     (a.pattern ?? "") === (b.pattern ?? "") &&
-    (a.patternColor ?? "") === (b.patternColor ?? "")
+    (a.patternColor ?? "") === (b.patternColor ?? "") &&
+    JSON.stringify(a.arrowMark ?? null) === JSON.stringify(b.arrowMark ?? null)
   );
 }
 
@@ -385,7 +386,8 @@ function polygonStyleEqual(a: SceneModel["polygons"][number]["style"], b: SceneM
     (a.fillColor ?? "") === (b.fillColor ?? "") &&
     (a.fillOpacity ?? 0) === (b.fillOpacity ?? 0) &&
     (a.pattern ?? "") === (b.pattern ?? "") &&
-    (a.patternColor ?? "") === (b.patternColor ?? "")
+    (a.patternColor ?? "") === (b.patternColor ?? "") &&
+    JSON.stringify(a.arrowMark ?? null) === JSON.stringify(b.arrowMark ?? null)
   );
 }
 
@@ -410,6 +412,7 @@ function angleStyleEqual(a: SceneModel["angles"][number]["style"], b: SceneModel
     a.labelText === b.labelText &&
     a.showLabel === b.showLabel &&
     a.showValue === b.showValue &&
-    Boolean(a.promoteToSolid) === Boolean(b.promoteToSolid)
+    Boolean(a.promoteToSolid) === Boolean(b.promoteToSolid) &&
+    JSON.stringify(a.arcArrowMark ?? null) === JSON.stringify(b.arcArrowMark ?? null)
   );
 }

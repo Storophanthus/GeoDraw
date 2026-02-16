@@ -10,6 +10,13 @@ import {
   drawRightAngleSquareFill,
 } from "../angleRender";
 import { resolveCanvasFillStyle } from "../patternFill";
+import {
+  clamp01,
+  collectArrowPositions,
+  drawArrowPlacements,
+  resolveMidArrowPlacements,
+  segmentArrowHeadSize,
+} from "../pathArrowRender";
 import type { DrawableObjectSelection } from "./types";
 
 export type ResolvedAngleForRender = {
@@ -52,6 +59,10 @@ export function drawAngles(
       | "rightArcDot";
     const markSizePx = Math.max(3, Math.min(16, angle.style.markSize ?? 4));
     const rightMarkSizePx = computeRightMarkSizePx(radiusPx, mapStrokeWidth(angle.style.strokeWidth));
+    const startAngle = Math.atan2(as.y - bs.y, as.x - bs.x);
+    const canRenderArcArrow =
+      Boolean(angle.style.arcArrowMark?.enabled) &&
+      (isSector || resolvedMarkStyle === "arc" || resolvedMarkStyle === "rightArcDot");
 
     ctx.save();
     if (angle.style.fillEnabled && angle.style.fillOpacity > 0) {
@@ -81,12 +92,11 @@ export function drawAngles(
       else if (dash === "dotted") ctx.setLineDash([2, 4]);
     }
     if (isSector) {
-      const start = Math.atan2(as.y - bs.y, as.x - bs.x);
-      const end = start - entry.theta;
+      const end = startAngle - entry.theta;
       ctx.beginPath();
       ctx.moveTo(bs.x, bs.y);
-      ctx.lineTo(bs.x + Math.cos(start) * radiusPx, bs.y + Math.sin(start) * radiusPx);
-      ctx.arc(bs.x, bs.y, radiusPx, start, end, true);
+      ctx.lineTo(bs.x + Math.cos(startAngle) * radiusPx, bs.y + Math.sin(startAngle) * radiusPx);
+      ctx.arc(bs.x, bs.y, radiusPx, startAngle, end, true);
       ctx.lineTo(bs.x, bs.y);
       ctx.stroke();
     } else if (resolvedMarkStyle !== "none") {
@@ -115,6 +125,20 @@ export function drawAngles(
         }
       }
     }
+    if (canRenderArcArrow) {
+      const arrowBaseWidth = mapStrokeWidth(angle.style.strokeWidth);
+      drawArcArrowOverlay(
+        ctx,
+        bs,
+        radiusPx,
+        startAngle,
+        entry.theta,
+        angle.style.arcArrowMark!,
+        angle.style.strokeColor,
+        angle.style.strokeOpacity,
+        arrowBaseWidth
+      );
+    }
 
     if (selectedObject?.type === "angle" && selectedObject.id === angle.id) {
       const isNew = recentCreatedObject?.type === "angle" && recentCreatedObject.id === angle.id;
@@ -122,12 +146,11 @@ export function drawAngles(
       ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
       ctx.lineWidth = mapStrokeWidth(angle.style.strokeWidth) + (isNew ? 1.5 : 1.6);
       if (isSector) {
-        const start = Math.atan2(as.y - bs.y, as.x - bs.x);
-        const end = start - entry.theta;
+        const end = startAngle - entry.theta;
         ctx.beginPath();
         ctx.moveTo(bs.x, bs.y);
-        ctx.lineTo(bs.x + Math.cos(start) * (radiusPx + 2), bs.y + Math.sin(start) * (radiusPx + 2));
-        ctx.arc(bs.x, bs.y, radiusPx + 2, start, end, true);
+        ctx.lineTo(bs.x + Math.cos(startAngle) * (radiusPx + 2), bs.y + Math.sin(startAngle) * (radiusPx + 2));
+        ctx.arc(bs.x, bs.y, radiusPx + 2, startAngle, end, true);
         ctx.lineTo(bs.x, bs.y);
         ctx.stroke();
       } else if (resolvedMarkStyle !== "none") {
@@ -151,6 +174,47 @@ export function drawAngles(
 
     ctx.restore();
   }
+}
+
+function drawArcArrowOverlay(
+  ctx: CanvasRenderingContext2D,
+  center: Vec2,
+  radiusPx: number,
+  startAngle: number,
+  theta: number,
+  arrow: NonNullable<SceneModel["angles"][number]["style"]["arcArrowMark"]>,
+  fallbackColor: string,
+  opacity: number,
+  fallbackLineWidth: number
+): void {
+  if (!Number.isFinite(radiusPx) || radiusPx <= 1e-9) return;
+  const color = arrow.color ?? fallbackColor;
+  const lineWidth = Math.max(0.5, arrow.lineWidthPt ?? fallbackLineWidth);
+  const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
+  const positions = collectArrowPositions(arrow, 0.5);
+  const sweep = Math.max(1e-6, theta);
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = clamp01(opacity);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (let i = 0; i < positions.length; i += 1) {
+    const t = clamp01(positions[i]);
+    const phi = startAngle - sweep * t;
+    const tip = {
+      x: center.x + Math.cos(phi) * radiusPx,
+      y: center.y + Math.sin(phi) * radiusPx,
+    };
+    // Arc is drawn with decreasing screen angle (anticlockwise=true).
+    const tangentX = Math.sin(phi);
+    const tangentY = -Math.cos(phi);
+    const placements = resolveMidArrowPlacements(tip, tangentX, tangentY, arrow.direction, separation);
+    drawArrowPlacements(ctx, placements, headSize, arrow.tip);
+  }
+  ctx.restore();
 }
 
 function drawArcBarMarks(

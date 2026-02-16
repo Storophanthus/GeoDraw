@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_o",
+      "name": "O",
+      "definition": { "kind": "free", "x": 0, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_a",
+      "name": "A",
+      "definition": { "kind": "free", "x": 3, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_b",
+      "name": "B",
+      "definition": { "kind": "free", "x": 1.5, "y": 2.6 },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "numbers": [],
+  "lines": [],
+  "segments": [],
+  "circles": [],
+  "angles": [
+    {
+      "id": "a_sector",
+      "kind": "sector",
+      "aId": "p_a",
+      "bId": "p_o",
+      "cId": "p_b",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "strokeOpacity": 1,
+        "strokeDash": "solid",
+        "textColor": "#0f172a",
+        "textSize": 16,
+        "fillEnabled": true,
+        "fillColor": "#93c5fd",
+        "fillOpacity": 0.2,
+        "markStyle": "arc",
+        "markSymbol": "none",
+        "arcMultiplicity": 1,
+        "markPos": 0.5,
+        "markSize": 4,
+        "markColor": "#334155",
+        "arcRadius": 2,
+        "labelText": "",
+        "labelPosWorld": { "x": 1.1, "y": 0.8 },
+        "showLabel": false,
+        "showValue": false,
+        "arcArrowMark": {
+          "enabled": true,
+          "direction": "->",
+          "tip": "Triangle",
+          "distribution": "single",
+          "pos": 0.4
+        }
+      }
+    }
+  ]
+}

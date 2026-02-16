@@ -90,19 +90,29 @@ export type LineStyle = {
     color?: string;
     lineWidthPt?: number;
   };
-  segmentArrowMark?: {
-    enabled: boolean;
-    mode: "end" | "mid";
-    direction: "->" | "<-" | "<->";
-    pos?: number;
-    distribution?: "single" | "multi";
-    startPos?: number;
-    endPos?: number;
-    step?: number;
-    sizeScale?: number;
-    color?: string;
-    lineWidthPt?: number;
-  };
+  segmentArrowMark?: SegmentArrowMark;
+};
+
+export type ArrowDirection = "->" | "<-" | "<->" | ">-<";
+
+export type ArrowTipStyle = "Stealth" | "Latex" | "Triangle";
+
+export type PathArrowMark = {
+  enabled: boolean;
+  direction: ArrowDirection;
+  tip?: ArrowTipStyle;
+  pos?: number;
+  distribution?: "single" | "multi";
+  startPos?: number;
+  endPos?: number;
+  step?: number;
+  sizeScale?: number;
+  color?: string;
+  lineWidthPt?: number;
+};
+
+export type SegmentArrowMark = PathArrowMark & {
+  mode: "end" | "mid";
 };
 
 export type CircleStyle = {
@@ -114,6 +124,7 @@ export type CircleStyle = {
   fillOpacity?: number;
   pattern?: string;
   patternColor?: string;
+  arrowMark?: PathArrowMark;
 };
 
 export type PolygonStyle = {
@@ -125,6 +136,8 @@ export type PolygonStyle = {
   fillOpacity?: number;
   pattern?: string;
   patternColor?: string;
+  // Kept optional for style-copy compatibility with circle styles.
+  arrowMark?: PathArrowMark;
 };
 
 export type AngleMarkStyle =
@@ -161,6 +174,7 @@ export type AngleStyle = {
   showLabel: boolean;
   showValue: boolean;
   promoteToSolid?: boolean;
+  arcArrowMark?: PathArrowMark;
 };
 
 export type ShowLabelMode = "none" | "name" | "caption";

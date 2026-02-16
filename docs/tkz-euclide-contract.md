@@ -206,7 +206,7 @@ Fail-closed rules:
 End-arrow overlay (supported):
 
 ```tex
-\draw[color=<color>,line width=<w>pt,-{Stealth[scale=<s>]}] ($(A)!<t>!(B)$) -- (B);
+\draw[color=<color>,line width=<w>pt,-{<tip>[scale=<s>]}] ($(A)!<t>!(B)$) -- (B);
 ```
 
 Mid-arrow policy:
@@ -215,21 +215,56 @@ Mid-arrow policy:
 ```tex
 \path[
   postaction=decorate,
-  decoration={markings,mark=at position <pos> with {\arrow[color=<color>,line width=<w>pt]{>}}}
+  decoration={markings,mark=at position <pos> with {\arrow[color=<color>,line width=<w>pt]{<tip>}}}
 ] (A) -- (B);
 ```
 
-Multi-arrow variant:
+Direction mapping:
+- `->`: forward arrow in path direction.
+- `<-`: reverse arrow (`\arrowreversed`).
+- `<->`: separated forward + reverse heads around each mark position (true bidirectional look).
+- `>-<`: separated inward heads around each mark position.
+
+Tip mapping:
+- `Stealth`
+- `Latex`
+- `Triangle`
+
+Distribution:
+- `single`: one logical mark position.
+- `multi`: expanded into repeated `mark=at position ...` entries (not `mark=between`) for deterministic paired-direction handling.
+
+Example paired-direction mark expansion:
 
 ```tex
 \path[
   postaction=decorate,
-  decoration={markings,mark=between positions <start> and <end> step <step> with {\arrow[color=<color>,line width=<w>pt]{>}}}
+  decoration={markings,
+    mark=at position <p1> with {\arrowreversed[...]{Latex}},
+    mark=at position <p2> with {\arrow[...]{Latex}}
+  }
 ] (A) -- (B);
 ```
 
 Notes:
-- `->` maps to `\arrow{>}`.
-- `<-` maps to `\arrowreversed{>}`.
-- `<->` is emitted as `\arrow{>}` + `\arrowreversed{>}` at the same mark position.
-- Requires `decorations.markings` library; tkz-euclide 5.x load path in this repo already includes it.
+- Exporter injects `\usetikzlibrary{decorations.markings,arrows.meta}` when arrow overlays are present.
+
+## Circle / Arc ArrowMark
+
+Circle and arc overlays use the same `PathArrowMark` semantics as segment mid-arrows:
+- directions: `->`, `<-`, `<->`, `>-<`
+- tips: `Stealth`, `Latex`, `Triangle`
+- distributions: `single` / `multi`
+
+Circle overlay path form:
+
+```tex
+\path[postaction=decorate,decoration={markings,...}] (<cx>,<cy>) circle[radius=<r>];
+```
+
+Arc overlay path form (sector/non-sector angle):
+
+```tex
+\path[postaction=decorate,decoration={markings,...}]
+  (<sx>,<sy>) arc[start angle=<a0>,end angle=<a1>,radius=<r>];
+```

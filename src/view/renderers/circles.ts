@@ -2,6 +2,13 @@ import { getCircleWorldGeometry, type SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import { resolveCanvasFillStyle } from "../patternFill";
 import { applyStrokeDash } from "../strokeStyle";
+import {
+  clamp01,
+  collectArrowPositions,
+  drawArrowPlacements,
+  resolveMidArrowPlacements,
+  segmentArrowHeadSize,
+} from "../pathArrowRender";
 import type { DrawableObjectSelection } from "./types";
 import type { Vec2 } from "../../geo/vec2";
 
@@ -51,6 +58,7 @@ export function drawCircles(
       ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
       ctx.stroke();
     }
+    drawCircleArrowOverlay(ctx, c, r, circle.style);
 
     if (selectedObject?.type === "circle" && selectedObject.id === circle.id) {
       ctx.globalAlpha = 1;
@@ -80,6 +88,44 @@ export function drawCircles(
         ctx.stroke();
       }
     }
+  }
+  ctx.restore();
+}
+
+function drawCircleArrowOverlay(
+  ctx: CanvasRenderingContext2D,
+  center: Vec2,
+  radius: number,
+  style: SceneModel["circles"][number]["style"]
+): void {
+  const arrow = style.arrowMark;
+  if (!arrow?.enabled) return;
+  if (!Number.isFinite(radius) || radius <= 1e-9) return;
+  const color = arrow.color ?? style.strokeColor;
+  const lineWidth = Math.max(0.5, arrow.lineWidthPt ?? style.strokeWidth);
+  const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
+  const positions = collectArrowPositions(arrow, 0.5);
+
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = style.strokeOpacity;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (let i = 0; i < positions.length; i += 1) {
+    const t = clamp01(positions[i]);
+    const angle = Math.PI * 2 * t;
+    const tip = {
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y + Math.sin(angle) * radius,
+    };
+    // Canvas full-circle arc is drawn for increasing angle in screen space.
+    const tangentX = -Math.sin(angle);
+    const tangentY = Math.cos(angle);
+    const placements = resolveMidArrowPlacements(tip, tangentX, tangentY, arrow.direction, separation);
+    drawArrowPlacements(ctx, placements, headSize, arrow.tip);
   }
   ctx.restore();
 }

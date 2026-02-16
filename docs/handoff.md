@@ -1285,3 +1285,57 @@ When starting a new chat, provide:
   - Covers high-churn polygon redefine cycles, shared-edge owner integrity,
   and delete cleanup.
   - Added to `npm run test:scene` so ownership lifecycle regressions are caught in routine scene tests.
+
+## Latest Done (Arrow Marks: Full Direction Semantics + Circle/Sector/Angle Support)
+- Implemented full 4-direction arrow semantics across canvas and TikZ export:
+  - `->`, `<-`, `<->`, `>-<`.
+  - Fixed the previous `<->` mid-mark overlap issue (`>-<` look) by separating paired arrowheads.
+- Added arrow tip style option across supported arrow marks:
+  - `Stealth`, `Latex`, `Triangle`.
+- Added reusable path-arrow rendering helpers:
+  - `src/view/pathArrowRender.ts`.
+  - Segment/circle/arc overlays now share consistent sizing/separation rules.
+- Canvas rendering updates:
+  - `src/view/segmentOverlayRender.ts`: corrected 4-direction behavior for end + mid modes.
+  - `src/view/renderers/circles.ts`: new circle boundary arrow overlay.
+  - `src/view/renderers/angles.ts`: new arc arrow overlay for sector arcs and angle arcs.
+- Scene/style model updates:
+  - `src/scene/points.ts`: cleaned corrupted patch residue and finalized shared arrow types:
+    - `ArrowDirection` includes `>-<`.
+    - `ArrowTipStyle` includes `Stealth | Latex | Triangle`.
+    - `PathArrowMark` reused by circle/angle; segment uses `SegmentArrowMark`.
+    - Added `CircleStyle.arrowMark`, `AngleStyle.arcArrowMark`.
+  - `src/state/slices/sceneSlice.ts`: defaults for segment/circle/angle arrow marks.
+  - `src/state/slices/sceneMutationActions.ts`: copy-style conversion now maps arrow fields between line/circle/polygon/angle where applicable.
+  - `src/ui/PropertiesPanel.tsx`: style equality now includes new arrow fields.
+- UI updates:
+  - `src/ui/ObjectStyleSections.tsx`:
+    - Direction dropdown now uses readable labels (not raw `"<->"` text).
+    - Added tip style selector for segment arrows.
+    - Added circle arrow controls.
+    - Added sector/angle arc arrow controls.
+- TikZ export updates:
+  - `src/export/tikz.ts`:
+    - Added generic path-arrow overlay emission for segment mid, circles, sectors, and angle arcs.
+    - Correctly maps all 4 directions and all 3 tip styles.
+    - Added arc/circle raw path helpers for arrow overlays.
+    - End-mode segment now supports explicit inward `>-<` using extrapolated tails.
+    - Optional TikZ library injection now includes `decorations.markings,arrows.meta` when needed.
+- Regression fixtures/tests:
+  - Added fixtures:
+    - `src/export/__fixtures__/segment-mark-arrow-mid-inward.json`
+    - `src/export/__fixtures__/circle-arrow-basic.json`
+    - `src/export/__fixtures__/sector-arrow-basic.json`
+    - `src/export/__fixtures__/angle-arc-arrow-basic.json`
+  - Updated assertions in `scripts/test-export.ts` for:
+    - separated bidirectional mid marks,
+    - inward mid marks,
+    - circle/sector/angle arc arrow overlays,
+    - arrow tip style export,
+    - required TikZ library injection.
+
+## Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all fixtures compiled).
+- `npm run test:scene` passed.
+- `npm run test:command` passed.

@@ -1,11 +1,14 @@
 import { sub } from "../geo/geometry";
 import type { Vec2 } from "../geo/vec2";
 import type { SceneModel } from "../scene/points";
-
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, value));
-}
+import {
+  clamp01,
+  collectArrowPositions,
+  drawArrowPlacements,
+  resolveEndArrowPlacements,
+  resolveMidArrowPlacements,
+  segmentArrowHeadSize,
+} from "./pathArrowRender";
 
 export function drawSegmentMarkOverlay(
   ctx: CanvasRenderingContext2D,
@@ -132,10 +135,7 @@ export function drawSegmentArrowOverlay(
   const uy = d.y / len;
   const color = arrow.color ?? style.strokeColor;
   const lineWidth = Math.max(0.5, arrow.lineWidthPt ?? style.strokeWidth);
-  const headScale = Math.max(0.2, Math.min(8, arrow.sizeScale ?? 1));
-  const headSize = Math.max(6, (7 + lineWidth * 1.2) * headScale);
-  const pos = clamp01(arrow.pos ?? style.segmentMark?.pos ?? 0.5);
-  const mid = { x: p1.x + ux * len * pos, y: p1.y + uy * len * pos };
+  const { headSize, separation } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
 
   ctx.save();
   ctx.setLineDash([]);
@@ -146,43 +146,18 @@ export function drawSegmentArrowOverlay(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  const drawArrowHead = (tip: Vec2, dirX: number, dirY: number) => {
-    const nx = -dirY;
-    const ny = dirX;
-    const backX = tip.x - dirX * headSize;
-    const backY = tip.y - dirY * headSize;
-    ctx.beginPath();
-    ctx.moveTo(tip.x, tip.y);
-    ctx.lineTo(backX + nx * (headSize * 0.45), backY + ny * (headSize * 0.45));
-    ctx.lineTo(backX - nx * (headSize * 0.45), backY - ny * (headSize * 0.45));
-    ctx.closePath();
-    ctx.fill();
-  };
-
   if (arrow.mode === "end") {
-    if (arrow.direction === "->" || arrow.direction === "<->") drawArrowHead(p2, ux, uy);
-    if (arrow.direction === "<-" || arrow.direction === "<->") drawArrowHead(p1, -ux, -uy);
+    const placements = resolveEndArrowPlacements(p1, p2, ux, uy, arrow.direction);
+    drawArrowPlacements(ctx, placements, headSize, arrow.tip);
     ctx.restore();
     return;
   }
-  const distribution = arrow.distribution ?? "single";
-  if (distribution === "multi") {
-    let start = clamp01(arrow.startPos ?? 0.45);
-    let end = clamp01(arrow.endPos ?? 0.55);
-    const step = Math.max(0.01, Math.min(1, arrow.step ?? 0.05));
-    if (end < start) {
-      const t = start;
-      start = end;
-      end = t;
-    }
-    for (let t = start; t <= end + 1e-9; t += step) {
-      const tip = { x: p1.x + ux * len * t, y: p1.y + uy * len * t };
-      if (arrow.direction === "->" || arrow.direction === "<->") drawArrowHead(tip, ux, uy);
-      if (arrow.direction === "<-" || arrow.direction === "<->") drawArrowHead(tip, -ux, -uy);
-    }
-  } else {
-    if (arrow.direction === "->" || arrow.direction === "<->") drawArrowHead(mid, ux, uy);
-    if (arrow.direction === "<-" || arrow.direction === "<->") drawArrowHead(mid, -ux, -uy);
+  const positions = collectArrowPositions(arrow, style.segmentMark?.pos ?? 0.5);
+  for (let i = 0; i < positions.length; i += 1) {
+    const t = clamp01(positions[i]);
+    const tip = { x: p1.x + ux * len * t, y: p1.y + uy * len * t };
+    const placements = resolveMidArrowPlacements(tip, ux, uy, arrow.direction, separation);
+    drawArrowPlacements(ctx, placements, headSize, arrow.tip);
   }
   ctx.restore();
 }

@@ -719,23 +719,100 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "segment-mark-arrow-mid.json") {
+    if (exportError) throw exportError;
     if (!tikz.includes("postaction=decorate")) {
       throw new Error("Expected segment mid-arrow fixture to emit decoration-based draw.");
     }
     if (!tikz.includes("mark=at position")) {
       throw new Error("Expected segment mid-arrow fixture to emit mark=at position.");
     }
+    if (!tikz.includes("\\arrowreversed")) {
+      throw new Error("Expected segment mid-arrow fixture to include reversed arrow command.");
+    }
+    const markCount = (tikz.match(/mark=at position/g) ?? []).length;
+    if (markCount < 2) {
+      throw new Error("Expected segment bidirectional mid-arrow to emit separated mark positions.");
+    }
   }
 
   if (fileName === "segment-mark-arrow-mid-multi.json") {
+    if (exportError) throw exportError;
     if (!tikz.includes("postaction=decorate")) {
       throw new Error("Expected segment multi mid-arrow fixture to emit decoration-based draw.");
     }
-    if (!tikz.includes("mark=between positions")) {
-      throw new Error("Expected segment multi mid-arrow fixture to emit mark=between positions.");
+    if (!tikz.includes("mark=at position")) {
+      throw new Error("Expected segment multi mid-arrow fixture to emit per-position marks.");
     }
-    if (!tikz.includes("step 0.05")) {
-      throw new Error("Expected segment multi mid-arrow fixture to emit step 0.05.");
+    const markCount = (tikz.match(/mark=at position/g) ?? []).length;
+    if (markCount < 3) {
+      throw new Error("Expected segment multi mid-arrow fixture to emit multiple mark entries.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-mid-inward.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\arrow[")) {
+      throw new Error("Expected inward mid-arrow fixture to include forward arrow command.");
+    }
+    if (!tikz.includes("\\arrowreversed[")) {
+      throw new Error("Expected inward mid-arrow fixture to include reversed arrow command.");
+    }
+    if (!tikz.includes("{Latex}")) {
+      throw new Error("Expected inward mid-arrow fixture to emit Latex tip style.");
+    }
+  }
+
+  if (fileName === "circle-arrow-basic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("circle[radius=")) {
+      throw new Error("Expected circle arrow fixture to emit circle path arrow overlay.");
+    }
+    if (!tikz.includes("postaction=decorate")) {
+      throw new Error("Expected circle arrow fixture to emit decoration-based arrow overlay.");
+    }
+    if (!tikz.includes("{Latex}")) {
+      throw new Error("Expected circle arrow fixture to emit Latex arrow tip.");
+    }
+  }
+
+  if (fileName === "sector-arrow-basic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDrawSector")) {
+      throw new Error("Expected sector arrow fixture to emit sector draw command.");
+    }
+    if (!tikz.includes("arc[start angle=")) {
+      throw new Error("Expected sector arrow fixture to emit arc path overlay.");
+    }
+    if (!tikz.includes("{Triangle}")) {
+      throw new Error("Expected sector arrow fixture to emit Triangle arrow tip.");
+    }
+  }
+
+  if (fileName === "angle-arc-arrow-basic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzMarkAngle")) {
+      throw new Error("Expected non-sector angle arrow fixture to emit \\tkzMarkAngle.");
+    }
+    if (!tikz.includes("arc[start angle=")) {
+      throw new Error("Expected non-sector angle arrow fixture to emit arc path arrow overlay.");
+    }
+    if (!tikz.includes("{Latex}")) {
+      throw new Error("Expected non-sector angle arrow fixture to emit Latex arrow tip.");
+    }
+    if (!tikz.includes("\\arrow[") || !tikz.includes("\\arrowreversed[")) {
+      throw new Error("Expected non-sector angle inward arrow fixture to emit both directions.");
+    }
+  }
+
+  if (
+    fileName === "segment-mark-arrow-mid.json" ||
+    fileName === "segment-mark-arrow-mid-inward.json" ||
+    fileName === "circle-arrow-basic.json" ||
+    fileName === "sector-arrow-basic.json" ||
+    fileName === "angle-arc-arrow-basic.json"
+  ) {
+    if (!tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta}")) {
+      throw new Error("Expected arrow fixtures to emit decorations.markings + arrows.meta library line.");
     }
   }
 
