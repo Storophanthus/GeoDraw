@@ -57,6 +57,17 @@ export const IconMidpoint = createIcon(() => (
     </>
 ), "IconMidpoint");
 
+export const IconTransform = createIcon(() => (
+    <>
+        <circle cx="5" cy="17" r="2.5" fill="currentColor" stroke="none" />
+        <circle cx="19" cy="7" r="2.5" fill="currentColor" stroke="none" />
+        <path d="M7.5 16 L16.5 9.5" strokeWidth={2.2} />
+        <path d="M16.5 9.5 l-1.5 3.8 M16.5 9.5 l-3.9 0.9" strokeWidth={2} />
+        <path d="M7 9.5a7.5 7.5 0 0 1 8.4-4.6" strokeWidth={1.8} />
+        <path d="M15.4 4.9 l-2.8 0.5 M15.4 4.9 l-1.6 2.2" strokeWidth={1.8} />
+    </>
+), "IconTransform");
+
 export const IconLine = createIcon(() => (
     <>
         <line x1="1" y1="23" x2="23" y2="1" strokeWidth={2.5} />

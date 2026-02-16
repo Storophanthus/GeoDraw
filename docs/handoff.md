@@ -25,6 +25,20 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-02-16 transform toolbar tool (point-only) added end-to-end:
+  - New toolbar tool id: `transform` (POINTS group) with dedicated icon.
+  - Tool settings state added: `transformTool` (`mode`, `angleExpr`, `direction`, `factorExpr`) with UI controls in Properties panel.
+  - Click workflows implemented in tool state machine:
+    - `translate`: click `P`, then vector start `A`, then vector end `B` => creates translated point.
+    - `rotate`: click `P`, then center `O` => creates rotated point using angle expression + direction.
+    - `dilate`: click `P`, then center `O` => creates dilated point using factor expression.
+    - `reflect`: click `P`, then line/segment axis => creates reflected point.
+  - Canvas pending previews and interaction highlights now support all transform modes.
+  - History snapshot/restore now persists `transformTool` config.
+  - Regression coverage added:
+    - `src/scene/__tests__/transform-tool-workflow.test.ts`
+  - Test runner hardening:
+    - `test:scene` switched to `node --import tsx ...` (avoids `tsx` IPC EPERM in restricted environments).
 - 2026-02-16 stability + UX batch:
   - Assignment label propagation for created points is enforced in command assignment flow:
     - assigned point aliases now overwrite point `name` and `captionTex` to assignment label.

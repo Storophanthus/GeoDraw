@@ -3,12 +3,12 @@ import { constructFromClick, hitTestPointId, hitTestSegmentId, hitTestTopObject 
 import type { ActiveTool, PendingSelection } from "../state/geoStore";
 import { camera as camMath, type Camera, type Viewport } from "./camera";
 import { findBestSnap } from "./snapEngine";
-import type { SceneModel } from "../scene/points";
+import { evaluateAngleExpressionDegrees, type SceneModel } from "../scene/points";
 
 type ConstructFromClickArgs = Parameters<typeof constructFromClick>[0];
 export type ConstructClickIo = Omit<
   ConstructFromClickArgs["io"],
-  "angleFixedTool" | "regularPolygonTool" | "camera" | "vp"
+  "angleFixedTool" | "regularPolygonTool" | "transformTool" | "evaluateAngleExpressionDegrees" | "camera" | "vp"
 >;
 
 type RunConstructClickParams = {
@@ -23,6 +23,7 @@ type RunConstructClickParams = {
   vp: Viewport;
   angleFixedTool: ConstructFromClickArgs["io"]["angleFixedTool"];
   regularPolygonTool: ConstructFromClickArgs["io"]["regularPolygonTool"];
+  transformTool: ConstructFromClickArgs["io"]["transformTool"];
   tolerances: {
     point: number;
     angle: number;
@@ -46,6 +47,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     vp,
     angleFixedTool,
     regularPolygonTool,
+    transformTool,
     tolerances,
     io,
   } = params;
@@ -97,6 +99,8 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
       ...io,
       angleFixedTool,
       regularPolygonTool,
+      transformTool,
+      evaluateAngleExpressionDegrees: (exprRaw) => evaluateAngleExpressionDegrees(scene, exprRaw),
       camera,
       vp,
     },

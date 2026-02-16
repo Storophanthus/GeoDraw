@@ -26,6 +26,7 @@ import {
   IconSector,
   IconSegment,
   IconTangent,
+  IconTransform,
 } from "./icons";
 
 type IconProps = {
@@ -44,6 +45,7 @@ type ToolGroupId = "move" | "points" | "lines" | "angle" | "circles" | "styles";
 const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   move: { icon: IconMove, tooltip: "Move / Select (V)", ariaLabel: "Move tool" },
   point: { icon: IconPoint, tooltip: "Point (P)", ariaLabel: "Point tool" },
+  transform: { icon: IconTransform, tooltip: "Transform Point", ariaLabel: "Transform tool" },
   copyStyle: { icon: IconCopyStyle, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
   export_clip: { icon: IconExportClip, tooltip: "Export Clip Rectangle", ariaLabel: "Export clip tool" },
   midpoint: { icon: IconMidpoint, tooltip: "Midpoint (M)", ariaLabel: "Midpoint tool" },
@@ -65,7 +67,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
 
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
   { id: "move", label: "MOVE", tools: ["move", "export_clip"] },
-  { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
+  { id: "points", label: "POINTS", tools: ["point", "midpoint", "transform"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "SHAPES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon", "regular_polygon"] },

@@ -12,6 +12,7 @@ import {
   type AngleFixedToolState,
   type CircleFixedToolState,
   type RegularPolygonToolState,
+  type TransformToolState,
 } from "./previews/pendingPreview";
 import { drawAngles, drawCircles, drawLines, drawPoints, drawPolygons, drawSegments } from "./renderers";
 import type { DrawableObjectSelection } from "./renderers/types";
@@ -43,6 +44,7 @@ type RenderFrameArgs = {
   angleFixedTool: AngleFixedToolState;
   regularPolygonTool: RegularPolygonToolState;
   circleFixedTool: CircleFixedToolState;
+  transformTool: TransformToolState;
   anglePreviewArcRadius: number;
   pendingPreviewTolerances: PendingPreviewTolerances;
   selectedDrawableObject: DrawableObjectSelection;
@@ -73,6 +75,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     angleFixedTool,
     regularPolygonTool,
     circleFixedTool,
+    transformTool,
     anglePreviewArcRadius,
     pendingPreviewTolerances,
     selectedDrawableObject,
@@ -115,6 +118,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       angleFixedTool,
       regularPolygonTool,
       circleFixedTool,
+      transformTool,
       anglePreviewArcRadius,
       pendingPreviewTolerances
     );

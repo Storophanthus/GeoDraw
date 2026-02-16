@@ -25,7 +25,12 @@ import {
   hitTestSegmentId as engineHitTestSegmentId,
 } from "../engine";
 import type { SceneModel, ScenePoint } from "../scene/points";
-import type { AngleFixedToolState, CircleFixedToolState, RegularPolygonToolState } from "./previews/pendingPreview";
+import type {
+  AngleFixedToolState,
+  CircleFixedToolState,
+  RegularPolygonToolState,
+  TransformToolState,
+} from "./previews/pendingPreview";
 
 export type PointerState = {
   active: boolean;
@@ -79,6 +84,7 @@ type InteractionDeps = {
   angleFixedTool: AngleFixedToolState;
   circleFixedTool: CircleFixedToolState;
   regularPolygonTool: RegularPolygonToolState;
+  transformTool: TransformToolState;
   constructClickIo: ConstructClickIo;
   tolerances: { point: number; angle: number; segment: number; line: number; circle: number };
   clickEpsilonPx: number;
@@ -104,6 +110,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     angleFixedTool,
     circleFixedTool,
     regularPolygonTool,
+    transformTool,
     constructClickIo,
     tolerances,
     clickEpsilonPx,
@@ -229,6 +236,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           vp,
           angleFixedTool,
           regularPolygonTool,
+          transformTool,
           tolerances,
           io: constructClickIo,
         }),
@@ -269,6 +277,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     angleFixedTool,
     circleFixedTool,
     regularPolygonTool,
+    transformTool,
     tolerances,
     actions,
     clickEpsilonPx,

@@ -17,6 +17,7 @@ import type { Camera, Viewport } from "../../view/camera";
 export type ActiveTool =
   | "move"
   | "point"
+  | "transform"
   | "copyStyle"
   | "midpoint"
   | "segment"
@@ -54,6 +55,8 @@ export type HoveredHit =
   | { type: "angle"; id: string }
   | null;
 
+export type TransformToolMode = "translate" | "rotate" | "dilate" | "reflect";
+
 export type PendingSelection =
   | {
     tool: "perp_line" | "parallel_line";
@@ -84,6 +87,19 @@ export type PendingSelection =
     tool: "segment" | "line2p" | "circle_cp" | "midpoint";
     step: 2;
     first: { type: "point"; id: string };
+  }
+  | {
+    tool: "transform";
+    step: 2;
+    mode: TransformToolMode;
+    first: { type: "point"; id: string };
+  }
+  | {
+    tool: "transform";
+    step: 3;
+    mode: "translate";
+    first: { type: "point"; id: string };
+    second: { type: "point"; id: string };
   }
   | {
     tool: "polygon";
@@ -193,6 +209,12 @@ export type GeoState = {
     sides: number;
     direction: AngleFixedDirection;
   };
+  transformTool: {
+    mode: TransformToolMode;
+    angleExpr: string;
+    direction: AngleFixedDirection;
+    factorExpr: string;
+  };
   dependencyGlowEnabled: boolean;
   exportClipWorld: ExportClipWorld | null;
   copyStyle: {
@@ -275,6 +297,7 @@ export type GeoActions = {
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
   setCircleFixedTool: (next: Partial<GeoState["circleFixedTool"]>) => void;
   setRegularPolygonTool: (next: Partial<GeoState["regularPolygonTool"]>) => void;
+  setTransformTool: (next: Partial<GeoState["transformTool"]>) => void;
   setGridEnabled: (enabled: boolean) => void;
   setAxesEnabled: (enabled: boolean) => void;
   setGridSnapEnabled: (enabled: boolean) => void;

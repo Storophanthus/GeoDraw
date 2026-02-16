@@ -37,7 +37,8 @@ export function drawInteractionHighlights(
       pendingSelection.tool === "sector" ||
       pendingSelection.tool === "regular_polygon" ||
       pendingSelection.tool === "angle_fixed" ||
-      pendingSelection.tool === "angle_bisector"
+      pendingSelection.tool === "angle_bisector" ||
+      pendingSelection.tool === "transform"
     ) {
       drawHitHighlight(
         ctx,

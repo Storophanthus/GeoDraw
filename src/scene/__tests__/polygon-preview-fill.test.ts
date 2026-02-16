@@ -101,6 +101,7 @@ const fixedToolState = {
   angleFixedTool: { angleExpr: "45", direction: "CCW" as const },
   regularPolygonTool: { sides: 5, direction: "CCW" as const },
   circleFixedTool: { radius: "1" },
+  transformTool: { mode: "translate" as const, angleExpr: "90", direction: "CCW" as const, factorExpr: "2" },
   anglePreviewArcRadius: 40,
   tolerances: { linePx: 10, segmentPx: 10 },
 };
@@ -128,6 +129,7 @@ const twoPointPending: PendingSelection = {
     fixedToolState.angleFixedTool,
     fixedToolState.regularPolygonTool,
     fixedToolState.circleFixedTool,
+    fixedToolState.transformTool,
     fixedToolState.anglePreviewArcRadius,
     fixedToolState.tolerances
   );
@@ -158,6 +160,7 @@ const onePointPending: PendingSelection = {
     fixedToolState.angleFixedTool,
     fixedToolState.regularPolygonTool,
     fixedToolState.circleFixedTool,
+    fixedToolState.transformTool,
     fixedToolState.anglePreviewArcRadius,
     fixedToolState.tolerances
   );

@@ -112,7 +112,10 @@ export function CanvasView() {
   const createPointOnLine = useGeoStore((store) => store.createPointOnLine);
   const createPointOnSegment = useGeoStore((store) => store.createPointOnSegment);
   const createPointOnCircle = useGeoStore((store) => store.createPointOnCircle);
+  const createPointByTranslation = useGeoStore((store) => store.createPointByTranslation);
   const createPointByRotation = useGeoStore((store) => store.createPointByRotation);
+  const createPointByDilation = useGeoStore((store) => store.createPointByDilation);
+  const createPointByReflection = useGeoStore((store) => store.createPointByReflection);
   const createCircleCenterPoint = useGeoStore((store) => store.createCircleCenterPoint);
   const createIntersectionPoint = useGeoStore((store) => store.createIntersectionPoint);
   const movePointTo = useGeoStore((store) => store.movePointTo);
@@ -124,6 +127,7 @@ export function CanvasView() {
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
   const regularPolygonTool = useGeoStore((store) => store.regularPolygonTool);
+  const transformTool = useGeoStore((store) => store.transformTool);
 
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
@@ -171,14 +175,16 @@ export function CanvasView() {
       createPointOnLine,
       createPointOnSegment,
       createPointOnCircle,
+      createPointByTranslation,
       createPointByRotation,
+      createPointByDilation,
+      createPointByReflection,
       createCircleCenterPoint,
       createIntersectionPoint,
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
       setExportClipWorld,
-      regularPolygonTool,
       getPointWorldById: (id) => {
         const point = scene.points.find((p) => p.id === id);
         return point ? getPointWorldPos(point, scene) : null;
@@ -210,14 +216,16 @@ export function CanvasView() {
       createPointOnLine,
       createPointOnSegment,
       createPointOnCircle,
+      createPointByTranslation,
       createPointByRotation,
+      createPointByDilation,
+      createPointByReflection,
       createCircleCenterPoint,
       createIntersectionPoint,
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
       setExportClipWorld,
-      regularPolygonTool,
       effectiveGridSnapEnabled,
       camera,
       gridSettings,
@@ -304,8 +312,8 @@ export function CanvasView() {
         vp,
         dpr,
         gridSettings,
-      activeTool,
-      pendingSelection,
+        activeTool,
+        pendingSelection,
         cursorWorld,
         hoverScreen,
         hoverSnap,
@@ -313,9 +321,10 @@ export function CanvasView() {
         hoveredTargetValid,
         resolvedPoints,
         resolvedAngles,
-      angleFixedTool,
-      regularPolygonTool,
-      circleFixedTool,
+        angleFixedTool,
+        regularPolygonTool,
+        circleFixedTool,
+        transformTool,
         anglePreviewArcRadius: angleDefaults.arcRadius,
         pendingPreviewTolerances: {
           linePx: LINE_HIT_TOLERANCE_PX,
@@ -350,7 +359,9 @@ export function CanvasView() {
       dependencyGlowEnabled,
       exportClipWorld,
       gridSettings,
+      circleFixedTool,
       regularPolygonTool,
+      transformTool,
       vp,
     ]
   );
@@ -384,6 +395,7 @@ export function CanvasView() {
     angleFixedTool,
     regularPolygonTool,
     circleFixedTool,
+    transformTool,
     constructClickIo,
     tolerances: hitTolerances,
     clickEpsilonPx: CLICK_EPSILON_PX,

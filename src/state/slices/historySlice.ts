@@ -29,6 +29,7 @@ export type HistorySnapshot = {
   angleDefaults: AngleStyle;
   angleFixedTool: GeoState["angleFixedTool"];
   circleFixedTool: GeoState["circleFixedTool"];
+  transformTool?: GeoState["transformTool"];
   exportClipWorld?: GeoState["exportClipWorld"];
   copyStyle: GeoState["copyStyle"];
 };
@@ -71,6 +72,7 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     angleDefaults: prev.angleDefaults,
     angleFixedTool: prev.angleFixedTool,
     circleFixedTool: prev.circleFixedTool,
+    transformTool: prev.transformTool,
     exportClipWorld: prev.exportClipWorld,
     copyStyle: prev.copyStyle,
   };

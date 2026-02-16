@@ -46,6 +46,7 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     angleDefaults: snapshot.angleDefaults,
     angleFixedTool: snapshot.angleFixedTool,
     circleFixedTool: snapshot.circleFixedTool,
+    transformTool: snapshot.transformTool ?? prev.transformTool,
     exportClipWorld: snapshot.exportClipWorld ?? null,
     copyStyle: snapshot.copyStyle,
   };

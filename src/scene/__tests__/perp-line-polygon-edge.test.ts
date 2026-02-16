@@ -180,6 +180,15 @@ const io: ConstructClickIo = {
   createPointByRotation() {
     return null;
   },
+  createPointByTranslation() {
+    return null;
+  },
+  createPointByDilation() {
+    return null;
+  },
+  createPointByReflection() {
+    return null;
+  },
   createIntersectionPoint() {
     return null;
   },
@@ -212,6 +221,7 @@ runConstructClickAdapter({
   vp,
   angleFixedTool: { angleExpr: "45", direction: "CCW" },
   regularPolygonTool: { sides: 5, direction: "CCW" },
+  transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
   tolerances: { point: 12, angle: 20, segment: 10, line: 10, circle: 10 },
   io,
 });
@@ -235,6 +245,7 @@ runConstructClickAdapter({
   vp,
   angleFixedTool: { angleExpr: "45", direction: "CCW" },
   regularPolygonTool: { sides: 5, direction: "CCW" },
+  transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
   tolerances: { point: 12, angle: 20, segment: 10, line: 10, circle: 10 },
   io,
 });
@@ -257,6 +268,7 @@ runConstructClickAdapter({
   vp,
   angleFixedTool: { angleExpr: "45", direction: "CCW" },
   regularPolygonTool: { sides: 5, direction: "CCW" },
+  transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
   tolerances: { point: 12, angle: 20, segment: 10, line: 10, circle: 10 },
   io,
 });
@@ -283,6 +295,7 @@ runConstructClickAdapter({
   vp,
   angleFixedTool: { angleExpr: "45", direction: "CCW" },
   regularPolygonTool: { sides: 5, direction: "CCW" },
+  transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
   tolerances: { point: 12, angle: 20, segment: 10, line: 10, circle: 10 },
   io,
 });

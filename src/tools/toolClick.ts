@@ -50,6 +50,9 @@ export type ToolClickIO = {
     direction: "CCW" | "CW",
     angleExpr?: string
   ) => string | null;
+  createPointByTranslation: (pointId: string, fromId: string, toId: string) => string | null;
+  createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
+  createPointByReflection: (pointId: string, axis: LineLikeObjectRef) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
@@ -58,6 +61,15 @@ export type ToolClickIO = {
   applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
   regularPolygonTool: { sides: number; direction: "CCW" | "CW" };
+  transformTool: {
+    mode: "translate" | "rotate" | "dilate" | "reflect";
+    angleExpr: string;
+    direction: "CCW" | "CW";
+    factorExpr: string;
+  };
+  evaluateAngleExpressionDegrees: (
+    exprRaw: string
+  ) => { ok: true; valueDeg: number } | { ok: false; error: string };
   getPointWorldById: (id: string) => Vec2 | null;
   gridSnapEnabled: boolean;
   snapWorldToGrid: (world: Vec2) => Vec2;
@@ -138,6 +150,81 @@ export function handleToolClick(
       return;
     }
     io.applyCopyStyleTo(hits.hitObject);
+    return;
+  }
+
+  if (activeTool === "transform") {
+    const mode = io.transformTool.mode;
+    const pendingTransform =
+      pendingSelection && pendingSelection.tool === "transform" && pendingSelection.mode === mode
+        ? pendingSelection
+        : null;
+    const resolveLineLikeTarget = (): LineLikeObjectRef | null => {
+      if (hits.snap?.kind === "onLine" && hits.snap.lineId) return { type: "line", id: hits.snap.lineId };
+      if (hits.snap?.kind === "onSegment" && hits.snap.segId) return { type: "segment", id: hits.snap.segId };
+      if (hits.hitObject?.type === "line") return { type: "line", id: hits.hitObject.id };
+      if (hits.hitObject?.type === "segment") return { type: "segment", id: hits.hitObject.id };
+      return null;
+    };
+
+    if (!pendingTransform) {
+      io.setPendingSelection({
+        tool: "transform",
+        step: 2,
+        mode,
+        first: { type: "point", id: resolveOrCreatePointAtCursor() },
+      });
+      return;
+    }
+
+    if (pendingTransform.step === 2) {
+      if (mode === "translate") {
+        io.setPendingSelection({
+          tool: "transform",
+          step: 3,
+          mode: "translate",
+          first: pendingTransform.first,
+          second: { type: "point", id: resolveOrCreatePointAtCursor() },
+        });
+        return;
+      }
+
+      if (mode === "rotate") {
+        const evalResult = io.evaluateAngleExpressionDegrees(io.transformTool.angleExpr);
+        if (!evalResult.ok) return;
+        const centerId = resolveOrCreatePointAtCursor();
+        const created = io.createPointByRotation(
+          centerId,
+          pendingTransform.first.id,
+          evalResult.valueDeg,
+          io.transformTool.direction,
+          io.transformTool.angleExpr
+        );
+        if (!created) return;
+        io.clearPendingSelection();
+        return;
+      }
+
+      if (mode === "dilate") {
+        const centerId = resolveOrCreatePointAtCursor();
+        const created = io.createPointByDilation(pendingTransform.first.id, centerId, io.transformTool.factorExpr);
+        if (!created) return;
+        io.clearPendingSelection();
+        return;
+      }
+
+      const axis = resolveLineLikeTarget();
+      if (!axis) return;
+      const created = io.createPointByReflection(pendingTransform.first.id, axis);
+      if (!created) return;
+      io.clearPendingSelection();
+      return;
+    }
+
+    const toId = resolveOrCreatePointAtCursor();
+    const created = io.createPointByTranslation(pendingTransform.first.id, pendingTransform.second.id, toId);
+    if (!created) return;
+    io.clearPendingSelection();
     return;
   }
 
@@ -511,6 +598,11 @@ export function handleToolClick(
 }
 
 export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSelection: PendingSelection): boolean {
+  if (activeTool === "transform") {
+    if (!pendingSelection || pendingSelection.tool !== "transform") return true;
+    if (pendingSelection.step === 2 && pendingSelection.mode === "reflect") return false;
+    return true;
+  }
   if (activeTool === "perp_line" || activeTool === "parallel_line") {
     if (!pendingSelection || (pendingSelection.tool !== "perp_line" && pendingSelection.tool !== "parallel_line")) return true;
     return pendingSelection.first.type === "lineLike";
@@ -551,6 +643,13 @@ export function isValidTarget(
   if (activeTool === "circle_fixed") return hoveredHit.type === "point";
   if (activeTool === "polygon") return hoveredHit.type === "point";
   if (activeTool === "regular_polygon") return hoveredHit.type === "point";
+  if (activeTool === "transform") {
+    if (!pendingSelection || pendingSelection.tool !== "transform") return hoveredHit.type === "point";
+    if (pendingSelection.step === 2 && pendingSelection.mode === "reflect") {
+      return hoveredHit.type === "line2p" || hoveredHit.type === "segment";
+    }
+    return hoveredHit.type === "point";
+  }
   if (activeTool === "angle_bisector") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";
   if (activeTool === "sector") return hoveredHit.type === "point";

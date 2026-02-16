@@ -133,6 +133,15 @@ function runScenario(activeTool: ActiveTool): void {
     createPointByRotation() {
       return null;
     },
+    createPointByTranslation() {
+      return null;
+    },
+    createPointByDilation() {
+      return null;
+    },
+    createPointByReflection() {
+      return null;
+    },
     createIntersectionPoint() {
       return null;
     },
@@ -166,6 +175,7 @@ function runScenario(activeTool: ActiveTool): void {
     vp,
     angleFixedTool: { angleExpr: "45", direction: "CCW" },
     regularPolygonTool: { sides: 5, direction: "CCW" },
+    transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
     tolerances: {
       point: 12,
       angle: 20,

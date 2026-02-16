@@ -16,6 +16,18 @@ type ToolInfoSectionProps = {
   regularPolygonSides: number;
   regularPolygonDirection: "CCW" | "CW";
   setRegularPolygonTool: (next: { sides?: number; direction?: "CCW" | "CW" }) => void;
+  transformMode: "translate" | "rotate" | "dilate" | "reflect";
+  transformAngleExpr: string;
+  transformDirection: "CCW" | "CW";
+  transformFactorExpr: string;
+  setTransformTool: (next: {
+    mode?: "translate" | "rotate" | "dilate" | "reflect";
+    angleExpr?: string;
+    direction?: "CCW" | "CW";
+    factorExpr?: string;
+  }) => void;
+  transformAnglePreview: AnglePreview;
+  transformFactorPreview: NumberExpressionEvalResult;
   pendingSelection: PendingSelection;
   pendingCircleFixedCenterLabel: string | null;
   createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
@@ -35,12 +47,35 @@ export function ToolInfoSection({
   regularPolygonSides,
   regularPolygonDirection,
   setRegularPolygonTool,
+  transformMode,
+  transformAngleExpr,
+  transformDirection,
+  transformFactorExpr,
+  setTransformTool,
+  transformAnglePreview,
+  transformFactorPreview,
   pendingSelection,
   pendingCircleFixedCenterLabel,
   createCircleFixedRadius,
   clearPendingSelection,
 }: ToolInfoSectionProps) {
   const isCircleFixedPending = pendingSelection && pendingSelection.tool === "circle_fixed";
+  const transformPending =
+    pendingSelection && pendingSelection.tool === "transform" && pendingSelection.mode === transformMode
+      ? pendingSelection
+      : null;
+  const transformStepText =
+    !transformPending
+      ? "Step 1: click source point P."
+      : transformMode === "translate"
+        ? transformPending.step === 2
+          ? "Step 2: click vector start point A."
+          : "Step 3: click vector end point B."
+        : transformMode === "rotate"
+          ? "Step 2: click center point O."
+          : transformMode === "dilate"
+            ? "Step 2: click center point O."
+            : "Step 2: click axis line or segment.";
 
   return (
     <>
@@ -161,6 +196,77 @@ export function ToolInfoSection({
             </select>
           </div>
           <div className="statusText">Click first vertex, then second vertex (first side).</div>
+        </div>
+      )}
+      {activeTool === "transform" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Transform Point</div>
+          <div className="controlRow">
+            <label className="controlLabel">Mode</label>
+            <select
+              className="selectInput"
+              value={transformMode}
+              onChange={(e) => {
+                setTransformTool({ mode: e.target.value as "translate" | "rotate" | "dilate" | "reflect" });
+                clearPendingSelection();
+              }}
+            >
+              <option value="translate">Translate</option>
+              <option value="rotate">Rotate</option>
+              <option value="dilate">Dilate</option>
+              <option value="reflect">Reflect</option>
+            </select>
+          </div>
+          {transformMode === "rotate" && (
+            <>
+              <div className="controlRow">
+                <label className="controlLabel">Angle Expr (deg)</label>
+                <input
+                  className="renameInput"
+                  type="text"
+                  value={transformAngleExpr}
+                  onChange={(e) => setTransformTool({ angleExpr: e.target.value })}
+                  placeholder="e.g. 90, alpha+15"
+                />
+              </div>
+              <div className="controlRow">
+                <label className="controlLabel">Direction</label>
+                <select
+                  className="selectInput"
+                  value={transformDirection}
+                  onChange={(e) => setTransformTool({ direction: e.target.value as "CCW" | "CW" })}
+                >
+                  <option value="CCW">CCW</option>
+                  <option value="CW">CW</option>
+                </select>
+              </div>
+              <div className="statusText">
+                {transformAnglePreview.ok
+                  ? `Resolved: ${transformAnglePreview.valueDeg.toFixed(3)}°`
+                  : transformAnglePreview.error}
+              </div>
+            </>
+          )}
+          {transformMode === "dilate" && (
+            <>
+              <div className="controlRow">
+                <label className="controlLabel">Factor Expr</label>
+                <input
+                  className="renameInput"
+                  type="text"
+                  value={transformFactorExpr}
+                  onChange={(e) => setTransformTool({ factorExpr: e.target.value })}
+                  placeholder="e.g. 2, 1/3, k_1"
+                />
+              </div>
+              <div className="statusText">
+                {transformFactorPreview.ok && Number.isFinite(transformFactorPreview.value)
+                  ? `Resolved: k = ${transformFactorPreview.value.toFixed(6)}`
+                  : "Factor must resolve to a finite number."}
+              </div>
+            </>
+          )}
+          <div className="statusText">{transformStepText}</div>
         </div>
       )}
       {activeTool === "export_clip" && (

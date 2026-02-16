@@ -18,6 +18,7 @@ export function createUiActions(
   | "setAngleFixedTool"
   | "setCircleFixedTool"
   | "setRegularPolygonTool"
+  | "setTransformTool"
   | "setGridEnabled"
   | "setAxesEnabled"
   | "setGridSnapEnabled"
@@ -111,6 +112,16 @@ export function createUiActions(
         ...prev,
         regularPolygonTool: {
           ...prev.regularPolygonTool,
+          ...next,
+        },
+      }));
+    },
+
+    setTransformTool(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        transformTool: {
+          ...prev.transformTool,
           ...next,
         },
       }));

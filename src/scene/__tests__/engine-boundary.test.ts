@@ -157,6 +157,15 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     createPointByRotation() {
       return null;
     },
+    createPointByTranslation() {
+      return null;
+    },
+    createPointByDilation() {
+      return null;
+    },
+    createPointByReflection() {
+      return null;
+    },
     createIntersectionPoint() {
       return null;
     },
@@ -172,6 +181,10 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     },
     angleFixedTool: { angleExpr: "45", direction: "CCW" },
     regularPolygonTool: { sides: 5, direction: "CCW" },
+    transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
+    evaluateAngleExpressionDegrees() {
+      return { ok: true, valueDeg: 45 };
+    },
     gridSnapEnabled: false,
     snapWorldToGrid(world) {
       return world;

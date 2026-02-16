@@ -1,5 +1,5 @@
 import type { Camera } from "../../view/camera";
-import type { ActiveTool, AngleFixedDirection, SelectedObject } from "./storeTypes";
+import type { ActiveTool, AngleFixedDirection, SelectedObject, TransformToolMode } from "./storeTypes";
 
 export type UiSliceState = {
   camera: Camera;
@@ -17,6 +17,12 @@ export type UiSliceState = {
   regularPolygonTool: {
     sides: number;
     direction: AngleFixedDirection;
+  };
+  transformTool: {
+    mode: TransformToolMode;
+    angleExpr: string;
+    direction: AngleFixedDirection;
+    factorExpr: string;
   };
   dependencyGlowEnabled: boolean;
   exportClipWorld: import("./storeTypes").ExportClipWorld | null;
@@ -49,6 +55,12 @@ export function createUiSliceState(): UiSliceState {
     regularPolygonTool: {
       sides: 5,
       direction: "CCW",
+    },
+    transformTool: {
+      mode: "translate",
+      angleExpr: "90",
+      direction: "CCW",
+      factorExpr: "2",
     },
     dependencyGlowEnabled: true,
     exportClipWorld: null,

@@ -32,6 +32,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
   const regularPolygonTool = useGeoStore((store) => store.regularPolygonTool);
+  const transformTool = useGeoStore((store) => store.transformTool);
   const pendingSelection = useGeoStore((store) => store.pendingSelection);
   const setPointDefaults = useGeoStore((store) => store.setPointDefaults);
   const setSegmentDefaults = useGeoStore((store) => store.setSegmentDefaults);
@@ -42,6 +43,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const setAngleFixedTool = useGeoStore((store) => store.setAngleFixedTool);
   const setCircleFixedTool = useGeoStore((store) => store.setCircleFixedTool);
   const setRegularPolygonTool = useGeoStore((store) => store.setRegularPolygonTool);
+  const setTransformTool = useGeoStore((store) => store.setTransformTool);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
   const clearPendingSelection = useGeoStore((store) => store.clearPendingSelection);
   const updateSelectedPointStyle = useGeoStore((store) => store.updateSelectedPointStyle);
@@ -101,6 +103,14 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const circleFixedPreview = useMemo(
     () => evaluateNumberExpression(scene, circleFixedTool.radius),
     [scene, circleFixedTool.radius]
+  );
+  const transformAnglePreview = useMemo(
+    () => evaluateAngleExpressionDegrees(scene, transformTool.angleExpr),
+    [scene, transformTool.angleExpr]
+  );
+  const transformFactorPreview = useMemo(
+    () => evaluateNumberExpression(scene, transformTool.factorExpr),
+    [scene, transformTool.factorExpr]
   );
   const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "polygon" | "angle" | null>(() => {
     if (selectedPoint) return "point";
@@ -212,6 +222,13 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   regularPolygonSides={regularPolygonTool.sides}
   regularPolygonDirection={regularPolygonTool.direction}
   setRegularPolygonTool={setRegularPolygonTool}
+  transformMode={transformTool.mode}
+  transformAngleExpr={transformTool.angleExpr}
+  transformDirection={transformTool.direction}
+  transformFactorExpr={transformTool.factorExpr}
+  setTransformTool={setTransformTool}
+  transformAnglePreview={transformAnglePreview}
+  transformFactorPreview={transformFactorPreview}
   pendingSelection={pendingSelection}
   pendingCircleFixedCenterLabel={
     pendingSelection && pendingSelection.tool === "circle_fixed"
