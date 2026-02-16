@@ -4,6 +4,7 @@ import { normalizeSceneIntegrity } from "../domain/sceneIntegrity";
 import {
   computeOrientedAngleRad,
   evaluateAngleExpressionDegrees,
+  evaluateNumberExpression,
   getCircleWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
@@ -53,6 +54,9 @@ export type TikzCommand =
   | { kind: "DefPoint"; name: string; x: number; y: number }
   | { kind: "DefPointOnLine"; name: string; a: string; b: string }
   | { kind: "DefPointByRotation"; name: string; center: string; point: string; angleDeg: number; direction: "CCW" | "CW" }
+  | { kind: "DefPointByTranslation"; name: string; point: string; from: string; to: string }
+  | { kind: "DefPointByDilation"; name: string; point: string; center: string; factor: number }
+  | { kind: "DefPointByReflection"; name: string; point: string; axisA: string; axisB: string; footName: string }
   | { kind: "DefPerpendicularLine"; auxName: string; through: string; baseA: string; baseB: string }
   | { kind: "DefParallelLine"; auxName: string; through: string; baseA: string; baseB: string }
   | {
@@ -569,6 +573,54 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         point: mustName(pointName, point.pointId),
         angleDeg: evaluated.valueDeg,
         direction: point.direction,
+      });
+      definedPointIds.add(point.id);
+    } else if (point.kind === "pointByTranslation") {
+      resolvePoint(point.pointId);
+      resolvePoint(point.fromId);
+      resolvePoint(point.toId);
+      constructions.push({
+        kind: "DefPointByTranslation",
+        name,
+        point: mustName(pointName, point.pointId),
+        from: mustName(pointName, point.fromId),
+        to: mustName(pointName, point.toId),
+      });
+      definedPointIds.add(point.id);
+    } else if (point.kind === "pointByDilation") {
+      resolvePoint(point.pointId);
+      resolvePoint(point.centerId);
+      const expr = point.factorExpr?.trim() || (typeof point.factor === "number" && Number.isFinite(point.factor) ? String(point.factor) : "");
+      if (!expr) {
+        throw new Error(`Unsupported construction: Dilate expression for ${name}: missing factor`);
+      }
+      const evaluated = evaluateNumberExpression(scene, expr);
+      if (!evaluated.ok) {
+        throw new Error(`Unsupported construction: Dilate expression for ${name}: ${evaluated.error}`);
+      }
+      if (!Number.isFinite(evaluated.value)) {
+        throw new Error(`Unsupported construction: Dilate expression for ${name}: non-finite value`);
+      }
+      constructions.push({
+        kind: "DefPointByDilation",
+        name,
+        point: mustName(pointName, point.pointId),
+        center: mustName(pointName, point.centerId),
+        factor: evaluated.value,
+      });
+      definedPointIds.add(point.id);
+    } else if (point.kind === "pointByReflection") {
+      resolvePoint(point.pointId);
+      const axis = resolveLineLikeNames(point.axis);
+      derivedAuxIndex += 1;
+      const footName = `tkzRefProj_${derivedAuxIndex}`;
+      constructions.push({
+        kind: "DefPointByReflection",
+        name,
+        point: mustName(pointName, point.pointId),
+        axisA: axis.a,
+        axisB: axis.b,
+        footName,
       });
       definedPointIds.add(point.id);
     } else if (point.kind === "circleLineIntersectionPoint") {
@@ -1366,6 +1418,25 @@ export function renderTikz(cmds: TikzCommand[]): string {
       }
       const signedAngle = cmd.direction === "CW" ? -Math.abs(cmd.angleDeg) : Math.abs(cmd.angleDeg);
       out.push(`\\tkzDefPointBy[rotation=center ${cmd.center} angle ${fmt(signedAngle)}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
+      continue;
+    }
+    if (cmd.kind === "DefPointByTranslation") {
+      assertTkzMacro("tkzDefPointBy");
+      assertTkzMacro("tkzGetPoint");
+      out.push(`\\tkzDefPointBy[translation= from ${cmd.from} to ${cmd.to}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
+      continue;
+    }
+    if (cmd.kind === "DefPointByDilation") {
+      assertTkzMacro("tkzDefPointBy");
+      assertTkzMacro("tkzGetPoint");
+      out.push(`\\tkzDefPointBy[homothety=center ${cmd.center} ratio ${fmt(cmd.factor)}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
+      continue;
+    }
+    if (cmd.kind === "DefPointByReflection") {
+      assertTkzMacro("tkzDefPointBy");
+      assertTkzMacro("tkzGetPoint");
+      out.push(`\\tkzDefPointBy[projection=onto ${cmd.axisA}--${cmd.axisB}](${cmd.point}) \\tkzGetPoint{${cmd.footName}}`);
+      out.push(`\\tkzDefPointBy[homothety=center ${cmd.footName} ratio -1](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
       continue;
     }
     if (cmd.kind === "DefPerpendicularLine") {

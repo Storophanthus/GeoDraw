@@ -17,6 +17,9 @@ export type SnapshotPointDefinition =
   | { kind: "pointOnSegment"; segId: string; u: number }
   | { kind: "pointOnCircle"; circleId: string; t: number }
   | { kind: "circleCenter"; circleId: string }
+  | { kind: "pointByTranslation"; pointId: string; fromId: string; toId: string }
+  | { kind: "pointByDilation"; pointId: string; centerId: string; factor?: number; factorExpr?: string }
+  | { kind: "pointByReflection"; pointId: string; axis: { type: "line" | "segment"; id: string } }
   | {
       kind: "pointByRotation";
       centerId: string;
@@ -336,6 +339,21 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
   if (point.kind === "circleCenter") {
     return { kind: "circleCenter", circleId: point.circleId };
   }
+  if (point.kind === "pointByTranslation") {
+    return { kind: "pointByTranslation", pointId: point.pointId, fromId: point.fromId, toId: point.toId };
+  }
+  if (point.kind === "pointByDilation") {
+    return {
+      kind: "pointByDilation",
+      pointId: point.pointId,
+      centerId: point.centerId,
+      factor: point.factor,
+      factorExpr: point.factorExpr,
+    };
+  }
+  if (point.kind === "pointByReflection") {
+    return { kind: "pointByReflection", pointId: point.pointId, axis: point.axis };
+  }
   if (point.kind === "pointByRotation") {
     return {
       kind: "pointByRotation",
@@ -405,6 +423,9 @@ function pointDependsOn(point: ScenePoint): string[] {
   if (point.kind === "pointOnSegment") return [point.segId];
   if (point.kind === "pointOnCircle") return [point.circleId];
   if (point.kind === "circleCenter") return [point.circleId];
+  if (point.kind === "pointByTranslation") return [point.pointId, point.fromId, point.toId];
+  if (point.kind === "pointByDilation") return [point.pointId, point.centerId];
+  if (point.kind === "pointByReflection") return [point.pointId, objectRefKey(point.axis)];
   if (point.kind === "pointByRotation") return [point.centerId, point.pointId];
   if (point.kind === "circleLineIntersectionPoint") {
     const refs = [point.circleId, point.lineId];

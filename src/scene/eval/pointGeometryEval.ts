@@ -35,3 +35,25 @@ export function evalPointByRotation(center: Vec2, base: Vec2, angleDeg: number, 
     y: center.y + vx * s + vy * c,
   };
 }
+
+export function evalPointByTranslation(point: Vec2, from: Vec2, to: Vec2): Vec2 {
+  return add(point, sub(to, from));
+}
+
+export function evalPointByDilation(point: Vec2, center: Vec2, factor: number): Vec2 | null {
+  if (!Number.isFinite(factor)) return null;
+  return add(center, mul(sub(point, center), factor));
+}
+
+export function evalPointByReflection(point: Vec2, axisA: Vec2, axisB: Vec2): Vec2 | null {
+  const dx = axisB.x - axisA.x;
+  const dy = axisB.y - axisA.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq <= 1e-12) return null;
+  const tx = point.x - axisA.x;
+  const ty = point.y - axisA.y;
+  const t = (tx * dx + ty * dy) / lenSq;
+  const projX = axisA.x + t * dx;
+  const projY = axisA.y + t * dy;
+  return { x: 2 * projX - point.x, y: 2 * projY - point.y };
+}

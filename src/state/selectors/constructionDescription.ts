@@ -244,6 +244,28 @@ function describePointConstruction(
       pointNameById
     )} by ${sign}${angleText}° (${point.direction}).`;
   }
+  if (point.kind === "pointByTranslation") {
+    return `Point from translation of ${pointLabel(point.pointId, pointNameById)} by vector ${pointLabel(
+      point.fromId,
+      pointNameById
+    )}${pointLabel(point.toId, pointNameById)}.`;
+  }
+  if (point.kind === "pointByDilation") {
+    const factorText = point.factorExpr?.trim() || (typeof point.factor === "number" && Number.isFinite(point.factor) ? String(point.factor) : "?");
+    return `Point from dilation of ${pointLabel(point.pointId, pointNameById)} about ${pointLabel(
+      point.centerId,
+      pointNameById
+    )} with factor ${factorText}.`;
+  }
+  if (point.kind === "pointByReflection") {
+    return `Point from reflection of ${pointLabel(point.pointId, pointNameById)} across ${describeObjectRef(
+      point.axis,
+      pointNameById,
+      lineById,
+      segmentById,
+      circleById
+    )}.`;
+  }
   if (point.kind === "circleLineIntersectionPoint") {
     const circle = circleById.get(point.circleId);
     const line = lineById.get(point.lineId);

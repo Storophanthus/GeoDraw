@@ -279,6 +279,51 @@ export type PointByRotation = {
   style: PointStyle;
 };
 
+export type PointByTranslation = {
+  id: string;
+  kind: "pointByTranslation";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  pointId: string;
+  fromId: string;
+  toId: string;
+  style: PointStyle;
+};
+
+export type PointByDilation = {
+  id: string;
+  kind: "pointByDilation";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  pointId: string;
+  centerId: string;
+  factor?: number;
+  factorExpr?: string;
+  style: PointStyle;
+};
+
+export type PointByReflection = {
+  id: string;
+  kind: "pointByReflection";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  pointId: string;
+  axis: LineLikeObjectRef;
+  style: PointStyle;
+};
+
 export type CircleCenterPoint = {
   id: string;
   kind: "circleCenter";
@@ -390,6 +435,9 @@ export type ScenePoint =
   | PointOnSegment
   | PointOnCircle
   | PointByRotation
+  | PointByTranslation
+  | PointByDilation
+  | PointByReflection
   | CircleCenterPoint
   | IntersectionPoint
   | LineLikeIntersectionPoint
@@ -656,6 +704,7 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
       return getCircleWorldGeometryWithCtx(circle, s, c);
     },
     evaluateAngleExpressionDegreesWithCtx,
+    evaluateNumberExpressionWithCtx,
     resolveCircleLinePairAssignments,
     rememberStableCircleLinePoint,
     objectIntersections,

@@ -147,6 +147,16 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         if (point.kind === "pointOnCircle") return nextCircleIds.has(point.circleId);
         if (point.kind === "circleCenter") return nextCircleIds.has(point.circleId);
         if (point.kind === "pointByRotation") return pointIds.has(point.centerId) && pointIds.has(point.pointId);
+        if (point.kind === "pointByTranslation") {
+          return pointIds.has(point.pointId) && pointIds.has(point.fromId) && pointIds.has(point.toId);
+        }
+        if (point.kind === "pointByDilation") {
+          return pointIds.has(point.pointId) && pointIds.has(point.centerId);
+        }
+        if (point.kind === "pointByReflection") {
+          if (!pointIds.has(point.pointId)) return false;
+          return point.axis.type === "line" ? nextLineIdsAfter.has(point.axis.id) : nextSegmentIds.has(point.axis.id);
+        }
         if (point.kind === "circleLineIntersectionPoint") {
           return nextCircleIds.has(point.circleId) && nextLineIdsAfter.has(point.lineId);
         }

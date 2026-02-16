@@ -10,6 +10,10 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) fail(message);
 }
 
+function approxEqual(a: number, b: number, eps = 1e-8): boolean {
+  return Math.abs(a - b) <= eps;
+}
+
 function pointIdByName(name: string): string {
   const point = getGeoStore().scene.points.find((p) => p.name === name);
   if (!point) fail(`Missing point ${name}`);
@@ -27,6 +31,15 @@ function assertPointLabel(pointId: string, expected: string, context: string): v
   if (!point) fail(`${context}: missing point ${pointId}`);
   if (point.name !== expected) fail(`${context}: expected point.name=${expected}, got ${point.name}`);
   if (point.captionTex !== expected) fail(`${context}: expected point.captionTex=${expected}, got ${point.captionTex}`);
+}
+
+function pointWorld(pointId: string): { x: number; y: number } {
+  const store = getGeoStore();
+  const point = store.scene.points.find((p) => p.id === pointId);
+  if (!point) fail(`Missing point ${pointId}`);
+  const world = getPointWorldPos(point, store.scene);
+  if (!world) fail(`Point ${pointId} is undefined`);
+  return world;
 }
 
 function buildParseContext(): ParseContext {
@@ -221,6 +234,82 @@ mustOk(commandBarApi.setPointXY("X", 5, 0), "set X for parser integration");
   mustOk(commandBarApi.applyObjectAssignment(parsed.name, parsed.cmd), "apply parsed midpoint assignment");
 }
 assertPointLabel(aliasId("M"), "M", "parser midpoint assignment label");
+
+// parser+assignment integration: transform assignments must create constrained points with assigned labels
+mustOk(commandBarApi.setPointXY("TA", -2, 1), "set TA");
+mustOk(commandBarApi.setPointXY("TB", 1, 2), "set TB");
+mustOk(commandBarApi.setPointXY("TC", 3, -1), "set TC");
+const ta = pointIdByName("TA");
+const tb = pointIdByName("TB");
+const tc = pointIdByName("TC");
+mustOk(commandBarApi.applyObjectAssignment("tAxis", { type: "CreateLineByPoints", aId: tb, bId: tc }), "create tAxis");
+
+{
+  const parsed = parseCommandInput("TT = Translate(TA,TB,TC)", buildParseContext());
+  if (parsed.kind !== "assignObject") fail(`unexpected parse kind for translate: ${parsed.kind}`);
+  mustOk(commandBarApi.applyObjectAssignment(parsed.name, parsed.cmd), "apply translate assignment");
+}
+{
+  const id = aliasId("TT");
+  assertPointLabel(id, "TT", "translate assignment label");
+  const point = getGeoStore().scene.points.find((p) => p.id === id);
+  assert(!!point && point.kind === "pointByTranslation", "translate assignment did not create constrained translation point");
+  const wBase = pointWorld(ta);
+  const wFrom = pointWorld(tb);
+  const wTo = pointWorld(tc);
+  const wOut = pointWorld(id);
+  const expected = { x: wBase.x + (wTo.x - wFrom.x), y: wBase.y + (wTo.y - wFrom.y) };
+  assert(approxEqual(wOut.x, expected.x) && approxEqual(wOut.y, expected.y), "translate point world mismatch");
+}
+
+{
+  const parsed = parseCommandInput("TR = Rotate(TA,TB,90)", buildParseContext());
+  if (parsed.kind !== "assignObject") fail(`unexpected parse kind for rotate: ${parsed.kind}`);
+  mustOk(commandBarApi.applyObjectAssignment(parsed.name, parsed.cmd), "apply rotate assignment");
+}
+{
+  const id = aliasId("TR");
+  assertPointLabel(id, "TR", "rotate assignment label");
+  const point = getGeoStore().scene.points.find((p) => p.id === id);
+  assert(!!point && point.kind === "pointByRotation", "rotate assignment did not create constrained rotation point");
+}
+
+{
+  const parsed = parseCommandInput("TD = Dilate(TA,TB,2)", buildParseContext());
+  if (parsed.kind !== "assignObject") fail(`unexpected parse kind for dilate: ${parsed.kind}`);
+  mustOk(commandBarApi.applyObjectAssignment(parsed.name, parsed.cmd), "apply dilate assignment");
+}
+{
+  const id = aliasId("TD");
+  assertPointLabel(id, "TD", "dilate assignment label");
+  const point = getGeoStore().scene.points.find((p) => p.id === id);
+  assert(!!point && point.kind === "pointByDilation", "dilate assignment did not create constrained dilation point");
+}
+
+{
+  const parsed = parseCommandInput("TF = Reflect(TA,tAxis)", buildParseContext());
+  if (parsed.kind !== "assignObject") fail(`unexpected parse kind for reflect: ${parsed.kind}`);
+  mustOk(commandBarApi.applyObjectAssignment(parsed.name, parsed.cmd), "apply reflect assignment");
+}
+{
+  const id = aliasId("TF");
+  assertPointLabel(id, "TF", "reflect assignment label");
+  const point = getGeoStore().scene.points.find((p) => p.id === id);
+  assert(!!point && point.kind === "pointByReflection", "reflect assignment did not create constrained reflection point");
+}
+
+// constrained regression: transformed points must move with dependencies
+{
+  const store = getGeoStore();
+  store.movePointTo(tc, { x: 6, y: 1 });
+  const tId = aliasId("TT");
+  const wBase = pointWorld(ta);
+  const wFrom = pointWorld(tb);
+  const wTo = pointWorld(tc);
+  const wOut = pointWorld(tId);
+  const expected = { x: wBase.x + (wTo.x - wFrom.x), y: wBase.y + (wTo.y - wFrom.y) };
+  assert(approxEqual(wOut.x, expected.x) && approxEqual(wOut.y, expected.y), "translated point did not stay constrained");
+}
 
 // stale alias safety: deleting aliased object then reassigning same alias should recreate, not fail.
 {

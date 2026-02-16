@@ -172,6 +172,24 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                                             point.id,
                                             `Rotate(${pointLabel(point.pointId)},${pointLabel(point.centerId)},${point.angleExpr ?? point.angleDeg},${point.direction})`
                                         )
+                                        : point.kind === "pointByTranslation"
+                                            ? withAliasPrefix(
+                                                "point",
+                                                point.id,
+                                                `Translate(${pointLabel(point.pointId)},${pointLabel(point.fromId)},${pointLabel(point.toId)})`
+                                            )
+                                            : point.kind === "pointByDilation"
+                                                ? withAliasPrefix(
+                                                    "point",
+                                                    point.id,
+                                                    `Dilate(${pointLabel(point.pointId)},${pointLabel(point.centerId)},${point.factorExpr ?? point.factor ?? "?"})`
+                                                )
+                                                : point.kind === "pointByReflection"
+                                                    ? withAliasPrefix(
+                                                        "point",
+                                                        point.id,
+                                                        `Reflect(${pointLabel(point.pointId)},${lineLikeText(point.axis)})`
+                                                    )
                                         : point.kind === "pointOnCircle"
                                             ? withAliasPrefix("point", point.id, `PointOn(${circleRefText(point.circleId)})`)
                                             : point.kind === "pointOnLine"

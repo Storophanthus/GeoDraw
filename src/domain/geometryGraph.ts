@@ -73,6 +73,16 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
     } else if (p.kind === "pointByRotation") {
       addDependency(graph, child, key("point", p.centerId));
       addDependency(graph, child, key("point", p.pointId));
+    } else if (p.kind === "pointByTranslation") {
+      addDependency(graph, child, key("point", p.pointId));
+      addDependency(graph, child, key("point", p.fromId));
+      addDependency(graph, child, key("point", p.toId));
+    } else if (p.kind === "pointByDilation") {
+      addDependency(graph, child, key("point", p.pointId));
+      addDependency(graph, child, key("point", p.centerId));
+    } else if (p.kind === "pointByReflection") {
+      addDependency(graph, child, key("point", p.pointId));
+      addDependency(graph, child, p.axis.type === "line" ? key("line", p.axis.id) : key("segment", p.axis.id));
     } else if (p.kind === "intersectionPoint") {
       addDependency(graph, child, objectRefToKey(p.objA));
       addDependency(graph, child, objectRefToKey(p.objB));

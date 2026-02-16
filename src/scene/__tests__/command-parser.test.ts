@@ -108,6 +108,33 @@ if (midSeg.type !== "CreateMidpointBySegment" || midSeg.segId !== "sAB") {
   throw new Error("Midpoint(sAB) mismatch");
 }
 
+const translated = mustCmd("Translate(A,O,B)", baseCtx, "CreatePointByTranslation");
+if (translated.type !== "CreatePointByTranslation" || translated.pointId !== "pA" || translated.fromId !== "pO" || translated.toId !== "pB") {
+  throw new Error("Translate(A,O,B) mismatch");
+}
+
+const rotated = mustCmd("Rotate(A,O,30,CW)", baseCtx, "CreatePointByRotation");
+if (
+  rotated.type !== "CreatePointByRotation" ||
+  rotated.pointId !== "pA" ||
+  rotated.centerId !== "pO" ||
+  rotated.angleExpr !== "30" ||
+  Math.abs(rotated.angleDeg - 30) > 1e-9 ||
+  rotated.direction !== "CW"
+) {
+  throw new Error("Rotate(A,O,30,CW) mismatch");
+}
+
+const dilated = mustCmd("Dilate(B,O,2)", baseCtx, "CreatePointByDilation");
+if (dilated.type !== "CreatePointByDilation" || dilated.pointId !== "pB" || dilated.centerId !== "pO" || dilated.factorExpr !== "2") {
+  throw new Error("Dilate(B,O,2) mismatch");
+}
+
+const reflected = mustCmd("Reflect(B,lAB)", baseCtx, "CreatePointByReflection");
+if (reflected.type !== "CreatePointByReflection" || reflected.pointId !== "pB" || reflected.axis.type !== "line" || reflected.axis.id !== "lAB") {
+  throw new Error("Reflect(B,lAB) mismatch");
+}
+
 const circleOA = mustCmd("Circle(O,A)", baseCtx, "CreateCircleCenterThrough");
 if (circleOA.type !== "CreateCircleCenterThrough" || circleOA.centerId !== "pO" || circleOA.throughId !== "pA") {
   throw new Error("Circle(O,A) mismatch");
@@ -203,6 +230,26 @@ if (
 const assignMidpoint = mustAssignObject("M = Midpoint(A,B)", baseCtx, "M", "CreateMidpointByPoints");
 if (assignMidpoint.type !== "CreateMidpointByPoints" || assignMidpoint.aId !== "pA" || assignMidpoint.bId !== "pB") {
   throw new Error("M = Midpoint(A,B) mismatch");
+}
+
+const assignTranslated = mustAssignObject("T = Translate(A,O,B)", baseCtx, "T", "CreatePointByTranslation");
+if (assignTranslated.type !== "CreatePointByTranslation" || assignTranslated.pointId !== "pA" || assignTranslated.fromId !== "pO" || assignTranslated.toId !== "pB") {
+  throw new Error("T = Translate(A,O,B) mismatch");
+}
+
+const assignRotated = mustAssignObject("R = Rotate(A,O,45)", baseCtx, "R", "CreatePointByRotation");
+if (assignRotated.type !== "CreatePointByRotation" || assignRotated.pointId !== "pA" || assignRotated.centerId !== "pO" || assignRotated.direction !== "CCW") {
+  throw new Error("R = Rotate(A,O,45) mismatch");
+}
+
+const assignDilated = mustAssignObject("D = Dilate(B,O,3)", baseCtx, "D", "CreatePointByDilation");
+if (assignDilated.type !== "CreatePointByDilation" || assignDilated.pointId !== "pB" || assignDilated.centerId !== "pO" || assignDilated.factorExpr !== "3") {
+  throw new Error("D = Dilate(B,O,3) mismatch");
+}
+
+const assignReflected = mustAssignObject("Q = Reflect(B,sAB)", baseCtx, "Q", "CreatePointByReflection");
+if (assignReflected.type !== "CreatePointByReflection" || assignReflected.pointId !== "pB" || assignReflected.axis.type !== "segment" || assignReflected.axis.id !== "sAB") {
+  throw new Error("Q = Reflect(B,sAB) mismatch");
 }
 
 const withScalarR: ParseContext = {

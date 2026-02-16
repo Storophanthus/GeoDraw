@@ -1,5 +1,5 @@
 import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
-import type { GeometryObjectRef, SceneModel, SceneNumberDefinition, ScenePoint, ShowLabelMode } from "../../scene/points";
+import type { GeometryObjectRef, LineLikeObjectRef, SceneModel, SceneNumberDefinition, ScenePoint, ShowLabelMode } from "../../scene/points";
 import { evaluateNumberExpression } from "../../scene/points";
 import type { Vec2 } from "../../geo/vec2";
 import type { SceneCreationStateLike } from "../../domain/intersectionReuse";
@@ -56,6 +56,9 @@ export function createSceneCreationActions(
   | "createPointOnSegment"
   | "createPointOnCircle"
   | "createPointByRotation"
+  | "createPointByTranslation"
+  | "createPointByDilation"
+  | "createPointByReflection"
   | "createIntersectionPoint"
   | "createNumber"
 > {
@@ -363,6 +366,149 @@ export function createSceneCreationActions(
                 angleExpr,
                 direction,
                 radiusMode: "keep",
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createPointByTranslation(pointId, fromId, toId) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const point = prev.scene.points.find((item) => item.id === pointId);
+        const from = prev.scene.points.find((item) => item.id === fromId);
+        const to = prev.scene.points.find((item) => item.id === toId);
+        if (!point || !from || !to) return prev;
+        const pointWorld = getPointWorldPos(point, prev.scene);
+        const fromWorld = getPointWorldPos(from, prev.scene);
+        const toWorld = getPointWorldPos(to, prev.scene);
+        if (!pointWorld || !fromWorld || !toWorld) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "pointByTranslation",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: "name" as ShowLabelMode,
+                locked: false,
+                auxiliary: false,
+                pointId,
+                fromId,
+                toId,
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createPointByDilation(pointId, centerId, factorExpr) {
+      const expr = factorExpr.trim();
+      if (!expr) return null;
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const point = prev.scene.points.find((item) => item.id === pointId);
+        const center = prev.scene.points.find((item) => item.id === centerId);
+        if (!point || !center) return prev;
+        const pointWorld = getPointWorldPos(point, prev.scene);
+        const centerWorld = getPointWorldPos(center, prev.scene);
+        if (!pointWorld || !centerWorld) return prev;
+        const evaluated = evaluateNumberExpression(prev.scene, expr);
+        if (!evaluated.ok || !Number.isFinite(evaluated.value)) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "pointByDilation",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: "name" as ShowLabelMode,
+                locked: false,
+                auxiliary: false,
+                pointId,
+                centerId,
+                factor: evaluated.value,
+                factorExpr: expr,
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createPointByReflection(pointId, axis: LineLikeObjectRef) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const point = prev.scene.points.find((item) => item.id === pointId);
+        if (!point) return prev;
+        const axisExists = axis.type === "line"
+          ? prev.scene.lines.some((line) => line.id === axis.id)
+          : prev.scene.segments.some((seg) => seg.id === axis.id);
+        if (!axisExists) return prev;
+        const pointWorld = getPointWorldPos(point, prev.scene);
+        if (!pointWorld) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "pointByReflection",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: "name" as ShowLabelMode,
+                locked: false,
+                auxiliary: false,
+                pointId,
+                axis,
                 style: {
                   ...prev.pointDefaults,
                   labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },

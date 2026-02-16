@@ -1363,3 +1363,185 @@ When starting a new chat, provide:
 - `npm run test:export` passed.
 - `npm run test:scene` passed.
 - `npm run test:command` passed.
+
+## Planned Work (Next): Transformation MVP (Point-Only)
+Date planned: February 16, 2026
+
+### Scope (Phase 1)
+- Add command-driven transformations that produce a new point from an input point.
+- Input object `P` is point-only for this phase.
+- No object-wide transforms yet (segment/line/circle/polygon/angle transforms are out-of-scope for phase 1).
+
+### Proposed Commands
+- `T = Translate(P, A, B)`:
+  - `T = P + (B - A)`
+  - Inputs: points `P, A, B`
+- `R = Rotate(P, O, expr[,CW|CCW])`:
+  - Rotate point `P` around center `O` by angle `expr` (degrees).
+  - Default direction: `CCW`.
+- `H = Dilate(P, O, k)`:
+  - Homothety of point `P` with center `O` and ratio `k`.
+- `S = Reflect(P, l)`:
+  - Reflection of point `P` across line/segment alias `l`.
+
+### Architecture Plan
+1. Parser
+- Extend `src/CommandParser.ts` with 4 command forms above.
+- Reuse existing identifier resolution (`resolvePointIdentifier`, alias resolution).
+- Keep assignment flow identical to current assign-object pipeline.
+
+2. Scene Point Definitions
+- Add new point kinds in `src/scene/points.ts` for:
+  - translated point
+  - dilated point
+  - reflected point
+- Reuse existing `pointByRotation` for rotate command where possible.
+
+3. Evaluation
+- Add evaluators in `src/scene/eval/*` and dispatch in `pointEvalDispatch`.
+- Reflection must support both line and segment bases using line support geometry.
+- Ensure constrained recompute stability and finite checks.
+
+4. Creation / Command Alias Integration
+- Add creation methods in `src/state/slices/sceneCreationActions.ts` and alias plumbing in `src/state/geoStore.ts`.
+- Respect redefine constraints and current alias typing behavior.
+- Any assign-object that creates a point must preserve assignment name/caption mapping behavior (current guardrail).
+
+5. Construction Description
+- Add readable construction text in `src/state/selectors/constructionDescription.ts`.
+
+6. TikZ Export
+- Extend `src/export/tikz.ts` IR + renderer:
+  - Translate: explicit point arithmetic fallback (or supported tkz macro if stable).
+  - Rotate: keep using `tkzDefPointBy[rotation=...]` path.
+  - Dilate: `tkzDefPointBy[homothety=...]`.
+  - Reflect: explicit coordinate fallback if no stable whitelist macro path.
+- Keep whitelist guardrails intact; do not introduce non-whitelisted tkz macros.
+
+### Tests Plan
+1. Command parser tests (`src/scene/__tests__/command-parser.test.ts`)
+- Parse success/failure for each new command form.
+- Direction defaults and optional args.
+
+2. Scene behavior tests (`src/scene/__tests__/...`)
+- Dependency recompute correctness for each transform.
+- Redefine assignment behavior.
+
+3. Export tests
+- Add fixtures in `src/export/__fixtures__/` for each transform.
+- Extend `scripts/test-export.ts` expectations for emitted TikZ patterns.
+
+4. Manual geometry checks (before finish)
+- Move source/center/reference points and verify transformed point follows deterministically.
+- Reflection across segment and line aliases.
+- Confirm no identity merging or proximity-based point collapse.
+
+### Out-of-Scope (Phase 1)
+- Transforming non-point objects directly.
+- Dedicated transform toolbar workflows.
+- Composition syntax (e.g., nested transforms beyond parser-safe command forms).
+
+### Acceptance Criteria
+- New commands parse and execute through assign-object path.
+- Redefine works for point aliases bound to transform outputs.
+- Export emits deterministic TikZ and passes fixture compilation.
+- Full suite passes:
+  - `npm run test:command`
+  - `npm run test:scene`
+  - `npm run test:export`
+  - `npm run build`
+
+## Latest Done (Transformation MVP: Point-Only)
+Date completed: February 16, 2026
+
+### Implemented Commands
+- `Translate(P, A, B)` -> point translation by vector `AB`.
+- `Rotate(P, O, expr[,CW|CCW])` -> point rotation around center `O`.
+- `Dilate(P, O, k)` -> point dilation from center `O` by scalar factor `k`.
+- `Reflect(P, l)` -> point reflection across line/segment alias `l`.
+
+### End-to-End Wiring
+- Parser + command model:
+  - Updated `src/CommandParser.ts` to parse all 4 forms and emit:
+    - `CreatePointByTranslation`
+    - `CreatePointByRotation`
+    - `CreatePointByDilation`
+    - `CreatePointByReflection`
+- Command execution:
+  - Updated `src/CommandBar.tsx` to execute non-assignment forms for all 4 commands.
+- Scene creation actions:
+  - Added point creation methods in `src/state/slices/sceneCreationActions.ts`:
+    - `createPointByTranslation`
+    - `createPointByDilation`
+    - `createPointByReflection`
+  - Reused existing `createPointByRotation`.
+- Store action typing:
+  - Added new GeoAction signatures in `src/state/slices/storeTypes.ts`.
+- Assignment alias integration:
+  - Updated `src/state/geoStore.ts` assign-object path for all new point commands.
+  - Added label-aware helpers:
+    - `createPointByTranslationWithLabel`
+    - `createPointByRotationWithLabel`
+    - `createPointByDilationWithLabel`
+    - `createPointByReflectionWithLabel`
+  - Guardrail preserved: any assignment-created point gets `name/captionTex = assignment label`.
+
+### New Point Kinds + Evaluation
+- Added point kinds in `src/scene/points.ts`:
+  - `pointByTranslation`
+  - `pointByDilation`
+  - `pointByReflection`
+- Added geometry evaluators in `src/scene/eval/pointGeometryEval.ts`:
+  - translation, dilation, reflection formulas.
+- Added kind evaluators + dispatch in:
+  - `src/scene/eval/pointKindEvaluators.ts`
+  - `src/scene/eval/pointEvalDispatch.ts`
+- Added number-expression dependency for dilation eval (factor expression stays dynamic).
+
+### Integrity / Dependency / Description / Snapshot
+- Scene integrity normalization support for new point kinds:
+  - `src/domain/sceneIntegrity.ts`
+- Dependency graph support:
+  - `src/domain/geometryGraph.ts`
+- Construction snapshot support (definition + dependsOn):
+  - `src/export/constructionSnapshot.ts`
+- Construction description text support:
+  - `src/state/selectors/constructionDescription.ts`
+- Object Browser formula text support:
+  - `src/ui/ObjectBrowser.tsx`
+
+### TikZ Export Support
+- Added new TikZ IR constructions in `src/export/tikz.ts`:
+  - `DefPointByTranslation`
+  - `DefPointByDilation`
+  - `DefPointByReflection`
+- Emission details:
+  - Translate: `\tkzDefPointBy[translation= from A to B](P)`.
+  - Dilate: `\tkzDefPointBy[homothety=center O ratio k](P)`.
+  - Reflect:
+    1. projection foot on axis line via `projection=onto A--B`
+    2. symmetric point via `homothety=center foot ratio -1`
+  - This avoids probabilistic/unstable reflection syntax.
+
+### Regression Tests Added/Updated
+- `src/scene/__tests__/command-parser.test.ts`
+  - Added parse coverage for Translate/Rotate/Dilate/Reflect.
+  - Added assign-object parse coverage for all four.
+- `src/scene/__tests__/command-redefine.test.ts`
+  - Added assignment integration checks:
+    - transform assignments create constrained points
+    - assignment label maps to point name/caption
+    - translated point remains constrained when dependency moves
+- `src/scene/__tests__/command-redefine-export.test.ts`
+  - Added export assertions for translate/rotate/dilate/reflect constructions.
+
+### Verification (post-change)
+- `npm run build` passed.
+- `npm run test:command` passed.
+- `npm run test:scene` passed.
+- `npm run test:export` passed.
+
+### Notes
+- Existing fail-closed redefine policy for point aliases remains unchanged:
+  - only free-point alias redefinition (`CreatePointXY`) is allowed.
+  - transform-derived point aliases are not redefined in-place by assignment updates.

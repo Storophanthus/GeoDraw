@@ -320,6 +320,30 @@ export const commandBarApi = {
         applyAssignedPointLabel(id, label);
         return { ok: true as const, mode: "created", objectType: "point", id };
       }
+      if (cmd.type === "CreatePointByTranslation") {
+        const id = commandBarApi.createPointByTranslationWithLabel(cmd.pointId, cmd.fromId, cmd.toId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreatePointByRotation") {
+        const id = commandBarApi.createPointByRotationWithLabel(cmd.pointId, cmd.centerId, cmd.angleDeg, cmd.angleExpr, cmd.direction, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreatePointByDilation") {
+        const id = commandBarApi.createPointByDilationWithLabel(cmd.pointId, cmd.centerId, cmd.factorExpr, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreatePointByReflection") {
+        const id = commandBarApi.createPointByReflectionWithLabel(cmd.pointId, cmd.axis, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
       if (cmd.type === "CreateCircleXYR") {
         const centerId = actions.createFreePoint({ x: cmd.x, y: cmd.y });
         const id = commandBarApi.createCircleCenterRadiusWithLabel(centerId, cmd.r, label);
@@ -865,6 +889,105 @@ export const commandBarApi = {
     }));
     commandBarObjectAliases.set(name, { type: "point", id: pointId });
     return pointId;
+  },
+  createPointByTranslationWithLabel(pointId: string, fromId: string, toId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const createdId = actions.createPointByTranslation(pointId, fromId, toId);
+    if (!createdId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === createdId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
+  },
+  createPointByRotationWithLabel(
+    pointId: string,
+    centerId: string,
+    angleDeg: number,
+    angleExpr: string,
+    direction: "CCW" | "CW",
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const createdId = actions.createPointByRotation(centerId, pointId, angleDeg, direction, angleExpr);
+    if (!createdId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === createdId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
+  },
+  createPointByDilationWithLabel(pointId: string, centerId: string, factorExpr: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const createdId = actions.createPointByDilation(pointId, centerId, factorExpr);
+    if (!createdId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === createdId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
+  },
+  createPointByReflectionWithLabel(
+    pointId: string,
+    axis: { type: "line" | "segment"; id: string },
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const createdId = actions.createPointByReflection(pointId, axis);
+    if (!createdId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === createdId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
   },
   createCircleCenterThroughWithLabel(centerId: string, throughId: string, label: string): string | null {
     const name = label.trim();

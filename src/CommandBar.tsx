@@ -64,6 +64,10 @@ export function CommandBar() {
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
+  const createPointByTranslation = useGeoStore((store) => store.createPointByTranslation);
+  const createPointByRotation = useGeoStore((store) => store.createPointByRotation);
+  const createPointByDilation = useGeoStore((store) => store.createPointByDilation);
+  const createPointByReflection = useGeoStore((store) => store.createPointByReflection);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createTangentLines = useGeoStore((store) => store.createTangentLines);
@@ -224,6 +228,46 @@ export function CommandBar() {
       const pointId = createMidpointFromSegment(cmd.segId);
       if (!pointId) {
         setStatus({ kind: "error", text: "Cannot construct midpoint" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePointByTranslation") {
+      const pointId = createPointByTranslation(cmd.pointId, cmd.fromId, cmd.toId);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct translated point" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePointByRotation") {
+      const pointId = createPointByRotation(cmd.centerId, cmd.pointId, cmd.angleDeg, cmd.direction, cmd.angleExpr);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct rotated point" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePointByDilation") {
+      const pointId = createPointByDilation(cmd.pointId, cmd.centerId, cmd.factorExpr);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct dilated point" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePointByReflection") {
+      const pointId = createPointByReflection(cmd.pointId, cmd.axis);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct reflected point" });
         return;
       }
       setStatus({ kind: "ok", text: `Created point ${pointId}` });
@@ -426,7 +470,7 @@ export function CommandBar() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Line(A,B), Circle(O,A), Sector(O,A,B), AngleFixed(B,A,30,CW)"
+            placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Translate(P,A,B), Rotate(P,O,30), Dilate(P,O,2), Reflect(P,l)"
             style={{
               width: "100%",
               minWidth: 0,

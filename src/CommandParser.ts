@@ -36,6 +36,10 @@ export type Command =
   | { type: "CreatePointXY"; x: number; y: number }
   | { type: "CreateMidpointByPoints"; aId: string; bId: string }
   | { type: "CreateMidpointBySegment"; segId: string }
+  | { type: "CreatePointByTranslation"; pointId: string; fromId: string; toId: string }
+  | { type: "CreatePointByRotation"; pointId: string; centerId: string; angleDeg: number; angleExpr: string; direction: "CCW" | "CW" }
+  | { type: "CreatePointByDilation"; pointId: string; centerId: string; factorExpr: string }
+  | { type: "CreatePointByReflection"; pointId: string; axis: { type: "line" | "segment"; id: string } }
   | { type: "CreateLineXY"; x1: number; y1: number; x2: number; y2: number }
   | { type: "CreateLineByPoints"; aId: string; bId: string }
   | { type: "CreatePerpendicularLine"; throughId: string; base: { type: "line" | "segment"; id: string } }
@@ -443,6 +447,78 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
       return { kind: "cmd", cmd: { type: "CreateMidpointBySegment", segId: seg.id } };
     }
     return err("Midpoint expects Midpoint(A,B) or Midpoint(s)");
+  }
+
+  if (name === "Translate") {
+    if (args.length !== 3) return err("Translate(P, A, B) expects 3 point labels");
+    const pointLabel = asIdentifier(args[0]);
+    const fromLabel = asIdentifier(args[1]);
+    const toLabel = asIdentifier(args[2]);
+    if (!pointLabel || !fromLabel || !toLabel) return err("Translate(P, A, B) expects point labels");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const from = resolvePointIdentifier(fromLabel, ctx);
+    if (!from.ok) return err(from.message);
+    const to = resolvePointIdentifier(toLabel, ctx);
+    if (!to.ok) return err(to.message);
+    return { kind: "cmd", cmd: { type: "CreatePointByTranslation", pointId: point.id, fromId: from.id, toId: to.id } };
+  }
+
+  if (name === "Rotate") {
+    if (args.length !== 3 && args.length !== 4) return err("Rotate(P, O, expr[,CW|CCW]) expects 3 or 4 arguments");
+    const pointLabel = asIdentifier(args[0]);
+    const centerLabel = asIdentifier(args[1]);
+    if (!pointLabel || !centerLabel) return err("Rotate(P, O, expr[,CW|CCW]) expects point labels for first two arguments");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const center = resolvePointIdentifier(centerLabel, ctx);
+    if (!center.ok) return err(center.message);
+    const dirRaw = args.length === 4 ? args[3].trim() : "CCW";
+    const direction = dirRaw === "CW" ? "CW" : dirRaw === "CCW" ? "CCW" : null;
+    if (!direction) return err("Rotate direction must be CW or CCW");
+    const angleEval = evaluateExpression(args[2], ctx);
+    if (!angleEval.ok) return err("Rotate expression must evaluate to a finite number");
+    return {
+      kind: "cmd",
+      cmd: {
+        type: "CreatePointByRotation",
+        pointId: point.id,
+        centerId: center.id,
+        angleDeg: angleEval.value,
+        angleExpr: args[2].trim(),
+        direction,
+      },
+    };
+  }
+
+  if (name === "Dilate") {
+    if (args.length !== 3) return err("Dilate(P, O, k) expects 3 arguments");
+    const pointLabel = asIdentifier(args[0]);
+    const centerLabel = asIdentifier(args[1]);
+    if (!pointLabel || !centerLabel) return err("Dilate(P, O, k) expects point labels for first two arguments");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const center = resolvePointIdentifier(centerLabel, ctx);
+    if (!center.ok) return err(center.message);
+    const factorEval = evaluateExpression(args[2], ctx);
+    if (!factorEval.ok) return err("Dilate factor must evaluate to a finite number");
+    return {
+      kind: "cmd",
+      cmd: { type: "CreatePointByDilation", pointId: point.id, centerId: center.id, factorExpr: args[2].trim() },
+    };
+  }
+
+  if (name === "Reflect") {
+    if (args.length !== 2) return err("Reflect(P, l) expects 2 arguments");
+    const pointLabel = asIdentifier(args[0]);
+    const axisLabel = asIdentifier(args[1]);
+    if (!pointLabel || !axisLabel) return err("Reflect(P, l) expects point and line/segment aliases");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const axisAlias = ctx.objectAliases.get(axisLabel);
+    if (!axisAlias) return err(`Unknown line/segment: ${axisLabel}`);
+    if (axisAlias.type !== "line" && axisAlias.type !== "segment") return err(`Not a line/segment: ${axisLabel}`);
+    return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: { type: axisAlias.type, id: axisAlias.id } } };
   }
 
   if (name === "Line") {

@@ -255,6 +255,9 @@ export type GeoActions = {
     direction: AngleFixedDirection,
     angleExpr?: string
   ) => string | null;
+  createPointByTranslation: (pointId: string, fromId: string, toId: string) => string | null;
+  createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
+  createPointByReflection: (pointId: string, axis: LineLikeObjectRef) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createNumber: (definition: SceneNumberDefinition, preferredName?: string) => string | null;
