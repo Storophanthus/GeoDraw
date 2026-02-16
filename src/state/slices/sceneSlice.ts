@@ -120,6 +120,7 @@ export function createSceneSliceState() {
   return {
     scene: {
       points: [],
+      vectors: [],
       segments: [],
       lines: [],
       circles: [],
@@ -134,6 +135,7 @@ export function createSceneSliceState() {
     nextPolygonId: 1,
     nextAngleId: 1,
     nextNumberId: 1,
+    nextVectorId: 1,
     pointDefaults: defaultPointStyle,
     segmentDefaults: defaultSegmentStyle,
     lineDefaults: defaultLineStyle,

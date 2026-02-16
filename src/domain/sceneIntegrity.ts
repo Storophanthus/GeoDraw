@@ -16,6 +16,7 @@ function objectRefAlive(
 
 export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   let points = scene.points;
+  let vectors = scene.vectors ?? [];
   let segments = scene.segments;
   let lines = scene.lines;
   let circles = scene.circles;
@@ -29,6 +30,13 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
 
   for (let pass = 0; pass < 6; pass += 1) {
     const pointIds = new Set(points.map((p) => p.id));
+    const nextVectors = vectors.filter((vector) => {
+      if (vector.kind === "freeVector") {
+        return Number.isFinite(vector.dx) && Number.isFinite(vector.dy);
+      }
+      return pointIds.has(vector.fromId) && pointIds.has(vector.toId);
+    });
+    const nextVectorIds = new Set(nextVectors.map((vector) => vector.id));
 
     const nextSegments = segments.filter((seg) => pointIds.has(seg.aId) && pointIds.has(seg.bId));
     const nextCircles = circles.filter((circle) => {
@@ -109,7 +117,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
 
     const nextLineIdsAfter = new Set(nextLines.map((l) => l.id));
 
-    const sceneForPass: SceneModel = { points, lines, segments, circles, polygons, angles, numbers };
+    const sceneForPass: SceneModel = { points, vectors: nextVectors, lines, segments, circles, polygons, angles, numbers };
     const pointsWithBranches = points.map((point) => {
       if (
         point.kind !== "intersectionPoint" ||
@@ -136,6 +144,9 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         if (point.kind === "intersectionPoint" && point.excludePointId && !pointIds.has(point.excludePointId)) {
           return { ...point, excludePointId: undefined };
         }
+        if (point.kind === "pointByTranslation" && point.vectorId && !nextVectorIds.has(point.vectorId)) {
+          return { ...point, vectorId: undefined };
+        }
         return point;
       })
       .filter((point) => {
@@ -148,6 +159,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         if (point.kind === "circleCenter") return nextCircleIds.has(point.circleId);
         if (point.kind === "pointByRotation") return pointIds.has(point.centerId) && pointIds.has(point.pointId);
         if (point.kind === "pointByTranslation") {
+          if (point.vectorId) return pointIds.has(point.pointId) && nextVectorIds.has(point.vectorId);
           return pointIds.has(point.pointId) && pointIds.has(point.fromId) && pointIds.has(point.toId);
         }
         if (point.kind === "pointByDilation") {
@@ -202,6 +214,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
 
     const anyChanged =
       !sameIds(nextPoints, points) ||
+      !sameIds(nextVectors, vectors) ||
       !sameIds(nextSegmentsNormalized, segments) ||
       !sameIds(nextLines, lines) ||
       !sameIds(nextCircles, circles) ||
@@ -209,9 +222,11 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       !sameIds(nextAngles, angles) ||
       !sameIds(nextNumbers, numbers) ||
       nextPoints.some((point, idx) => point !== points[idx]) ||
+      nextVectors.some((vector, idx) => vector !== vectors[idx]) ||
       nextSegmentsNormalized.some((segment, idx) => segment !== segments[idx]);
 
     points = nextPoints;
+    vectors = nextVectors;
     segments = nextSegmentsNormalized;
     lines = nextLines;
     circles = nextCircles;
@@ -223,5 +238,5 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   }
 
   if (!changed) return scene;
-  return { ...scene, points, segments, lines, circles, polygons, angles, numbers };
+  return { ...scene, points, vectors, segments, lines, circles, polygons, angles, numbers };
 }

@@ -38,6 +38,7 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     nextPolygonId: snapshot.nextPolygonId ?? prev.nextPolygonId,
     nextAngleId: snapshot.nextAngleId,
     nextNumberId: snapshot.nextNumberId,
+    nextVectorId: snapshot.nextVectorId ?? prev.nextVectorId,
     pointDefaults: snapshot.pointDefaults,
     segmentDefaults: snapshot.segmentDefaults,
     lineDefaults: snapshot.lineDefaults,

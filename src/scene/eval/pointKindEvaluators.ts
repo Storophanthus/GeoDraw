@@ -5,6 +5,7 @@ import {
   evalMidpoint,
   evalPointByRotation,
   evalPointByTranslation,
+  evalPointByTranslationVector,
   evalPointOnCircle,
   evalPointOnLine,
   evalPointOnSegment,
@@ -20,6 +21,7 @@ import type {
   PointOnCircle,
   PointOnLine,
   PointOnSegment,
+  SceneVector,
   SceneModel,
   LineLikeObjectRef,
 } from "../points";
@@ -141,11 +143,51 @@ export function evalPointByTranslationPoint(
   }
 ): Vec2 | null {
   const base = ops.getPointWorldById(point.pointId, scene, ctx);
+  if (!base) return null;
+  if (point.vectorId) {
+    const delta = resolveVectorDelta(point.vectorId, scene, ctx, {
+      getPointWorldById: ops.getPointWorldById,
+    });
+    if (!delta) return null;
+    ctx.stats.allocationsEstimate += 1;
+    return evalPointByTranslationVector(base, delta);
+  }
   const from = ops.getPointWorldById(point.fromId, scene, ctx);
   const to = ops.getPointWorldById(point.toId, scene, ctx);
-  if (!base || !from || !to) return null;
+  if (!from || !to) return null;
   ctx.stats.allocationsEstimate += 1;
   return evalPointByTranslation(base, from, to);
+}
+
+function resolveVectorDelta(
+  vectorId: string,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+  }
+): Vec2 | null {
+  const vector = ctx.vectorById.get(vectorId);
+  if (!vector) return null;
+  return vectorDeltaFromDefinition(vector, scene, ctx, ops);
+}
+
+function vectorDeltaFromDefinition(
+  vector: SceneVector,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+  }
+): Vec2 | null {
+  if (vector.kind === "freeVector") {
+    if (!Number.isFinite(vector.dx) || !Number.isFinite(vector.dy)) return null;
+    return { x: vector.dx, y: vector.dy };
+  }
+  const from = ops.getPointWorldById(vector.fromId, scene, ctx);
+  const to = ops.getPointWorldById(vector.toId, scene, ctx);
+  if (!from || !to) return null;
+  return { x: to.x - from.x, y: to.y - from.y };
 }
 
 export function evalPointByDilationPoint(

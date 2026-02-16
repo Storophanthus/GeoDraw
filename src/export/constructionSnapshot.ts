@@ -17,7 +17,7 @@ export type SnapshotPointDefinition =
   | { kind: "pointOnSegment"; segId: string; u: number }
   | { kind: "pointOnCircle"; circleId: string; t: number }
   | { kind: "circleCenter"; circleId: string }
-  | { kind: "pointByTranslation"; pointId: string; fromId: string; toId: string }
+  | { kind: "pointByTranslation"; pointId: string; fromId: string; toId: string; vectorId?: string }
   | { kind: "pointByDilation"; pointId: string; centerId: string; factor?: number; factorExpr?: string }
   | { kind: "pointByReflection"; pointId: string; axis: { type: "line" | "segment"; id: string } }
   | {
@@ -73,6 +73,10 @@ export type SnapshotPoint = {
   dependsOn: string[];
 };
 
+export type SnapshotVector =
+  | { id: string; definition: { kind: "vectorFromPoints"; fromId: string; toId: string } }
+  | { id: string; definition: { kind: "freeVector"; dx: number; dy: number } };
+
 export type SnapshotLine = {
   id: string;
   kind?: "twoPoint" | "perpendicular" | "parallel" | "tangent" | "circleCircleTangent" | "angleBisector";
@@ -113,6 +117,7 @@ export type SnapshotCircle = {
 export type ConstructionSnapshot = {
   version: 1;
   points: SnapshotPoint[];
+  vectors: SnapshotVector[];
   numbers: Array<{
     id: string;
     name: string;
@@ -154,6 +159,14 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
       definition: pointDefinition(point),
       dependsOn: pointDependsOn(point),
     }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  const vectors = (scene.vectors ?? [])
+    .map((vector) =>
+      vector.kind === "vectorFromPoints"
+        ? ({ id: vector.id, definition: { kind: "vectorFromPoints", fromId: vector.fromId, toId: vector.toId } } as const)
+        : ({ id: vector.id, definition: { kind: "freeVector", dx: vector.dx, dy: vector.dy } } as const)
+    )
     .sort((a, b) => a.id.localeCompare(b.id));
 
   const numbers = scene.numbers
@@ -278,6 +291,7 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
   return {
     version: 1,
     points,
+    vectors,
     numbers,
     lines,
     segments,
@@ -340,7 +354,13 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
     return { kind: "circleCenter", circleId: point.circleId };
   }
   if (point.kind === "pointByTranslation") {
-    return { kind: "pointByTranslation", pointId: point.pointId, fromId: point.fromId, toId: point.toId };
+    return {
+      kind: "pointByTranslation",
+      pointId: point.pointId,
+      fromId: point.fromId,
+      toId: point.toId,
+      vectorId: point.vectorId,
+    };
   }
   if (point.kind === "pointByDilation") {
     return {
@@ -423,7 +443,11 @@ function pointDependsOn(point: ScenePoint): string[] {
   if (point.kind === "pointOnSegment") return [point.segId];
   if (point.kind === "pointOnCircle") return [point.circleId];
   if (point.kind === "circleCenter") return [point.circleId];
-  if (point.kind === "pointByTranslation") return [point.pointId, point.fromId, point.toId];
+  if (point.kind === "pointByTranslation") {
+    const refs = [point.pointId, point.fromId, point.toId];
+    if (point.vectorId) refs.push(`vector:${point.vectorId}`);
+    return refs;
+  }
   if (point.kind === "pointByDilation") return [point.pointId, point.centerId];
   if (point.kind === "pointByReflection") return [point.pointId, objectRefKey(point.axis)];
   if (point.kind === "pointByRotation") return [point.centerId, point.pointId];

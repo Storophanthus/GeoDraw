@@ -289,6 +289,7 @@ export type PointByTranslation = {
   locked?: boolean;
   auxiliary?: boolean;
   pointId: string;
+  vectorId?: string;
   fromId: string;
   toId: string;
   style: PointStyle;
@@ -344,6 +345,22 @@ export type GeometryObjectRef =
   | { type: "angle"; id: string };
 
 export type LineLikeObjectRef = { type: "line"; id: string } | { type: "segment"; id: string };
+
+export type SceneVectorFromPoints = {
+  id: string;
+  kind: "vectorFromPoints";
+  fromId: string;
+  toId: string;
+};
+
+export type SceneVectorFree = {
+  id: string;
+  kind: "freeVector";
+  dx: number;
+  dy: number;
+};
+
+export type SceneVector = SceneVectorFromPoints | SceneVectorFree;
 
 export type IntersectionPoint = {
   id: string;
@@ -639,6 +656,7 @@ export type SceneNumber = {
 
 export type SceneModel = {
   points: ScenePoint[];
+  vectors?: SceneVector[];
   segments: SceneSegment[];
   lines: SceneLine[];
   circles: SceneCircle[];

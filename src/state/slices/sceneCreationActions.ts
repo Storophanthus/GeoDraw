@@ -394,11 +394,19 @@ export function createSceneCreationActions(
         if (!pointWorld || !fromWorld || !toWorld) return prev;
         const name = nextUnusedPointName(prev);
         const id = `p_${prev.nextPointId}`;
+        const existingVector = (prev.scene.vectors ?? []).find(
+          (vector) => vector.kind === "vectorFromPoints" && vector.fromId === fromId && vector.toId === toId
+        );
+        const vectorId = existingVector?.id ?? `v_${prev.nextVectorId}`;
+        const vectors = existingVector
+          ? (prev.scene.vectors ?? [])
+          : [...(prev.scene.vectors ?? []), { id: vectorId, kind: "vectorFromPoints" as const, fromId, toId }];
         createdId = id;
         return {
           ...prev,
           scene: {
             ...prev.scene,
+            vectors,
             points: [
               ...prev.scene.points,
               {
@@ -411,6 +419,7 @@ export function createSceneCreationActions(
                 locked: false,
                 auxiliary: false,
                 pointId,
+                vectorId,
                 fromId,
                 toId,
                 style: {
@@ -423,6 +432,7 @@ export function createSceneCreationActions(
           selectedObject: { type: "point", id },
           recentCreatedObject: { type: "point", id },
           nextPointId: prev.nextPointId + 1,
+          nextVectorId: existingVector ? prev.nextVectorId : prev.nextVectorId + 1,
         };
       });
       return createdId;

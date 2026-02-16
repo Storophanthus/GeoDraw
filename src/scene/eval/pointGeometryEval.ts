@@ -40,6 +40,10 @@ export function evalPointByTranslation(point: Vec2, from: Vec2, to: Vec2): Vec2 
   return add(point, sub(to, from));
 }
 
+export function evalPointByTranslationVector(point: Vec2, vector: Vec2): Vec2 {
+  return add(point, vector);
+}
+
 export function evalPointByDilation(point: Vec2, center: Vec2, factor: number): Vec2 | null {
   if (!Number.isFinite(factor)) return null;
   return add(center, mul(sub(point, center), factor));

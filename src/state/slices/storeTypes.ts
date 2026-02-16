@@ -192,6 +192,7 @@ export type GeoState = {
   nextPolygonId: number;
   nextAngleId: number;
   nextNumberId: number;
+  nextVectorId: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;

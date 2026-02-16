@@ -14,7 +14,7 @@
     "test:export": "node scripts/test-export.mjs",
     "test:perf": "tsx src/scene/__tests__/eval-perf.test.ts",
     "test:zoom": "node --import tsx scripts/zoom-stress.ts",
-    "test:scene": "node --import tsx src/scene/__tests__/intersection-ownership-regression.test.ts && node --import tsx src/scene/__tests__/polygon-ownership-stress.test.ts && node --import tsx src/scene/__tests__/grid-snap-point-reuse.test.ts && node --import tsx src/scene/__tests__/perp-line-polygon-edge.test.ts && node --import tsx src/scene/__tests__/polygon-preview-fill.test.ts && node --import tsx src/scene/__tests__/polygon-owned-segment-visibility.test.ts && node --import tsx src/scene/__tests__/transform-tool-workflow.test.ts && node --import tsx src/scene/__tests__/tangent-circle-circle.test.ts",
+    "test:scene": "node --import tsx src/scene/__tests__/intersection-ownership-regression.test.ts && node --import tsx src/scene/__tests__/polygon-ownership-stress.test.ts && node --import tsx src/scene/__tests__/grid-snap-point-reuse.test.ts && node --import tsx src/scene/__tests__/perp-line-polygon-edge.test.ts && node --import tsx src/scene/__tests__/polygon-preview-fill.test.ts && node --import tsx src/scene/__tests__/polygon-owned-segment-visibility.test.ts && node --import tsx src/scene/__tests__/transform-tool-workflow.test.ts && node --import tsx src/scene/__tests__/tangent-circle-circle.test.ts && node --import tsx src/scene/__tests__/vector-translation-regression.test.ts",
     "diag:scene": "tsx scripts/scene-diagnostics.ts",
     "test:export:watch": "tsx --watch src/export/__tests__/line-extents.test.ts",
     "update:tkz-macros": "tsx scripts/extract-tkz-euclide-macros.ts"

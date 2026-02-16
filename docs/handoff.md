@@ -1561,3 +1561,49 @@ Date completed: February 16, 2026
 - Existing fail-closed redefine policy for point aliases remains unchanged:
   - only free-point alias redefinition (`CreatePointXY`) is allowed.
   - transform-derived point aliases are not redefined in-place by assignment updates.
+
+## Latest Done (Vector-First Translation Foundation)
+Date completed: February 16, 2026
+
+### What Changed
+- Added first-class vectors in scene model:
+  - `vectorFromPoints` (`fromId`, `toId`)
+  - `freeVector` (`dx`, `dy`)
+- Added `scene.vectors` container (initialized in state as `[]`).
+- Added `nextVectorId` to store state + history snapshot/restore.
+
+### Translation Point Upgrade
+- `pointByTranslation` now supports optional `vectorId`.
+- Kept legacy `fromId/toId` fields for compatibility with parser/export/references.
+- Creation path now vector-first:
+  - `createPointByTranslation` creates or reuses a `vectorFromPoints` object.
+  - New translated point stores `vectorId` (and still stores `fromId/toId`).
+  - Same `(fromId,toId)` pair reuses existing vector instead of duplicating.
+
+### Evaluation + Integrity
+- Eval context now indexes vectors by id.
+- Translation evaluation prefers `vectorId` resolution, then falls back to legacy `fromId/toId`.
+- Scene integrity normalization now:
+  - validates/removes invalid vectors,
+  - clears stale `pointByTranslation.vectorId`,
+  - keeps translation points valid via vector path or legacy fallback.
+
+### Snapshot Support
+- Construction snapshot now includes `vectors`.
+- `pointByTranslation` snapshot definition now includes optional `vectorId`.
+- `dependsOn` for translated points includes `vector:<id>` when present.
+
+### Regression Coverage Added
+- Extended `src/scene/__tests__/command-redefine.test.ts`:
+  - asserts translate assignment creates `pointByTranslation.vectorId`,
+  - asserts vector object exists with expected endpoints,
+  - asserts repeated same translation reuses vector (no duplication).
+- Added new test: `src/scene/__tests__/vector-translation-regression.test.ts`
+  - verifies translation evaluates from `vectorId` (vector-first), even if legacy fields disagree.
+- Included new test in `npm run test:scene`.
+
+### Verification
+- `npm run build` passed.
+- `npm run test:command` passed.
+- `npm run test:scene` passed.
+- `npm run test:export` passed.

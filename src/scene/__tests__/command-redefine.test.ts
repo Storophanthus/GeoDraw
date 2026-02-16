@@ -242,6 +242,7 @@ mustOk(commandBarApi.setPointXY("TC", 3, -1), "set TC");
 const ta = pointIdByName("TA");
 const tb = pointIdByName("TB");
 const tc = pointIdByName("TC");
+const vectorsBeforeTranslate = (getGeoStore().scene.vectors ?? []).length;
 mustOk(commandBarApi.applyObjectAssignment("tAxis", { type: "CreateLineByPoints", aId: tb, bId: tc }), "create tAxis");
 
 {
@@ -254,12 +255,36 @@ mustOk(commandBarApi.applyObjectAssignment("tAxis", { type: "CreateLineByPoints"
   assertPointLabel(id, "TT", "translate assignment label");
   const point = getGeoStore().scene.points.find((p) => p.id === id);
   assert(!!point && point.kind === "pointByTranslation", "translate assignment did not create constrained translation point");
+  assert(typeof point.vectorId === "string" && point.vectorId.length > 0, "translate assignment should bind to vectorId");
+  const vector = (getGeoStore().scene.vectors ?? []).find((item) => item.id === point.vectorId);
+  assert(!!vector, "missing translation vector object");
+  assert(
+    vector?.kind === "vectorFromPoints" && vector.fromId === tb && vector.toId === tc,
+    "translation vector endpoints mismatch"
+  );
   const wBase = pointWorld(ta);
   const wFrom = pointWorld(tb);
   const wTo = pointWorld(tc);
   const wOut = pointWorld(id);
   const expected = { x: wBase.x + (wTo.x - wFrom.x), y: wBase.y + (wTo.y - wFrom.y) };
   assert(approxEqual(wOut.x, expected.x) && approxEqual(wOut.y, expected.y), "translate point world mismatch");
+}
+
+mustOk(commandBarApi.applyObjectAssignment("TT2", { type: "CreatePointByTranslation", pointId: ta, fromId: tb, toId: tc }), "apply second translate assignment");
+{
+  const id = aliasId("TT");
+  const id2 = aliasId("TT2");
+  const p1 = getGeoStore().scene.points.find((p) => p.id === id);
+  const p2 = getGeoStore().scene.points.find((p) => p.id === id2);
+  assert(!!p1 && p1.kind === "pointByTranslation", "TT should remain pointByTranslation");
+  assert(!!p2 && p2.kind === "pointByTranslation", "TT2 should be pointByTranslation");
+  assert(typeof p1.vectorId === "string" && p1.vectorId.length > 0, "TT missing vectorId");
+  assert(typeof p2.vectorId === "string" && p2.vectorId.length > 0, "TT2 missing vectorId");
+  assert(p1.vectorId === p2.vectorId, "translation points should reuse identical vectorFromPoints");
+  assert(
+    (getGeoStore().scene.vectors ?? []).length === vectorsBeforeTranslate + 1,
+    "same from/to translation should not duplicate vectors"
+  );
 }
 
 {
