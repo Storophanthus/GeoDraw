@@ -3,8 +3,6 @@ import {
   useRef,
   useState,
   type ComponentType,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { ActiveTool } from "../state/geoStore";
 import {
@@ -23,10 +21,15 @@ import {
   IconPerpendicular,
   IconPoint,
   IconPolygon,
+  IconRegularPolygon,
   IconSector,
   IconSegment,
+  IconSidebarPanelLeft,
+  IconSidebarPanelRight,
   IconTangent,
-  IconTransform,
+  IconTranslate,
+  IconReflect,
+  IconDilate,
 } from "./icons";
 
 type IconProps = {
@@ -45,7 +48,9 @@ type ToolGroupId = "move" | "points" | "transform" | "lines" | "angle" | "circle
 const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   move: { icon: IconMove, tooltip: "Move / Select (V)", ariaLabel: "Move tool" },
   point: { icon: IconPoint, tooltip: "Point (P)", ariaLabel: "Point tool" },
-  transform: { icon: IconTransform, tooltip: "Transform Point", ariaLabel: "Transform tool" },
+  translate: { icon: IconTranslate, tooltip: "Translate Object", ariaLabel: "Translate tool" },
+  reflect: { icon: IconReflect, tooltip: "Reflect Object", ariaLabel: "Reflect tool" },
+  dilate: { icon: IconDilate, tooltip: "Dilate Object", ariaLabel: "Dilate tool" },
   copyStyle: { icon: IconCopyStyle, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
   export_clip: { icon: IconExportClip, tooltip: "Export Clip Rectangle", ariaLabel: "Export clip tool" },
   midpoint: { icon: IconMidpoint, tooltip: "Midpoint (M)", ariaLabel: "Midpoint tool" },
@@ -61,21 +66,19 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   circle_3p: { icon: IconCircle3Point, tooltip: "Circle through 3 Points", ariaLabel: "Circle through three points tool" },
   circle_fixed: { icon: IconCircleRadius, tooltip: "Circle with Fixed Radius", ariaLabel: "Circle with fixed radius tool" },
   polygon: { icon: IconPolygon, tooltip: "Polygon", ariaLabel: "Polygon tool" },
-  regular_polygon: { icon: IconPolygon, tooltip: "Regular Polygon", ariaLabel: "Regular polygon tool" },
+  regular_polygon: { icon: IconRegularPolygon, tooltip: "Regular Polygon", ariaLabel: "Regular polygon tool" },
   sector: { icon: IconSector, tooltip: "Circular Sector", ariaLabel: "Circular sector tool" },
 };
 
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
   { id: "move", label: "MOVE", tools: ["move", "export_clip"] },
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
-  { id: "transform", label: "TRANSFORM", tools: ["transform"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "SHAPES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon", "regular_polygon"] },
+  { id: "transform", label: "TRANSFORM", tools: ["translate", "reflect", "dilate"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle"] },
 ];
-
-const LONG_PRESS_MS = 250;
 
 type ToolPaletteProps = {
   activeTool: ActiveTool;
@@ -84,6 +87,7 @@ type ToolPaletteProps = {
   setLeftCollapsed: (next: boolean) => void;
   leftWidth: number;
   collapsedWidth: number;
+  onFlyoutVisibilityChange?: (open: boolean) => void;
 };
 
 export function ToolPalette({
@@ -93,12 +97,13 @@ export function ToolPalette({
   setLeftCollapsed,
   leftWidth,
   collapsedWidth,
+  onFlyoutVisibilityChange,
 }: ToolPaletteProps) {
   const [openFlyoutGroup, setOpenFlyoutGroup] = useState<ToolGroupId | null>(null);
   const [groupLastSelected, setGroupLastSelected] = useState<Record<ToolGroupId, ActiveTool>>({
     move: "move",
     points: "point",
-    transform: "transform",
+    transform: "translate",
     lines: "segment",
     angle: "angle",
     circles: "circle_cp",
@@ -140,6 +145,10 @@ export function ToolPalette({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [openFlyoutGroup]);
 
+  useEffect(() => {
+    onFlyoutVisibilityChange?.(openFlyoutGroup !== null);
+  }, [openFlyoutGroup, onFlyoutVisibilityChange]);
+
   return (
     <aside
       ref={toolbarRef}
@@ -148,42 +157,24 @@ export function ToolPalette({
       aria-label="Tools"
     >
       {leftCollapsed ? (
-        <button className="collapseButton" onClick={() => setLeftCollapsed(false)} aria-label="Expand left sidebar">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M9 18l6-6-6-6" />
-          </svg>
+        <button
+          className="sidebarToggleButton"
+          onClick={() => setLeftCollapsed(false)}
+          aria-label="Expand left sidebar"
+        >
+          <IconSidebarPanelRight size={16} strokeWidth={2} />
         </button>
       ) : (
         <>
           <button
-            className="collapseButton"
+            className="sidebarToggleButton"
             onClick={() => {
               setOpenFlyoutGroup(null);
               setLeftCollapsed(true);
             }}
             aria-label="Collapse left sidebar"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
+            <IconSidebarPanelLeft size={16} strokeWidth={2} />
           </button>
 
           {TOOL_GROUPS.map((group, idx) => {
@@ -244,66 +235,29 @@ function ToolGroupButton({
 }: ToolGroupButtonProps) {
   const mainDef = TOOL_REGISTRY[mainTool];
   const MainIcon = mainDef.icon;
-  const longPressTimerRef = useRef<number | null>(null);
-  const longPressOpenedRef = useRef(false);
-
-  const clearPressTimer = () => {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  };
-
-  const onPointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    if (e.button !== 0) return;
-    clearPressTimer();
-    longPressOpenedRef.current = false;
-    longPressTimerRef.current = window.setTimeout(() => {
-      longPressOpenedRef.current = true;
-      onOpenFlyout();
-    }, LONG_PRESS_MS);
-  };
-
-  const onPointerUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    if (e.button !== 0) return;
-    const openedByLongPress = longPressOpenedRef.current;
-    clearPressTimer();
-    if (!openedByLongPress) {
-      if (activeTool === mainTool) {
-        if (flyoutOpen) onCloseFlyout();
-        else onOpenFlyout();
-      } else {
-        onCloseFlyout();
-        onSelectTool(mainTool);
-      }
-    }
-    longPressOpenedRef.current = false;
-  };
-
-  const onContextMenu = (e: ReactMouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    clearPressTimer();
-    longPressOpenedRef.current = false;
-    onOpenFlyout();
-  };
 
   const flyoutTools = tools.filter((tool) => tool !== mainTool);
+  const hasFlyout = flyoutTools.length > 0;
 
   return (
-    <div className="toolGroupWrap" data-group-id={groupId}>
-      <div className="toolButtonWrap">
+    <div
+      className="toolGroupWrap"
+      data-group-id={groupId}
+      onMouseEnter={() => {
+        if (hasFlyout) onOpenFlyout();
+      }}
+      onMouseLeave={() => onCloseFlyout()}
+    >
+      <div className={flyoutOpen ? "toolButtonWrap suppressTooltip" : "toolButtonWrap"}>
         <button
           type="button"
           className={activeTool === mainTool ? "toolIconButton active" : "toolIconButton"}
-          onPointerDown={onPointerDown}
-          onPointerUp={onPointerUp}
-          onPointerCancel={clearPressTimer}
-          onPointerLeave={clearPressTimer}
-          onContextMenu={onContextMenu}
-          onClick={(e) => {
-            if (e.detail !== 0) return;
+          onClick={() => {
             onCloseFlyout();
             onSelectTool(mainTool);
+          }}
+          onFocus={() => {
+            if (hasFlyout) onOpenFlyout();
           }}
           aria-label={mainDef.ariaLabel}
         >

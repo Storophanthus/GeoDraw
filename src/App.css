@@ -44,28 +44,30 @@ textarea {
   overflow: visible;
   position: relative;
   z-index: 40;
+  transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1), padding 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.leftToolbar.collapsed,
-.rightSidebar.collapsed {
-  padding: 8px 2px;
+.leftToolbar.collapsed {
+  padding: 8px 6px;
   align-items: center;
 }
 
 .rightSidebar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   padding: 10px 10px 12px;
   background: #f3f6fb;
   border-left: 1px solid #d7dfe8;
   overflow: auto;
   flex: 0 0 auto;
+  transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1), padding 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .rightTopRow {
   display: flex;
   justify-content: flex-end;
+  width: 100%;
 }
 
 .collapseButton {
@@ -81,11 +83,49 @@ textarea {
   cursor: pointer;
 }
 
+.sidebarToggleButton {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #bcc8d9;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f8fbff 0%, #edf3fa 100%);
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+  transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.sidebarToggleButton:hover,
+.sidebarToggleButton:focus-visible {
+  background: #ffffff;
+  border-color: #94a3b8;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
+  outline: none;
+}
+
+.sidebarToggleButton:active {
+  transform: scale(0.98);
+}
+
+.rightSidebar.collapsed {
+  padding: 8px 6px;
+  align-items: center;
+  overflow: visible;
+}
+
 .resizeHandle {
-  width: 6px;
+  width: 4px;
   cursor: col-resize;
   background: transparent;
   flex: 0 0 auto;
+}
+
+.resizeHandle.disabled {
+  pointer-events: none;
+  cursor: default;
 }
 
 .resizeHandle:hover {
@@ -186,6 +226,7 @@ textarea {
   display: flex;
   flex-direction: column;
   align-items: center;
+  animation: toolGroupEnter 160ms ease both;
 }
 
 .toolGroupWrap {
@@ -198,10 +239,12 @@ textarea {
 .toolGroupLabel {
   width: 100%;
   text-align: center;
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  font-size: 9.3px;
+  letter-spacing: 0.03em;
+  line-height: 1.1;
   text-transform: uppercase;
   color: #64748b;
+  white-space: nowrap;
   margin: 6px 0 2px;
 }
 
@@ -251,8 +294,10 @@ textarea {
   top: 50%;
   left: calc(100% + 8px);
   transform: translateY(-50%);
-  background: rgba(15, 23, 42, 0.94);
-  color: #f8fafc;
+  background: #f8fbff;
+  color: #334155;
+  border: 1px solid #bcc8d9;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
   font-size: 11px;
   line-height: 1.2;
   padding: 5px 7px;
@@ -271,9 +316,14 @@ textarea {
   visibility: visible;
 }
 
+.toolButtonWrap.suppressTooltip .toolTooltip {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
 .toolFlyout {
   position: absolute;
-  left: calc(100% + 8px);
+  left: 100%;
   top: 0;
   display: flex;
   flex-direction: column;
@@ -283,7 +333,38 @@ textarea {
   border-radius: 10px;
   background: #ffffff;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
-  z-index: 30;
+  z-index: 80;
+  opacity: 0;
+  transform: translateX(-4px) scale(0.98);
+  animation: toolFlyoutIn 130ms ease forwards;
+  pointer-events: auto;
+}
+
+@keyframes toolFlyoutIn {
+  from {
+    opacity: 0;
+    transform: translateX(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toolGroupEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+body.sidebar-resizing .leftToolbar,
+body.sidebar-resizing .rightSidebar {
+  transition: none !important;
 }
 
 .sidebarSection {

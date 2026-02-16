@@ -104,10 +104,6 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     () => evaluateNumberExpression(scene, circleFixedTool.radius),
     [scene, circleFixedTool.radius]
   );
-  const transformAnglePreview = useMemo(
-    () => evaluateAngleExpressionDegrees(scene, transformTool.angleExpr),
-    [scene, transformTool.angleExpr]
-  );
   const transformFactorPreview = useMemo(
     () => evaluateNumberExpression(scene, transformTool.factorExpr),
     [scene, transformTool.factorExpr]
@@ -222,12 +218,8 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   regularPolygonSides={regularPolygonTool.sides}
   regularPolygonDirection={regularPolygonTool.direction}
   setRegularPolygonTool={setRegularPolygonTool}
-  transformMode={transformTool.mode}
-  transformAngleExpr={transformTool.angleExpr}
-  transformDirection={transformTool.direction}
   transformFactorExpr={transformTool.factorExpr}
   setTransformTool={setTransformTool}
-  transformAnglePreview={transformAnglePreview}
   transformFactorPreview={transformFactorPreview}
   pendingSelection={pendingSelection}
   pendingCircleFixedCenterLabel={

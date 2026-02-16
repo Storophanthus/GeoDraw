@@ -1,4 +1,5 @@
-import { Redo2, Undo2, ZoomIn } from "lucide-react";
+import { Redo2, Undo2 } from "lucide-react";
+import { IconFitView } from "./icons";
 
 type HistoryControlsProps = {
   canUndo: boolean;
@@ -41,7 +42,7 @@ export function HistoryControls({
         title="Fit View"
         aria-label="Fit view"
       >
-        <ZoomIn size={16} />
+        <IconFitView size={16} />
       </button>
     </div>
   );

@@ -1,5 +1,5 @@
 import { constructFromClick } from "../../engine";
-import type { PendingSelection } from "../../state/slices/storeTypes";
+import type { ActiveTool, PendingSelection } from "../../state/slices/storeTypes";
 import type { ToolClickHits } from "../../tools/toolClick";
 
 function assert(cond: boolean, msg: string): void {
@@ -7,8 +7,6 @@ function assert(cond: boolean, msg: string): void {
 }
 
 type TestIO = Parameters<typeof constructFromClick>[0]["io"];
-
-type TransformMode = "translate" | "rotate" | "dilate" | "reflect";
 
 const baseHits: ToolClickHits = {
   hitPointId: null,
@@ -26,24 +24,20 @@ const pointWorldById = new Map<string, { x: number; y: number }>([
   ["pO", { x: 0, y: 0 }],
 ]);
 
-function makeHarness(mode: TransformMode): {
+function makeHarness(activeTool: ActiveTool): {
   click: (hits: Partial<ToolClickHits>) => void;
   getPending: () => PendingSelection;
   logs: {
-    rotationExpr: string[];
-    translateCalls: Array<{ pointId: string; fromId: string; toId: string }>;
-    rotateCalls: Array<{ centerId: string; pointId: string; angleDeg: number; direction: "CCW" | "CW"; angleExpr?: string }>;
-    dilateCalls: Array<{ pointId: string; centerId: string; factorExpr: string }>;
-    reflectCalls: Array<{ pointId: string; axis: { type: "line" | "segment"; id: string } }>;
+    translate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; fromId: string; toId: string }>;
+    dilate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; factorExpr: string }>;
+    reflect: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; axis: { type: "line" | "segment"; id: string } }>;
   };
 } {
   let pending: PendingSelection = null;
   const logs = {
-    rotationExpr: [] as string[],
-    translateCalls: [] as Array<{ pointId: string; fromId: string; toId: string }>,
-    rotateCalls: [] as Array<{ centerId: string; pointId: string; angleDeg: number; direction: "CCW" | "CW"; angleExpr?: string }>,
-    dilateCalls: [] as Array<{ pointId: string; centerId: string; factorExpr: string }>,
-    reflectCalls: [] as Array<{ pointId: string; axis: { type: "line" | "segment"; id: string } }>,
+    translate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; fromId: string; toId: string }>,
+    dilate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; factorExpr: string }>,
+    reflect: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; axis: { type: "line" | "segment"; id: string } }>,
   };
 
   const io: TestIO = {
@@ -116,21 +110,29 @@ function makeHarness(mode: TransformMode): {
     createPointOnCircle() {
       return null;
     },
-    createPointByRotation(centerId, basePointId, angleDeg, direction, angleExpr) {
-      logs.rotateCalls.push({ centerId, pointId: basePointId, angleDeg, direction, angleExpr });
-      return "p_rot";
+    createPointByRotation() {
+      return null;
     },
-    createPointByTranslation(pointId, fromId, toId) {
-      logs.translateCalls.push({ pointId, fromId, toId });
-      return "p_trans";
+    createPointByTranslation() {
+      return null;
     },
-    createPointByDilation(pointId, centerId, factorExpr) {
-      logs.dilateCalls.push({ pointId, centerId, factorExpr });
-      return "p_dil";
+    createPointByDilation() {
+      return null;
     },
-    createPointByReflection(pointId, axis) {
-      logs.reflectCalls.push({ pointId, axis });
-      return "p_ref";
+    createPointByReflection() {
+      return null;
+    },
+    transformObjectByTranslation(source, fromId, toId) {
+      logs.translate.push({ source, fromId, toId });
+      return "obj_t";
+    },
+    transformObjectByDilation(source, centerId, factorExpr) {
+      logs.dilate.push({ source, centerId, factorExpr });
+      return "obj_d";
+    },
+    transformObjectByReflection(source, axis) {
+      logs.reflect.push({ source, axis });
+      return "obj_r";
     },
     createIntersectionPoint() {
       return null;
@@ -145,13 +147,12 @@ function makeHarness(mode: TransformMode): {
     angleFixedTool: { angleExpr: "45", direction: "CCW" },
     regularPolygonTool: { sides: 5, direction: "CCW" },
     transformTool: {
-      mode,
+      mode: "translate",
       angleExpr: "30+15",
       direction: "CW",
       factorExpr: "1/2",
     },
-    evaluateAngleExpressionDegrees(exprRaw) {
-      logs.rotationExpr.push(exprRaw);
+    evaluateAngleExpressionDegrees() {
       return { ok: true, valueDeg: 45 };
     },
     getPointWorldById(id) {
@@ -168,7 +169,7 @@ function makeHarness(mode: TransformMode): {
   const click = (hits: Partial<ToolClickHits>) => {
     constructFromClick({
       screen: { x: 400, y: 300 },
-      activeTool: "transform",
+      activeTool,
       pendingSelection: pending,
       hits: { ...baseHits, ...hits },
       io,
@@ -184,67 +185,82 @@ function makeHarness(mode: TransformMode): {
 
 {
   const h = makeHarness("translate");
-  h.click({ hitPointId: "pP", hitObject: { type: "point", id: "pP" } });
+  h.click({ hitObject: { type: "point", id: "pP" }, hitPointId: "pP" });
   const step2 = h.getPending();
-  assert(!!step2 && step2.tool === "transform" && step2.step === 2 && step2.mode === "translate", "Translate step 1 should select source point.");
-  h.click({ hitPointId: "pA", hitObject: { type: "point", id: "pA" } });
+  assert(!!step2 && step2.tool === "translate" && step2.step === 2 && step2.source.id === "pP", "Translate step 1 should pick source object.");
+  h.click({ hitObject: { type: "point", id: "pA" }, hitPointId: "pA" });
   const step3 = h.getPending();
-  assert(!!step3 && step3.tool === "transform" && step3.step === 3 && step3.second.id === "pA", "Translate step 2 should select vector start.");
-  h.click({ hitPointId: "pB", hitObject: { type: "point", id: "pB" } });
-  assert(h.logs.translateCalls.length === 1, "Translate should create exactly one transformed point.");
+  assert(!!step3 && step3.tool === "translate" && step3.step === 3 && step3.from.id === "pA", "Translate step 2 should pick vector start.");
+  h.click({ hitObject: { type: "point", id: "pB" }, hitPointId: "pB" });
+  assert(h.logs.translate.length === 1, "Translate should invoke object transform once.");
   assert(
-    h.logs.translateCalls[0].pointId === "pP" &&
-      h.logs.translateCalls[0].fromId === "pA" &&
-      h.logs.translateCalls[0].toId === "pB",
-    "Translate should call createPointByTranslation(P,A,B)."
+    h.logs.translate[0].source.type === "point" &&
+      h.logs.translate[0].source.id === "pP" &&
+      h.logs.translate[0].fromId === "pA" &&
+      h.logs.translate[0].toId === "pB",
+    "Translate should call transformObjectByTranslation(point, A, B)."
   );
-  assert(h.getPending() === null, "Translate should clear pending state after creation.");
+  assert(h.getPending() === null, "Translate should clear pending state.");
 }
 
 {
-  const h = makeHarness("rotate");
-  h.click({ hitPointId: "pP", hitObject: { type: "point", id: "pP" } });
-  h.click({ hitPointId: "pO", hitObject: { type: "point", id: "pO" } });
-  assert(h.logs.rotationExpr.length === 1 && h.logs.rotationExpr[0] === "30+15", "Rotate should evaluate configured angle expression.");
-  assert(h.logs.rotateCalls.length === 1, "Rotate should create exactly one transformed point.");
-  const rotate = h.logs.rotateCalls[0];
+  const h = makeHarness("translate");
+  h.click({ hitObject: { type: "segment", id: "sAB" } });
+  h.click({ hitObject: { type: "point", id: "pA" }, hitPointId: "pA" });
+  h.click({ hitObject: { type: "point", id: "pB" }, hitPointId: "pB" });
+  assert(h.logs.translate.length === 1, "Segment translate should invoke object transform.");
   assert(
-    rotate.centerId === "pO" &&
-      rotate.pointId === "pP" &&
-      Math.abs(rotate.angleDeg - 45) <= 1e-12 &&
-      rotate.direction === "CW" &&
-      rotate.angleExpr === "30+15",
-    "Rotate should call createPointByRotation(O,P,45,CW,expr)."
+    h.logs.translate[0].source.type === "segment" &&
+      h.logs.translate[0].source.id === "sAB",
+    "Translate should preserve segment source identity."
   );
-  assert(h.getPending() === null, "Rotate should clear pending state after creation.");
+}
+
+{
+  const h = makeHarness("translate");
+  h.click({ hitObject: { type: "line", id: "lAB" } });
+  h.click({ hitObject: { type: "point", id: "pA" }, hitPointId: "pA" });
+  h.click({ hitObject: { type: "point", id: "pB" }, hitPointId: "pB" });
+  assert(h.logs.translate.length === 1, "Line translate should invoke object transform.");
+  assert(
+    h.logs.translate[0].source.type === "line" &&
+      h.logs.translate[0].source.id === "lAB",
+    "Translate should preserve line source identity."
+  );
 }
 
 {
   const h = makeHarness("dilate");
-  h.click({ hitPointId: "pP", hitObject: { type: "point", id: "pP" } });
-  h.click({ hitPointId: "pO", hitObject: { type: "point", id: "pO" } });
-  assert(h.logs.dilateCalls.length === 1, "Dilate should create exactly one transformed point.");
+  h.click({ hitObject: { type: "circle", id: "c1" } });
+  const step2 = h.getPending();
+  assert(!!step2 && step2.tool === "dilate" && step2.step === 2 && step2.source.id === "c1", "Dilate step 1 should pick source object.");
+  h.click({ hitObject: { type: "point", id: "pO" }, hitPointId: "pO" });
+  assert(h.logs.dilate.length === 1, "Dilate should invoke object transform once.");
   assert(
-    h.logs.dilateCalls[0].pointId === "pP" &&
-      h.logs.dilateCalls[0].centerId === "pO" &&
-      h.logs.dilateCalls[0].factorExpr === "1/2",
-    "Dilate should call createPointByDilation(P,O,factorExpr)."
+    h.logs.dilate[0].source.type === "circle" &&
+      h.logs.dilate[0].source.id === "c1" &&
+      h.logs.dilate[0].centerId === "pO" &&
+      h.logs.dilate[0].factorExpr === "1/2",
+    "Dilate should call transformObjectByDilation(circle, O, factorExpr)."
   );
-  assert(h.getPending() === null, "Dilate should clear pending state after creation.");
+  assert(h.getPending() === null, "Dilate should clear pending state.");
 }
 
 {
   const h = makeHarness("reflect");
-  h.click({ hitPointId: "pP", hitObject: { type: "point", id: "pP" } });
+  h.click({ hitObject: { type: "polygon", id: "poly1" } });
+  const step2 = h.getPending();
+  assert(!!step2 && step2.tool === "reflect" && step2.step === 2 && step2.source.id === "poly1", "Reflect step 1 should pick source object.");
   h.click({ hitObject: { type: "line", id: "l_axis" } });
-  assert(h.logs.reflectCalls.length === 1, "Reflect should create exactly one transformed point.");
+  assert(h.logs.reflect.length === 1, "Reflect should invoke object transform once.");
   assert(
-    h.logs.reflectCalls[0].pointId === "pP" &&
-      h.logs.reflectCalls[0].axis.type === "line" &&
-      h.logs.reflectCalls[0].axis.id === "l_axis",
-    "Reflect should call createPointByReflection with selected line axis."
+    h.logs.reflect[0].source.type === "polygon" &&
+      h.logs.reflect[0].source.id === "poly1" &&
+      h.logs.reflect[0].axis.type === "line" &&
+      h.logs.reflect[0].axis.id === "l_axis",
+    "Reflect should call transformObjectByReflection(polygon, axis)."
   );
-  assert(h.getPending() === null, "Reflect should clear pending state after creation.");
+  assert(h.getPending() === null, "Reflect should clear pending state.");
 }
 
 console.log("transform-tool-workflow: ok");

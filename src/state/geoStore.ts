@@ -34,6 +34,7 @@ import type {
   PendingSelection,
   RenameResult,
   SelectedObject,
+  TransformableObjectRef,
 } from "./slices/storeTypes";
 import { createUiActions } from "./slices/uiActions";
 import { createSceneRenameActions } from "./slices/sceneRenameActions";
@@ -54,6 +55,7 @@ export type {
   PendingSelection,
   RenameResult,
   SelectedObject,
+  TransformableObjectRef,
 };
 const initialState: GeoState = createInitialGeoState();
 rebuildRightAngleProvenance(initialState.scene);

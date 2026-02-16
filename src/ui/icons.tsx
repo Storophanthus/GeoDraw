@@ -68,6 +68,33 @@ export const IconTransform = createIcon(() => (
     </>
 ), "IconTransform");
 
+export const IconTranslate = createIcon(() => (
+    <>
+        <rect x="2.5" y="11" width="7" height="7" rx="1.2" fill="currentColor" fillOpacity="0.25" strokeWidth={1.8} />
+        <rect x="14.5" y="6" width="7" height="7" rx="1.2" fill="currentColor" fillOpacity="0.15" strokeWidth={1.8} />
+        <path d="M10.5 14.5 H15.5" strokeWidth={2.2} />
+        <path d="M15.5 14.5 l-2.2 -2.2 M15.5 14.5 l-2.2 2.2" strokeWidth={2} />
+    </>
+), "IconTranslate");
+
+export const IconReflect = createIcon(() => (
+    <>
+        <line x1="3" y1="21" x2="21" y2="3" strokeWidth={2.2} />
+        <circle cx="7" cy="17" r="2.3" fill="currentColor" stroke="none" />
+        <circle cx="17" cy="7" r="2.3" fill="currentColor" stroke="none" />
+        <path d="M9.2 14.8 L14.8 9.2" strokeWidth={1.8} strokeDasharray="2 2" />
+    </>
+), "IconReflect");
+
+export const IconDilate = createIcon(() => (
+    <>
+        <circle cx="6" cy="18" r="2.2" fill="currentColor" stroke="none" />
+        <rect x="9.5" y="10.5" width="5" height="5" rx="0.9" fill="currentColor" fillOpacity="0.28" strokeWidth={1.8} />
+        <rect x="14.5" y="5.5" width="8" height="8" rx="1.2" fill="currentColor" fillOpacity="0.14" strokeWidth={1.8} />
+        <path d="M6 18 L18.5 9.5" strokeWidth={1.8} />
+    </>
+), "IconDilate");
+
 export const IconLine = createIcon(() => (
     <>
         <line x1="1" y1="23" x2="23" y2="1" strokeWidth={2.5} />
@@ -188,6 +215,14 @@ export const IconPolygon = createIcon(() => (
     </>
 ), "IconPolygon");
 
+export const IconRegularPolygon = createIcon(() => (
+    <>
+        <path d="M12 2.5 L20 7 L20 17 L12 21.5 L4 17 L4 7 Z" fill="currentColor" fillOpacity="0.18" strokeWidth={2.2} />
+        <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+        <line x1="12" y1="12" x2="20" y2="7" strokeWidth={1.7} strokeDasharray="2 2" />
+    </>
+), "IconRegularPolygon");
+
 export const IconCopyStyle = createIcon(() => (
     <>
         <rect x="1" y="1" width="12" height="12" rx="2" fill="currentColor" fillOpacity="0.2" stroke="none" />
@@ -214,6 +249,26 @@ export const IconFitView = createIcon(() => (
         <rect x="7.5" y="7.5" width="9" height="9" rx="1.5" strokeWidth={1.8} />
     </>
 ), "IconFitView");
+
+export const IconSidebarPanelLeft = createIcon(() => (
+    <>
+        <rect x="3" y="4" width="18" height="16" rx="3" strokeWidth={2.2} />
+        <line x1="9.5" y1="5.5" x2="9.5" y2="18.5" strokeWidth={1.8} />
+        <circle cx="15.5" cy="8.5" r="0.9" fill="currentColor" stroke="none" />
+        <circle cx="15.5" cy="12" r="0.9" fill="currentColor" stroke="none" />
+        <circle cx="15.5" cy="15.5" r="0.9" fill="currentColor" stroke="none" />
+    </>
+), "IconSidebarPanelLeft");
+
+export const IconSidebarPanelRight = createIcon(() => (
+    <>
+        <rect x="3" y="4" width="18" height="16" rx="3" strokeWidth={2.2} />
+        <line x1="14.5" y1="5.5" x2="14.5" y2="18.5" strokeWidth={1.8} />
+        <circle cx="8.5" cy="8.5" r="0.9" fill="currentColor" stroke="none" />
+        <circle cx="8.5" cy="12" r="0.9" fill="currentColor" stroke="none" />
+        <circle cx="8.5" cy="15.5" r="0.9" fill="currentColor" stroke="none" />
+    </>
+), "IconSidebarPanelRight");
 
 export const IconGlobe = createIcon(() => (
     <>

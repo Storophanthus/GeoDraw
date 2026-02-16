@@ -37,8 +37,7 @@ export function drawInteractionHighlights(
       pendingSelection.tool === "sector" ||
       pendingSelection.tool === "regular_polygon" ||
       pendingSelection.tool === "angle_fixed" ||
-      pendingSelection.tool === "angle_bisector" ||
-      pendingSelection.tool === "transform"
+      pendingSelection.tool === "angle_bisector"
     ) {
       drawHitHighlight(
         ctx,
@@ -54,6 +53,41 @@ export function drawInteractionHighlights(
         drawHitHighlight(
           ctx,
           { type: "point", id: pendingSelection.second.id },
+          resolvedPoints,
+          scene,
+          camera,
+          vp,
+          "#16a34a",
+          0.9
+        );
+      }
+      if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
+        drawHitHighlight(ctx, hoveredHit, resolvedPoints, scene, camera, vp, "#0ea5e9", 0.9);
+      }
+      return;
+    }
+    if (
+      pendingSelection.tool === "translate" ||
+      pendingSelection.tool === "dilate" ||
+      pendingSelection.tool === "reflect"
+    ) {
+      const sourceHit: { type: "point" | "segment" | "line2p" | "circle" | "polygon" | "angle"; id: string } =
+        pendingSelection.source.type === "point"
+          ? { type: "point", id: pendingSelection.source.id }
+          : pendingSelection.source.type === "segment"
+            ? { type: "segment", id: pendingSelection.source.id }
+            : pendingSelection.source.type === "line"
+              ? { type: "line2p", id: pendingSelection.source.id }
+            : pendingSelection.source.type === "circle"
+              ? { type: "circle", id: pendingSelection.source.id }
+              : pendingSelection.source.type === "polygon"
+                ? { type: "polygon", id: pendingSelection.source.id }
+                : { type: "angle", id: pendingSelection.source.id };
+      drawHitHighlight(ctx, sourceHit, resolvedPoints, scene, camera, vp, "#22c55e", 0.95);
+      if (pendingSelection.tool === "translate" && pendingSelection.step === 3) {
+        drawHitHighlight(
+          ctx,
+          { type: "point", id: pendingSelection.from.id },
           resolvedPoints,
           scene,
           camera,

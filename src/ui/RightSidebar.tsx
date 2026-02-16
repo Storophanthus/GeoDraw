@@ -1,7 +1,7 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useGeoStore } from "../state/geoStore";
 import { ExportPanel } from "./ExportPanel";
+import { IconSidebarPanelLeft, IconSidebarPanelRight } from "./icons";
 import { ObjectBrowser } from "./ObjectBrowser";
 import { PropertiesPanel } from "./PropertiesPanel";
 
@@ -31,14 +31,14 @@ export function RightSidebar({
       style={{ width: rightCollapsed ? collapsedWidth : rightWidth }}
     >
       {rightCollapsed ? (
-        <button className="collapseButton" onClick={() => setRightCollapsed(false)} aria-label="Expand right sidebar">
-          <ChevronLeft size={14} />
+        <button className="sidebarToggleButton" onClick={() => setRightCollapsed(false)} aria-label="Expand right sidebar">
+          <IconSidebarPanelLeft size={16} strokeWidth={2} />
         </button>
       ) : (
         <>
           <div className="rightTopRow">
-            <button className="collapseButton" onClick={() => setRightCollapsed(true)} aria-label="Collapse right sidebar">
-              <ChevronRight size={14} />
+            <button className="sidebarToggleButton" onClick={() => setRightCollapsed(true)} aria-label="Collapse right sidebar">
+              <IconSidebarPanelRight size={16} strokeWidth={2} />
             </button>
           </div>
 

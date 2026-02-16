@@ -1,5 +1,6 @@
 import {
   type GeometryObjectRef,
+  type LineLikeObjectRef,
   type SceneModel,
   type ScenePoint,
 } from "../../scene/points";
@@ -9,6 +10,7 @@ export function selectConstructionDescription(
   scene: SceneModel
 ): string | null {
   const pointNameById = new Map(scene.points.map((p) => [p.id, p.name]));
+  const pointById = new Map(scene.points.map((p) => [p.id, p]));
   const lineById = new Map(scene.lines.map((l) => [l.id, l]));
   const segmentById = new Map(scene.segments.map((s) => [s.id, s]));
   const circleById = new Map(scene.circles.map((c) => [c.id, c]));
@@ -20,6 +22,7 @@ export function selectConstructionDescription(
     selectedObject,
     scene,
     pointNameById,
+    pointById,
     lineById,
     segmentById,
     circleById,
@@ -33,6 +36,7 @@ function describeSelectedConstruction(
   selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "number"; id: string } | null,
   scene: SceneModel,
   pointNameById: Map<string, string>,
+  pointById: Map<string, ScenePoint>,
   lineById: Map<string, SceneModel["lines"][number]>,
   segmentById: Map<string, SceneModel["segments"][number]>,
   circleById: Map<string, SceneModel["circles"][number]>,
@@ -82,27 +86,111 @@ function describeSelectedConstruction(
         pointNameById
       )}${pointLabel(line.cId, pointNameById)}.`;
     }
+    const aTransform = getPointTransformMeta(line.aId, pointById);
+    const bTransform = getPointTransformMeta(line.bId, pointById);
+    if (aTransform && bTransform && sameTransformEnvelope(aTransform, bTransform)) {
+      return `Line ${pointLabel(aTransform.basePointId, pointNameById)}${pointLabel(
+        bTransform.basePointId,
+        pointNameById
+      )} ${describeTransformAction(aTransform, pointNameById, lineById, segmentById, circleById)}.`;
+    }
     return `Line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
   }
   if (selectedObject.type === "segment") {
     const segment = segmentById.get(selectedObject.id);
     if (!segment) return `Segment ${selectedObject.id}`;
+    const aTransform = getPointTransformMeta(segment.aId, pointById);
+    const bTransform = getPointTransformMeta(segment.bId, pointById);
+    if (aTransform && bTransform && sameTransformEnvelope(aTransform, bTransform)) {
+      const sourceText = `${pointLabel(aTransform.basePointId, pointNameById)}${pointLabel(bTransform.basePointId, pointNameById)}`;
+      return `Segment ${sourceText} ${describeTransformAction(aTransform, pointNameById, lineById, segmentById, circleById)}.`;
+    }
     return `Segment from ${pointLabel(segment.aId, pointNameById)} to ${pointLabel(segment.bId, pointNameById)}.`;
   }
   if (selectedObject.type === "circle") {
     const circle = circleById.get(selectedObject.id);
     if (!circle) return `Circle ${selectedObject.id}`;
+    if (circle.kind === "threePoint") {
+      const aTransform = getPointTransformMeta(circle.aId, pointById);
+      const bTransform = getPointTransformMeta(circle.bId, pointById);
+      const cTransform = getPointTransformMeta(circle.cId, pointById);
+      if (
+        aTransform &&
+        bTransform &&
+        cTransform &&
+        sameTransformEnvelope(aTransform, bTransform) &&
+        sameTransformEnvelope(aTransform, cTransform)
+      ) {
+        return `Circle through ${pointLabel(aTransform.basePointId, pointNameById)}, ${pointLabel(
+          bTransform.basePointId,
+          pointNameById
+        )}, ${pointLabel(cTransform.basePointId, pointNameById)} ${describeTransformAction(
+          aTransform,
+          pointNameById,
+          lineById,
+          segmentById,
+          circleById
+        )}.`;
+      }
+    } else {
+      const centerTransform = getPointTransformMeta(circle.centerId, pointById);
+      const throughTransform = circle.kind === "fixedRadius" ? null : getPointTransformMeta(circle.throughId, pointById);
+      if (
+        centerTransform &&
+        (circle.kind === "fixedRadius" || (throughTransform && sameTransformEnvelope(centerTransform, throughTransform)))
+      ) {
+        if (circle.kind === "fixedRadius") {
+          return `Circle with center ${pointLabel(centerTransform.basePointId, pointNameById)} and radius ${circle.radiusExpr ?? circle.radius} ${describeTransformAction(
+            centerTransform,
+            pointNameById,
+            lineById,
+            segmentById,
+            circleById
+          )}.`;
+        }
+        if (!throughTransform) return describeCircleForConstruction(circle, pointNameById);
+        return `Circle with center ${pointLabel(centerTransform.basePointId, pointNameById)} through ${pointLabel(
+          throughTransform.basePointId,
+          pointNameById
+        )} ${describeTransformAction(centerTransform, pointNameById, lineById, segmentById, circleById)}.`;
+      }
+    }
     return describeCircleForConstruction(circle, pointNameById);
   }
   if (selectedObject.type === "polygon") {
     const polygon = polygonById.get(selectedObject.id);
     if (!polygon) return `Polygon ${selectedObject.id}`;
+    const transformMetas = polygon.pointIds.map((id) => getPointTransformMeta(id, pointById));
+    const seed = transformMetas[0];
+    if (seed && transformMetas.every((meta) => !!meta && sameTransformEnvelope(seed, meta))) {
+      const sourceLabels = transformMetas.map((meta) => pointLabel(meta!.basePointId, pointNameById)).join("");
+      return `Polygon ${sourceLabels} ${describeTransformAction(seed, pointNameById, lineById, segmentById, circleById)}.`;
+    }
     const labels = polygon.pointIds.map((id) => pointLabel(id, pointNameById)).join("");
     return `Polygon ${labels}.`;
   }
   if (selectedObject.type === "angle") {
     const angle = angleById.get(selectedObject.id);
     if (!angle) return `Angle ${selectedObject.id}`;
+    const aTransform = getPointTransformMeta(angle.aId, pointById);
+    const bTransform = getPointTransformMeta(angle.bId, pointById);
+    const cTransform = getPointTransformMeta(angle.cId, pointById);
+    if (
+      aTransform &&
+      bTransform &&
+      cTransform &&
+      sameTransformEnvelope(aTransform, bTransform) &&
+      sameTransformEnvelope(aTransform, cTransform)
+    ) {
+      const angleLabel = `${pointLabel(aTransform.basePointId, pointNameById)}${pointLabel(
+        bTransform.basePointId,
+        pointNameById
+      )}${pointLabel(cTransform.basePointId, pointNameById)}`;
+      if (angle.kind === "sector") {
+        return `Sector ${angleLabel} ${describeTransformAction(aTransform, pointNameById, lineById, segmentById, circleById)}.`;
+      }
+      return `Angle ${angleLabel} ${describeTransformAction(aTransform, pointNameById, lineById, segmentById, circleById)}.`;
+    }
     if (angle.kind === "sector") {
       return `Sector ${pointLabel(angle.aId, pointNameById)}${pointLabel(angle.bId, pointNameById)}${pointLabel(
         angle.cId,
@@ -392,6 +480,99 @@ function describeObjectRef(
   return circle
     ? describeCircleRef(circle, pointNameById)
     : `circle ${ref.id}`;
+}
+
+type PointTransformMeta =
+  | {
+      kind: "translation";
+      basePointId: string;
+      fromId: string;
+      toId: string;
+    }
+  | {
+      kind: "dilation";
+      basePointId: string;
+      centerId: string;
+      factorText: string;
+    }
+  | {
+      kind: "reflection";
+      basePointId: string;
+      axis: LineLikeObjectRef;
+    };
+
+function getPointTransformMeta(pointId: string, pointById: Map<string, ScenePoint>): PointTransformMeta | null {
+  const point = pointById.get(pointId);
+  if (!point) return null;
+  if (point.kind === "pointByTranslation") {
+    return {
+      kind: "translation",
+      basePointId: point.pointId,
+      fromId: point.fromId,
+      toId: point.toId,
+    };
+  }
+  if (point.kind === "pointByDilation") {
+    const factorText =
+      point.factorExpr?.trim() ||
+      (typeof point.factor === "number" && Number.isFinite(point.factor) ? String(point.factor) : "?");
+    return {
+      kind: "dilation",
+      basePointId: point.pointId,
+      centerId: point.centerId,
+      factorText,
+    };
+  }
+  if (point.kind === "pointByReflection") {
+    return {
+      kind: "reflection",
+      basePointId: point.pointId,
+      axis: point.axis,
+    };
+  }
+  return null;
+}
+
+function sameTransformEnvelope(a: PointTransformMeta, b: PointTransformMeta): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "translation" && b.kind === "translation") return a.fromId === b.fromId && a.toId === b.toId;
+  if (a.kind === "dilation" && b.kind === "dilation") return a.centerId === b.centerId && a.factorText === b.factorText;
+  if (a.kind === "reflection" && b.kind === "reflection") return a.axis.type === b.axis.type && a.axis.id === b.axis.id;
+  return false;
+}
+
+function describeLineLikeCompact(
+  ref: LineLikeObjectRef,
+  pointNameById: Map<string, string>,
+  lineById: Map<string, SceneModel["lines"][number]>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>
+): string {
+  if (ref.type === "segment") {
+    const seg = segmentById.get(ref.id);
+    return seg ? `segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}` : `segment ${ref.id}`;
+  }
+  const line = lineById.get(ref.id);
+  if (line && (line.kind === undefined || line.kind === "twoPoint")) {
+    return `line ${pointLabel(line.aId, pointNameById)}${pointLabel(line.bId, pointNameById)}`;
+  }
+  return describeObjectRef(ref, pointNameById, lineById, segmentById, circleById);
+}
+
+function describeTransformAction(
+  meta: PointTransformMeta,
+  pointNameById: Map<string, string>,
+  lineById: Map<string, SceneModel["lines"][number]>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>
+): string {
+  if (meta.kind === "translation") {
+    return `translated by vector ${pointLabel(meta.fromId, pointNameById)}${pointLabel(meta.toId, pointNameById)}`;
+  }
+  if (meta.kind === "dilation") {
+    return `dilated about ${pointLabel(meta.centerId, pointNameById)} with factor ${meta.factorText}`;
+  }
+  return `reflected over ${describeLineLikeCompact(meta.axis, pointNameById, lineById, segmentById, circleById)}`;
 }
 
 function describeCircleRef(circle: SceneModel["circles"][number], pointNameById: Map<string, string>): string {

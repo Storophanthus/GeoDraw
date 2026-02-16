@@ -4,7 +4,6 @@ import { hitTestLineId, hitTestSegmentId } from "../../engine";
 import {
   evalPointByDilation,
   evalPointByReflection,
-  evalPointByRotation,
   evalPointByTranslation,
 } from "../../scene/eval/pointGeometryEval";
 import {
@@ -326,85 +325,57 @@ export function drawPendingPreview(
     }
   }
 
-  if (pendingSelection.tool === "transform") {
-    const sourcePoint = scene.points.find((point) => point.id === pendingSelection.first.id);
-    const source = sourcePoint ? getPointWorldPos(sourcePoint, scene) : null;
-    if (!source) {
-      ctx.restore();
-      return;
-    }
-
-    if (pendingSelection.mode === "translate") {
-      if (pendingSelection.step === 2) {
-        const fromWorld = getHoveredPointWorld();
-        if (fromWorld) {
-          drawPreviewSegment(source, fromWorld);
+  if (
+    pendingSelection.tool === "translate" ||
+    pendingSelection.tool === "dilate" ||
+    pendingSelection.tool === "reflect"
+  ) {
+    const source = pendingSelection.source;
+    const sourceAnchor = (): Vec2 | null => {
+      if (source.type === "point") return geoPointWorld(scene, source.id);
+      if (source.type === "segment") {
+        const seg = scene.segments.find((item) => item.id === source.id);
+        if (!seg) return null;
+        const a = geoPointWorld(scene, seg.aId);
+        const b = geoPointWorld(scene, seg.bId);
+        if (!a || !b) return null;
+        return { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 };
+      }
+      if (source.type === "line") {
+        const line = scene.lines.find((item) => item.id === source.id);
+        if (!line) return null;
+        const anchors = getLineWorldAnchors(line, scene);
+        if (!anchors) return null;
+        return { x: (anchors.a.x + anchors.b.x) * 0.5, y: (anchors.a.y + anchors.b.y) * 0.5 };
+      }
+      if (source.type === "polygon") {
+        const polygon = scene.polygons.find((item) => item.id === source.id);
+        if (!polygon || polygon.pointIds.length === 0) return null;
+        let sx = 0;
+        let sy = 0;
+        let count = 0;
+        for (const pointId of polygon.pointIds) {
+          const world = geoPointWorld(scene, pointId);
+          if (!world) continue;
+          sx += world.x;
+          sy += world.y;
+          count += 1;
         }
-        ctx.restore();
-        return;
+        if (count === 0) return null;
+        return { x: sx / count, y: sy / count };
       }
-      const fromPoint = scene.points.find((point) => point.id === pendingSelection.second.id);
-      const fromWorld = fromPoint ? getPointWorldPos(fromPoint, scene) : null;
-      const toWorld = getHoveredPointWorld();
-      if (!fromWorld || !toWorld) {
-        ctx.restore();
-        return;
+      if (source.type === "circle") {
+        const circle = scene.circles.find((item) => item.id === source.id);
+        if (!circle) return null;
+        const geom = getCircleWorldGeometry(circle, scene);
+        return geom?.center ?? null;
       }
-      const transformed = evalPointByTranslation(source, fromWorld, toWorld);
-      drawPreviewSegment(fromWorld, toWorld);
-      drawPreviewSegment(source, transformed);
-      drawPreviewPoint(transformed);
-      ctx.restore();
-      return;
-    }
+      const angle = scene.angles.find((item) => item.id === source.id);
+      if (!angle) return null;
+      return geoPointWorld(scene, angle.bId);
+    };
 
-    if (pendingSelection.mode === "rotate") {
-      const center = getHoveredPointWorld();
-      if (!center) {
-        ctx.restore();
-        return;
-      }
-      const evaluated = evaluateAngleExpressionDegrees(scene, transformTool.angleExpr);
-      if (!evaluated.ok) {
-        ctx.restore();
-        return;
-      }
-      const transformed = evalPointByRotation(center, source, evaluated.valueDeg, transformTool.direction);
-      if (!transformed) {
-        ctx.restore();
-        return;
-      }
-      drawPreviewSegment(center, source);
-      drawPreviewSegment(center, transformed);
-      drawPreviewPoint(transformed);
-      ctx.restore();
-      return;
-    }
-
-    if (pendingSelection.mode === "dilate") {
-      const center = getHoveredPointWorld();
-      if (!center) {
-        ctx.restore();
-        return;
-      }
-      const factor = evaluateNumberExpression(scene, transformTool.factorExpr);
-      if (!factor.ok || !Number.isFinite(factor.value)) {
-        ctx.restore();
-        return;
-      }
-      const transformed = evalPointByDilation(source, center, factor.value);
-      if (!transformed) {
-        ctx.restore();
-        return;
-      }
-      drawPreviewSegment(center, source);
-      drawPreviewSegment(center, transformed);
-      drawPreviewPoint(transformed);
-      ctx.restore();
-      return;
-    }
-
-    const axisRef =
+    const resolveAxisRef =
       hoverSnap?.kind === "onLine" && hoverSnap.lineId
         ? ({ type: "line", id: hoverSnap.lineId } as const)
         : hoverSnap?.kind === "onSegment" && hoverSnap.segId
@@ -422,37 +393,274 @@ export function drawPendingPreview(
                     return null;
                   })()
                 : null;
-    if (!axisRef) {
+
+    let transformPointWorld: ((world: Vec2) => Vec2 | null) | null = null;
+    if (pendingSelection.tool === "translate") {
+      if (pendingSelection.step === 2) {
+        const anchor = sourceAnchor();
+        const fromWorld = getHoveredPointWorld();
+        if (anchor && fromWorld) drawPreviewSegment(anchor, fromWorld);
+        ctx.restore();
+        return;
+      }
+      const fromWorld = geoPointWorld(scene, pendingSelection.from.id);
+      const toWorld = getHoveredPointWorld();
+      if (!fromWorld || !toWorld) {
+        ctx.restore();
+        return;
+      }
+      drawPreviewSegment(fromWorld, toWorld);
+      transformPointWorld = (world) => evalPointByTranslation(world, fromWorld, toWorld);
+    } else if (pendingSelection.tool === "dilate") {
+      const center = getHoveredPointWorld();
+      if (!center) {
+        ctx.restore();
+        return;
+      }
+      const factor = evaluateNumberExpression(scene, transformTool.factorExpr);
+      if (!factor.ok || !Number.isFinite(factor.value)) {
+        ctx.restore();
+        return;
+      }
+      transformPointWorld = (world) => evalPointByDilation(world, center, factor.value);
+    } else {
+      if (!resolveAxisRef) {
+        ctx.restore();
+        return;
+      }
+      const axisAnchors =
+        resolveAxisRef.type === "line"
+          ? (() => {
+              const line = scene.lines.find((item) => item.id === resolveAxisRef.id);
+              if (!line) return null;
+              return getLineWorldAnchors(line, scene);
+            })()
+          : (() => {
+              const seg = scene.segments.find((item) => item.id === resolveAxisRef.id);
+              if (!seg) return null;
+              const a = geoPointWorld(scene, seg.aId);
+              const b = geoPointWorld(scene, seg.bId);
+              if (!a || !b) return null;
+              return { a, b };
+            })();
+      if (!axisAnchors) {
+        ctx.restore();
+        return;
+      }
+      drawInfinitePreviewLine(axisAnchors.a, sub(axisAnchors.b, axisAnchors.a));
+      transformPointWorld = (world) => evalPointByReflection(world, axisAnchors.a, axisAnchors.b);
+    }
+
+    if (!transformPointWorld) {
       ctx.restore();
       return;
     }
-    const axisAnchors =
-      axisRef.type === "line"
-        ? (() => {
-            const line = scene.lines.find((item) => item.id === axisRef.id);
-            if (!line) return null;
-            return getLineWorldAnchors(line, scene);
-          })()
-        : (() => {
-            const seg = scene.segments.find((item) => item.id === axisRef.id);
-            if (!seg) return null;
-            const a = geoPointWorld(scene, seg.aId);
-            const b = geoPointWorld(scene, seg.bId);
-            if (!a || !b) return null;
-            return { a, b };
-          })();
-    if (!axisAnchors) {
+
+    const drawWorldPolyline = (worldPoints: Vec2[], close = false, fillAlpha = 0): void => {
+      if (worldPoints.length < 2) return;
+      const screenPoints = worldPoints.map((world) => camMath.worldToScreen(world, camera, vp));
+      if (close && screenPoints.length >= 3 && fillAlpha > 0) {
+        const prevAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = fillAlpha;
+        ctx.fillStyle = "#0ea5e9";
+        ctx.beginPath();
+        ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+        for (let i = 1; i < screenPoints.length; i += 1) ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = prevAlpha;
+      }
+      ctx.beginPath();
+      ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+      for (let i = 1; i < screenPoints.length; i += 1) ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+      if (close) ctx.closePath();
+      ctx.stroke();
+    };
+
+    if (source.type === "point") {
+      const world = geoPointWorld(scene, source.id);
+      if (!world) {
+        ctx.restore();
+        return;
+      }
+      const transformed = transformPointWorld(world);
+      if (!transformed) {
+        ctx.restore();
+        return;
+      }
+      drawPreviewSegment(world, transformed);
+      drawPreviewPoint(transformed);
       ctx.restore();
       return;
     }
-    const transformed = evalPointByReflection(source, axisAnchors.a, axisAnchors.b);
-    if (!transformed) {
+
+    if (source.type === "segment") {
+      const seg = scene.segments.find((item) => item.id === source.id);
+      if (!seg) {
+        ctx.restore();
+        return;
+      }
+      const a = geoPointWorld(scene, seg.aId);
+      const b = geoPointWorld(scene, seg.bId);
+      if (!a || !b) {
+        ctx.restore();
+        return;
+      }
+      const ta = transformPointWorld(a);
+      const tb = transformPointWorld(b);
+      if (!ta || !tb) {
+        ctx.restore();
+        return;
+      }
+      drawPreviewSegment(ta, tb);
       ctx.restore();
       return;
     }
-    drawInfinitePreviewLine(axisAnchors.a, sub(axisAnchors.b, axisAnchors.a));
-    drawPreviewSegment(source, transformed);
-    drawPreviewPoint(transformed);
+
+    if (source.type === "line") {
+      const line = scene.lines.find((item) => item.id === source.id);
+      if (!line) {
+        ctx.restore();
+        return;
+      }
+      const anchors = getLineWorldAnchors(line, scene);
+      if (!anchors) {
+        ctx.restore();
+        return;
+      }
+      const ta = transformPointWorld(anchors.a);
+      const tb = transformPointWorld(anchors.b);
+      if (!ta || !tb) {
+        ctx.restore();
+        return;
+      }
+      const dir = sub(tb, ta);
+      if (dir.x * dir.x + dir.y * dir.y <= 1e-12) {
+        ctx.restore();
+        return;
+      }
+      drawInfinitePreviewLine(ta, dir);
+      ctx.restore();
+      return;
+    }
+
+    if (source.type === "polygon") {
+      const polygon = scene.polygons.find((item) => item.id === source.id);
+      if (!polygon || polygon.pointIds.length < 3) {
+        ctx.restore();
+        return;
+      }
+      const transformed: Vec2[] = [];
+      for (const pointId of polygon.pointIds) {
+        const world = geoPointWorld(scene, pointId);
+        if (!world) continue;
+        const out = transformPointWorld(world);
+        if (!out) continue;
+        transformed.push(out);
+      }
+      if (transformed.length >= 3) {
+        drawWorldPolyline(transformed, true, 0.14);
+      }
+      ctx.restore();
+      return;
+    }
+
+    if (source.type === "circle") {
+      const circle = scene.circles.find((item) => item.id === source.id);
+      if (!circle) {
+        ctx.restore();
+        return;
+      }
+      if (circle.kind === "threePoint") {
+        const a = geoPointWorld(scene, circle.aId);
+        const b = geoPointWorld(scene, circle.bId);
+        const c = geoPointWorld(scene, circle.cId);
+        if (!a || !b || !c) {
+          ctx.restore();
+          return;
+        }
+        const ta = transformPointWorld(a);
+        const tb = transformPointWorld(b);
+        const tc = transformPointWorld(c);
+        if (!ta || !tb || !tc) {
+          ctx.restore();
+          return;
+        }
+        const geom = circumcircleFromThreePoints(ta, tb, tc);
+        if (!geom) {
+          ctx.restore();
+          return;
+        }
+        const cs = camMath.worldToScreen(geom.center, camera, vp);
+        ctx.beginPath();
+        ctx.arc(cs.x, cs.y, geom.radius * camera.zoom, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+      const geom = getCircleWorldGeometry(circle, scene);
+      if (!geom) {
+        ctx.restore();
+        return;
+      }
+      const center = geom.center;
+      const through =
+        circle.kind === "twoPoint"
+          ? geoPointWorld(scene, circle.throughId)
+          : { x: center.x + geom.radius, y: center.y };
+      if (!through) {
+        ctx.restore();
+        return;
+      }
+      const transformedCenter = transformPointWorld(center);
+      const transformedThrough = transformPointWorld(through);
+      if (!transformedCenter || !transformedThrough) {
+        ctx.restore();
+        return;
+      }
+      const radius = Math.hypot(transformedThrough.x - transformedCenter.x, transformedThrough.y - transformedCenter.y);
+      if (!Number.isFinite(radius) || radius <= 1e-12) {
+        ctx.restore();
+        return;
+      }
+      const cs = camMath.worldToScreen(transformedCenter, camera, vp);
+      ctx.beginPath();
+      ctx.arc(cs.x, cs.y, radius * camera.zoom, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    const angle = scene.angles.find((item) => item.id === source.id);
+    if (!angle) {
+      ctx.restore();
+      return;
+    }
+    const a = geoPointWorld(scene, angle.aId);
+    const b = geoPointWorld(scene, angle.bId);
+    const c = geoPointWorld(scene, angle.cId);
+    if (!a || !b || !c) {
+      ctx.restore();
+      return;
+    }
+    const ta = transformPointWorld(a);
+    const tb = transformPointWorld(b);
+    const tc = transformPointWorld(c);
+    if (!ta || !tb || !tc) {
+      ctx.restore();
+      return;
+    }
+    drawPreviewSegment(tb, ta);
+    drawPreviewSegment(tb, tc);
+    if (angle.kind === "sector") {
+      const as = camMath.worldToScreen(ta, camera, vp);
+      const bs = camMath.worldToScreen(tb, camera, vp);
+      const theta = computeOrientedAngleRad(ta, tb, tc);
+      if (theta !== null) {
+        const radiusPx = Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y));
+        drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
+      }
+    }
     ctx.restore();
     return;
   }

@@ -17,7 +17,9 @@ import type { Camera, Viewport } from "../../view/camera";
 export type ActiveTool =
   | "move"
   | "point"
-  | "transform"
+  | "translate"
+  | "reflect"
+  | "dilate"
   | "copyStyle"
   | "midpoint"
   | "segment"
@@ -57,6 +59,11 @@ export type HoveredHit =
 
 export type TransformToolMode = "translate" | "rotate" | "dilate" | "reflect";
 
+export type TransformableObjectRef = {
+  type: "point" | "segment" | "line" | "circle" | "polygon" | "angle";
+  id: string;
+};
+
 export type PendingSelection =
   | {
     tool: "perp_line" | "parallel_line";
@@ -89,17 +96,25 @@ export type PendingSelection =
     first: { type: "point"; id: string };
   }
   | {
-    tool: "transform";
+    tool: "translate";
     step: 2;
-    mode: TransformToolMode;
-    first: { type: "point"; id: string };
+    source: TransformableObjectRef;
   }
   | {
-    tool: "transform";
+    tool: "translate";
     step: 3;
-    mode: "translate";
-    first: { type: "point"; id: string };
-    second: { type: "point"; id: string };
+    source: TransformableObjectRef;
+    from: { type: "point"; id: string };
+  }
+  | {
+    tool: "reflect";
+    step: 2;
+    source: TransformableObjectRef;
+  }
+  | {
+    tool: "dilate";
+    step: 2;
+    source: TransformableObjectRef;
   }
   | {
     tool: "polygon";

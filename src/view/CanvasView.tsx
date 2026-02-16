@@ -19,6 +19,7 @@ import { CanvasLabelsLayer } from "./CanvasLabelsLayer";
 import { renderCanvasFrame } from "./renderFrame";
 import { useCanvasInteractionController, type PointerState } from "./useCanvasInteractionController";
 import { isValidTarget } from "../tools/toolClick";
+import { applyDilationToObject, applyReflectionToObject, applyTranslationToObject } from "../tools/objectTransforms";
 import { snapWorldToRectGrid } from "../render/rectGrid";
 
 const POINT_HIT_TOLERANCE_PX = 12;
@@ -99,6 +100,7 @@ export function CanvasView() {
   const createCircle = useGeoStore((store) => store.createCircle);
   const createAuxiliaryCircle = useGeoStore((store) => store.createAuxiliaryCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
+  const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createTangentLines = useGeoStore((store) => store.createTangentLines);
@@ -124,6 +126,7 @@ export function CanvasView() {
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
   const setExportClipWorld = useGeoStore((store) => store.setExportClipWorld);
+  const setObjectVisibility = useGeoStore((store) => store.setObjectVisibility);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
   const regularPolygonTool = useGeoStore((store) => store.regularPolygonTool);
@@ -162,6 +165,7 @@ export function CanvasView() {
       createCircle,
       createAuxiliaryCircle,
       createCircleThreePoint,
+      createCircleFixedRadius,
       createPerpendicularLine,
       createParallelLine,
       createTangentLines,
@@ -179,6 +183,60 @@ export function CanvasView() {
       createPointByRotation,
       createPointByDilation,
       createPointByReflection,
+      transformObjectByTranslation: (source, fromId, toId) =>
+        applyTranslationToObject(source, fromId, toId, {
+          scene,
+          createPointByTranslation,
+          createPointByDilation,
+          createPointByReflection,
+          createPointOnLine,
+          createSegment,
+          createLine,
+          createAngleBisectorLine,
+          createCircle,
+          createCircleThreePoint,
+          createCircleFixedRadius,
+          createPolygon,
+          createAngle,
+          createSector,
+          setObjectVisibility,
+        }),
+      transformObjectByDilation: (source, centerId, factorExpr) =>
+        applyDilationToObject(source, centerId, factorExpr, {
+          scene,
+          createPointByTranslation,
+          createPointByDilation,
+          createPointByReflection,
+          createPointOnLine,
+          createSegment,
+          createLine,
+          createAngleBisectorLine,
+          createCircle,
+          createCircleThreePoint,
+          createCircleFixedRadius,
+          createPolygon,
+          createAngle,
+          createSector,
+          setObjectVisibility,
+        }),
+      transformObjectByReflection: (source, axis) =>
+        applyReflectionToObject(source, axis, {
+          scene,
+          createPointByTranslation,
+          createPointByDilation,
+          createPointByReflection,
+          createPointOnLine,
+          createSegment,
+          createLine,
+          createAngleBisectorLine,
+          createCircle,
+          createCircleThreePoint,
+          createCircleFixedRadius,
+          createPolygon,
+          createAngle,
+          createSector,
+          setObjectVisibility,
+        }),
       createCircleCenterPoint,
       createIntersectionPoint,
       setSelectedObject,
@@ -203,6 +261,7 @@ export function CanvasView() {
       createCircle,
       createAuxiliaryCircle,
       createCircleThreePoint,
+      createCircleFixedRadius,
       createPerpendicularLine,
       createParallelLine,
       createTangentLines,
@@ -226,6 +285,7 @@ export function CanvasView() {
       setCopyStyleSource,
       applyCopyStyleTo,
       setExportClipWorld,
+      setObjectVisibility,
       effectiveGridSnapEnabled,
       camera,
       gridSettings,

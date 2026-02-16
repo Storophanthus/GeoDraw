@@ -25,6 +25,138 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-02-16 transform retcon: split single transform tool into object-transform tools:
+  - Replaced single `transform` click workflow with three dedicated tools:
+    - `translate` (select source object -> vector start point -> vector end point)
+    - `reflect` (select source object -> axis line/segment)
+    - `dilate` (select source object -> center point; factor from tool settings)
+  - Source object types supported by tool workflow:
+    - point, segment, circle, polygon, angle
+  - Added object transform helper module:
+    - `src/tools/objectTransforms.ts`
+    - object-level translate/reflect/dilate constructors are now centralized here.
+  - UI/tooling updates:
+    - Tool palette now shows separate transform tools with dedicated icons.
+    - Tool info panel now shows per-tool instructions (no mode dropdown).
+    - Pending previews/highlights updated for object-source selection and per-tool steps.
+  - Core integration:
+    - `toolClick` IO now dispatches object transforms (`transformObjectByTranslation`, `transformObjectByReflection`, `transformObjectByDilation`).
+    - `CanvasView` wires those IO calls to `objectTransforms` helpers and scene creation APIs.
+  - Regression coverage:
+    - rewrote `src/scene/__tests__/transform-tool-workflow.test.ts` for new tool split and object-source flow.
+    - updated scene test harness stubs in:
+      - `src/scene/__tests__/engine-boundary.test.ts`
+      - `src/scene/__tests__/grid-snap-point-reuse.test.ts`
+      - `src/scene/__tests__/perp-line-polygon-edge.test.ts`
+  - Validation:
+    - `npm run build`
+    - `npm run test:scene`
+    - `npm run test:command`
+    - `npm run test:export`
+- 2026-02-16 transform object construction-description + export guarantee follow-up:
+  - Construction description now infers shared transform provenance for selected non-point objects:
+    - segment/circle/polygon/angle built from transformed points now describe source object + transform action.
+    - example now supported: reflected segment text form (`Segment AB reflected over line BC.`).
+    - file: `src/state/selectors/constructionDescription.ts`.
+  - Added regressions:
+    - `src/scene/__tests__/construction-description-transform.test.ts`
+      - covers reflected segment, translated circle, dilated polygon descriptions.
+    - `src/scene/__tests__/transform-object-export-regression.test.ts`
+      - verifies transformed-object export remains construction-based (reflection via `tkzDefPointBy[...]`), and transformed points are not exported as hard-coded coordinate points.
+  - `test:scene` now includes both new tests in `package.json`.
+- 2026-02-16 line source support for object transforms:
+  - Transform source whitelist now includes `line` for `translate` / `reflect` / `dilate`.
+  - Interaction updates:
+    - line hits (`line2p`) are valid transform targets at source selection step.
+    - pending highlight + preview now render transformed line previews.
+  - Object transform engine:
+    - `src/tools/objectTransforms.ts` now supports source type `line`.
+    - `twoPoint` lines transform via transformed endpoints.
+    - `angleBisector` lines transform via transformed `(A,B,C)` and `createAngleBisectorLine(...)`.
+    - other line kinds are transformed by sampling constrained points on the source line (`createPointOnLine`), transforming those points, then creating a two-point transformed line.
+    - source helper sample points are immediately set invisible via `setObjectVisibility`.
+  - Construction description:
+    - transformed two-point lines now describe source + transform action (e.g. `Line AB reflected over line BC.`).
+  - Added/updated regressions:
+    - `src/scene/__tests__/transform-tool-workflow.test.ts` (line source accepted in tool workflow)
+    - `src/scene/__tests__/construction-description-transform.test.ts` (line transformed description)
+    - `src/scene/__tests__/transform-object-export-regression.test.ts` (transformed line export remains construction-based, no hard-coded transformed point coordinates)
+  - Validation:
+    - `npm run test:scene`
+    - `npm run test:command`
+    - `npm run test:export`
+    - `npm run build`
+- 2026-02-16 toolbar ordering/layout tweak:
+  - `TRANSFORM` group moved to sit directly above `STYLES` in left toolbar ordering.
+  - `toolGroupLabel` layout tightened (`line-height: 1.1`, `white-space: nowrap`) to avoid visual overflow.
+  - Files:
+    - `src/ui/ToolPalette.tsx`
+    - `src/App.css`
+  - Validation:
+    - `npm run build`
+- 2026-02-16 toolbar icon polish follow-up:
+  - `regular_polygon` now uses a dedicated icon (distinct from `polygon`).
+  - Top action `Fit View` no longer uses `ZoomIn`; now uses `IconFitView`.
+  - Group label text was reduced further to prevent `TRANSFORM` overflow on narrow sidebar width.
+  - Files:
+    - `src/ui/icons.tsx`
+    - `src/ui/ToolPalette.tsx`
+    - `src/ui/HistoryControls.tsx`
+    - `src/App.css`
+  - Validation:
+    - `npm run build`
+- 2026-02-16 sidebar UX pass (toolbar width + hover flyouts + toggle redesign):
+  - Left sidebar minimum width increased to preserve long group labels (e.g. `TRANSFORM`) without overflow:
+    - `LEFT_MIN` raised and default `leftWidth` increased in `src/ui/useAppShellController.ts`.
+    - collapsed sidebar width increased to fit redesigned toggle affordance.
+  - Left/right collapse toggles redesigned to panel-style buttons (matching requested visual direction):
+    - new icons: `IconSidebarPanelLeft`, `IconSidebarPanelRight` in `src/ui/icons.tsx`.
+    - applied in `src/ui/ToolPalette.tsx` and `src/ui/RightSidebar.tsx`.
+  - Sidebar hide/show now has visible transitions:
+    - width + padding transitions on sidebars.
+    - tool/content fade-slide transitions via persistent content wrappers:
+      - `.leftToolbarContent`
+      - `.rightSidebarContent`
+    - resize drag keeps transitions disabled during active resizing (`body.sidebar-resizing` in `src/ui/useSidebarResize.ts` + `src/App.css`).
+  - Tool-group interaction changed to GeoGebra-like hover behavior:
+    - flyout opens on hover/focus; no extra click needed just to reveal group tools.
+    - main tool click now selects immediately (removes previous click-to-toggle friction).
+    - file: `src/ui/ToolPalette.tsx`.
+  - Validation:
+    - `npm run build`
+- 2026-02-16 sidebar UX pass stabilization (regression fix):
+  - Reverted brittle always-mounted sidebar content wrappers that caused:
+    - collapsed panel appearing as blank bar,
+    - flyout placement glitches outside expected area.
+  - Restored stable conditional rendering for collapsed/expanded sidebars while keeping:
+    - wider left minimum width,
+    - redesigned panel-style toggle icons/buttons,
+    - hover-to-open tool-group flyouts (GeoGebra-like; no extra click needed to reveal options),
+    - sidebar width/padding transitions.
+  - Visual polish updates:
+    - toggle button dark theme softened (no pure-black icon look),
+    - collapsed width reduced from oversized value to compact state,
+    - flyout anchor/z-index tuned.
+  - Files:
+    - `src/ui/ToolPalette.tsx`
+    - `src/ui/RightSidebar.tsx`
+    - `src/ui/useAppShellController.ts`
+    - `src/App.css`
+  - Validation:
+    - `npm run build`
+- 2026-02-16 sidebar visual refinement (post-feedback):
+  - Reworked sidebar toggle button visual tone away from harsh dark block:
+    - light neutral background, slate icon tone, softer border/shadow.
+    - keeps panel-style glyphs while matching app light theme.
+  - Adjusted collapsed sidebar width to avoid toggle clipping and keep icon fully visible.
+  - Added safe tool-group enter animation on expand.
+  - Prevented lower-group flyouts from dropping below canvas by opening them upward for:
+    - `SHAPES`, `TRANSFORM`, `STYLES`.
+  - Files:
+    - `src/App.css`
+    - `src/ui/useAppShellController.ts`
+  - Validation:
+    - `npm run build`
 - 2026-02-16 transform toolbar tool (point-only) added end-to-end:
   - New toolbar tool id: `transform` (POINTS group) with dedicated icon.
   - Tool settings state added: `transformTool` (`mode`, `angleExpr`, `direction`, `factorExpr`) with UI controls in Properties panel.
@@ -1604,6 +1736,41 @@ Date completed: February 16, 2026
 
 ### Verification
 - `npm run build` passed.
+
+## Latest Done (Flyout Direction Consistency)
+Date completed: February 16, 2026
+
+### Problem
+- `SHAPES` (polygon/regular polygon) and `TRANSFORM` tool groups were opening flyouts upward, unlike other groups.
+
+### Cause
+- `src/App.css` had a hardcoded rule forcing `circles`, `transform`, and `styles` flyouts to anchor with `bottom: 0` (drop-up).
+
+### Fix
+- Removed the forced drop-up selector block so all tool-group flyouts use the same default drop-down direction.
+
+### Verification
+- `npm run build` passed.
 - `npm run test:command` passed.
 - `npm run test:scene` passed.
 - `npm run test:export` passed.
+
+## Latest Done (Toolbar Flyout Overlay Cleanup)
+Date completed: February 16, 2026
+
+### Problem
+- In the left tool palette, opening a group flyout could still show the main tool tooltip behind it.
+- This rendered as a clipped dark pill (e.g. partial `"S..."`) behind the flyout and looked like a visual glitch.
+
+### Fix
+- Updated `src/ui/ToolPalette.tsx`:
+  - main group button wrapper now uses `suppressTooltip` class while that group flyout is open.
+- Updated `src/App.css`:
+  - added `.toolButtonWrap.suppressTooltip .toolTooltip` rule to force tooltip hidden.
+  - updated tooltip visual style to light theme (removed dark chip look).
+  - moved flyout anchor flush to toolbar edge (`left: 100%`) and reduced resize handle width (`4px`) to avoid pointer conflict.
+- Updated `src/ui/WorkspaceShell.tsx` + `src/ui/ToolPalette.tsx`:
+  - when any left-tool flyout is open, left resize handle is disabled (`pointer-events: none`) and re-enabled after flyout closes.
+
+### Verification
+- `npm run build` passed.
