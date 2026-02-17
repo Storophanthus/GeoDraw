@@ -431,6 +431,16 @@
     - `testCircleCircleSemanticBranchPersistenceUnderDrag`
     - `testLineLikeSemanticIntersectionTracksGeometryUnderDrag`
   - Note: `npm run test:scene` remains blocked in this sandbox due `tsx` IPC `EPERM`, but code compiles and export harness remains green.
+- 2026-02-17 TikZ export arrow calibration & alignment:
+  - **Calibration**: Adjusted export scales to match user requirements (10pt length):
+    - Segment arrows: `0.85x`
+    - Arc/Circle arrows: `0.75x` (baked into tip dimensions)
+  - **Alignment**:
+    - **Circles**: Retained `decorations.markings` + `bend` for robustness on large radii.
+    - **Angles/Sectors**: Switched to "Constructive Path" export (invisible sub-arc + `flex`) to fix tangent deviation on small radii.
+  - **Library**: `bending` library now auto-injected when `arrows.meta` is used.
+  - **Validation**: Verified visual parity with provided TikZ snippet. `npm run test:export`.
+
 
 
 ## Active Work (Open)
@@ -440,7 +450,11 @@
   - Runtime branch selection no longer uses nearest-`preferredWorld` heuristics in generic intersection assignment.
   - Export fallback for legacy generic intersections no longer uses `preferredWorld` root distance; explicit branch is used when present, deterministic root `0` otherwise.
   - Export path now normalizes scene integrity before emitting TikZ, so missing legacy branch indices are backfilled once before export.
+  - Export path now normalizes scene integrity before emitting TikZ, so missing legacy branch indices are backfilled once before export.
   - Regression fixture `regression-line-coverage-j-o.json` was upgraded to semantic intersection kinds (`lineLikeIntersectionPoint`, `circleSegmentIntersectionPoint`, `circleCircleIntersectionPoint`) with explicit branch indices.
+- **Angle Gap Standardization** (Next Priority):
+  - Current gap logic (`separationPx / pathLengthPx`) causes excessive gaps on small-radius arcs (Angles).
+  - Needs tuning to scale gap by radius or clamp maximum angle delta for bidirectional arrows (`<->`, `>-<`).
 - Active homework focus (correctness-first):
   1. Validate on dense construction scenes and guard against regressions.
   2. Regular polygon follow-up: optional orientation toggle (CW/CCW) if needed.
@@ -2069,3 +2083,258 @@ Date completed: February 16, 2026
 - checkpoint commit before this remap experiment:
   - `834d948` (`checkpoint: arrow parity before width-size remap`)
   - tag: `checkpoint/arrow-parity-2026-02-16`
+
+## Latest Done (Explicit Pair Arrow Gap Control)
+Date completed: February 16, 2026
+
+### Goal
+- Add a manual `Arrow Gap` override for pair directions (`<->`, `>-<`) while preserving current auto spacing behavior by default.
+
+### Changes
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/scene/points.ts`
+  - Added optional `pairGapPx?: number` to `PathArrowMark` (and therefore `SegmentArrowMark` via extension).
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/slices/sceneMutationActions.ts`
+  - Preserved `pairGapPx` when converting between segment/path/angle/circle arrow mark models.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`
+  - Added `resolveArrowPairGapPx(explicitGapPx, autoGapPx)`.
+  - Included `pairGapPx` in `asPathArrowMark(...)`.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/segmentOverlayRender.ts`
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/circles.ts`
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/angles.ts`
+  - Pair-arrow spacing now uses `pairGapPx` when set, else keeps auto separation.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - `pathArrowOverlayToTikz(...)` now passes `arrow.pairGapPx` into pair-delta computation.
+  - `computePathArrowPairDelta(...)` now supports explicit gap override and falls back to auto when unset.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+  - Added pair-direction-only controls for Segment (mid mode), Circle, and Arc Arrow sections:
+    - `Auto Gap` toggle
+    - `Arrow Gap` slider + numeric input
+  - When Auto is enabled, `pairGapPx` is unset and current auto behavior is used.
+
+### Regression coverage
+- Added fixture:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/__fixtures__/segment-mark-arrow-mid-gap.json`
+- Updated:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/scripts/test-export.ts`
+  - Added assertion that explicit `pairGapPx` drives exported pair spacing (fraction delta parity check).
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 53 fixtures compiled).
+
+## Latest Done (Default Arrow Baseline Increase)
+Date completed: February 16, 2026
+
+### Goal
+- Increase default `Arrow Size=1` / `Arrow Width=1` visual baseline in canvas and keep export metrics in sync.
+
+### Changes
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`
+  - Increased default head base from `14*scale` to `16*scale`.
+  - Increased pair separation coefficient for width influence.
+  - Retuned tip profiles:
+    - `Stealth` longer and wider (`lengthMul=1.2`, `wingMul=0.44`, notch kept)
+    - `Triangle` slightly wider (`wingMul=0.56`)
+    - `Latex` unchanged open-stroke behavior.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - `resolvePathArrowTipMetricsPx(...)` updated to same geometry constants for parity:
+    - `baseSize = max(6, 16*scale)`
+    - same tip multipliers and pair-separation rule.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+  - Auto-gap estimator updated to the same baseline constants.
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 53 fixtures compiled).
+
+## Latest Done (Arrow Default Visibility Root-Cause Fix)
+Date completed: February 16, 2026
+
+### Root cause found
+- Canvas arrow overlays used segment/arc stroke width as fallback when `arrow.lineWidthPt` was unset.
+- That bypassed arrow UI default (`width=1` -> stored `8`) and made default arrows appear too small.
+
+### Fixes
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`
+  - exported `DEFAULT_ARROW_LINE_WIDTH_PT = 8`.
+  - increased head baseline and adjusted pair-separation curve.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/segmentOverlayRender.ts`
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/circles.ts`
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/angles.ts`
+  - all now fallback to `DEFAULT_ARROW_LINE_WIDTH_PT` when arrow width is unset.
+  - no longer fallback to object stroke width for arrowhead rendering.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+  - updated auto-gap estimator to match the revised canvas head/separation model.
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 53 fixtures compiled).
+
+## Latest Done (Direction Glyph + Stealth Shape Retune)
+Date completed: February 16, 2026
+
+### Changes
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+  - Direction dropdown labels now mimic line+arrow layout:
+    - `─▶`, `◀─`, `◀─▶`, `▶─◀`
+  - Tip dropdown labels now include shaft+tip glyph:
+    - `─➤` (Stealth), `─❯` (Latex), `─▶` (Triangle)
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`
+  - `Latex` tip remains open-stroked.
+  - `Stealth` tip profile adjusted to slimmer default stealth-like geometry:
+    - longer length, narrower wings, deeper notch.
+  - Arrow scaling retuned so default `size=1` is more visible while `<1` still scales down coherently.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - Arrow metric model updated to track new canvas head-size/spacing profile for better parity.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+  - Auto-gap estimator updated to match new canvas separation model.
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 53 fixtures compiled).
+
+## Latest Done (Arrow Icon/Scale Corrections)
+Date completed: February 16, 2026
+
+### User issues addressed
+- Tip icon for `Latex` looked too close to filled triangle representation.
+- Direction/tip icons in dropdown looked too small.
+- Canvas default arrow at size=1 was still too small; size values below 1 did not feel meaningful.
+
+### Changes
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+  - Direction labels updated to icon-only glyphs with stronger forms: `⟶`, `⟵`, `⟷`, `⇄`.
+  - Tip labels updated to icon-only glyphs: `➤` (Stealth), `❯` (Latex), `▶` (Triangle).
+  - Applied `arrowIconSelect` class to all arrow direction/tip dropdowns (segment/circle/arc).
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+  - Added `.arrowIconSelect` styling (`font-size`, weight, centered glyph layout) so icon dropdowns are visibly larger.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`
+  - `Latex` canvas tip now draws as open stroked chevron (not filled triangle body).
+  - Increased default canvas visibility:
+    - larger width mapping from stored arrow width
+    - larger head sizing baseline with proper downscaling for `size < 1`.
+  - Updated pair-separation formula consistently.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+  - Updated auto-gap estimator to mirror the same new canvas sizing/separation math.
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 53 fixtures compiled).
+
+## Latest Done (Arrow Picker UI Simplification)
+Date completed: February 16, 2026
+
+### Change
+- Reverted arrow direction/tip controls from custom button-grid preview UI back to compact dropdowns.
+- Direction dropdown now uses icon-only entries: `→`, `←`, `↔`, `⇄`.
+- Tip dropdown now uses icon-only entries: `➤`, `▷`, `▶`.
+- Removed the temporary custom arrow picker CSS styles.
+
+### Files
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 53 fixtures compiled).
+
+## Latest Done (Arrow UI Polish + Export Robustness)
+Date completed: February 16, 2026
+
+### User-reported issues addressed
+- Arrow direction and tip style controls were too abstract (text-only).
+- Arrow position slider could overflow/right-clip.
+- Arrow width/size numeric box looked oversized and could visually clash with slider.
+- Canvas default arrow at width=1,size=1 looked too small.
+- Export could fail with `% Export failed: Unsupported PathArrowMark: lineWidthPt`.
+
+### Fixes
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+  - Replaced text-only direction/tip selects with icon-based pickers:
+    - direction icons for `->`, `<-`, `<->`, `>-<`
+    - tip icons previewing `Stealth`, `Latex`, `Triangle`
+  - Arrow width inputs now clamp to valid UI range (`0.2..12`) via parser helper.
+  - Arrow width sliders/numbers now use safe minimum `0.2` (prevents zero/invalid width export path).
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+  - Tightened numeric control column widths.
+  - Made sliders fully responsive (`width:100%`, `min-width:0`, no extra margins) to stop right-edge overflow.
+  - Added styles for icon-based arrow direction/tip picker buttons.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`
+  - Increased canvas arrow baseline visibility:
+    - larger default head size
+    - slightly stronger width mapping from stored arrow width to canvas width
+  - keeps export behavior unchanged.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - removed hard fail for non-positive/invalid arrow `lineWidthPt` in path/segment arrow export path;
+  - exporter now falls back to safe defaults (no more `% Export failed: Unsupported PathArrowMark: lineWidthPt` in this case).
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 53 fixtures compiled).
+
+## Latest Done (Arrow Default Retcon 1 -> 1.3 + Width Typing Fix)
+Date completed: February 16, 2026
+
+### User-requested retcon
+- Arrow default baseline was redefined so previous `1` now maps to `1.3` as the new default.
+- Applied consistently for:
+  - scene default styles (segment/circle/sector-arc arrow marks),
+  - canvas fallback rendering for unset arrow values,
+  - TikZ export fallback for unset arrow values,
+  - UI fallback values shown in arrow controls.
+
+### Numeric input fix
+- Arrow width numeric fields no longer snap intermediate `0` to `0.2` while typing.
+- This allows entering values like `0.5` naturally (without being forced to `0.2` first).
+- Slider minimum remains unchanged (`0.2`); the fix targets numeric entry behavior.
+
+### Files
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pathArrowRender.ts`
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/slices/sceneSlice.ts`
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 53 fixtures compiled).
+
+## Latest Done (Arrow Tip Export Scale-Proportional Conversion)
+Date completed: February 16, 2026
+
+### Problem
+- Arrowheads in TikZ export still looked disproportionate versus canvas in some views (notably sector arcs).
+- Root cause: tip geometry used a fixed `canvas px -> pt` conversion constant, ignoring actual export coordinate scale.
+
+### Fix
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - computes `canvasPxToTikzPt` from actual export metrics:
+    - `coordScale` (world->cm in tikzpicture),
+    - `screenPxPerWorld` (camera zoom used for match-canvas export).
+  - passes this conversion through arrow overlay metrics for:
+    - segment arrows,
+    - circle arrows,
+    - sector/arc arrows.
+  - tip spec (`length`, `width`) now uses the dynamic conversion instead of fixed fallback.
+  - keeps a fallback constant only when metrics are unavailable.
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 53 fixtures compiled).
+
+## Latest Done (Arrow Tip Metric Parity: Export = Canvas Formula)
+Date completed: February 16, 2026
+
+### Problem
+- After scale-proportional conversion, visual mismatch still remained in arrowhead proportions.
+- Root cause: export tip metrics still used an older base-size model (`16 * scale`) while canvas uses `headSize = max(8, 24 * scale)`.
+
+### Fix
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - `resolvePathArrowTipMetricsPx(...)` now mirrors canvas formulas exactly:
+    - `headSize = max(8, 24 * sizeScale)`
+    - same tip profile multipliers
+    - same pair-separation formula using `headSize`.
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed (all 53 fixtures compiled).
