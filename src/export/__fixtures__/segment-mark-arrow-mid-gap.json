@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "A",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": -2, "y": 1.5 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_2",
+      "name": "B",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 5.5, "y": 1.5 },
+      "dependsOn": []
+    }
+  ],
+  "lines": [],
+  "segments": [
+    {
+      "id": "s_1",
+      "aId": "p_1",
+      "bId": "p_2",
+      "visible": true,
+      "style": {
+        "strokeColor": "#0f766e",
+        "strokeWidth": 2.2,
+        "dash": "solid",
+        "opacity": 1,
+        "segmentArrowMark": {
+          "enabled": true,
+          "mode": "mid",
+          "direction": "<->",
+          "tip": "Stealth",
+          "distribution": "single",
+          "pos": 0.5,
+          "pairGapPx": 30
+        }
+      }
+    }
+  ],
+  "circles": [],
+  "angles": [],
+  "numbers": []
+}

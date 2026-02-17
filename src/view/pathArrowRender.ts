@@ -122,8 +122,7 @@ export function segmentArrowHeadSize(
   const widthScale = Math.sqrt(widthUi) * (referenceSize / headSize);
 
   // Keep clear separation between paired arrows.
-  // Increased to 2.4/1.5 to match larger default arrow size and prevent overlap.
-  const separation = Math.max(3, Math.max(headSize * 2.4, headSize * 1.5 * widthScale));
+  const separation = Math.max(3, Math.max(headSize * 1.45, headSize * 1.05 * widthScale));
   return { headSize, separation, widthScale };
 }
 

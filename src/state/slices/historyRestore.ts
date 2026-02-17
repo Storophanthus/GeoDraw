@@ -18,6 +18,39 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
       if (branchIndex === null) return point;
       return { ...point, branchIndex };
     }),
+    segments: normalizedScene.segments.map((seg) => {
+      if (seg.style.segmentArrowMarks?.length) return seg;
+      if (!seg.style.segmentArrowMark) return seg;
+      return {
+        ...seg,
+        style: {
+          ...seg.style,
+          segmentArrowMarks: migrateArrowMark(seg.style.segmentArrowMark),
+        },
+      };
+    }),
+    circles: normalizedScene.circles.map((c) => {
+      if (c.style.arrowMarks?.length) return c;
+      if (!c.style.arrowMark) return c;
+      return {
+        ...c,
+        style: {
+          ...c.style,
+          arrowMarks: migrateArrowMark(c.style.arrowMark),
+        },
+      };
+    }),
+    angles: normalizedScene.angles.map((a) => {
+      if (a.style.arcArrowMarks?.length) return a;
+      if (!a.style.arcArrowMark) return a;
+      return {
+        ...a,
+        style: {
+          ...a.style,
+          arcArrowMarks: migrateArrowMark(a.style.arcArrowMark),
+        },
+      };
+    }),
   };
   return {
     ...prev,
@@ -51,4 +84,33 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     exportClipWorld: snapshot.exportClipWorld ?? null,
     copyStyle: snapshot.copyStyle,
   };
+}
+
+function migrateArrowMark<T extends { direction: string; pos?: number; pairGapPx?: number }>(arrow: T): T[] {
+  if (!arrow) return [];
+  const dir = arrow.direction;
+  if (dir === "->" || dir === "<-") {
+    return [arrow];
+  }
+  // Split bidirectional arrows into two
+  const basePos = arrow.pos ?? 0.5;
+  // Estimate gap offset. In the old system, gap separation depended on context (segments vs arcs),
+  // but here at data level we don't have geometry. We pick a safe visual default (e.g. +/- 0.05).
+  // For segments/arcs this is usually sufficient distinction.
+  const offset = 0.05;
+
+  if (dir === "<->") {
+    return [
+      { ...arrow, direction: "<-", pos: Math.max(0, basePos - offset), pairGapPx: undefined },
+      { ...arrow, direction: "->", pos: Math.min(1, basePos + offset), pairGapPx: undefined },
+    ];
+  }
+  if (dir === ">-<") {
+    // >-< means incoming to the center. So Left arrow is -> (0 to center), Right arrow is <- (1 to center)
+    return [
+      { ...arrow, direction: "->", pos: Math.max(0, basePos - offset), pairGapPx: undefined },
+      { ...arrow, direction: "<-", pos: Math.min(1, basePos + offset), pairGapPx: undefined },
+    ];
+  }
+  return [arrow];
 }

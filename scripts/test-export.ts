@@ -748,6 +748,25 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "segment-mark-arrow-mid-gap.json") {
+    if (exportError) throw exportError;
+    const marks = extractMarkCommands(tikz);
+    if (marks.length < 2) {
+      throw new Error("Expected mid-gap fixture to emit parseable mark commands.");
+    }
+    const [left, right] = marks
+      .slice(0, 2)
+      .sort((a, b) => a.position - b.position);
+    if (left.cmd !== "arrowreversed" || right.cmd !== "arrow") {
+      throw new Error("Expected segment <-> mid-gap fixture to emit outward command order.");
+    }
+    const measuredGap = right.position - left.position;
+    const expectedGap = (2 * 30) / (7.5 * 80); // 2*pairGapPx / (pathLengthWorld * screenPxPerWorld)
+    if (Math.abs(measuredGap - expectedGap) > 0.005) {
+      throw new Error(`Expected explicit pairGapPx spacing ${expectedGap}, got ${measuredGap}.`);
+    }
+  }
+
   if (fileName === "segment-mark-arrow-mid-multi.json") {
     if (exportError) throw exportError;
     if (!tikz.includes("postaction=decorate")) {
@@ -855,6 +874,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (
     fileName === "segment-mark-arrow-mid.json" ||
+    fileName === "segment-mark-arrow-mid-gap.json" ||
     fileName === "segment-mark-arrow-mid-inward.json" ||
     fileName === "circle-arrow-basic.json" ||
     fileName === "circle-arrow-mid-position-parity.json" ||

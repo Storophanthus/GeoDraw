@@ -14,7 +14,9 @@ import {
   arrowCanvasLineWidthFromStoredPt,
   clamp01,
   collectArrowPositions,
+  DEFAULT_ARROW_LINE_WIDTH_PT,
   drawArrowPlacements,
+  resolveArrowPairGapPx,
   segmentArrowHeadSize,
 } from "../pathArrowRender";
 import type { DrawableObjectSelection } from "./types";
@@ -61,7 +63,7 @@ export function drawAngles(
     const rightMarkSizePx = computeRightMarkSizePx(radiusPx, mapStrokeWidth(angle.style.strokeWidth));
     const startAngle = Math.atan2(as.y - bs.y, as.x - bs.x);
     const canRenderArcArrow =
-      Boolean(angle.style.arcArrowMark?.enabled) &&
+      (Boolean(angle.style.arcArrowMark?.enabled) || (angle.style.arcArrowMarks?.length ?? 0) > 0) &&
       (isSector || resolvedMarkStyle === "arc" || resolvedMarkStyle === "rightArcDot");
 
     ctx.save();
@@ -133,7 +135,7 @@ export function drawAngles(
         radiusPx,
         startAngle,
         entry.theta,
-        angle.style.arcArrowMark!,
+        angle.style.arcArrowMarks ?? angle.style.arcArrowMark!,
         angle.style.strokeColor,
         angle.style.strokeOpacity,
         arrowBaseWidth
@@ -182,65 +184,82 @@ function drawArcArrowOverlay(
   radiusPx: number,
   startAngle: number,
   theta: number,
-  arrow: NonNullable<SceneModel["angles"][number]["style"]["arcArrowMark"]>,
+  styleArrows: SceneModel["angles"][number]["style"]["arcArrowMarks"] | SceneModel["angles"][number]["style"]["arcArrowMark"],
   fallbackColor: string,
   opacity: number,
-  fallbackLineWidth: number
+  _fallbackLineWidth: number // retained for signature compat
 ): void {
+  // Normalize input to array
+  const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
+  if (arrows.length === 0) return;
   if (!Number.isFinite(radiusPx) || radiusPx <= 1e-9) return;
-  const color = arrow.color ?? fallbackColor;
-  const safeFallbackWidth = Number.isFinite(fallbackLineWidth) && fallbackLineWidth > 0 ? fallbackLineWidth : 1;
-  const lineWidthPt =
-    typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) ? arrow.lineWidthPt : safeFallbackWidth;
-  const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
-  const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
-  const positions = collectArrowPositions(arrow, 0.5);
-  const sweep = Math.max(1e-6, theta);
-  const pathLengthPx = Math.max(1e-6, sweep * radiusPx);
-  const pairOffset = Math.max(0.002, Math.min(0.24, separation / pathLengthPx));
+
   ctx.save();
   ctx.setLineDash([]);
   ctx.globalAlpha = Number.isFinite(opacity) ? clamp01(opacity) : 1;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = lineWidth;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  const pushPlacement = (
-    out: Array<{ tip: Vec2; dirX: number; dirY: number }>,
-    tRaw: number,
-    reversed: boolean
-  ) => {
-    const t = clamp01(tRaw);
-    const phi = startAngle - sweep * t;
-    const tip = {
-      x: center.x + Math.cos(phi) * radiusPx,
-      y: center.y + Math.sin(phi) * radiusPx,
+
+  const sweep = Math.max(1e-6, theta);
+  const pathLengthPx = Math.max(1e-6, sweep * radiusPx);
+
+  for (const arrow of arrows) {
+    if (!arrow.enabled) continue;
+
+    const color = arrow.color ?? fallbackColor;
+    const lineWidthPt =
+      typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) && arrow.lineWidthPt > 0
+        ? arrow.lineWidthPt
+        : DEFAULT_ARROW_LINE_WIDTH_PT;
+    const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
+    const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale, arrow.arrowLength);
+    const pairGapPx = resolveArrowPairGapPx(arrow.pairGapPx, separation);
+    // For angles, positions are t in [0,1] along the arc sweep
+    const positions = collectArrowPositions(arrow, 0.5);
+    const pairOffset = Math.max(0.002, Math.min(0.24, pairGapPx / pathLengthPx));
+
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lineWidth;
+
+    const pushPlacement = (
+      out: Array<{ tip: Vec2; dirX: number; dirY: number }>,
+      tRaw: number,
+      reversed: boolean
+    ) => {
+      const t = clamp01(tRaw);
+      const phi = startAngle - sweep * t;
+      const tip = {
+        x: center.x + Math.cos(phi) * radiusPx,
+        y: center.y + Math.sin(phi) * radiusPx,
+      };
+      // Arc is drawn with decreasing screen angle (anticlockwise=true).
+      // Tangent vector:
+      const tangentX = Math.sin(phi);
+      const tangentY = -Math.cos(phi);
+      out.push({
+        tip,
+        dirX: reversed ? -tangentX : tangentX,
+        dirY: reversed ? -tangentY : tangentY,
+      });
     };
-    // Arc is drawn with decreasing screen angle (anticlockwise=true).
-    const tangentX = Math.sin(phi);
-    const tangentY = -Math.cos(phi);
-    out.push({
-      tip,
-      dirX: reversed ? -tangentX : tangentX,
-      dirY: reversed ? -tangentY : tangentY,
-    });
-  };
-  for (let i = 0; i < positions.length; i += 1) {
-    const t = clamp01(positions[i]);
-    const placements: Array<{ tip: Vec2; dirX: number; dirY: number }> = [];
-    if (arrow.direction === "->") {
-      pushPlacement(placements, t, false);
-    } else if (arrow.direction === "<-") {
-      pushPlacement(placements, t, true);
-    } else if (arrow.direction === "<->") {
-      pushPlacement(placements, t - pairOffset, true);
-      pushPlacement(placements, t + pairOffset, false);
-    } else {
-      pushPlacement(placements, t - pairOffset, false);
-      pushPlacement(placements, t + pairOffset, true);
+
+    for (let i = 0; i < positions.length; i += 1) {
+      const t = clamp01(positions[i]);
+      const placements: Array<{ tip: Vec2; dirX: number; dirY: number }> = [];
+      if (arrow.direction === "->") {
+        pushPlacement(placements, t, false);
+      } else if (arrow.direction === "<-") {
+        pushPlacement(placements, t, true);
+      } else if (arrow.direction === "<->") {
+        pushPlacement(placements, t - pairOffset, true);
+        pushPlacement(placements, t + pairOffset, false);
+      } else {
+        pushPlacement(placements, t - pairOffset, false);
+        pushPlacement(placements, t + pairOffset, true);
+      }
+      drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
     }
-    drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
   }
   ctx.restore();
 }

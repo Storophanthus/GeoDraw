@@ -5,7 +5,9 @@ import {
   arrowCanvasLineWidthFromStoredPt,
   clamp01,
   collectArrowPositions,
+  DEFAULT_ARROW_LINE_WIDTH_PT,
   drawArrowPlacements,
+  resolveArrowPairGapPx,
   resolveEndArrowPlacements,
   resolveMidArrowPlacements,
   segmentArrowHeadSize,
@@ -127,41 +129,48 @@ export function drawSegmentArrowOverlay(
   p2: Vec2,
   style: SceneModel["segments"][number]["style"]
 ): void {
-  const arrow = style.segmentArrowMark;
-  if (!arrow?.enabled) return;
+  const arrows = style.segmentArrowMarks ?? (style.segmentArrowMark ? [style.segmentArrowMark] : []);
+  if (arrows.length === 0) return;
   const d = sub(p2, p1);
   const len = Math.hypot(d.x, d.y);
   if (len < 1e-6) return;
   const ux = d.x / len;
   const uy = d.y / len;
-  const color = arrow.color ?? style.strokeColor;
-  const fallbackWidth = Number.isFinite(style.strokeWidth) && style.strokeWidth > 0 ? style.strokeWidth : 1;
-  const lineWidthPt =
-    typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) ? arrow.lineWidthPt : fallbackWidth;
-  const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
-  const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
 
   ctx.save();
   ctx.setLineDash([]);
   ctx.globalAlpha = Number.isFinite(style.opacity) ? clamp01(style.opacity) : 1;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = lineWidth;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  if (arrow.mode === "end") {
-    const placements = resolveEndArrowPlacements(p1, p2, ux, uy, arrow.direction);
-    drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
-    ctx.restore();
-    return;
-  }
-  const positions = collectArrowPositions(arrow, style.segmentMark?.pos ?? 0.5);
-  for (let i = 0; i < positions.length; i += 1) {
-    const t = clamp01(positions[i]);
-    const tip = { x: p1.x + ux * len * t, y: p1.y + uy * len * t };
-    const placements = resolveMidArrowPlacements(tip, ux, uy, arrow.direction, separation);
-    drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
+  for (const arrow of arrows) {
+    if (!arrow.enabled) continue;
+    const color = arrow.color ?? style.strokeColor;
+    const lineWidthPt =
+      typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) && arrow.lineWidthPt > 0
+        ? arrow.lineWidthPt
+        : DEFAULT_ARROW_LINE_WIDTH_PT;
+    const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
+    const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale, arrow.arrowLength);
+    const pairGapPx = resolveArrowPairGapPx(arrow.pairGapPx, separation);
+
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lineWidth;
+
+    if (arrow.mode === "end") {
+      const placements = resolveEndArrowPlacements(p1, p2, ux, uy, arrow.direction);
+      drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
+    } else {
+      // mode === "mid"
+      const positions = collectArrowPositions(arrow, style.segmentMark?.pos ?? 0.5);
+      for (let i = 0; i < positions.length; i += 1) {
+        const t = clamp01(positions[i]);
+        const tip = { x: p1.x + ux * len * t, y: p1.y + uy * len * t };
+        const placements = resolveMidArrowPlacements(tip, ux, uy, arrow.direction, pairGapPx);
+        drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
+      }
+    }
   }
   ctx.restore();
 }

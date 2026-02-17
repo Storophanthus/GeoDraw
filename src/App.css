@@ -572,6 +572,15 @@ body.sidebar-resizing .rightSidebar {
   width: 100%;
 }
 
+.arrowIconSelect {
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.02em;
+  padding-left: 8px;
+  padding-right: 24px;
+}
+
 .checkboxRow {
   display: flex;
   align-items: center;
@@ -707,7 +716,7 @@ body.sidebar-resizing .rightSidebar {
 }
 
 .controlRowWithNumeric {
-  grid-template-columns: minmax(92px, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(92px, 1fr) minmax(0, 1fr) minmax(62px, 70px);
 }
 
 .controlLabel {
@@ -781,9 +790,10 @@ body.sidebar-resizing .rightSidebar {
 }
 
 .scaleInputCompact {
-  width: 76px;
-  height: 36px;
-  padding: 6px 8px;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 4px 6px;
   font-size: 12px;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
@@ -834,17 +844,14 @@ body.sidebar-resizing .rightSidebar {
 }
 
 .sizeSlider {
-  width: 140px;
-}
-
-.controlRowWithNumeric .sizeSlider {
   width: 100%;
-  min-width: 92px;
+  min-width: 0;
+  margin: 0;
 }
 
 .controlRow input[type="number"]:not(.scaleInputCompact) {
   width: 100%;
-  min-width: 110px;
+  min-width: 0;
   height: 36px;
   padding: 6px 10px;
   font-size: 12px;

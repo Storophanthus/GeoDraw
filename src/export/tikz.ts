@@ -1035,8 +1035,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const aWorld = getPointWorldPosCached(scene, seg.aId);
     const bWorld = getPointWorldPosCached(scene, seg.bId);
     const segmentLengthWorld = aWorld && bWorld ? distance(aWorld, bWorld) : undefined;
-    const arrowOverlay = segmentArrowOverlayToTikz(
-      seg.style.segmentArrowMark,
+    const arrowOverlay = segmentArrowsToTikz(
+      seg.style.segmentArrowMarks ?? seg.style.segmentArrowMark,
       aName,
       bName,
       {
@@ -1136,7 +1136,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     }
     const circleGeom = circleGeomById(circle.id);
     const circleArrowOverlay = pathArrowOverlayToTikz(
-      circle.style.arrowMark,
+      circle.style.arrowMarks ?? circle.style.arrowMark,
       circlePathExprFromCenterClockwise(circleGeom.center, circleGeom.radius),
       {
         strokeColor: circle.style.strokeColor,
@@ -1205,7 +1205,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const sectorRadius = distance(aWorld, bWorld);
       const sectorStart = Math.atan2(aWorld.y - bWorld.y, aWorld.x - bWorld.x);
       const sectorArrowOverlay = pathArrowOverlayToTikz(
-        angle.style.arcArrowMark,
+        angle.style.arcArrowMarks ?? angle.style.arcArrowMark,
         arcPathExprFromWorld(bWorld, sectorRadius, sectorStart, theta, `(${aName})`),
         {
           strokeColor: angle.style.strokeColor,
@@ -1251,7 +1251,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const angleStart = Math.atan2(aWorld.y - bWorld.y, aWorld.x - bWorld.x);
       const arcRadius = nonSectorAngleRadiusWorldFromStyle(angle.style, options);
       const arcArrowOverlay = pathArrowOverlayToTikz(
-        angle.style.arcArrowMark,
+        angle.style.arcArrowMarks ?? angle.style.arcArrowMark,
         arcPathExprFromWorld(bWorld, arcRadius, angleStart, theta),
         {
           strokeColor: angle.style.strokeColor,
@@ -2309,68 +2309,67 @@ function segmentMarkToTikz(
   return opts.join(", ");
 }
 
-function segmentArrowOverlayToTikz(
-  arrow: SceneModel["segments"][number]["style"]["segmentArrowMark"],
+function segmentArrowsToTikz(
+  styleArrows: SegmentArrowMark | SegmentArrowMark[] | undefined,
   aName: string,
   bName: string,
   base: { strokeColor: string; strokeWidth: number; opacity: number },
   metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number }
 ): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
-  if (!arrow?.enabled) return null;
-  if (arrow.mode === "mid") {
-    const midOverlay = pathArrowOverlayToTikz(arrow, `(${aName}) -- (${bName})`, base, arrow.pos ?? 0.5, metrics);
-    if (!midOverlay) return null;
-    return { kind: "raw", tex: midOverlay };
+  const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
+  if (arrows.length === 0) return null;
+
+  const rawTexs: string[] = [];
+
+  for (const arrow of arrows) {
+    if (!arrow.enabled) continue;
+
+    if (arrow.mode === "mid") {
+      const midOverlay = pathArrowOverlayToTikz(arrow, `(${aName}) -- (${bName})`, base, arrow.pos ?? 0.5, metrics as { pathLengthWorld: number; screenPxPerWorld: number });
+      if (midOverlay) {
+        rawTexs.push(midOverlay);
+      }
+      continue;
+    }
+
+    // End arrow logic
+    ensureSupportedArrowDirection(arrow.direction, "SegmentArrowMark");
+    const tip = resolveArrowTipName(arrow.tip, "SegmentArrowMark");
+    const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
+    const opacity = normalizedOpacity(base.opacity);
+    const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
+    const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
+    // User snippet requires scale=0.85 for segments.
+    const arrowScale = clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.85;
+    const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
+    const tipMetrics = resolvePathArrowTipMetricsPx(tip, arrowScale, arrowWidthUi, "SegmentArrowMark");
+    const tipSpec = resolveArrowTipSpec(
+      tip,
+      tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT,
+      tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT
+    );
+    const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * arrowScale));
+    const t = fmt(1 - tailFrac);
+    const tNeg = fmt(-tailFrac);
+    const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{${tipSpec}}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
+      }`;
+
+    if (arrow.direction === "->") {
+      rawTexs.push(`\\draw[${drawStyle}] ($(${aName})!${t}!(${bName})$) -- (${bName});`);
+    } else if (arrow.direction === "<-") {
+      rawTexs.push(`\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`);
+    } else if (arrow.direction === "<->") {
+      rawTexs.push(`\\draw[${drawStyle}] ($(${aName})!${t}!(${bName})$) -- (${bName});`);
+      rawTexs.push(`\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`);
+    } else {
+      // >-< or other
+      rawTexs.push(`\\draw[${drawStyle}] ($(${aName})!${tNeg}!(${bName})$) -- (${aName});`);
+      rawTexs.push(`\\draw[${drawStyle}] ($(${bName})!${tNeg}!(${aName})$) -- (${bName});`);
+    }
   }
 
-  ensureSupportedArrowDirection(arrow.direction, "SegmentArrowMark");
-  const tip = resolveArrowTipName(arrow.tip, "SegmentArrowMark");
-  const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
-  const opacity = normalizedOpacity(base.opacity);
-  const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
-  const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
-  // User snippet requires scale=0.85 for segments.
-  const arrowScale = clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.85;
-  const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
-  const tipMetrics = resolvePathArrowTipMetricsPx(tip, arrowScale, arrowWidthUi, "SegmentArrowMark");
-  const tipSpec = resolveArrowTipSpec(
-    tip,
-    tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT,
-    tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT
-  );
-  const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * arrowScale));
-  const t = fmt(1 - tailFrac);
-  const tNeg = fmt(-tailFrac);
-  const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{${tipSpec}}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
-    }`;
-  if (arrow.direction === "->") {
-    return {
-      kind: "raw",
-      tex: `\\draw[${drawStyle}] ($(${aName})!${t}!(${bName})$) -- (${bName});`,
-    };
-  }
-  if (arrow.direction === "<-") {
-    return {
-      kind: "raw",
-      tex: `\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`,
-    };
-  }
-  if (arrow.direction === "<->") {
-    return {
-      kind: "raw",
-      tex: [
-        `\\draw[${drawStyle}] ($(${aName})!${t}!(${bName})$) -- (${bName});`,
-        `\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`,
-      ].join("\n"),
-    };
-  }
-  return {
-    kind: "raw",
-    tex: [
-      `\\draw[${drawStyle}] ($(${aName})!${tNeg}!(${bName})$) -- (${aName});`,
-      `\\draw[${drawStyle}] ($(${bName})!${tNeg}!(${aName})$) -- (${bName});`,
-    ].join("\n"),
-  };
+  if (rawTexs.length === 0) return null;
+  return { kind: "raw", tex: rawTexs.join("\n") };
 }
 
 function pathArrowOverlayToTikz(

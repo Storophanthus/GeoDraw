@@ -851,8 +851,8 @@ function angleStyleFromPointStyle(style: PointStyle): Partial<AngleStyle> {
 
 function pathArrowMarkFromSegmentArrow(arrow: LineStyle["segmentArrowMark"] | undefined): PathArrowMark | undefined {
   if (!arrow) return undefined;
-  const { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt } = arrow;
-  return { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt };
+  const { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt, pairGapPx } = arrow;
+  return { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt, pairGapPx };
 }
 
 function segmentArrowMarkFromPathArrow(
@@ -860,7 +860,7 @@ function segmentArrowMarkFromPathArrow(
   mode: SegmentArrowMark["mode"]
 ): SegmentArrowMark | undefined {
   if (!arrow) return undefined;
-  const { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt } = arrow;
+  const { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt, pairGapPx } = arrow;
   return {
     enabled,
     mode,
@@ -874,5 +874,6 @@ function segmentArrowMarkFromPathArrow(
     sizeScale,
     color,
     lineWidthPt,
+    pairGapPx,
   };
 }

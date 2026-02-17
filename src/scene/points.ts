@@ -91,6 +91,7 @@ export type LineStyle = {
     lineWidthPt?: number;
   };
   segmentArrowMark?: SegmentArrowMark;
+  segmentArrowMarks?: SegmentArrowMark[];
 };
 
 export type ArrowDirection = "->" | "<-" | "<->" | ">-<";
@@ -107,8 +108,10 @@ export type PathArrowMark = {
   endPos?: number;
   step?: number;
   sizeScale?: number;
+  arrowLength?: number;
   color?: string;
   lineWidthPt?: number;
+  pairGapPx?: number;
 };
 
 export type SegmentArrowMark = PathArrowMark & {
@@ -125,6 +128,7 @@ export type CircleStyle = {
   pattern?: string;
   patternColor?: string;
   arrowMark?: PathArrowMark;
+  arrowMarks?: PathArrowMark[];
 };
 
 export type PolygonStyle = {
@@ -175,6 +179,7 @@ export type AngleStyle = {
   showValue: boolean;
   promoteToSolid?: boolean;
   arcArrowMark?: PathArrowMark;
+  arcArrowMarks?: PathArrowMark[];
 };
 
 export type ShowLabelMode = "none" | "name" | "caption";
