@@ -452,9 +452,9 @@
   - Export path now normalizes scene integrity before emitting TikZ, so missing legacy branch indices are backfilled once before export.
   - Export path now normalizes scene integrity before emitting TikZ, so missing legacy branch indices are backfilled once before export.
   - Regression fixture `regression-line-coverage-j-o.json` was upgraded to semantic intersection kinds (`lineLikeIntersectionPoint`, `circleSegmentIntersectionPoint`, `circleCircleIntersectionPoint`) with explicit branch indices.
-- **Angle Gap Standardization** (Next Priority):
-  - Current gap logic (`separationPx / pathLengthPx`) causes excessive gaps on small-radius arcs (Angles).
-  - Needs tuning to scale gap by radius or clamp maximum angle delta for bidirectional arrows (`<->`, `>-<`).
+- **Circle/Arc Arrow Gap Tuning** (Next Priority):
+  - General arrow gap logic is settled.
+  - Remaining work: tune gap scaling for small-radius arcs (Angles/Circles) where current logic (`separationPx / pathLengthPx`) may cause excessive gaps.
 - Active homework focus (correctness-first):
   1. Validate on dense construction scenes and guard against regressions.
   2. Regular polygon follow-up: optional orientation toggle (CW/CCW) if needed.
@@ -2338,3 +2338,31 @@ Date completed: February 16, 2026
 ### Verification
 - `npm run build` passed.
 - `npm run test:export` passed (all 53 fixtures compiled).
+
+## Latest Done (Multi-Arrow Support + UI Polish)
+Date completed: February 17, 2026
+
+### Multi-Arrow Support
+- Data Model:
+  - Updated `CircleStyle`, `SegmentStyle`, `AngleStyle` to support `PathArrowMark[]` / `SegmentArrowMark[]` arrays.
+  - Migrated legacy single-arrow fields to the new array format.
+  - Legacy bidirectional `<->` / `>-<` styles migrated to two separate inward/outward arrows with offset.
+- Rendering:
+  - Updated `circles.ts`, `segmentOverlayRender.ts`, `pathArrowRender.ts` to render multiple arrows.
+  - Supports arbitrary number of arrows per object.
+- Export:
+  - Updated `tikz.ts` to export loop over all arrows.
+
+### UI Polish ("App Polish")
+- `ArrowListControl`:
+  - Implemented Master-Detail layout for arrow management.
+  - Allowed zero-arrow state (user can remove all arrows).
+  - Selector uses simple indices (`1`, `2`, ...) instead of long names.
+- Styling:
+  - "Appearance" group (Color, Width, Size, Length) now styled with shaded, rounded box (consistent with Distribution group).
+  - Action buttons (+, Duplicate, Remove) grouped with icon-only buttons (`Plus`, `Copy`, `Trash2`).
+  - Fixed truncation issues in arrow selector.
+
+### Verification
+- `npm run build` passed.
+- `npm run test:export` passed.
