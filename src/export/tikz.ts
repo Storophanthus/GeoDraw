@@ -60,49 +60,49 @@ export type TikzCommand =
   | { kind: "DefPerpendicularLine"; auxName: string; through: string; baseA: string; baseB: string }
   | { kind: "DefParallelLine"; auxName: string; through: string; baseA: string; baseB: string }
   | {
-      kind: "DefCircleSimilitudeCenter";
-      name: string;
-      mode: "outer" | "inner";
-      circleAO: string;
-      circleAX: string;
-      circleBO: string;
-      circleBX: string;
-    }
+    kind: "DefCircleSimilitudeCenter";
+    name: string;
+    mode: "outer" | "inner";
+    circleAO: string;
+    circleAX: string;
+    circleBO: string;
+    circleBX: string;
+  }
   | {
-      kind: "DefCircleTangentsFromPoint";
-      from: string;
-      circleO: string;
-      circleX: string;
-      firstName: string;
-      secondName: string;
-    }
+    kind: "DefCircleTangentsFromPoint";
+    from: string;
+    circleO: string;
+    circleX: string;
+    firstName: string;
+    secondName: string;
+  }
   | { kind: "DefAngleBisectorLine"; auxName: string; a: string; b: string; c: string }
   | { kind: "DefCircleCircumCenter"; centerName: string; a: string; b: string; c: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
   | { kind: "DefMidPoint"; name: string; a: string; b: string }
   | { kind: "InterLL"; name: string; a1: string; a2: string; b1: string; b2: string }
   | {
-      kind: "InterLC";
-      name: string;
-      lineA: string;
-      lineB: string;
-      circleO: string;
-      circleX: string;
-      branch: 0 | 1;
-      common?: string;
-      selector?: { name: string; x: number; y: number };
-    }
+    kind: "InterLC";
+    name: string;
+    lineA: string;
+    lineB: string;
+    circleO: string;
+    circleX: string;
+    branch: 0 | 1;
+    common?: string;
+    selector?: { name: string; x: number; y: number };
+  }
   | {
-      kind: "InterCC";
-      name: string;
-      circleAO: string;
-      circleAX: string;
-      circleBO: string;
-      circleBX: string;
-      branch: 0 | 1;
-      common?: string;
-      selector?: { name: string; x: number; y: number };
-    }
+    kind: "InterCC";
+    name: string;
+    circleAO: string;
+    circleAX: string;
+    circleBO: string;
+    circleBX: string;
+    branch: 0 | 1;
+    common?: string;
+    selector?: { name: string; x: number; y: number };
+  }
   | { kind: "DrawSegment"; a: string; b: string; style?: string }
   | { kind: "MarkSegment"; a: string; b: string; style: string }
   | { kind: "DrawRaw"; tex: string }
@@ -139,8 +139,11 @@ type LabelPlacement = {
 const PATH_ARROW_WIDTH_EXPORT_SCALE = 0.6 / 7.6;
 // Arrow width UI is stored as lineWidthPt = sliderValue * 8.
 const PATH_ARROW_WIDTH_UI_FACTOR = 8;
+const DEFAULT_PATH_ARROW_UI = 1.3;
 // Approximate conversion for tip geometry parity (canvas px -> TikZ pt).
-const CANVAS_PX_TO_TIKZ_PT = 0.75;
+// 16.8px (Canvas) * 0.5 = 8.4pt base -> 10.08pt tip length (Stealth).
+const CANVAS_PX_TO_TIKZ_PT = 0.5;
+
 
 export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}): TikzCommand[] {
   const pointById = new Map(scene.points.map((p) => [p.id, p]));
@@ -170,6 +173,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const fitScale = Math.min(maxWidthCm / worldWidth, maxHeightCm / worldHeight);
     coordScale = clampPositive(coordScale * fitScale, 0.01, 100);
   }
+  // Calculate effective pixels per world unit for TikZ metric mapping.
+  // 1cm (TikZ default unit) approx equals 37.8px (at 96 DPI).
+  // This ensures gap pixels (defined in screen px) map to correct physical length in TikZ.
+  const arrowMetricPxPerWorld = coordScale * 37.8;
   defs.push({ kind: "SetupUnits", scale: coordScale });
   defs.push({ kind: "SetupLabelScale", scale: labelScale });
   defs.push({
@@ -442,19 +449,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       constructions.push(
         line.kind === "perpendicular"
           ? {
-              kind: "DefPerpendicularLine",
-              auxName,
-              through: mustName(pointName, line.throughId),
-              baseA: base.a,
-              baseB: base.b,
-            }
+            kind: "DefPerpendicularLine",
+            auxName,
+            through: mustName(pointName, line.throughId),
+            baseA: base.a,
+            baseB: base.b,
+          }
           : {
-              kind: "DefParallelLine",
-              auxName,
-              through: mustName(pointName, line.throughId),
-              baseA: base.a,
-              baseB: base.b,
-            }
+            kind: "DefParallelLine",
+            auxName,
+            through: mustName(pointName, line.throughId),
+            baseA: base.a,
+            baseB: base.b,
+          }
       );
       const anchors = { a: mustName(pointName, line.throughId), b: auxName };
       lineAnchorNames.set(lineId, anchors);
@@ -1039,7 +1046,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       },
       {
         pathLengthWorld: segmentLengthWorld,
-        screenPxPerWorld: exportPxPerWorld,
+        screenPxPerWorld: arrowMetricPxPerWorld,
       }
     );
     if (arrowOverlay) {
@@ -1068,21 +1075,21 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         ? line.throughId
         : line.kind === "circleCircleTangent"
           ? (circleCircleAnchorId as string)
-        : line.kind === "angleBisector"
-          ? line.bId
-          : line.aId;
+          : line.kind === "angleBisector"
+            ? line.bId
+            : line.aId;
     const drawAName =
       ext.drawAId === line.id
         ? lineNames.b
         : ext.drawAId === lineAnchorId
-        ? lineNames.a
-        : pointName.get(ext.drawAId) ?? ext.drawAId;
+          ? lineNames.a
+          : pointName.get(ext.drawAId) ?? ext.drawAId;
     const drawBName =
       ext.drawBId === line.id
         ? lineNames.b
         : ext.drawBId === lineAnchorId
-        ? lineNames.a
-        : pointName.get(ext.drawBId) ?? ext.drawBId;
+          ? lineNames.a
+          : pointName.get(ext.drawBId) ?? ext.drawBId;
     draws.push({
       kind: "DrawLine",
       a: drawAName,
@@ -1139,8 +1146,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       0.5,
       {
         pathLengthWorld: 2 * Math.PI * circleGeom.radius,
-        screenPxPerWorld: exportPxPerWorld,
-      }
+        screenPxPerWorld: arrowMetricPxPerWorld,
+      },
+      undefined, // arcDef undefined -> Use markings (Decoration)
+      { bend: true } // Circle arrows use bend
     );
     if (circleArrowOverlay) {
       draws.push({ kind: "DrawRaw", tex: circleArrowOverlay });
@@ -1206,8 +1215,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         angle.style.markPos ?? 0.5,
         {
           pathLengthWorld: Math.abs(theta) * sectorRadius,
-          screenPxPerWorld: exportPxPerWorld,
-        }
+          screenPxPerWorld: arrowMetricPxPerWorld,
+        },
+        {
+          center: bWorld,
+          radius: sectorRadius,
+          startRad: sectorStart,
+          sweepRad: theta,
+        },
+        { flex: true } // Keep angle arrows using flex
       );
       if (sectorArrowOverlay) {
         draws.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
@@ -1245,8 +1261,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         angle.style.markPos ?? 0.5,
         {
           pathLengthWorld: Math.abs(theta) * arcRadius,
-          screenPxPerWorld: exportPxPerWorld,
-        }
+          screenPxPerWorld: arrowMetricPxPerWorld,
+        },
+        {
+          center: bWorld,
+          radius: arcRadius,
+          startRad: angleStart,
+          sweepRad: theta,
+        },
+        { flex: true } // Keep angle arrows using flex
       );
       if (arcArrowOverlay) {
         draws.push({ kind: "DrawRaw", tex: arcArrowOverlay });
@@ -1913,8 +1936,12 @@ function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number;
     if (!angle.visible) continue;
     const vertex = getPointWorldPosCached(scene, angle.bId);
     if (!vertex) continue;
+    const aWorld = getPointWorldPosCached(scene, angle.aId);
     add(vertex.x, vertex.y);
-    const r = Math.max(0, angle.style.arcRadius);
+    const r =
+      angle.kind === "sector" && aWorld
+        ? Math.max(0, distance(aWorld, vertex))
+        : Math.max(0, angle.style.arcRadius);
     add(vertex.x - r, vertex.y - r);
     add(vertex.x + r, vertex.y + r);
     add(angle.style.labelPosWorld.x, angle.style.labelPosWorld.y);
@@ -1985,17 +2012,17 @@ function computeLineDrawPlacement(
       ? line.throughId
       : line.kind === "circleCircleTangent"
         ? (circleCircleAnchorId as string)
-      : line.kind === "angleBisector"
-        ? line.bId
-        : line.aId;
+        : line.kind === "angleBisector"
+          ? line.bId
+          : line.aId;
   const anchorBId =
     line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent"
       ? line.id
       : line.kind === "circleCircleTangent"
         ? line.id
-      : line.kind === "angleBisector"
-        ? line.id
-        : line.bId;
+        : line.kind === "angleBisector"
+          ? line.id
+          : line.bId;
   if (dd <= 1e-12) return { drawAId: anchorAId, drawBId: anchorBId, addLeft: 1, addRight: 1 };
   const len = Math.sqrt(dd);
 
@@ -2225,8 +2252,8 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   const innerSepPt = fixedInnerSep !== undefined
     ? Math.max(0.4, fixedInnerSep * pointScale)
     : matchCanvas
-    ? Math.max(0.4, s.sizePx * pointScale * 0.75)
-    : Math.max(0.4, 3.75 * pointScale * (s.sizePx / basePointSizePx));
+      ? Math.max(0.4, s.sizePx * pointScale * 0.75)
+      : Math.max(0.4, 3.75 * pointScale * (s.sizePx / basePointSizePx));
   const opts = [
     shape,
     `draw=${draw}`,
@@ -2301,20 +2328,21 @@ function segmentArrowOverlayToTikz(
   const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
   const opacity = normalizedOpacity(base.opacity);
   const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
-  if (arrow.lineWidthPt !== undefined && (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0)) {
-    throw new Error("Unsupported SegmentArrowMark: lineWidthPt");
-  }
   const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
-  const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
+  // User snippet requires scale=0.85 for segments.
+  const arrowScale = clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.85;
   const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
-  const tipMetrics = resolvePathArrowTipMetricsPx(tip, arrowScale, arrowWidthUi);
-  const tipSpec = resolveArrowTipSpec(tip, tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT, tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT);
+  const tipMetrics = resolvePathArrowTipMetricsPx(tip, arrowScale, arrowWidthUi, "SegmentArrowMark");
+  const tipSpec = resolveArrowTipSpec(
+    tip,
+    tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT,
+    tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT
+  );
   const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * arrowScale));
   const t = fmt(1 - tailFrac);
   const tNeg = fmt(-tailFrac);
-  const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{${tipSpec}}${
-    opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
-  }`;
+  const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{${tipSpec}}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
+    }`;
   if (arrow.direction === "->") {
     return {
       kind: "raw",
@@ -2353,48 +2381,118 @@ function pathArrowOverlayToTikz(
   pathExpr: string,
   base: { strokeColor: string; strokeWidth: number; opacity: number },
   fallbackPos: number,
-  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number }
+  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number },
+  arcDef?: { center: { x: number; y: number }; radius: number; startRad: number; sweepRad: number },
+  arrowTipOptions?: { bend?: boolean; flex?: boolean } // New parameter for bend/flex
 ): string | null {
   if (!arrow?.enabled) return null;
   ensureSupportedArrowDirection(arrow.direction, "PathArrowMark");
   const tip = resolveArrowTipName(arrow.tip, "PathArrowMark");
-  if (arrow.lineWidthPt !== undefined && (!Number.isFinite(arrow.lineWidthPt) || arrow.lineWidthPt <= 0)) {
-    throw new Error("Unsupported PathArrowMark: lineWidthPt");
-  }
   const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
   const opacity = normalizedOpacity(base.opacity);
   const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
   const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
-  const arrowScale = clampPositive(arrow.sizeScale ?? 1, 0.1, 20);
+  // User snippet requires scale=0.75 for arcs/paths.
+  const effectiveScale = clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.75;
   const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
-  const tipMetrics = resolvePathArrowTipMetricsPx(tip, arrowScale, arrowWidthUi);
-  const tipSpec = resolveArrowTipSpec(tip, tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT, tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT);
-  const arrowOpts = `color=${arrowColor},line width=${fmt(arrowWidth)}pt${
-    opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
-  }`;
-  const forwardCmd = `\\arrow[${arrowOpts}]{${tipSpec}}`;
-  const reverseCmd = `\\arrowreversed[${arrowOpts}]{${tipSpec}}`;
-  const pairDelta = computePathArrowPairDelta(tipMetrics.pairSeparationPx, metrics?.pathLengthWorld, metrics?.screenPxPerWorld);
+
+  // Bending fix: Use scale=1.0 for the arrow command so TikZ bending calculations
+  // see the true physical size relative to the path. Bake the scale into dimensions.
+  const arrowScaleCommand = 1.0;
+
+  const tipMetrics = resolvePathArrowTipMetricsPx(tip, 1.0, arrowWidthUi, "PathArrowMark", arrow.arrowLength);
+  const tipSpec = resolveArrowTipSpec(
+    tip,
+    tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
+    tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
+    { ...arrowTipOptions, opacity: arcDef ? opacity : undefined } // Pass opacity for constructive paths
+  );
+
+  // Standard opts for Markings (Deco)
+  const arrowOptsMarking = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScaleCommand)}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""}`;
+
+  // Opts for Constructive Path (Flex)
+  // We hide the stroke (draw opacity=0) but keep the arrow tip visible (via tipSpec opacity).
+  // We must NOT set generic 'opacity=' on the path, as it might clip the tip.
+  // We rely on 'draw opacity=0' to hide the line.
+  const arrowOptsConstructive = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScaleCommand)},draw opacity=0`;
+
+  const forwardCmd = `\\arrow[${arrowOptsMarking}]{${tipSpec}}`;
+  const reverseCmd = `\\arrowreversed[${arrowOptsMarking}]{${tipSpec}}`;
+  const pairDelta = computePathArrowPairDelta(
+    tipMetrics.pairSeparationPx * effectiveScale, // Use effective scale for gaps
+    metrics?.pathLengthWorld,
+    metrics?.screenPxPerWorld,
+    arrow.pairGapPx
+  );
   const positions = collectPathArrowPositions(arrow, fallbackPos);
   const marks: string[] = [];
+  const paths: string[] = [];
 
   const addMark = (pos: number, command: string) => {
     marks.push(`mark=at position ${fmt(clamp01(pos))} with {${command}}`);
   };
 
+  const addConstructivePath = (pos: number, reversed: boolean) => {
+    if (!arcDef) return;
+    const isCCW = arcDef.sweepRad >= 0;
+    // Target angle on the circle
+    const targetRad = arcDef.startRad + arcDef.sweepRad * clamp01(pos);
+    // Draw a short arc segment ending (or starting) at the target to define the tangent.
+    // For "flex" to work well, the segment should be reasonably capable of bending.
+    // 0.2 rad is ~11 degrees, sufficient for the arrow size.
+    const epsilon = 0.2;
+
+    // To ensure the arrow tip is exactly at `pos`:
+    // For Forward (Standard): Arrow is at END of path. Path: (target - epsilon) -> (target).
+    // For Reversed: Arrow is at END of path, but tip is reversed. Path: (target - epsilon) -> (target).
+    // The `reversed` option in arrows.meta behaves mostly correctly with bending (flips the bend).
+
+    const aEnd = targetRad;
+    const aStart = targetRad - (isCCW ? epsilon : -epsilon);
+
+    const pCenter = arcDef.center;
+    const r = arcDef.radius;
+
+    const startDeg = (aStart * 180) / Math.PI;
+    const endDeg = (aEnd * 180) / Math.PI;
+
+    const arcPath = `(${fmt(pCenter.x + Math.cos(aStart) * r)},${fmt(pCenter.y + Math.sin(aStart) * r)}) arc (${fmt(startDeg)}:${fmt(endDeg)}:${fmt(r)})`;
+
+    const finalTipSpec = reversed ? tipSpec.replace(/\]$/, ",reversed]") : tipSpec;
+    // Use \draw with draw opacity=0, so the line is hidden but the arrow tip (with its own opacity) renders.
+    paths.push(`\\draw[${arrowOptsConstructive}, -{${finalTipSpec}}] ${arcPath};`);
+  };
+
   for (let i = 0; i < positions.length; i += 1) {
     const p = positions[i];
     if (arrow.direction === "->") {
-      addMark(p, forwardCmd);
+      if (arcDef) addConstructivePath(p, false);
+      else addMark(p, forwardCmd);
     } else if (arrow.direction === "<-") {
-      addMark(p, reverseCmd);
+      if (arcDef) addConstructivePath(p, true);
+      else addMark(p, reverseCmd);
     } else if (arrow.direction === "<->") {
-      addMark(p - pairDelta, reverseCmd);
-      addMark(p + pairDelta, forwardCmd);
+      if (arcDef) {
+        addConstructivePath(p - pairDelta, true);
+        addConstructivePath(p + pairDelta, false);
+      } else {
+        addMark(p - pairDelta, reverseCmd);
+        addMark(p + pairDelta, forwardCmd);
+      }
     } else {
-      addMark(p - pairDelta, forwardCmd);
-      addMark(p + pairDelta, reverseCmd);
+      if (arcDef) {
+        addConstructivePath(p - pairDelta, false);
+        addConstructivePath(p + pairDelta, true);
+      } else {
+        addMark(p - pairDelta, forwardCmd);
+        addMark(p + pairDelta, reverseCmd);
+      }
     }
+  }
+
+  if (arcDef) {
+    return paths.join("\n");
   }
 
   if (marks.length === 0) return null;
@@ -2406,14 +2504,20 @@ function pathArrowOverlayToTikz(
 function computePathArrowPairDelta(
   pairSeparationPx: number,
   pathLengthWorld: number | undefined,
-  screenPxPerWorld: number | undefined
+  screenPxPerWorld: number | undefined,
+  explicitGapPx?: number
 ): number {
-  const separationPx = Math.max(3, pairSeparationPx);
+  const requestedGapPx =
+    typeof explicitGapPx === "number" && Number.isFinite(explicitGapPx) && explicitGapPx >= 0
+      ? explicitGapPx
+      : pairSeparationPx;
+  const separationPx = Math.max(3, requestedGapPx);
   if (Number.isFinite(pathLengthWorld) && (pathLengthWorld as number) > 1e-9) {
     const pxPerWorld = clampPositive(screenPxPerWorld ?? 80, 1, 20000);
     const pathLengthPx = (pathLengthWorld as number) * pxPerWorld;
     if (pathLengthPx > 1e-9) {
-      return Math.max(0.002, Math.min(0.24, separationPx / pathLengthPx));
+      // Relax cap to 0.4 (40%) to allow larger gaps on short segments.
+      return Math.max(0.002, Math.min(0.4, separationPx / pathLengthPx));
     }
   }
   // Fallback when path length is not known at call site.
@@ -2465,38 +2569,69 @@ function resolveArrowTipName(
 function resolveArrowTipSpec(
   tip: "Stealth" | "Latex" | "Triangle",
   lengthPt: number,
-  widthPt: number
+  widthPt: number,
+  options?: { bend?: boolean; flex?: boolean; opacity?: number }
 ): string {
-  return `${tip}[length=${fmt(Math.max(0.5, lengthPt))}pt,width=${fmt(Math.max(0.4, widthPt))}pt]`;
+  let extra = "";
+  if (options?.flex) {
+    extra += ",flex";
+  } else if (options?.bend) {
+    extra += ",bend";
+  }
+  if (options?.opacity !== undefined && options.opacity < 0.999) {
+    extra += `,opacity=${fmt(options.opacity)}`;
+  }
+  return `${tip}[length=${fmt(Math.max(0.5, lengthPt))}pt,width=${fmt(Math.max(0.4, widthPt))}pt${extra}]`;
 }
 
 function resolvePathArrowWidthUi(lineWidthPt: unknown): number {
-  if (!Number.isFinite(lineWidthPt) || (lineWidthPt as number) <= 0) return 1;
+  if (!Number.isFinite(lineWidthPt) || (lineWidthPt as number) <= 0) return DEFAULT_PATH_ARROW_UI;
   return clampPositive((lineWidthPt as number) / PATH_ARROW_WIDTH_UI_FACTOR, 0.2, 12);
 }
 
 function resolvePathArrowTipMetricsPx(
   tip: "Stealth" | "Latex" | "Triangle",
-  arrowScale: number,
-  widthUi: number
+  _arrowScale: number,
+  widthUi: number,
+  context: "SegmentArrowMark" | "PathArrowMark",
+  arrowLength?: number
 ): { lengthPx: number; widthPx: number; pairSeparationPx: number } {
-  const baseSize = Math.max(6, 8 * arrowScale);
+  // If arrowLength is provided, use it as the base size (uncoupled from scale).
+  // Base length: arrowLength is now a multiplier (default 1.0).
+  // 1.0 corresponds to 16.8px, matching the tuned `(1,1,3) -> 15.12pt` visually.
+  // For PathArrowMark (Arcs), reduce by 0.9x to match user requirement (9pt vs 10pt).
+  const contextScale = context === "PathArrowMark" ? 0.9 : 1.0;
+  const baseSize = (arrowLength ?? 1.0) * 16.8 * contextScale;
+
   const widthScale = Math.sqrt(Math.max(0.2, Math.min(12, widthUi)));
   const profile =
     tip === "Latex"
-      ? { lengthMul: 0.92, wingMul: 0.35 }
+      ? { lengthMul: 0.95, wingMul: 0.34 }
       : tip === "Triangle"
-      ? { lengthMul: 1.02, wingMul: 0.58 }
-      : { lengthMul: 1.05, wingMul: 0.47 };
+        ? { lengthMul: 1.071, wingMul: 0.56 } // Tuned to 9.0pt (from 8.4pt)
+        : { lengthMul: 1.2, wingMul: 0.44 };
+
+  // If arrowLength is explicit, we don't multiply by profile.lengthMul because 
+  // the user likely interprets "Length" as the total length.
+  // But for "Stealth", the visual length including notch might differ.
+  // Let's stick to using baseSize as the driver.
   const lengthPx = Math.max(4, baseSize * profile.lengthMul);
-  const halfWidthPx = Math.max(1.2, baseSize * profile.wingMul * widthScale);
+
+  // Width calculation
+  // We want width to be independent of length (matching Canvas logic).
+  // Canvas uses a fixed reference size (24) equivalent.
+  // Here we use the raw definition: 16.8 base size (unscaled by arrowLength).
+  const widthBase = 16.8;
+  const halfWidthPx = Math.max(1.2, widthBase * profile.wingMul * widthScale);
   const widthPx = halfWidthPx * 2;
-  const pairSeparationPx = Math.max(3, Math.max(baseSize * 1.6, baseSize * 1.2 * widthScale));
+
+  const pairSeparationPx = Math.max(3, Math.max(baseSize * 0.9, baseSize * 0.65 * widthScale));
   return { lengthPx, widthPx, pairSeparationPx };
 }
 
-function resolveArrowSourceWidth(lineWidthPt: unknown, baseStrokeWidth: unknown): number {
-  if (Number.isFinite(lineWidthPt) && (lineWidthPt as number) > 0) return lineWidthPt as number;
+function resolveArrowSourceWidth(_lineWidthPt: unknown, baseStrokeWidth: unknown): number {
+  // lineWidthPt is now used for geometry width (Ui), not stroke width.
+  // if (Number.isFinite(lineWidthPt) && (lineWidthPt as number) > 0) return lineWidthPt as number;
   if (Number.isFinite(baseStrokeWidth) && (baseStrokeWidth as number) > 0) return baseStrokeWidth as number;
   return 1;
 }
@@ -2588,13 +2723,13 @@ function angleMarkStyleToTikz(
   const sizeScale = isRightArcDot
     ? clampPositive(options.angleArcSizeScale ?? 1, 0.01, 100)
     : isRightAngle
-    ? clampPositive(options.rightAngleSizeScale ?? 1, 0.01, 100)
-    : clampPositive(options.angleArcSizeScale ?? 1, 0.01, 100);
+      ? clampPositive(options.rightAngleSizeScale ?? 1, 0.01, 100)
+      : clampPositive(options.angleArcSizeScale ?? 1, 0.01, 100);
   const baseSizeWorld = isRightArcDot
     ? nonSectorAngleRadiusWorldFromStyle(style, options)
     : isRightAngle
-    ? rightAngleMarkSizeWorldFromStyle(style, options)
-    : nonSectorAngleRadiusWorldFromStyle(style, options);
+      ? rightAngleMarkSizeWorldFromStyle(style, options)
+      : nonSectorAngleRadiusWorldFromStyle(style, options);
   const opts: string[] = [
     `color=${rgbColorExpr(style.strokeColor)}`,
     `line width=${fmt(strokeWidthToTikzPt(style.strokeWidth, options))}pt`,
@@ -2970,9 +3105,9 @@ function rgbColorExpr(hex: string): string {
       ? clean
       : /^[0-9a-fA-F]{3}$/.test(clean)
         ? clean
-            .split("")
-            .map((ch) => ch + ch)
-            .join("")
+          .split("")
+          .map((ch) => ch + ch)
+          .join("")
         : "000000";
   const r = parseInt(full.slice(0, 2), 16);
   const g = parseInt(full.slice(2, 4), 16);
@@ -3047,10 +3182,10 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
     libraryLines.push(needsPatternsMeta ? "\\usetikzlibrary{patterns,patterns.meta}" : "\\usetikzlibrary{patterns}");
   }
   if (needsDecorationsMarkings) {
-    const suffix = needsArrowsMeta ? ",arrows.meta" : "";
+    const suffix = needsArrowsMeta ? ",arrows.meta,bending" : "";
     libraryLines.push(`\\usetikzlibrary{decorations.markings${suffix}}`);
   } else if (needsArrowsMeta) {
-    libraryLines.push("\\usetikzlibrary{arrows.meta}");
+    libraryLines.push("\\usetikzlibrary{arrows.meta,bending}");
   }
 
   if (libraryLines.length === 0) return lines;

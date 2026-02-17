@@ -1,5 +1,8 @@
 import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle } from "../../scene/points";
 
+const DEFAULT_PATH_ARROW_UI = 1.0;
+const DEFAULT_PATH_ARROW_LINE_WIDTH_PT = DEFAULT_PATH_ARROW_UI * 8;
+
 export const defaultPointStyle: PointStyle = {
   shape: "circle",
   sizePx: 4,
@@ -36,8 +39,9 @@ export const defaultSegmentStyle: LineStyle = {
     startPos: 0.45,
     endPos: 0.55,
     step: 0.05,
-    sizeScale: 1,
-    lineWidthPt: 8,
+    sizeScale: DEFAULT_PATH_ARROW_UI,
+    lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
+    arrowLength: 1.0,
   },
 };
 
@@ -64,8 +68,8 @@ export const defaultCircleStyle: CircleStyle = {
     startPos: 0.45,
     endPos: 0.55,
     step: 0.05,
-    sizeScale: 1,
-    lineWidthPt: 8,
+    sizeScale: DEFAULT_PATH_ARROW_UI,
+    lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
   },
 };
 
@@ -111,8 +115,8 @@ export const defaultAngleStyle: AngleStyle = {
     startPos: 0.45,
     endPos: 0.55,
     step: 0.05,
-    sizeScale: 1,
-    lineWidthPt: 8,
+    sizeScale: DEFAULT_PATH_ARROW_UI,
+    lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
   },
 };
 

@@ -2,6 +2,8 @@ import type { ArrowDirection, ArrowTipStyle, PathArrowMark, SegmentArrowMark } f
 import type { Vec2 } from "../geo/vec2";
 
 const PATH_ARROW_CANVAS_WIDTH_UI_FACTOR = 8;
+const DEFAULT_PATH_ARROW_UI = 1.3;
+export const DEFAULT_ARROW_LINE_WIDTH_PT = PATH_ARROW_CANVAS_WIDTH_UI_FACTOR * DEFAULT_PATH_ARROW_UI;
 
 export type ArrowHeadPlacement = {
   tip: Vec2;
@@ -100,21 +102,40 @@ export function drawArrowPlacements(
 
 export function segmentArrowHeadSize(
   lineWidth: number,
-  sizeScale: number | undefined
+  sizeScale: number | undefined,
+  arrowLength: number | undefined
 ): { headSize: number; separation: number; widthScale: number } {
-  const scale = Math.max(0.2, Math.min(8, sizeScale ?? 1));
-  const widthScale = Math.sqrt(Math.max(0.2, Math.min(12, lineWidth)));
-  // Size controls tip length. Width is handled separately via wing scale.
-  const headSize = Math.max(6, 8 * scale);
-  // Keep clear separation between paired arrows; include width contribution.
-  const separation = Math.max(3, Math.max(headSize * 1.6, headSize * 1.2 * widthScale));
+  const scale = Math.max(0.2, Math.min(8, sizeScale ?? DEFAULT_PATH_ARROW_UI));
+  const widthUi = Math.max(0.2, Math.min(12, lineWidth / 1.35));
+
+  // Base length: arrowLength is now a multiplier (default 1.0).
+  // 1.0 corresponds to 16.8px, matching the tuned `(1,1,3) -> 15.12pt` visually.
+  const baseLength = (arrowLength ?? 1.0) * 16.8;
+
+  // "Head Size" in this function actually controls the LENGTH of the arrow.
+  const headSize = Math.max(4, baseLength * scale);
+
+  // Width logic: maintain aspect ratio based on widthUi, but decoupling from new length.
+  // We use a fixed reference size (24) for width calculation so changing length 
+  // doesn't affect width (pure elongation).
+  const referenceSize = 24 * scale;
+  const widthScale = Math.sqrt(widthUi) * (referenceSize / headSize);
+
+  // Keep clear separation between paired arrows.
+  // Increased to 2.4/1.5 to match larger default arrow size and prevent overlap.
+  const separation = Math.max(3, Math.max(headSize * 2.4, headSize * 1.5 * widthScale));
   return { headSize, separation, widthScale };
 }
 
 export function arrowCanvasLineWidthFromStoredPt(lineWidthPt: number): number {
-  if (!Number.isFinite(lineWidthPt) || lineWidthPt <= 0) return 0.5;
-  const width = lineWidthPt / PATH_ARROW_CANVAS_WIDTH_UI_FACTOR;
-  return Math.max(0.5, width);
+  if (!Number.isFinite(lineWidthPt) || lineWidthPt <= 0) return 0.8;
+  const width = (lineWidthPt / PATH_ARROW_CANVAS_WIDTH_UI_FACTOR) * 1.35;
+  return Math.max(0.8, width);
+}
+
+export function resolveArrowPairGapPx(explicitGapPx: number | undefined, autoGapPx: number): number {
+  if (Number.isFinite(explicitGapPx) && (explicitGapPx as number) >= 0) return explicitGapPx as number;
+  return autoGapPx;
 }
 
 export function isSupportedArrowDirection(direction: unknown): direction is ArrowDirection {
@@ -136,16 +157,25 @@ function drawArrowHead(
 ): void {
   const profile =
     tipStyle === "Latex"
-      ? { lengthMul: 0.92, wingMul: 0.35, notchMul: 0 }
+      ? { lengthMul: 0.95, wingMul: 0.34, notchMul: 0 }
       : tipStyle === "Triangle"
-      ? { lengthMul: 1.02, wingMul: 0.58, notchMul: 0 }
-      : { lengthMul: 1.05, wingMul: 0.47, notchMul: 0.2 };
+        ? { lengthMul: 1.0, wingMul: 0.56, notchMul: 0 }
+        : { lengthMul: 1.2, wingMul: 0.44, notchMul: 0.34 };
   const len = headSize * profile.lengthMul;
   const wing = headSize * profile.wingMul * widthScale;
   const backX = tip.x - dirX * len;
   const backY = tip.y - dirY * len;
   const nx = -dirY;
   const ny = dirX;
+
+  if (tipStyle === "Latex") {
+    ctx.beginPath();
+    ctx.moveTo(backX + nx * wing, backY + ny * wing);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.lineTo(backX - nx * wing, backY - ny * wing);
+    ctx.stroke();
+    return;
+  }
 
   ctx.beginPath();
   ctx.moveTo(tip.x, tip.y);
@@ -173,6 +203,7 @@ export function asPathArrowMark(arrow: SegmentArrowMark | PathArrowMark): PathAr
     sizeScale,
     color,
     lineWidthPt,
+    pairGapPx,
   } = arrow;
-  return { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt };
+  return { enabled, direction, tip, pos, distribution, startPos, endPos, step, sizeScale, color, lineWidthPt, pairGapPx };
 }

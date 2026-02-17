@@ -15,15 +15,15 @@ import type {
 
 const SEGMENT_MARK_OPTIONS = ["none", "|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"] as const;
 const ARROW_DIRECTION_OPTIONS: Array<{ value: ArrowDirection; label: string }> = [
-  { value: "->", label: "Forward (A→B)" },
-  { value: "<-", label: "Backward (A←B)" },
-  { value: "<->", label: "Bidirectional (A↔B)" },
-  { value: ">-<", label: "Inward (A>-<B)" },
+  { value: "->", label: "─▶" },
+  { value: "<-", label: "◀─" },
+  { value: "<->", label: "◀─▶" },
+  { value: ">-<", label: "▶─◀" },
 ];
 const ARROW_TIP_OPTIONS: Array<{ value: ArrowTipStyle; label: string }> = [
-  { value: "Stealth", label: "Stealth" },
-  { value: "Latex", label: "Latex" },
-  { value: "Triangle", label: "Triangle" },
+  { value: "Stealth", label: "─➤" },
+  { value: "Latex", label: "─❯" },
+  { value: "Triangle", label: "─▶" },
 ];
 const SEGMENT_ARROW_DISTRIBUTIONS = ["single", "multi"] as const;
 const FILL_PATTERN_OPTIONS = [
@@ -35,6 +35,8 @@ const FILL_PATTERN_OPTIONS = [
   { value: "dots", label: "Dots" },
 ] as const;
 const SEGMENT_ARROW_WIDTH_UI_FACTOR = 8;
+const DEFAULT_PATH_ARROW_UI = 1.0;
+const DEFAULT_PATH_ARROW_LINE_WIDTH_PT = 8.0;
 const DEFAULT_PATH_ARROW_MARK: PathArrowMark = {
   enabled: true,
   direction: "->",
@@ -44,9 +46,75 @@ const DEFAULT_PATH_ARROW_MARK: PathArrowMark = {
   startPos: 0.45,
   endPos: 0.55,
   step: 0.05,
-  sizeScale: 1,
-  lineWidthPt: SEGMENT_ARROW_WIDTH_UI_FACTOR,
+  sizeScale: DEFAULT_PATH_ARROW_UI,
+  lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
+  arrowLength: 1.0,
 };
+
+function isPairArrowDirection(direction: ArrowDirection | undefined): boolean {
+  return direction === "<->" || direction === ">-<";
+}
+
+function resolveAutoArrowPairGapPx(lineWidthPt: number | undefined, sizeScale: number | undefined): number {
+  const storedPt =
+    typeof lineWidthPt === "number" && Number.isFinite(lineWidthPt) && lineWidthPt > 0
+      ? lineWidthPt
+      : DEFAULT_PATH_ARROW_LINE_WIDTH_PT;
+  const widthUi = Math.max(0.2, Math.min(12, storedPt / SEGMENT_ARROW_WIDTH_UI_FACTOR));
+  const scale = Math.max(0.2, Math.min(8, sizeScale ?? DEFAULT_PATH_ARROW_UI));
+  const widthScale = Math.sqrt(widthUi);
+  // Base length 16.8px * scale (1.0 default) matches calibration.
+  const headSize = Math.max(4, 16.8 * scale);
+  // Increased multiplier to 2.4 to ensure <-> arrows don't overlap.
+  return Math.max(3, Math.max(headSize * 2.4, headSize * 1.5 * widthScale));
+}
+
+function resolveArrowGapControlValue(
+  arrow: Pick<PathArrowMark, "pairGapPx" | "lineWidthPt" | "sizeScale"> | undefined
+): number {
+  if (arrow && typeof arrow.pairGapPx === "number" && Number.isFinite(arrow.pairGapPx) && arrow.pairGapPx >= 0) {
+    return arrow.pairGapPx;
+  }
+  return resolveAutoArrowPairGapPx(arrow?.lineWidthPt, arrow?.sizeScale);
+}
+
+function clampArrowWidthUi(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_PATH_ARROW_UI;
+  return Math.max(0, Math.min(12, value));
+}
+
+function parseArrowWidthUi(raw: string): number {
+  return clampArrowWidthUi(Number(raw));
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function recenterArrowRange(pos: number, startPos: number, endPos: number): { startPos: number; endPos: number } {
+  const center = clamp01(pos);
+  let start = clamp01(startPos);
+  let end = clamp01(endPos);
+  if (end < start) {
+    const t = start;
+    start = end;
+    end = t;
+  }
+  const span = Math.max(0, Math.min(1, end - start));
+  let nextStart = center - span * 0.5;
+  let nextEnd = center + span * 0.5;
+  if (nextStart < 0) {
+    nextEnd -= nextStart;
+    nextStart = 0;
+  }
+  if (nextEnd > 1) {
+    nextStart -= nextEnd - 1;
+    nextEnd = 1;
+  }
+  return { startPos: clamp01(nextStart), endPos: clamp01(nextEnd) };
+}
+
 const ARC_VARIANT_OPTIONS = [
   { value: "vanilla", label: "Vanilla Arc" },
   { value: "bars1", label: 'Arc + "|"' },
@@ -105,16 +173,16 @@ export function ObjectStyleSections({
     selectedAngle?.style.markStyle === "none"
       ? "none"
       : selectedAngle?.style.arcMultiplicity === 3
-      ? "triple"
-      : selectedAngle?.style.arcMultiplicity === 2
-      ? "double"
-      : selectedAngle?.style.markSymbol === "|||"
-      ? "bars3"
-      : selectedAngle?.style.markSymbol === "||"
-      ? "bars2"
-      : selectedAngle?.style.markSymbol === "|"
-      ? "bars1"
-      : "vanilla";
+        ? "triple"
+        : selectedAngle?.style.arcMultiplicity === 2
+          ? "double"
+          : selectedAngle?.style.markSymbol === "|||"
+            ? "bars3"
+            : selectedAngle?.style.markSymbol === "||"
+              ? "bars2"
+              : selectedAngle?.style.markSymbol === "|"
+                ? "bars1"
+                : "vanilla";
 
   const updateAngleArcVariant = (variant: string) => {
     if (!selectedAngle) return;
@@ -428,7 +496,7 @@ export function ObjectStyleSections({
             <div className="controlRow">
               <label className="controlLabel">Direction</label>
               <select
-                className="selectInput"
+                className="selectInput arrowIconSelect"
                 value={selectedSegment.style.segmentArrowMark?.direction ?? "->"}
                 onChange={(e) =>
                   updateSelectedSegmentStyle({
@@ -458,7 +526,7 @@ export function ObjectStyleSections({
             <div className="controlRow">
               <label className="controlLabel">Tip Style</label>
               <select
-                className="selectInput"
+                className="selectInput arrowIconSelect"
                 value={selectedSegment.style.segmentArrowMark?.tip ?? "Stealth"}
                 onChange={(e) =>
                   updateSelectedSegmentStyle({
@@ -494,22 +562,29 @@ export function ObjectStyleSections({
                 max={1}
                 step={0.01}
                 value={selectedSegment.style.segmentArrowMark?.pos ?? selectedSegment.style.segmentMark?.pos ?? 0.5}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const pos = Number(e.target.value);
+                  const arrow = selectedSegment.style.segmentArrowMark ?? {
+                    enabled: true,
+                    mode: "mid" as const,
+                    direction: "->" as const,
+                    distribution: "single" as const,
+                    startPos: 0.45,
+                    endPos: 0.55,
+                    step: 0.05,
+                  };
+                  const recentered =
+                    (arrow.distribution ?? "single") === "multi"
+                      ? recenterArrowRange(pos, arrow.startPos ?? 0.45, arrow.endPos ?? 0.55)
+                      : null;
                   updateSelectedSegmentStyle({
                     segmentArrowMark: {
-                      ...(selectedSegment.style.segmentArrowMark ?? {
-                        enabled: true,
-                        mode: "mid",
-                        direction: "->",
-                        distribution: "single",
-                        startPos: 0.45,
-                        endPos: 0.55,
-                        step: 0.05,
-                      }),
-                      pos: Number(e.target.value),
+                      ...arrow,
+                      ...(recentered ?? {}),
+                      pos,
                     },
-                  })
-                }
+                  });
+                }}
               />
             </div>
             <div className="controlRow">
@@ -542,11 +617,11 @@ export function ObjectStyleSections({
               <input
                 className="sizeSlider"
                 type="range"
-                min={0}
+                min={0.2}
                 max={12}
                 step={0.05}
                 value={
-                  (selectedSegment.style.segmentArrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                  (selectedSegment.style.segmentArrowMark?.lineWidthPt ?? DEFAULT_PATH_ARROW_LINE_WIDTH_PT) /
                   SEGMENT_ARROW_WIDTH_UI_FACTOR
                 }
                 onChange={(e) =>
@@ -562,7 +637,7 @@ export function ObjectStyleSections({
                         endPos: 0.55,
                         step: 0.05,
                       }),
-                      lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                      lineWidthPt: parseArrowWidthUi(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
                     },
                   })
                 }
@@ -574,7 +649,7 @@ export function ObjectStyleSections({
                 max={12}
                 step={0.05}
                 value={
-                  (selectedSegment.style.segmentArrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                  (selectedSegment.style.segmentArrowMark?.lineWidthPt ?? DEFAULT_PATH_ARROW_LINE_WIDTH_PT) /
                   SEGMENT_ARROW_WIDTH_UI_FACTOR
                 }
                 onChange={(e) =>
@@ -590,7 +665,7 @@ export function ObjectStyleSections({
                         endPos: 0.55,
                         step: 0.05,
                       }),
-                      lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                      lineWidthPt: parseArrowWidthUi(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
                     },
                   })
                 }
@@ -604,7 +679,7 @@ export function ObjectStyleSections({
                 min={0.2}
                 max={8}
                 step={0.1}
-                value={selectedSegment.style.segmentArrowMark?.sizeScale ?? 1}
+                value={selectedSegment.style.segmentArrowMark?.sizeScale ?? DEFAULT_PATH_ARROW_UI}
                 onChange={(e) =>
                   updateSelectedSegmentStyle({
                     segmentArrowMark: {
@@ -617,7 +692,7 @@ export function ObjectStyleSections({
                         startPos: 0.45,
                         endPos: 0.55,
                         step: 0.05,
-                        lineWidthPt: SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                        lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
                       }),
                       sizeScale: Number(e.target.value),
                     },
@@ -630,7 +705,7 @@ export function ObjectStyleSections({
                 min={0.2}
                 max={8}
                 step={0.1}
-                value={selectedSegment.style.segmentArrowMark?.sizeScale ?? 1}
+                value={selectedSegment.style.segmentArrowMark?.sizeScale ?? DEFAULT_PATH_ARROW_UI}
                 onChange={(e) =>
                   updateSelectedSegmentStyle({
                     segmentArrowMark: {
@@ -643,7 +718,7 @@ export function ObjectStyleSections({
                         startPos: 0.45,
                         endPos: 0.55,
                         step: 0.05,
-                        lineWidthPt: SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                        lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
                       }),
                       sizeScale: Number(e.target.value),
                     },
@@ -651,8 +726,133 @@ export function ObjectStyleSections({
                 }
               />
             </div>
+            <div className="controlRow controlRowWithNumeric">
+              <label className="controlLabel">Arrow Length</label>
+              <input
+                className="sizeSlider"
+                type="range"
+                min={0.1}
+                max={4}
+                step={0.1}
+                value={selectedSegment.style.segmentArrowMark?.arrowLength ?? 1.0}
+                onChange={(e) =>
+                  updateSelectedSegmentStyle({
+                    segmentArrowMark: {
+                      mode: "end",
+                      ...(selectedSegment.style.segmentArrowMark ?? DEFAULT_PATH_ARROW_MARK),
+                      arrowLength: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+              <input
+                className="scaleInputCompact"
+                type="number"
+                min={0.1}
+                max={4}
+                step={0.1}
+                value={selectedSegment.style.segmentArrowMark?.arrowLength ?? 1.0}
+                onChange={(e) =>
+                  updateSelectedSegmentStyle({
+                    segmentArrowMark: {
+                      mode: "end",
+                      ...(selectedSegment.style.segmentArrowMark ?? DEFAULT_PATH_ARROW_MARK),
+                      arrowLength: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </div>
             {selectedSegment.style.segmentArrowMark?.mode === "mid" && (
               <>
+                {isPairArrowDirection(selectedSegment.style.segmentArrowMark?.direction ?? "->") && (
+                  <>
+                    <label className="checkboxRow">
+                      <input
+                        type="checkbox"
+                        checked={selectedSegment.style.segmentArrowMark?.pairGapPx === undefined}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentArrowMark: {
+                              ...(selectedSegment.style.segmentArrowMark ?? {
+                                enabled: true,
+                                mode: "mid",
+                                direction: "->",
+                                distribution: "single",
+                                pos: 0.5,
+                                startPos: 0.45,
+                                endPos: 0.55,
+                                step: 0.05,
+                                lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
+                              }),
+                              pairGapPx: e.target.checked
+                                ? undefined
+                                : resolveArrowGapControlValue(selectedSegment.style.segmentArrowMark),
+                            },
+                          })
+                        }
+                      />
+                      Auto Gap
+                    </label>
+                    <div className="controlRow controlRowWithNumeric">
+                      <label className="controlLabel">Arrow Gap</label>
+                      <input
+                        className="sizeSlider"
+                        type="range"
+                        min={0}
+                        max={120}
+                        step={0.5}
+                        disabled={selectedSegment.style.segmentArrowMark?.pairGapPx === undefined}
+                        value={resolveArrowGapControlValue(selectedSegment.style.segmentArrowMark)}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentArrowMark: {
+                              ...(selectedSegment.style.segmentArrowMark ?? {
+                                enabled: true,
+                                mode: "mid",
+                                direction: "->",
+                                distribution: "single",
+                                pos: 0.5,
+                                startPos: 0.45,
+                                endPos: 0.55,
+                                step: 0.05,
+                                lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
+                              }),
+                              pairGapPx: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                      <input
+                        className="scaleInputCompact"
+                        type="number"
+                        min={0}
+                        max={120}
+                        step={0.5}
+                        disabled={selectedSegment.style.segmentArrowMark?.pairGapPx === undefined}
+                        value={resolveArrowGapControlValue(selectedSegment.style.segmentArrowMark)}
+                        onChange={(e) =>
+                          updateSelectedSegmentStyle({
+                            segmentArrowMark: {
+                              ...(selectedSegment.style.segmentArrowMark ?? {
+                                enabled: true,
+                                mode: "mid",
+                                direction: "->",
+                                distribution: "single",
+                                pos: 0.5,
+                                startPos: 0.45,
+                                endPos: 0.55,
+                                step: 0.05,
+                                lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
+                              }),
+                              pairGapPx: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="controlRow">
                   <label className="controlLabel">Distribution</label>
                   <select
@@ -961,7 +1161,7 @@ export function ObjectStyleSections({
               <div className="controlRow">
                 <label className="controlLabel">Direction</label>
                 <select
-                  className="selectInput"
+                  className="selectInput arrowIconSelect"
                   value={selectedCircle.style.arrowMark?.direction ?? "->"}
                   onChange={(e) =>
                     updateSelectedCircleStyle({
@@ -982,7 +1182,7 @@ export function ObjectStyleSections({
               <div className="controlRow">
                 <label className="controlLabel">Tip Style</label>
                 <select
-                  className="selectInput"
+                  className="selectInput arrowIconSelect"
                   value={selectedCircle.style.arrowMark?.tip ?? "Stealth"}
                   onChange={(e) =>
                     updateSelectedCircleStyle({
@@ -1009,14 +1209,21 @@ export function ObjectStyleSections({
                   max={1}
                   step={0.01}
                   value={selectedCircle.style.arrowMark?.pos ?? 0.5}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const pos = Number(e.target.value);
+                    const arrow = selectedCircle.style.arrowMark ?? areaArrowDefaults;
+                    const recentered =
+                      (arrow.distribution ?? "single") === "multi"
+                        ? recenterArrowRange(pos, arrow.startPos ?? 0.45, arrow.endPos ?? 0.55)
+                        : null;
                     updateSelectedCircleStyle({
                       arrowMark: {
-                        ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
-                        pos: Number(e.target.value),
+                        ...arrow,
+                        ...(recentered ?? {}),
+                        pos,
                       },
-                    })
-                  }
+                    });
+                  }}
                 />
               </div>
               <div className="controlRow">
@@ -1040,18 +1247,18 @@ export function ObjectStyleSections({
                 <input
                   className="sizeSlider"
                   type="range"
-                  min={0}
+                  min={0.2}
                   max={12}
                   step={0.05}
                   value={
-                    (selectedCircle.style.arrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                    (selectedCircle.style.arrowMark?.lineWidthPt ?? DEFAULT_PATH_ARROW_LINE_WIDTH_PT) /
                     SEGMENT_ARROW_WIDTH_UI_FACTOR
                   }
                   onChange={(e) =>
                     updateSelectedCircleStyle({
                       arrowMark: {
                         ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
-                        lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                        lineWidthPt: parseArrowWidthUi(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
                       },
                     })
                   }
@@ -1063,14 +1270,14 @@ export function ObjectStyleSections({
                   max={12}
                   step={0.05}
                   value={
-                    (selectedCircle.style.arrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                    (selectedCircle.style.arrowMark?.lineWidthPt ?? DEFAULT_PATH_ARROW_LINE_WIDTH_PT) /
                     SEGMENT_ARROW_WIDTH_UI_FACTOR
                   }
                   onChange={(e) =>
                     updateSelectedCircleStyle({
                       arrowMark: {
                         ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
-                        lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                        lineWidthPt: parseArrowWidthUi(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
                       },
                     })
                   }
@@ -1084,7 +1291,7 @@ export function ObjectStyleSections({
                   min={0.2}
                   max={8}
                   step={0.1}
-                  value={selectedCircle.style.arrowMark?.sizeScale ?? 1}
+                  value={selectedCircle.style.arrowMark?.sizeScale ?? DEFAULT_PATH_ARROW_UI}
                   onChange={(e) =>
                     updateSelectedCircleStyle({
                       arrowMark: {
@@ -1100,7 +1307,7 @@ export function ObjectStyleSections({
                   min={0.2}
                   max={8}
                   step={0.1}
-                  value={selectedCircle.style.arrowMark?.sizeScale ?? 1}
+                  value={selectedCircle.style.arrowMark?.sizeScale ?? DEFAULT_PATH_ARROW_UI}
                   onChange={(e) =>
                     updateSelectedCircleStyle({
                       arrowMark: {
@@ -1111,6 +1318,62 @@ export function ObjectStyleSections({
                   }
                 />
               </div>
+              {isPairArrowDirection(selectedCircle.style.arrowMark?.direction ?? "->") && (
+                <>
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={selectedCircle.style.arrowMark?.pairGapPx === undefined}
+                      onChange={(e) =>
+                        updateSelectedCircleStyle({
+                          arrowMark: {
+                            ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                            pairGapPx: e.target.checked ? undefined : resolveArrowGapControlValue(selectedCircle.style.arrowMark),
+                          },
+                        })
+                      }
+                    />
+                    Auto Gap
+                  </label>
+                  <div className="controlRow controlRowWithNumeric">
+                    <label className="controlLabel">Arrow Gap</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0}
+                      max={120}
+                      step={0.5}
+                      disabled={selectedCircle.style.arrowMark?.pairGapPx === undefined}
+                      value={resolveArrowGapControlValue(selectedCircle.style.arrowMark)}
+                      onChange={(e) =>
+                        updateSelectedCircleStyle({
+                          arrowMark: {
+                            ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                            pairGapPx: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                    <input
+                      className="scaleInputCompact"
+                      type="number"
+                      min={0}
+                      max={120}
+                      step={0.5}
+                      disabled={selectedCircle.style.arrowMark?.pairGapPx === undefined}
+                      value={resolveArrowGapControlValue(selectedCircle.style.arrowMark)}
+                      onChange={(e) =>
+                        updateSelectedCircleStyle({
+                          arrowMark: {
+                            ...(selectedCircle.style.arrowMark ?? areaArrowDefaults),
+                            pairGapPx: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                </>
+              )}
               <div className="controlRow">
                 <label className="controlLabel">Distribution</label>
                 <select
@@ -1191,6 +1454,41 @@ export function ObjectStyleSections({
                       }
                     />
                   </div>
+                  <div className="controlRow controlRowWithNumeric">
+                    <label className="controlLabel">Arrow Length</label>
+                    <input
+                      className="sizeSlider"
+                      type="range"
+                      min={0.1}
+                      max={4}
+                      step={0.1}
+                      value={selectedAreaStyle?.arrowMark?.arrowLength ?? 1.0}
+                      onChange={(e) =>
+                        updateSelectedAreaStyle({
+                          arrowMark: {
+                            ...(selectedAreaStyle?.arrowMark ?? DEFAULT_PATH_ARROW_MARK),
+                            arrowLength: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                    <input
+                      className="scaleInputCompact"
+                      type="number"
+                      min={0.1}
+                      max={4}
+                      step={0.1}
+                      value={selectedAreaStyle?.arrowMark?.arrowLength ?? 1.0}
+                      onChange={(e) =>
+                        updateSelectedAreaStyle({
+                          arrowMark: {
+                            ...(selectedAreaStyle?.arrowMark ?? DEFAULT_PATH_ARROW_MARK),
+                            arrowLength: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </div>
                 </>
               )}
             </details>
@@ -1238,8 +1536,8 @@ export function ObjectStyleSections({
                       selectedAngle.style.markStyle === "none"
                         ? "none"
                         : selectedAngle.style.markStyle === "right" || selectedAngle.style.markStyle === "arc"
-                        ? "rightSquare"
-                        : selectedAngle.style.markStyle
+                          ? "rightSquare"
+                          : selectedAngle.style.markStyle
                     }
                     onChange={(e) =>
                       updateSelectedAngleStyle({
@@ -1409,7 +1707,7 @@ export function ObjectStyleSections({
             <div className="controlRow">
               <label className="controlLabel">Direction</label>
               <select
-                className="selectInput"
+                className="selectInput arrowIconSelect"
                 value={selectedAngle.style.arcArrowMark?.direction ?? "->"}
                 onChange={(e) =>
                   updateSelectedAngleStyle({
@@ -1430,7 +1728,7 @@ export function ObjectStyleSections({
             <div className="controlRow">
               <label className="controlLabel">Tip Style</label>
               <select
-                className="selectInput"
+                className="selectInput arrowIconSelect"
                 value={selectedAngle.style.arcArrowMark?.tip ?? "Stealth"}
                 onChange={(e) =>
                   updateSelectedAngleStyle({
@@ -1457,14 +1755,21 @@ export function ObjectStyleSections({
                 max={1}
                 step={0.01}
                 value={selectedAngle.style.arcArrowMark?.pos ?? selectedAngle.style.markPos ?? 0.5}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const pos = Number(e.target.value);
+                  const arrow = selectedAngle.style.arcArrowMark ?? angleArrowDefaults;
+                  const recentered =
+                    (arrow.distribution ?? "single") === "multi"
+                      ? recenterArrowRange(pos, arrow.startPos ?? 0.45, arrow.endPos ?? 0.55)
+                      : null;
                   updateSelectedAngleStyle({
                     arcArrowMark: {
-                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
-                      pos: Number(e.target.value),
+                      ...arrow,
+                      ...(recentered ?? {}),
+                      pos,
                     },
-                  })
-                }
+                  });
+                }}
               />
             </div>
             <div className="controlRow">
@@ -1488,18 +1793,18 @@ export function ObjectStyleSections({
               <input
                 className="sizeSlider"
                 type="range"
-                min={0}
+                min={0.2}
                 max={12}
                 step={0.05}
                 value={
-                  (selectedAngle.style.arcArrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                  (selectedAngle.style.arcArrowMark?.lineWidthPt ?? DEFAULT_PATH_ARROW_LINE_WIDTH_PT) /
                   SEGMENT_ARROW_WIDTH_UI_FACTOR
                 }
                 onChange={(e) =>
                   updateSelectedAngleStyle({
                     arcArrowMark: {
                       ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
-                      lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                      lineWidthPt: parseArrowWidthUi(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
                     },
                   })
                 }
@@ -1511,14 +1816,14 @@ export function ObjectStyleSections({
                 max={12}
                 step={0.05}
                 value={
-                  (selectedAngle.style.arcArrowMark?.lineWidthPt ?? SEGMENT_ARROW_WIDTH_UI_FACTOR) /
+                  (selectedAngle.style.arcArrowMark?.lineWidthPt ?? DEFAULT_PATH_ARROW_LINE_WIDTH_PT) /
                   SEGMENT_ARROW_WIDTH_UI_FACTOR
                 }
                 onChange={(e) =>
                   updateSelectedAngleStyle({
                     arcArrowMark: {
                       ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
-                      lineWidthPt: Number(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                      lineWidthPt: parseArrowWidthUi(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
                     },
                   })
                 }
@@ -1532,7 +1837,7 @@ export function ObjectStyleSections({
                 min={0.2}
                 max={8}
                 step={0.1}
-                value={selectedAngle.style.arcArrowMark?.sizeScale ?? 1}
+                value={selectedAngle.style.arcArrowMark?.sizeScale ?? DEFAULT_PATH_ARROW_UI}
                 onChange={(e) =>
                   updateSelectedAngleStyle({
                     arcArrowMark: {
@@ -1548,7 +1853,7 @@ export function ObjectStyleSections({
                 min={0.2}
                 max={8}
                 step={0.1}
-                value={selectedAngle.style.arcArrowMark?.sizeScale ?? 1}
+                value={selectedAngle.style.arcArrowMark?.sizeScale ?? DEFAULT_PATH_ARROW_UI}
                 onChange={(e) =>
                   updateSelectedAngleStyle({
                     arcArrowMark: {
@@ -1559,6 +1864,99 @@ export function ObjectStyleSections({
                 }
               />
             </div>
+            <div className="controlRow controlRowWithNumeric">
+              <label className="controlLabel">Arrow Length</label>
+              <input
+                className="sizeSlider"
+                type="range"
+                min={0.1}
+                max={4}
+                step={0.1}
+                value={selectedAngle.style.arcArrowMark?.arrowLength ?? 1.0}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      arrowLength: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+              <input
+                className="scaleInputCompact"
+                type="number"
+                min={0.1}
+                max={4}
+                step={0.1}
+                value={selectedAngle.style.arcArrowMark?.arrowLength ?? 1.0}
+                onChange={(e) =>
+                  updateSelectedAngleStyle({
+                    arcArrowMark: {
+                      ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                      arrowLength: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </div>
+            {isPairArrowDirection(selectedAngle.style.arcArrowMark?.direction ?? "->") && (
+              <>
+                <label className="checkboxRow">
+                  <input
+                    type="checkbox"
+                    checked={selectedAngle.style.arcArrowMark?.pairGapPx === undefined}
+                    onChange={(e) =>
+                      updateSelectedAngleStyle({
+                        arcArrowMark: {
+                          ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                          pairGapPx: e.target.checked
+                            ? undefined
+                            : resolveArrowGapControlValue(selectedAngle.style.arcArrowMark),
+                        },
+                      })
+                    }
+                  />
+                  Auto Gap
+                </label>
+                <div className="controlRow controlRowWithNumeric">
+                  <label className="controlLabel">Arrow Gap</label>
+                  <input
+                    className="sizeSlider"
+                    type="range"
+                    min={0}
+                    max={120}
+                    step={0.5}
+                    disabled={selectedAngle.style.arcArrowMark?.pairGapPx === undefined}
+                    value={resolveArrowGapControlValue(selectedAngle.style.arcArrowMark)}
+                    onChange={(e) =>
+                      updateSelectedAngleStyle({
+                        arcArrowMark: {
+                          ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                          pairGapPx: Number(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                  <input
+                    className="scaleInputCompact"
+                    type="number"
+                    min={0}
+                    max={120}
+                    step={0.5}
+                    disabled={selectedAngle.style.arcArrowMark?.pairGapPx === undefined}
+                    value={resolveArrowGapControlValue(selectedAngle.style.arcArrowMark)}
+                    onChange={(e) =>
+                      updateSelectedAngleStyle({
+                        arcArrowMark: {
+                          ...(selectedAngle.style.arcArrowMark ?? angleArrowDefaults),
+                          pairGapPx: Number(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </>
+            )}
             <div className="controlRow">
               <label className="controlLabel">Distribution</label>
               <select
