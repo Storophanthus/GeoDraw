@@ -339,7 +339,7 @@ export function createSceneLineAngleActions(
         const start = Math.atan2(wa.y - wb.y, wa.x - wb.x);
         const mid = start + theta * 0.5;
         const dir = { x: Math.cos(mid), y: Math.sin(mid) };
-        const labelDist = Math.max(0.4, prev.angleDefaults.arcRadius + 0.2);
+        const labelDist = Math.max(0.35, prev.angleDefaults.arcRadius + 0.05);
         const labelPosWorld = { x: wb.x + dir.x * labelDist, y: wb.y + dir.y * labelDist };
         const markStyle =
           isRightExact && prev.angleDefaults.markStyle === "arc" ? "rightSquare" : prev.angleDefaults.markStyle;
@@ -394,7 +394,7 @@ export function createSceneLineAngleActions(
         if (theta === null) return prev;
         const start = Math.atan2(wStart.y - wCenter.y, wStart.x - wCenter.x);
         const mid = start + theta * 0.5;
-        const labelDist = Math.max(0.4, r + 0.2);
+        const labelDist = Math.max(0.35, r + 0.05);
         const labelPosWorld = { x: wCenter.x + Math.cos(mid) * labelDist, y: wCenter.y + Math.sin(mid) * labelDist };
 
         id = `a_${prev.nextAngleId}`;
@@ -519,7 +519,7 @@ export function createSceneLineAngleActions(
         if (oriented === null) return prev;
         const start = Math.atan2(angleAWorld.y - wv.y, angleAWorld.x - wv.x);
         const mid = start + oriented * 0.5;
-        const labelDist = Math.max(0.4, prev.angleDefaults.arcRadius + 0.2);
+        const labelDist = Math.max(0.35, prev.angleDefaults.arcRadius + 0.05);
         const labelPosWorld = { x: wv.x + Math.cos(mid) * labelDist, y: wv.y + Math.sin(mid) * labelDist };
         const angleAId = direction === "CCW" ? basePointId : pointId;
         const angleCId = direction === "CCW" ? pointId : basePointId;
