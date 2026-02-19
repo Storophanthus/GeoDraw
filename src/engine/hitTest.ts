@@ -199,7 +199,7 @@ export function hitTestAngleId(
     const r =
       entry.angle.kind === "sector"
         ? Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y))
-        : Math.max(12, entry.angle.style.arcRadius * camera.zoom);
+        : Math.max(20, entry.angle.style.arcRadius * camera.zoom);
     const right = Boolean(entry.angle.isRightExact) || Boolean(entry.angle.isRightApprox);
     const rawMarkStyle = entry.angle.style.markStyle === "right" ? "rightSquare" : entry.angle.style.markStyle;
     const markStyle = right && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle;
@@ -207,9 +207,9 @@ export function hitTestAngleId(
     const d =
       right && markStyle === "rightSquare"
         ? Math.min(
-            distanceToRightAngleMark(screenPoint, as, bs, cs, computeRightMarkSizePx(r, entry.angle.style.strokeWidth)),
-            arcDistance
-          )
+          distanceToRightAngleMark(screenPoint, as, bs, cs, computeRightMarkSizePx(r, entry.angle.style.strokeWidth)),
+          arcDistance
+        )
         : arcDistance;
     if (d <= best) {
       best = d;
@@ -258,7 +258,7 @@ export function hitTestTopObject(
   opts: HitTestOptions = {}
 ): EngineHit {
   const pointTolPx = opts.pointTolPx ?? 10;
-  const angleTolPx = opts.angleTolPx ?? 10;
+  const angleTolPx = opts.angleTolPx ?? 20;
   const segmentTolPx = opts.segmentTolPx ?? 8;
   const lineTolPx = opts.lineTolPx ?? 8;
   const circleTolPx = opts.circleTolPx ?? 8;

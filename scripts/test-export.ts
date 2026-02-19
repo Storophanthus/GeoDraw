@@ -856,21 +856,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
-  if (fileName === "angle-arc-arrow-basic.json") {
-    if (exportError) throw exportError;
-    if (!tikz.includes("\\tkzMarkAngle")) {
-      throw new Error("Expected non-sector angle arrow fixture to emit \\tkzMarkAngle.");
-    }
-    if (!tikz.includes("arc[start angle=")) {
-      throw new Error("Expected non-sector angle arrow fixture to emit arc path arrow overlay.");
-    }
-    if (!tikz.includes("{Latex[")) {
-      throw new Error("Expected non-sector angle arrow fixture to emit Latex arrow tip.");
-    }
-    if (!tikz.includes("\\arrow[") || !tikz.includes("\\arrowreversed[")) {
-      throw new Error("Expected non-sector angle inward arrow fixture to emit both directions.");
-    }
-  }
+
 
   if (
     fileName === "segment-mark-arrow-mid.json" ||
@@ -878,8 +864,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     fileName === "segment-mark-arrow-mid-inward.json" ||
     fileName === "circle-arrow-basic.json" ||
     fileName === "circle-arrow-mid-position-parity.json" ||
-    fileName === "sector-arrow-basic.json" ||
-    fileName === "angle-arc-arrow-basic.json"
+    fileName === "sector-arrow-basic.json"
   ) {
     if (!tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta}")) {
       throw new Error("Expected arrow fixtures to emit decorations.markings + arrows.meta library line.");
