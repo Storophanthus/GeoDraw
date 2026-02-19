@@ -25,6 +25,17 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-02-20 Deprecate Double Arrow Styles for Circles and Angles:
+  - **Refactor**: Replaced legacy inline arrow controls with `ArrowListControl` for Circles and Angles.
+    - Enables multiple arrows per object (previously limited to 1 for Circles/Angles).
+    - Removes deprecated `<->` and `>-<` styles from the UI (existing files still render).
+  - **Fix**: Resolved "Ghost Arrow" issue in `ArrowListControl`.
+    - Previously, disabled arrows in legacy data showed up as "Arrow 1" in the list.
+    - Updated `ObjectStyleSections.tsx` to filter out disabled arrows for Segments, Circles, and Angles.
+  - **Validation**:
+    - Verified new UI allows adding/removing arrows on Circles/Angles.
+    - Verified ghost arrows are gone for all object types.
+    - `npm run type-check && npm run test:unit` passed.
 - 2026-02-19 Efficient TikZ Export:
   - Implemented new export mode (`makeEfficientTikz`) that post-processes standard TikZ output for readability and compactness.
   - Key transformations:
