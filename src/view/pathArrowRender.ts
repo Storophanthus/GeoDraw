@@ -1,5 +1,6 @@
 import type { ArrowDirection, ArrowTipStyle, PathArrowMark, SegmentArrowMark } from "../scene/points";
 import type { Vec2 } from "../geo/vec2";
+import { clamp01 } from "../geo/pathArrowPlacement";
 
 const PATH_ARROW_CANVAS_WIDTH_UI_FACTOR = 8;
 const DEFAULT_PATH_ARROW_UI = 1.3;
@@ -11,10 +12,7 @@ export type ArrowHeadPlacement = {
   dirY: number;
 };
 
-export function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, value));
-}
+export { clamp01 };
 
 export function resolveArrowTipStyle(tip: ArrowTipStyle | undefined): ArrowTipStyle {
   return tip === "Latex" || tip === "Triangle" || tip === "Stealth" ? tip : "Stealth";

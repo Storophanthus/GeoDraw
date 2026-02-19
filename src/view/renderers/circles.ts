@@ -118,7 +118,7 @@ function drawCircleArrowOverlay(
         ? arrow.lineWidthPt
         : DEFAULT_ARROW_LINE_WIDTH_PT;
     const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
-    const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale);
+    const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale, arrow.arrowLength);
 
     // Legacy support for pairGap if somehow still present, though we migrated away from it.
     // If direction is simple -> or <-, pairGap is ignored usually, unless we want to support it for single arrow?

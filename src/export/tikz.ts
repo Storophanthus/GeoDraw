@@ -9,8 +9,10 @@ import {
   getLineWorldAnchors,
   getPointWorldPos,
   type GeometryObjectRef,
-  type SceneModel,
-  type ScenePoint,
+  SceneModel,
+  ScenePoint,
+  SegmentArrowMark,
+  type PathArrowMark,
 } from "../scene/points";
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
@@ -81,28 +83,8 @@ export type TikzCommand =
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
   | { kind: "DefMidPoint"; name: string; a: string; b: string }
   | { kind: "InterLL"; name: string; a1: string; a2: string; b1: string; b2: string }
-  | {
-    kind: "InterLC";
-    name: string;
-    lineA: string;
-    lineB: string;
-    circleO: string;
-    circleX: string;
-    branch: 0 | 1;
-    common?: string;
-    selector?: { name: string; x: number; y: number };
-  }
-  | {
-    kind: "InterCC";
-    name: string;
-    circleAO: string;
-    circleAX: string;
-    circleBO: string;
-    circleBX: string;
-    branch: 0 | 1;
-    common?: string;
-    selector?: { name: string; x: number; y: number };
-  }
+  | { kind: "InterLC"; name: string; lineA: string; lineB: string; circleO: string; circleX: string; branch: 0 | 1; common?: string; swap?: boolean }
+  | { kind: "InterCC"; name: string; circleAO: string; circleAX: string; circleBO: string; circleBX: string; branch: 0 | 1; common?: string; swap?: boolean }
   | { kind: "DrawSegment"; a: string; b: string; style?: string }
   | { kind: "MarkSegment"; a: string; b: string; style: string }
   | { kind: "DrawRaw"; tex: string }
@@ -219,15 +201,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const visiting = new Set<string>();
   const visited = new Set<string>();
   const lineAnchorNames = new Map<string, { a: string; b: string }>();
-  let selectorIndex = 0;
   let derivedAuxIndex = 0;
   const circleThroughNameById = new Map<string, string>();
   const circleCenterNameById = new Map<string, string>();
 
-  const newSelectorName = (kind: "LC" | "CC"): string => {
-    selectorIndex += 1;
-    return `tkzSel${kind}_${selectorIndex}`;
-  };
+
 
   const circleGeomById = (circleId: string): { center: { x: number; y: number }; radius: number } => {
     const circle = circleById.get(circleId);
@@ -269,7 +247,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (cached) return cached;
     const circle = circleById.get(circleId);
     if (!circle) throw new Error(`Missing circle ${circleId}`);
-    ensureCircleCenterName(circleId);
+    ensureCircleCenterName(circle.id);
     if (circle.kind === "threePoint") {
       resolvePoint(circle.aId);
       const name = mustName(pointName, circle.aId);
@@ -643,7 +621,6 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const lineWorld = getLineWorldAnchors(line, scene);
       const geom = circleGeomById(circle.id);
       const center = geom.center;
-      const through = { x: center.x + geom.radius, y: center.y };
       if (!lineWorld) throw new Error(`Undefined line/circle geometry for ${point.name}`);
       const roots = lineCircleIntersectionBranches(lineWorld.a, lineWorld.b, center, geom.radius);
       if (roots.length === 0) {
@@ -687,26 +664,33 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           if (definedPointIds.has(sibling.id)) commonName = mustName(pointName, sibling.id);
         }
       }
-      if (point.excludePointId) {
-        const excluded = getPointWorldPosCached(scene, point.excludePointId);
-        if (excluded) {
-          const ROOT_EPS = 1e-6;
-          const hasOther = roots.some((r) => distance(r.point, excluded) > ROOT_EPS);
-          if (!hasOther) {
-            visiting.delete(pointId);
-            visited.add(pointId);
-            return;
+      let swap = false;
+      const targetWorld = getPointWorldPos(point, scene);
+
+      if (targetWorld && !commonName && roots.length === 2) {
+        const anchorsWorld = getLineWorldAnchors(line, scene);
+        if (anchorsWorld) {
+          const t = targetWorld;
+          const r0 = roots[0].point;
+          const r1 = roots[1].point;
+          const other = distance(r0, t) > distance(r1, t) ? r0 : r1;
+
+          const da_t = distance(anchorsWorld.a, t);
+          const da_o = distance(anchorsWorld.a, other);
+          const db_t = distance(anchorsWorld.b, t);
+          const db_o = distance(anchorsWorld.b, other);
+
+          if (Math.abs(db_t - db_o) > Math.abs(da_t - da_o) + 0.001) {
+            const tmp = lineAnchors.a;
+            lineAnchors.a = lineAnchors.b;
+            lineAnchors.b = tmp;
+            swap = db_t > db_o;
+          } else {
+            swap = da_t > da_o;
           }
         }
       }
-      let selector: { name: string; x: number; y: number } | undefined;
-      if (!commonName) {
-        const other = inferOtherLineCircleBranchPointFromWorld(lineWorld.a, lineWorld.b, center, through, branch);
-        if (other) {
-          selector = { name: newSelectorName("LC"), x: other.x, y: other.y };
-          commonName = selector.name;
-        }
-      }
+
       constructions.push({
         kind: "InterLC",
         name,
@@ -716,7 +700,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         circleX: circleThroughName,
         branch,
         common: commonName,
-        selector,
+        swap,
       });
       definedPointIds.add(point.id);
     } else if (point.kind === "circleSegmentIntersectionPoint") {
@@ -770,25 +754,54 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           if (definedPointIds.has(sibling.id)) commonName = mustName(pointName, sibling.id);
         }
       }
-      let selector: { name: string; x: number; y: number } | undefined;
-      if (!commonName) {
-        const other = inferOtherLineCircleBranchPointFromWorld(wa, wb, center, through, branch);
-        if (other) {
-          selector = { name: newSelectorName("LC"), x: other.x, y: other.y };
-          commonName = selector.name;
+      let swap = false;
+      const targetWorld = getPointWorldPos(point, scene);
+
+      if (targetWorld && !commonName && roots.length === 2 && wa && wb) {
+        const t = targetWorld;
+        const r0 = roots[0].point;
+        const r1 = roots[1].point;
+        const other = distance(r0, t) > distance(r1, t) ? r0 : r1;
+
+        const da_t = distance(wa, t);
+        const da_o = distance(wa, other);
+        const db_t = distance(wb, t);
+        const db_o = distance(wb, other);
+
+        let lineA = segAName;
+        let lineB = segBName;
+
+        if (Math.abs(db_t - db_o) > Math.abs(da_t - da_o) + 0.001) {
+          lineA = segBName;
+          lineB = segAName;
+          swap = db_t > db_o;
+        } else {
+          swap = da_t > da_o;
         }
+
+        constructions.push({
+          kind: "InterLC",
+          name,
+          lineA,
+          lineB,
+          circleO: circleCenterName,
+          circleX: circleThroughName,
+          branch,
+          common: commonName,
+          swap,
+        });
+      } else {
+        constructions.push({
+          kind: "InterLC",
+          name,
+          lineA: segAName,
+          lineB: segBName,
+          circleO: circleCenterName,
+          circleX: circleThroughName,
+          branch,
+          common: commonName,
+        });
       }
-      constructions.push({
-        kind: "InterLC",
-        name,
-        lineA: segAName,
-        lineB: segBName,
-        circleO: circleCenterName,
-        circleX: circleThroughName,
-        branch,
-        common: commonName,
-        selector,
-      });
       definedPointIds.add(point.id);
     } else if (point.kind === "circleCircleIntersectionPoint") {
       const cA = circleById.get(point.circleAId);
@@ -801,8 +814,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const cAGeom = circleGeomById(cA.id);
       const cBGeom = circleGeomById(cB.id);
       const cAThrough = { x: cAGeom.center.x + cAGeom.radius, y: cAGeom.center.y };
-      const cBThrough = { x: cBGeom.center.x + cBGeom.radius, y: cBGeom.center.y };
-      const branch: 0 | 1 = point.branchIndex;
+      let branch: 0 | 1 = point.branchIndex;
       let commonName: string | undefined;
       if (point.excludePointId) {
         commonName = mustName(pointName, point.excludePointId);
@@ -817,26 +829,53 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         });
         if (sibling) commonName = mustName(pointName, sibling.id);
       }
-      let selector: { name: string; x: number; y: number } | undefined;
-      if (!commonName) {
-        const other = inferOtherCircleCircleBranchPoint(cAGeom.center, cAThrough, cBGeom.center, cBThrough, branch);
-        if (other) {
-          selector = { name: newSelectorName("CC"), x: other.x, y: other.y };
-          commonName = selector.name;
+      const targetWorld = getPointWorldPos(point, scene);
+
+      // Find a common point (one that already exists and matches the OTHER intersection)
+      const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
+      if (roots.length === 2 && targetWorld) {
+        const otherWorld = distance(roots[0], targetWorld) > distance(roots[1], targetWorld) ? roots[0] : roots[1];
+        for (const pid of definedPointIds) {
+          const pWorld = getPointWorldPosCached(scene, pid);
+          if (pWorld && distance(pWorld, otherWorld) < 0.005) {
+            commonName = mustName(pointName, pid);
+            break;
+          }
         }
       }
-      constructions.push({
-        kind: "InterCC",
-        name,
-        circleAO: cACenterName,
-        circleAX: cAThroughName,
-        circleBO: cBCenterName,
-        circleBX: cBThroughName,
-        branch,
-        common: commonName,
-        selector,
-      });
-      definedPointIds.add(point.id);
+
+      let swap = false;
+      if (targetWorld) {
+        if (!commonName) {
+          const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
+          if (roots.length === 2) {
+            const other = distance(roots[0], targetWorld) > distance(roots[1], targetWorld) ? roots[0] : roots[1];
+            const angleA_t = computeOrientedAngleRad(cAGeom.center, cAThrough, targetWorld);
+            const angleA_o = computeOrientedAngleRad(cAGeom.center, cAThrough, other);
+            if (angleA_t !== null && angleA_o !== null) {
+              const o1 = cAGeom.center;
+              const o2 = cBGeom.center;
+              const a_t = computeOrientedAngleRad(targetWorld, o1, o2);
+              if (a_t !== null) {
+                swap = a_t <= 0;
+              }
+            }
+          }
+        }
+
+        constructions.push({
+          kind: "InterCC",
+          name,
+          circleAO: cACenterName,
+          circleAX: cAThroughName,
+          circleBO: cBCenterName,
+          circleBX: cBThroughName,
+          branch,
+          common: commonName,
+          swap,
+        });
+        definedPointIds.add(point.id);
+      }
     } else if (point.kind === "lineLikeIntersectionPoint") {
       const llA = lineLikeNamesFromRef(point.objA, resolveLineAnchorsById, scene, lineById, segById, pointName, resolvePoint);
       const llB = lineLikeNamesFromRef(point.objB, resolveLineAnchorsById, scene, lineById, segById, pointName, resolvePoint);
@@ -912,26 +951,48 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             });
             if (sibling) commonName = mustName(pointName, sibling.id);
           }
-          let selector: { name: string; x: number; y: number } | undefined;
-          if (!commonName) {
-            const other = inferOtherCircleCircleBranchPoint(cAGeom.center, cAThrough, cBGeom.center, cBThrough, branch);
-            if (other) {
-              selector = { name: newSelectorName("CC"), x: other.x, y: other.y };
-              commonName = selector.name;
+          const targetWorld = getPointWorldPos(point, scene);
+
+          // Find a common point (one that already exists and matches the OTHER intersection)
+          const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
+          if (roots.length === 2 && targetWorld) {
+            const otherWorld = distance(roots[0], targetWorld) > distance(roots[1], targetWorld) ? roots[0] : roots[1];
+            for (const pid of definedPointIds) {
+              const pWorld = getPointWorldPosCached(scene, pid);
+              if (pWorld && distance(pWorld, otherWorld) < 0.005) {
+                commonName = mustName(pointName, pid);
+                break;
+              }
             }
           }
-          constructions.push({
-            kind: "InterCC",
-            name,
-            circleAO: cACenterName,
-            circleAX: cAThroughName,
-            circleBO: cBCenterName,
-            circleBX: cBThroughName,
-            branch,
-            common: commonName,
-            selector,
-          });
-          definedPointIds.add(point.id);
+
+          let swap = false;
+          if (targetWorld) {
+            if (!commonName) {
+              const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
+              if (roots.length === 2) {
+                const o1 = cAGeom.center;
+                const o2 = cBGeom.center;
+                const a_t = computeOrientedAngleRad(targetWorld, o1, o2);
+                if (a_t !== null) {
+                  swap = a_t <= 0;
+                }
+              }
+            }
+
+            constructions.push({
+              kind: "InterCC",
+              name,
+              circleAO: cACenterName,
+              circleAX: cAThroughName,
+              circleBO: cBCenterName,
+              circleBX: cBThroughName,
+              branch,
+              common: commonName,
+              swap,
+            });
+            definedPointIds.add(point.id);
+          }
         } else {
           if (!mixed) {
             throw new Error(
@@ -944,7 +1005,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           const center = geom.center;
           const through = { x: center.x + geom.radius, y: center.y };
           const branch = inferLineCircleBranchFromWorld(point, mixed.ll.worldA, mixed.ll.worldB, center, through);
-          let commonName: string | undefined;
+          let mixCommonName: string | undefined;
           if (branch === 1) {
             const sibling = scene.points.find(
               (p) =>
@@ -953,10 +1014,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
                 sameObjectPair(p.objA, p.objB, point.objA, point.objB) &&
                 definedPointIds.has(p.id)
             );
-            if (sibling) commonName = mustName(pointName, sibling.id);
+            if (sibling) mixCommonName = mustName(pointName, sibling.id);
           }
-          if (!commonName) {
-            commonName = inferLineCircleCommonFromEndpointsWorld(
+          if (!mixCommonName) {
+            mixCommonName = inferLineCircleCommonFromEndpointsWorld(
               mixed.ll.endpointAId,
               mixed.ll.endpointBId,
               mixed.ll.worldA,
@@ -967,14 +1028,27 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
               pointName
             );
           }
-          let selector: { name: string; x: number; y: number } | undefined;
-          if (!commonName) {
-            const other = inferOtherLineCircleBranchPointFromWorld(mixed.ll.worldA, mixed.ll.worldB, center, through, branch);
-            if (other) {
-              selector = { name: newSelectorName("LC"), x: other.x, y: other.y };
-              commonName = selector.name;
+          let swap = false;
+          const targetWorld = getPointWorldPos(point, scene);
+          if (targetWorld && !mixCommonName) {
+            const roots = lineCircleIntersectionBranches(mixed.ll.worldA, mixed.ll.worldB, center, geom.radius);
+            if (roots.length === 2) {
+              const t = targetWorld;
+              const r0 = roots[0].point;
+              const r1 = roots[1].point;
+              const other = distance(r0, t) > distance(r1, t) ? r0 : r1;
+              const da_t = distance(mixed.ll.worldA, targetWorld);
+              const da_o = distance(mixed.ll.worldA, other);
+              const db_t = distance(mixed.ll.worldB, targetWorld);
+              const db_o = distance(mixed.ll.worldB, other);
+              if (Math.abs(db_t - db_o) > Math.abs(da_t - da_o) + 0.001) {
+                swap = db_t > db_o;
+              } else {
+                swap = da_t > da_o;
+              }
             }
           }
+
           constructions.push({
             kind: "InterLC",
             name,
@@ -983,8 +1057,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             circleO: mixedCenterName,
             circleX: circleThroughName,
             branch,
-            common: commonName,
-            selector,
+            common: mixCommonName,
+            swap,
           });
           definedPointIds.add(point.id);
         }
@@ -1530,39 +1604,47 @@ export function renderTikz(cmds: TikzCommand[]): string {
       continue;
     }
     if (cmd.kind === "InterLC") {
-      if (cmd.selector) {
-        assertTkzMacro("tkzDefPoint");
-        out.push(`\\tkzDefPoint(${fmt(cmd.selector.x)},${fmt(cmd.selector.y)}){${cmd.selector.name}}`);
+      interLCTmpIdx += 1;
+      const otherName = `tkzInterLC_${interLCTmpIdx}_other`;
+
+      let opt = "";
+      let p1, p2;
+      if (cmd.common) {
+        opt = `[common=${cmd.common}]`;
+        // common is the 2nd result point in tkz-euclide
+        p1 = cmd.name;
+        p2 = cmd.common;
+      } else {
+        opt = "[near]";
+        p1 = cmd.swap ? otherName : cmd.name;
+        p2 = cmd.swap ? cmd.name : otherName;
       }
+
       assertTkzMacro("tkzInterLC");
       assertTkzMacro("tkzGetPoints");
-      const canSwap = cmd.lineA !== cmd.lineB;
-      const shouldSwap = !cmd.common && canSwap && cmd.branch === 1;
-      const la = shouldSwap ? cmd.lineB : cmd.lineA;
-      const lb = shouldSwap ? cmd.lineA : cmd.lineB;
-      interLCTmpIdx += 1;
-      const other = `tkzInterLC_${interLCTmpIdx}_other`;
-      const opt = cmd.common ? `[common=${cmd.common}]` : "";
-      out.push(`\\tkzInterLC${opt}(${la},${lb})(${cmd.circleO},${cmd.circleX}) \\tkzGetPoints{${cmd.name}}{${other}}`);
+      out.push(`\\tkzInterLC${opt}(${cmd.lineA},${cmd.lineB})(${cmd.circleO},${cmd.circleX}) \\tkzGetPoints{${p1}}{${p2}}`);
       continue;
     }
     if (cmd.kind === "InterCC") {
-      if (cmd.selector) {
-        assertTkzMacro("tkzDefPoint");
-        out.push(`\\tkzDefPoint(${fmt(cmd.selector.x)},${fmt(cmd.selector.y)}){${cmd.selector.name}}`);
+      interLCTmpIdx += 1;
+      const otherName = `tkzInterCC_${interLCTmpIdx}_other`;
+
+      let opt = "";
+      let p1, p2;
+      if (cmd.common) {
+        opt = `[common=${cmd.common}]`;
+        // common is the 2nd result point
+        p1 = cmd.name;
+        p2 = cmd.common;
+      } else {
+        p1 = cmd.swap ? otherName : cmd.name;
+        p2 = cmd.swap ? cmd.name : otherName;
       }
+
       assertTkzMacro("tkzInterCC");
       assertTkzMacro("tkzGetPoints");
-      const canSwap = cmd.circleAO !== cmd.circleBO || cmd.circleAX !== cmd.circleBX;
-      const shouldSwap = !cmd.common && canSwap && cmd.branch === 1;
-      const ao = shouldSwap ? cmd.circleBO : cmd.circleAO;
-      const ax = shouldSwap ? cmd.circleBX : cmd.circleAX;
-      const bo = shouldSwap ? cmd.circleAO : cmd.circleBO;
-      const bx = shouldSwap ? cmd.circleAX : cmd.circleBX;
-      interLCTmpIdx += 1;
-      const other = `tkzInterCC_${interLCTmpIdx}_other`;
-      const opt = cmd.common ? `[common=${cmd.common}]` : "";
-      out.push(`\\tkzInterCC${opt}(${ao},${ax})(${bo},${bx}) \\tkzGetPoints{${cmd.name}}{${other}}`);
+      out.push(`\\tkzInterCC${opt}(${cmd.circleAO},${cmd.circleAX})(${cmd.circleBO},${cmd.circleBX}) \\tkzGetPoints{${p1}}{${p2}}`);
+      continue;
     }
   }
 
@@ -1965,35 +2047,6 @@ function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number;
   };
 }
 
-function inferOtherLineCircleBranchPointFromWorld(
-  lineA: { x: number; y: number },
-  lineB: { x: number; y: number },
-  circleO: { x: number; y: number },
-  circleX: { x: number; y: number },
-  selectedBranch: 0 | 1
-): { x: number; y: number } | null {
-  const radius = distance(circleO, circleX);
-  const branches = lineCircleIntersectionBranches(lineA, lineB, circleO, radius);
-  if (branches.length < 2) return null;
-  const idx = selectedBranch === 0 ? 1 : 0;
-  return branches[idx].point;
-}
-
-function inferOtherCircleCircleBranchPoint(
-  aCenter: { x: number; y: number },
-  aThrough: { x: number; y: number },
-  bCenter: { x: number; y: number },
-  bThrough: { x: number; y: number },
-  selectedBranch: 0 | 1
-): { x: number; y: number } | null {
-  const ra = distance(aCenter, aThrough);
-  const rb = distance(bCenter, bThrough);
-  const intersections = circleCircleIntersections(aCenter, ra, bCenter, rb);
-  if (intersections.length < 2) return null;
-  const idx = selectedBranch === 0 ? 1 : 0;
-  return intersections[idx];
-}
-
 function computeLineDrawPlacement(
   scene: SceneModel,
   line: SceneModel["lines"][number]
@@ -2373,131 +2426,121 @@ function segmentArrowsToTikz(
 }
 
 function pathArrowOverlayToTikz(
-  arrow:
-    | SceneModel["segments"][number]["style"]["segmentArrowMark"]
-    | SceneModel["circles"][number]["style"]["arrowMark"]
-    | SceneModel["angles"][number]["style"]["arcArrowMark"],
+  styleArrows: PathArrowMark | PathArrowMark[] | SegmentArrowMark | SegmentArrowMark[] | undefined,
   pathExpr: string,
   base: { strokeColor: string; strokeWidth: number; opacity: number },
   fallbackPos: number,
   metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number },
   arcDef?: { center: { x: number; y: number }; radius: number; startRad: number; sweepRad: number },
-  arrowTipOptions?: { bend?: boolean; flex?: boolean } // New parameter for bend/flex
+  arrowTipOptions?: { bend?: boolean; flex?: boolean }
 ): string | null {
-  if (!arrow?.enabled) return null;
-  ensureSupportedArrowDirection(arrow.direction, "PathArrowMark");
-  const tip = resolveArrowTipName(arrow.tip, "PathArrowMark");
-  const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
-  const opacity = normalizedOpacity(base.opacity);
-  const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
-  const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
-  // User snippet requires scale=0.75 for arcs/paths.
-  const effectiveScale = clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.75;
-  const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
+  const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
+  const results: string[] = [];
 
-  // Bending fix: Use scale=1.0 for the arrow command so TikZ bending calculations
-  // see the true physical size relative to the path. Bake the scale into dimensions.
-  const arrowScaleCommand = 1.0;
+  for (const arrow of arrows) {
+    if (!arrow?.enabled) continue;
+    ensureSupportedArrowDirection(arrow.direction, "PathArrowMark");
+    const tip = resolveArrowTipName(arrow.tip, "PathArrowMark");
+    const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
+    const opacity = normalizedOpacity(base.opacity);
+    const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
+    const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
+    // User snippet requires scale=0.75 for arcs/paths.
+    const effectiveScale = clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.75;
+    const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
 
-  const tipMetrics = resolvePathArrowTipMetricsPx(tip, 1.0, arrowWidthUi, "PathArrowMark", arrow.arrowLength);
-  const tipSpec = resolveArrowTipSpec(
-    tip,
-    tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
-    tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
-    { ...arrowTipOptions, opacity: arcDef ? opacity : undefined } // Pass opacity for constructive paths
-  );
+    // Bending fix: Use scale=1.0 for the arrow command so TikZ bending calculations
+    // see the true physical size relative to the path. Bake the scale into dimensions.
+    const arrowScaleCommand = 1.0;
 
-  // Standard opts for Markings (Deco)
-  const arrowOptsMarking = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScaleCommand)}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""}`;
+    const tipMetrics = resolvePathArrowTipMetricsPx(tip, 1.0, arrowWidthUi, "PathArrowMark", arrow.arrowLength);
+    const tipSpec = resolveArrowTipSpec(
+      tip,
+      tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
+      tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
+      { ...arrowTipOptions, opacity: arcDef ? opacity : undefined }
+    );
 
-  // Opts for Constructive Path (Flex)
-  // We hide the stroke (draw opacity=0) but keep the arrow tip visible (via tipSpec opacity).
-  // We must NOT set generic 'opacity=' on the path, as it might clip the tip.
-  // We rely on 'draw opacity=0' to hide the line.
-  const arrowOptsConstructive = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScaleCommand)},draw opacity=0`;
+    // Standard opts for Markings (Deco)
+    const arrowOptsMarking = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScaleCommand)}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
+      }`;
 
-  const forwardCmd = `\\arrow[${arrowOptsMarking}]{${tipSpec}}`;
-  const reverseCmd = `\\arrowreversed[${arrowOptsMarking}]{${tipSpec}}`;
-  const pairDelta = computePathArrowPairDelta(
-    tipMetrics.pairSeparationPx * effectiveScale, // Use effective scale for gaps
-    metrics?.pathLengthWorld,
-    metrics?.screenPxPerWorld,
-    arrow.pairGapPx
-  );
-  const positions = collectPathArrowPositions(arrow, fallbackPos);
-  const marks: string[] = [];
-  const paths: string[] = [];
+    // Opts for Constructive Path (Flex)
+    const arrowOptsConstructive = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(
+      arrowScaleCommand
+    )},draw opacity=0`;
 
-  const addMark = (pos: number, command: string) => {
-    marks.push(`mark=at position ${fmt(clamp01(pos))} with {${command}}`);
-  };
+    const forwardCmd = `\\arrow[${arrowOptsMarking}]{${tipSpec}}`;
+    const reverseCmd = `\\arrowreversed[${arrowOptsMarking}]{${tipSpec}}`;
+    const pairDelta = computePathArrowPairDelta(
+      tipMetrics.pairSeparationPx * effectiveScale,
+      metrics?.pathLengthWorld,
+      metrics?.screenPxPerWorld,
+      arrow.pairGapPx
+    );
+    const positions = collectPathArrowPositions(arrow, fallbackPos);
+    const marks: string[] = [];
+    const paths: string[] = [];
 
-  const addConstructivePath = (pos: number, reversed: boolean) => {
-    if (!arcDef) return;
-    const isCCW = arcDef.sweepRad >= 0;
-    // Target angle on the circle
-    const targetRad = arcDef.startRad + arcDef.sweepRad * clamp01(pos);
-    // Draw a short arc segment ending (or starting) at the target to define the tangent.
-    // For "flex" to work well, the segment should be reasonably capable of bending.
-    // 0.2 rad is ~11 degrees, sufficient for the arrow size.
-    const epsilon = 0.2;
+    const addMark = (pos: number, command: string) => {
+      marks.push(`mark=at position ${fmt(clamp01(pos))} with {${command}}`);
+    };
 
-    // To ensure the arrow tip is exactly at `pos`:
-    // For Forward (Standard): Arrow is at END of path. Path: (target - epsilon) -> (target).
-    // For Reversed: Arrow is at END of path, but tip is reversed. Path: (target - epsilon) -> (target).
-    // The `reversed` option in arrows.meta behaves mostly correctly with bending (flips the bend).
+    const addConstructivePath = (pos: number, reversed: boolean) => {
+      if (!arcDef) return;
+      const isCCW = arcDef.sweepRad >= 0;
+      const targetRad = arcDef.startRad + arcDef.sweepRad * clamp01(pos);
+      const epsilon = 0.2;
+      const aEnd = targetRad;
+      const aStart = targetRad - (isCCW ? epsilon : -epsilon);
+      const pCenter = arcDef.center;
+      const r = arcDef.radius;
+      const startDeg = (aStart * 180) / Math.PI;
+      const endDeg = (aEnd * 180) / Math.PI;
+      const arcPath = `(${fmt(pCenter.x + Math.cos(aStart) * r)},${fmt(
+        pCenter.y + Math.sin(aStart) * r
+      )}) arc (${fmt(startDeg)}:${fmt(endDeg)}:${fmt(r)})`;
+      const finalTipSpec = reversed ? tipSpec.replace(/\]$/, ",reversed]") : tipSpec;
+      paths.push(`\\draw[${arrowOptsConstructive}, -{${finalTipSpec}}] ${arcPath};`);
+    };
 
-    const aEnd = targetRad;
-    const aStart = targetRad - (isCCW ? epsilon : -epsilon);
-
-    const pCenter = arcDef.center;
-    const r = arcDef.radius;
-
-    const startDeg = (aStart * 180) / Math.PI;
-    const endDeg = (aEnd * 180) / Math.PI;
-
-    const arcPath = `(${fmt(pCenter.x + Math.cos(aStart) * r)},${fmt(pCenter.y + Math.sin(aStart) * r)}) arc (${fmt(startDeg)}:${fmt(endDeg)}:${fmt(r)})`;
-
-    const finalTipSpec = reversed ? tipSpec.replace(/\]$/, ",reversed]") : tipSpec;
-    // Use \draw with draw opacity=0, so the line is hidden but the arrow tip (with its own opacity) renders.
-    paths.push(`\\draw[${arrowOptsConstructive}, -{${finalTipSpec}}] ${arcPath};`);
-  };
-
-  for (let i = 0; i < positions.length; i += 1) {
-    const p = positions[i];
-    if (arrow.direction === "->") {
-      if (arcDef) addConstructivePath(p, false);
-      else addMark(p, forwardCmd);
-    } else if (arrow.direction === "<-") {
-      if (arcDef) addConstructivePath(p, true);
-      else addMark(p, reverseCmd);
-    } else if (arrow.direction === "<->") {
-      if (arcDef) {
-        addConstructivePath(p - pairDelta, true);
-        addConstructivePath(p + pairDelta, false);
+    for (let i = 0; i < positions.length; i += 1) {
+      const p = positions[i];
+      if (arrow.direction === "->") {
+        if (arcDef) addConstructivePath(p, false);
+        else addMark(p, forwardCmd);
+      } else if (arrow.direction === "<-") {
+        if (arcDef) addConstructivePath(p, true);
+        else addMark(p, reverseCmd);
+      } else if (arrow.direction === "<->") {
+        if (arcDef) {
+          addConstructivePath(p - pairDelta, true);
+          addConstructivePath(p + pairDelta, false);
+        } else {
+          addMark(p - pairDelta, reverseCmd);
+          addMark(p + pairDelta, forwardCmd);
+        }
       } else {
-        addMark(p - pairDelta, reverseCmd);
-        addMark(p + pairDelta, forwardCmd);
+        if (arcDef) {
+          addConstructivePath(p - pairDelta, false);
+          addConstructivePath(p + pairDelta, true);
+        } else {
+          addMark(p - pairDelta, forwardCmd);
+          addMark(p + pairDelta, reverseCmd);
+        }
       }
-    } else {
-      if (arcDef) {
-        addConstructivePath(p - pairDelta, false);
-        addConstructivePath(p + pairDelta, true);
-      } else {
-        addMark(p - pairDelta, forwardCmd);
-        addMark(p + pairDelta, reverseCmd);
-      }
+    }
+
+    if (arcDef) {
+      results.push(paths.join("\n"));
+    } else if (marks.length > 0) {
+      const opts: string[] = ["postaction=decorate", `decoration={markings,${marks.join(",")}}`];
+      if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
+      results.push(`\\path[${opts.join(", ")}] ${pathExpr};`);
     }
   }
 
-  if (arcDef) {
-    return paths.join("\n");
-  }
-
-  if (marks.length === 0) return null;
-  const opts: string[] = ["postaction=decorate", `decoration={markings,${marks.join(",")}}`];
-  if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
-  return `\\path[${opts.join(", ")}] ${pathExpr};`;
+  return results.length > 0 ? results.join("\n") : null;
 }
 
 function computePathArrowPairDelta(

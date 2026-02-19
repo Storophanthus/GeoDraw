@@ -431,6 +431,15 @@
     - `testCircleCircleSemanticBranchPersistenceUnderDrag`
     - `testLineLikeSemanticIntersectionTracksGeometryUnderDrag`
   - Note: `npm run test:scene` remains blocked in this sandbox due `tsx` IPC `EPERM`, but code compiles and export harness remains green.
+- 2026-02-18 Pure TikZ Export Refactor (Pure Construction):
+  - **Eliminated** hardcoded intersection coordinates (no "cheating" with pre-calculated points).
+  - Used `tkz-euclide` geometric construction logic (`near`, `common`) for robust point selection.
+  - Corrected `InterCC` ordering rule: `angle(P, O1, O2) < 180` determines first point (vertex at intersection).
+  - Implemented robust `common` point detection: checks *any* existing point at alternate intersection to stabilize selection.
+  - Fixed "undefined segment geometry" regression by ensuring intersection points are tracked in `definedPointIds` even when `common` reference is used.
+  - Validation:
+    - `npm run test:export`
+    - Verified against `tkz-euclide` 5.13c rules.
 - 2026-02-17 TikZ export arrow calibration & alignment:
   - **Calibration**: Adjusted export scales to match user requirements (10pt length):
     - Segment arrows: `0.85x`
