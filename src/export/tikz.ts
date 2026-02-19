@@ -16,6 +16,9 @@ import {
 } from "../scene/points";
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
+import { makeEfficientTikz } from "./tikz/efficient/makeEfficientTikz";
+
+export { makeEfficientTikz };
 
 export type TikzExportViewport = { xmin: number; xmax: number; ymin: number; ymax: number };
 export type TikzExportOptions = {
@@ -1748,7 +1751,13 @@ export function exportTikz(scene: SceneModel): string {
   pointWorldCache.delete(normalizedScene);
   const tex = renderTikz(buildTikzIR(normalizedScene));
   assertNoUnknownTkzMacro(tex);
+  assertNoUnknownTkzMacro(tex);
   return tex;
+}
+
+export function exportTikzEfficient(scene: SceneModel): string {
+  const standard = exportTikz(scene);
+  return makeEfficientTikz(standard);
 }
 
 export function exportTikzWithOptions(scene: SceneModel, options: TikzExportOptions): string {

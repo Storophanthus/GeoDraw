@@ -25,6 +25,23 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-02-19 Efficient TikZ Export:
+  - Implemented new export mode (`makeEfficientTikz`) that post-processes standard TikZ output for readability and compactness.
+  - Key transformations:
+    - **Numeric Rounding**: Coordinates and sizes rounded to 2 decimal places (std `14.000000...` -> `14`).
+    - **Color Simplification**: Map typically used hex colors (e.g. `#0f172a`, `#334155`) to standard TikZ names (`black`, `darkgray`, `teal`).
+    - **Label Grouping**: Consolidates consecutive similar label commands into `\foreach` loops (e.g. `\foreach \P/\pos in {A/above left, B/below right}...`).
+    - **Precision Cleanup**: Fixes overly precise values in `size`/`mksize`/`mkpos`.
+  - UI Integration:
+    - Added "Efficient TikZ Code (Compact)" checkbox to Export panel.
+    - Updated `ExportPanel` to trigger regeneration when efficient mode is toggled.
+  - Architecture:
+    - `src/export/tikz/efficient/` module added with `colorTable.ts` and `makeEfficientTikz.ts`.
+    - Purely additive pipeline; standard export logic remains untouched to preserve precision/debuggability.
+  - Validation:
+    - Unit tests in `src/export/tikz/efficient/__tests__/makeEfficientTikz.test.ts`.
+    - Verified `angle-arc-arrow-basic.json` output format.
+    - `npm run test:export`
 - 2026-02-16 transform retcon: split single transform tool into object-transform tools:
   - Replaced single `transform` click workflow with three dedicated tools:
     - `translate` (select source object -> vector start point -> vector end point)
