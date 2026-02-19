@@ -53,7 +53,8 @@ export function drawAngles(
     const rightLike = rightExact || rightApprox;
     const rightSolid = rightExact || (rightApprox && Boolean(angle.style.promoteToSolid));
     const rawMarkStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
-    const drawRightSquareShape = rawMarkStyle === "rightSquare" || (rightLike && rawMarkStyle === "arc");
+    const drawRightSquareShape =
+      !isSector && (rawMarkStyle === "rightSquare" || (rightLike && rawMarkStyle === "arc"));
     const resolvedMarkStyle = (drawRightSquareShape ? "rightSquare" : rawMarkStyle) as
       | "arc"
       | "none"
