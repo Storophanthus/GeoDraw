@@ -84,8 +84,16 @@ function applyNumericRounding(tex: string): string {
     // Let's explicitly handle "at position NUMBER with"
     tex = tex.replace(/(mark=at position\s+)([\d\.-]+)(\s+with)/g, (_, pre, val, post) => `${pre}${fmt(val)}${post}`);
 
-    // Also handle arrow tip size in standard tikz arrows if present, though prompt implies we should just handle numeric fields.
+    // Also handle arrow tip size in standard tikz arrows if present
     // We already handled "length=...pt" and "width=...pt" generally above.
+
+    // 6. Coordinates (x,y)
+    // Matches (Number, Number) or (Number,Number)
+    tex = tex.replace(/\(([\d\.-]+)\s*,\s*([\d\.-]+)\)/g, (_, x, y) => `(${fmt(x)},${fmt(y)})`);
+
+    // 7. Arc parameters (start:end:radius)
+    // Matches (Number:Number:Number)
+    tex = tex.replace(/\(([\d\.-]+)\s*:\s*([\d\.-]+)\s*:\s*([\d\.-]+)\)/g, (_, a, b, r) => `(${fmt(a)}:${fmt(b)}:${fmt(r)})`);
 
     return tex;
 }
@@ -242,17 +250,20 @@ function applyLabelGrouping(tex: string): string {
         };
     }
 
-    function isCompatible(prev: typeof buffer[0], currOpts: string, currPoint: string, currBody: string) {
+    function isCompatible(prev: typeof buffer[0], currOpts: string, _currPoint: string, _currBody: string) {
         const prevParsed = parseOptions(prev.options);
         const currParsed = parseOptions(currOpts);
 
         // Must have same non-position options
         if (prevParsed.others !== currParsed.others) return false;
 
-        // Must have same body template
-        const prevTemplate = extractBodyTemplate(prev.body, prev.point);
-        const currTemplate = extractBodyTemplate(currBody, currPoint);
-        return prevTemplate === currTemplate;
+        // Grouping is possible if:
+        // 1. Same body template (simple grouping, \P -> point name)
+        // 2. OR varying body (complex grouping, \descr -> description)
+        // We always try to group if options match.
+        // We'll figure out the template strategy in flushBuffer.
+
+        return true;
     }
 
     function extractBodyTemplate(body: string, pointName: string): string {
@@ -270,30 +281,53 @@ function applyLabelGrouping(tex: string): string {
             // Check if positions vary
             const firstParsed = parseOptions(buffer[0].options);
             const allSamePos = buffer.every(b => parseOptions(b.options).pos === firstParsed.pos);
+            const otherOpts = firstParsed.others;
 
-            const tmpl = extractBodyTemplate(buffer[0].body, buffer[0].point);
-            // We use \P as the loop variable for the point name
-            // The body likely contains \P (e.g. $\P$)
-            // We need to replace __POINT__ with \P in the template
-            const body = tmpl.replace(/__POINT__/g, "\\P");
+            // Check if bodies generally match the standard template (\P)
+            const firstTemplate = extractBodyTemplate(buffer[0].body, buffer[0].point);
+            const allSameTemplate = buffer.every(b => extractBodyTemplate(b.body, b.point) === firstTemplate);
 
-            if (allSamePos) {
-                // Simple grouping: \foreach \P in {A,B} { \tkzLabelPoint[opts](\P){body} }
-                const pts = buffer.map(b => b.point).join(",");
-                newLines.push(`\\foreach \\P in {${pts}}{\\tkzLabelPoint[${buffer[0].options}](\\P){${body}}}`);
+            if (allSameTemplate) {
+                // Case 1: Same template (e.g. \gdLabelGlow{$A$} where A is the point)
+                // We use \P in the loop
+                const body = firstTemplate.replace(/__POINT__/g, "\\P");
+
+                if (allSamePos) {
+                    // \foreach \P in {A,B} { ... }
+                    const pts = buffer.map(b => b.point).join(",");
+                    const optStr = buffer[0].options;
+                    newLines.push(`\\foreach \\P in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){${body}}}`);
+                } else {
+                    // \foreach \P/\pos in {A/above, B/below} { ... }
+                    const pts = buffer.map(b => {
+                        const pOpts = parseOptions(b.options);
+                        return `${b.point}/${pOpts.pos}`;
+                    }).join(",");
+                    const optStr = otherOpts ? `\\pos, ${otherOpts}` : `\\pos`;
+                    newLines.push(`\\foreach \\P/\\pos in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){${body}}}`);
+                }
             } else {
-                // Varying positions: \foreach \P/\pos in {A/above, B/below} { \tkzLabelPoint[\pos, opts](\P){body} }
-                const pts = buffer.map(b => {
-                    const pOpts = parseOptions(b.options);
-                    // If pos is empty, use empty string? Or "center"? 
-                    // Let's use whatever was there.
-                    return `${b.point}/${pOpts.pos}`;
-                }).join(",");
+                // Case 2: Varying bodies (e.g. $B_n$)
+                // We need to extract the description content.
+                // WE ASSUME the body has a consistent structure enclosing the text, e.g. \gdLabelGlow{...}
+                // If the structure varies wildly (e.g. one has \textbf{...} and another doesn't), we can't easily template it.
+                // Strategy: Just loop the *entire varying part* as \descr?
+                // Or loop the *whole body* as \body?
+                // \foreach \P/\body in {A/{\gdLabelGlow{$A$}}, B/{\gdLabelGlow{$B_n$}}}
+                // This is robust!
 
-                const otherOpts = firstParsed.others;
-                const optStr = otherOpts ? `\\pos, ${otherOpts}` : `\\pos`;
-
-                newLines.push(`\\foreach \\P/\\pos in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){${body}}}`);
+                if (allSamePos) {
+                    const pts = buffer.map(b => `${b.point}/{${b.body}}`).join(",");
+                    const optStr = buffer[0].options;
+                    newLines.push(`\\foreach \\P/\\descr in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){\\descr}}`);
+                } else {
+                    const pts = buffer.map(b => {
+                        const pOpts = parseOptions(b.options);
+                        return `${b.point}/${pOpts.pos}/{${b.body}}`;
+                    }).join(",");
+                    const optStr = otherOpts ? `\\pos, ${otherOpts}` : `\\pos`;
+                    newLines.push(`\\foreach \\P/\\pos/\\descr in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){\\descr}}`);
+                }
             }
         }
         buffer = [];
@@ -305,7 +339,7 @@ function applyLabelGrouping(tex: string): string {
             const [originalLine, options, point, body] = match;
             const cleanOpts = options.trim();
             const cleanPoint = point.trim();
-            const cleanBody = body;
+            const cleanBody = body; // don't trim body, spaces might matter inside latex? usually ok to keep as is
 
             if (buffer.length > 0) {
                 if (isCompatible(buffer[0], cleanOpts, cleanPoint, cleanBody)) {
