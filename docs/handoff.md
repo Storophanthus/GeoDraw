@@ -2537,3 +2537,44 @@ Date completed: February 20, 2026
 
 ### Verification
 - `npm run build` still blocked by existing Node-typing issue in efficient exporter tests (`assert`, `process`), unrelated to this calibration centralization.
+
+## Latest Done (Point Export Size Follows Scene Size Again)
+Date completed: February 20, 2026
+
+### Problem
+- Exported points stayed at `inner sep=1.5pt` even when point size changed in scene/UI.
+- Cause: `pointInnerSepFixedPt` was always forced by ExportPanel calibration.
+
+### Fix
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz/calibration.ts`
+  - `pointInnerSepFixedPt` set to `null` (no forced lock by default).
+  - Added `getPointInnerSepFixedPt()` helper returning `number | undefined`.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ExportPanel.tsx`
+  - now passes `pointInnerSepFixedPt: getPointInnerSepFixedPt()`.
+  - when calibration is `null`, exporter receives `undefined` and uses point-size-driven formula.
+
+### Operational note
+- If you want to lock point radius again, set `pointInnerSepFixedPt` to a number in calibration.
+- If you want export to follow object point size, keep it `null`.
+
+### Verification
+- `npm run build` still blocked by existing Node-typing issue in efficient exporter tests (`assert`, `process`), unrelated to this point-size fix.
+
+## Latest Done (Match Canvas Conversion Set Permanent)
+Date completed: February 20, 2026
+
+### Why
+- Export quality degrades significantly when `matchCanvas` is off.
+- User decision: keep canvas-conversion behavior always on.
+
+### Change
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ExportPanel.tsx`
+  - removed UI toggle for "Match canvas size conversion".
+  - exporter now always sends `matchCanvas: true`.
+
+### Result
+- TikZ export consistently uses the canvas-matching conversion path.
+- Fewer accidental low-parity exports from checkbox state drift.
+
+### Verification
+- `npm run build` still blocked by existing Node-typing issue in efficient exporter tests (`assert`, `process`), unrelated to this export-toggle removal.

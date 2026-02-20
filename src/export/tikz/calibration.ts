@@ -5,8 +5,9 @@ export const TIKZ_EXPORT_CALIBRATION = {
   uiLineScaleToExporter: 0.5 / 1.2,
   // Point stroke calibration used by ExportPanel options.
   pointStrokeScale: 0.4 / 1.05,
-  // Keep point marker size stable by fixed inner sep in TikZ (pt).
-  pointInnerSepFixedPt: 1.5,
+  // Set to a number to force fixed point radius in TikZ (pt).
+  // Set to null to let export follow actual point.sizePx.
+  pointInnerSepFixedPt: null,
   // Segment mark calibration.
   segmentMarkSizeScale: 5 / 8,
   segmentMarkLineWidthScale: 1 / 2.2,
@@ -31,3 +32,8 @@ export const TIKZ_EXPORT_CALIBRATION = {
 } as const;
 
 export type TikzExportCalibration = typeof TIKZ_EXPORT_CALIBRATION;
+
+export function getPointInnerSepFixedPt(): number | undefined {
+  const fixed = TIKZ_EXPORT_CALIBRATION.pointInnerSepFixedPt;
+  return typeof fixed === "number" && Number.isFinite(fixed) ? fixed : undefined;
+}

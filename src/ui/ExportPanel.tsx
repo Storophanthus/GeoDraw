@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from "../export/constructionSnapshot";
 import { exportTikzWithOptions, makeEfficientTikz } from "../export/tikz";
-import { TIKZ_EXPORT_CALIBRATION } from "../export/tikz/calibration";
+import { getPointInnerSepFixedPt, TIKZ_EXPORT_CALIBRATION } from "../export/tikz/calibration";
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
 import type { Camera } from "../view/camera";
@@ -25,7 +25,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
   const [exportUseClipSelection, setExportUseClipSelection] = useState(false);
   const [exportEfficient, setExportEfficient] = useState(false);
-  const [exportMatchCanvas, setExportMatchCanvas] = useState(true);
+  const exportMatchCanvas = true;
   const [exportLabelGlow, setExportLabelGlow] = useState(true);
   const [exportGlobalScale, setExportGlobalScale] = useState("1");
   const [exportPointScale, setExportPointScale] = useState("1");
@@ -79,7 +79,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
           matchCanvas: exportMatchCanvas,
           labelGlow: exportLabelGlow,
           pointStrokeScale: TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
-          pointInnerSepFixedPt: TIKZ_EXPORT_CALIBRATION.pointInnerSepFixedPt,
+          pointInnerSepFixedPt: getPointInnerSepFixedPt(),
           segmentMarkSizeScale: TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale,
           segmentMarkLineWidthScale: TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale,
           angleLabelFontScale: TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
@@ -180,14 +180,6 @@ export function ExportPanel({ visible }: ExportPanelProps) {
               </button>
             </div>
           )}
-          <label className="checkboxRow">
-            <input
-              type="checkbox"
-              checked={exportMatchCanvas}
-              onChange={(e) => setExportMatchCanvas(e.target.checked)}
-            />
-            Match canvas size conversion
-          </label>
           <label className="checkboxRow">
             <input
               type="checkbox"
