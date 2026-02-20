@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { exportTikz } from "../src/export/tikz.ts";
+import { exportTikz, exportTikzWithOptions } from "../src/export/tikz.ts";
 import type {
   CircleStyle,
   GeometryObjectRef,
@@ -93,6 +93,8 @@ async function main(): Promise<void> {
     await compileTikzSnippet(fileName.replace(/\.json$/, ""), tikz);
     console.log(`✓ ${fileName}`);
   }
+
+  assertTkzSetupToggleRegression();
 
   console.log(`All ${files.length} export fixtures compiled successfully.`);
 }
@@ -968,6 +970,60 @@ function parseGlobalLineAdd(tikz: string): number | null {
   const right = Number(m[2]);
   if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
   return Math.max(left, right);
+}
+
+function assertTkzSetupToggleRegression(): void {
+  const scene: SceneModel = {
+    points: [
+      {
+        id: "pA",
+        kind: "free",
+        name: "A",
+        captionTex: "A",
+        visible: true,
+        showLabel: "name",
+        position: { x: 0, y: 0 },
+        style: defaultPointStyle,
+      },
+      {
+        id: "pB",
+        kind: "free",
+        name: "B",
+        captionTex: "B",
+        visible: true,
+        showLabel: "name",
+        position: { x: 4, y: 0 },
+        style: defaultPointStyle,
+      },
+    ],
+    numbers: [],
+    lines: [],
+    segments: [
+      {
+        id: "sAB",
+        aId: "pA",
+        bId: "pB",
+        visible: true,
+        showLabel: false,
+        style: defaultLineStyle,
+      },
+    ],
+    circles: [],
+    polygons: [],
+    angles: [],
+  };
+
+  const withSetup = exportTikzWithOptions(scene, { emitTkzSetup: true });
+  if (!withSetup.includes("\\tkzInit[") || !withSetup.includes("\\tkzClip[space=") || !withSetup.includes("\\tkzSetUpLine[")) {
+    throw new Error("Regression: emitTkzSetup=true must include tkz setup lines.");
+  }
+  const withoutSetup = exportTikzWithOptions(scene, { emitTkzSetup: false });
+  if (withoutSetup.includes("\\tkzInit[") || withoutSetup.includes("\\tkzClip[space=") || withoutSetup.includes("\\tkzSetUpLine[")) {
+    throw new Error("Regression: emitTkzSetup=false must omit tkz setup lines.");
+  }
+  if (!withoutSetup.includes("\\tkzDrawSegment")) {
+    throw new Error("Regression: geometry must still export when tkz setup lines are omitted.");
+  }
 }
 
 function lineCoversPoint(

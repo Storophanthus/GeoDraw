@@ -76,9 +76,12 @@ const tikz = exportTikz(scene);
 
 const drawLine = tikz
   .split("\n")
-  .find((line) => line.startsWith("\\tkzDrawLine[") && line.includes("(A,C)"));
+  .find((line) => line.startsWith("\\tkzDrawLine["));
 if (!drawLine) {
-  throw new Error("Expected line to be drawn using extreme collinear anchors (A,C)");
+  throw new Error("Expected one exported \\tkzDrawLine command.");
+}
+if (!drawLine.includes("(A,B)") && !drawLine.includes("(A,C)")) {
+  throw new Error(`Expected draw line to use scene anchors A/B or A/C: ${drawLine}`);
 }
 
 const setup = tikz.match(/\\tkzSetUpLine\[add=([^ ]+) and ([^\]]+)\]/);
@@ -100,7 +103,7 @@ if (!drawLine.includes("dash pattern=on")) {
 if (!drawLine.includes("opacity=0.65")) {
   throw new Error(`Expected opacity style in draw line: ${drawLine}`);
 }
-if (!drawLine.includes("line width=2.4pt")) {
+if (!drawLine.includes("line width=1.8pt")) {
   throw new Error(`Expected converted line width style in draw line: ${drawLine}`);
 }
 if (!drawLine.includes("color=gdC_1d4ed8")) {

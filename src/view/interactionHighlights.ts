@@ -26,7 +26,7 @@ export function drawInteractionHighlights(
   vp: Viewport
 ) {
   if (pendingSelection) {
-    if (pendingSelection.tool === "export_clip") {
+    if (pendingSelection.tool === "export_clip" || pendingSelection.tool === "export_clip_rect") {
       if (hoveredHit && hoveredTargetValid && activeTool !== "move") {
         drawHitHighlight(ctx, hoveredHit, resolvedPoints, scene, camera, vp, "#0ea5e9", 0.9);
       }

@@ -4,7 +4,9 @@ export const TIKZ_EXPORT_CALIBRATION = {
   // UI-level line scale is historically mapped to exporter line scale via this factor.
   uiLineScaleToExporter: 0.5 / 1.2,
   // Point stroke calibration used by ExportPanel options.
-  pointStrokeScale: 0.4 / 1.05,
+  pointStrokeScale: 32 / 35,
+  // Point inner-sep calibration (applied after point size conversion).
+  pointInnerSepScale: 1 / 3,
   // Set to a number to force fixed point radius in TikZ (pt).
   // Set to null to let export follow actual point.sizePx.
   pointInnerSepFixedPt: null,
@@ -21,12 +23,8 @@ export const TIKZ_EXPORT_CALIBRATION = {
     maxWidthCm: 14,
     maxHeightCm: 9,
   },
-  // Point style conversion constants used inside tikz.ts.
+  // Point/canvas conversion constants used inside tikz.ts.
   pointConversion: {
-    basePointStrokePx: 1.4,
-    basePointSizePx: 4,
-    nonMatchLineWidthFactor: 1.05,
-    nonMatchInnerSepFactorPt: 3.75,
     matchCanvasPxToPt: 0.75,
   },
 } as const;

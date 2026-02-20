@@ -26,6 +26,7 @@ export type TikzExportOptions = {
   viewport?: TikzExportViewport;
   clipRectWorld?: TikzExportViewport;
   clipPolygonWorld?: { x: number; y: number }[];
+  emitTkzSetup?: boolean;
   clipSpace?: number;
   globalLineAdd?: number;
   pointScale?: number;
@@ -33,11 +34,11 @@ export type TikzExportOptions = {
   labelScale?: number;
   worldToTikzScale?: number;
   screenPxPerWorld?: number;
-  matchCanvas?: boolean;
   labelGlow?: boolean;
   segmentStrokeScale?: number;
   pointStrokeScale?: number;
   pointInnerSepFixedPt?: number;
+  pointInnerSepScale?: number;
   segmentMarkSizeScale?: number;
   segmentMarkLineWidthScale?: number;
   angleLabelFontScale?: number;
@@ -94,7 +95,9 @@ export type TikzCommand =
   | { kind: "DrawRaw"; tex: string }
   | { kind: "DrawLine"; a: string; b: string; addLeft: number; addRight: number; style?: string }
   | { kind: "DrawCircle"; o: string; x: string; style?: string }
+  | { kind: "FillCircle"; o: string; x: string; style?: string }
   | { kind: "DrawCircleRadius"; o: string; radius: number; style?: string }
+  | { kind: "FillCircleRadius"; o: string; radius: number; style?: string }
   | { kind: "DrawSector"; o: string; a: string; b: string; style?: string }
   | { kind: "FillSector"; o: string; a: string; b: string; style?: string }
   | { kind: "FillAngle"; a: string; b: string; c: string; style?: string }
@@ -141,7 +144,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   const defs: TikzCommand[] = [];
   const constructions: TikzCommand[] = [];
-  const draws: TikzCommand[] = [];
+  const drawFills: TikzCommand[] = [];
+  const drawStrokes: TikzCommand[] = [];
+  const drawOverlays: TikzCommand[] = [];
+  const drawPointsLayer: TikzCommand[] = [];
+  const drawLabelsLayer: TikzCommand[] = [];
   const definedPointIds = new Set<string>();
 
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
@@ -149,24 +156,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const exportPxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
   let coordScale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
   const labelScale = clampPositive(options.labelScale ?? 1, 0.1, 10);
-  // Auto-fit viewport for document embedding when canvas-match export is enabled.
-  // Fit both down and up so exported framing matches the current canvas view density.
-  if (options.matchCanvas) {
-    const maxWidthCm = clampPositive(
-      options.autoScaleToFitCm?.maxWidthCm ?? TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
-      1,
-      200
-    );
-    const maxHeightCm = clampPositive(
-      options.autoScaleToFitCm?.maxHeightCm ?? TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,
-      1,
-      200
-    );
-    const worldWidth = Math.max(1e-9, Math.abs(viewport.xmax - viewport.xmin));
-    const worldHeight = Math.max(1e-9, Math.abs(viewport.ymax - viewport.ymin));
-    const fitScale = Math.min(maxWidthCm / worldWidth, maxHeightCm / worldHeight);
-    coordScale = clampPositive(coordScale * fitScale, 0.01, 100);
-  }
+  // Auto-fit viewport for document embedding. Fit both down and up so exported
+  // framing matches the current canvas view density.
+  const maxWidthCm = clampPositive(
+    options.autoScaleToFitCm?.maxWidthCm ?? TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
+    1,
+    200
+  );
+  const maxHeightCm = clampPositive(
+    options.autoScaleToFitCm?.maxHeightCm ?? TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,
+    1,
+    200
+  );
+  const worldWidth = Math.max(1e-9, Math.abs(viewport.xmax - viewport.xmin));
+  const worldHeight = Math.max(1e-9, Math.abs(viewport.ymax - viewport.ymin));
+  const fitScale = Math.min(maxWidthCm / worldWidth, maxHeightCm / worldHeight);
+  coordScale = clampPositive(coordScale * fitScale, 0.01, 100);
   // Calculate effective pixels per world unit for TikZ metric mapping.
   // 1cm (TikZ default unit) approx equals 37.8px (at 96 DPI).
   // This ensures gap pixels (defined in screen px) map to correct physical length in TikZ.
@@ -1097,7 +1102,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     }
     const aName = mustName(pointName, seg.aId);
     const bName = mustName(pointName, seg.bId);
-    draws.push({
+    drawStrokes.push({
       kind: "DrawSegment",
       a: aName,
       b: bName,
@@ -1111,7 +1116,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       options
     );
     if (markStyle) {
-      draws.push({
+      drawOverlays.push({
         kind: "MarkSegment",
         a: aName,
         b: bName,
@@ -1137,14 +1142,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     );
     if (arrowOverlay) {
       if (arrowOverlay.kind === "tkz") {
-        draws.push({
+        drawOverlays.push({
           kind: "DrawSegment",
           a: aName,
           b: bName,
           style: arrowOverlay.style,
         });
       } else {
-        draws.push({
+        drawOverlays.push({
           kind: "DrawRaw",
           tex: arrowOverlay.tex,
         });
@@ -1176,7 +1181,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         : ext.drawBId === lineAnchorId
           ? lineNames.a
           : pointName.get(ext.drawBId) ?? ext.drawBId;
-    draws.push({
+    drawStrokes.push({
       kind: "DrawLine",
       a: drawAName,
       b: drawBName,
@@ -1188,36 +1193,64 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
     const centerName = ensureCircleCenterName(circle.id);
+    const fillStyle = circleFillStyleToTikz(circle.style);
+    const strokeStyle = circleStrokeStyleToTikz(circle.style, options);
     if (circle.kind === "fixedRadius") {
       const geom = circleGeomById(circle.id);
       if (!Number.isFinite(geom.radius) || geom.radius <= 0) {
         throw new Error(`Unsupported construction: CircleFixedRadius (invalid radius for ${circle.id})`);
       }
-      draws.push({
+      if (fillStyle) {
+        drawFills.push({
+          kind: "FillCircleRadius",
+          o: centerName,
+          radius: geom.radius,
+          style: fillStyle,
+        });
+      }
+      drawStrokes.push({
         kind: "DrawCircleRadius",
         o: centerName,
         radius: geom.radius,
-        style: circleStyleToTikz(circle.style, options),
+        style: strokeStyle,
       });
     } else if (circle.kind === "threePoint") {
       if (!definedPointIds.has(circle.aId) || !definedPointIds.has(circle.bId) || !definedPointIds.has(circle.cId)) {
         throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
       }
-      draws.push({
+      const through = mustName(pointName, circle.aId);
+      if (fillStyle) {
+        drawFills.push({
+          kind: "FillCircle",
+          o: centerName,
+          x: through,
+          style: fillStyle,
+        });
+      }
+      drawStrokes.push({
         kind: "DrawCircle",
         o: centerName,
-        x: mustName(pointName, circle.aId),
-        style: circleStyleToTikz(circle.style, options),
+        x: through,
+        style: strokeStyle,
       });
     } else {
       if (!definedPointIds.has(circle.throughId)) {
         throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
       }
-      draws.push({
+      const through = mustName(pointName, circle.throughId);
+      if (fillStyle) {
+        drawFills.push({
+          kind: "FillCircle",
+          o: centerName,
+          x: through,
+          style: fillStyle,
+        });
+      }
+      drawStrokes.push({
         kind: "DrawCircle",
         o: centerName,
-        x: mustName(pointName, circle.throughId),
-        style: circleStyleToTikz(circle.style, options),
+        x: through,
+        style: strokeStyle,
       });
     }
     const circleGeom = circleGeomById(circle.id);
@@ -1238,7 +1271,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       { bend: true } // Circle arrows use bend
     );
     if (circleArrowOverlay) {
-      draws.push({ kind: "DrawRaw", tex: circleArrowOverlay });
+      drawOverlays.push({ kind: "DrawRaw", tex: circleArrowOverlay });
     }
   }
   for (const polygon of scene.polygons) {
@@ -1253,10 +1286,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       }
       names.push(mustName(pointName, pointId));
     }
-    const style = polygonStyleToTikz(polygon.style, options);
+    const fillStyle = polygonFillStyleToTikz(polygon.style);
+    const strokeStyle = polygonStrokeStyleToTikz(polygon.style, options);
     const path = names.map((name, idx) => (idx === 0 ? `(${name})` : ` -- (${name})`)).join("");
-    const opts = style ? `[${style}]` : "";
-    draws.push({ kind: "DrawRaw", tex: `\\draw${opts} ${path} -- cycle;` });
+    if (fillStyle) {
+      const fillOpts = fillStyle ? `[${fillStyle}]` : "";
+      drawFills.push({ kind: "DrawRaw", tex: `\\fill${fillOpts} ${path} -- cycle;` });
+    }
+    const strokeOpts = strokeStyle ? `[${strokeStyle}]` : "";
+    drawStrokes.push({ kind: "DrawRaw", tex: `\\draw${strokeOpts} ${path} -- cycle;` });
   }
   for (const angle of scene.angles) {
     if (!angle.visible) continue;
@@ -1279,9 +1317,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (angle.kind === "sector") {
       if (angle.style.fillEnabled) {
         const fillStyle = sectorFillStyleToTikz(angle.style);
-        draws.push({ kind: "FillSector", o: bName, a: aName, b: cName, style: fillStyle });
+        drawFills.push({ kind: "FillSector", o: bName, a: aName, b: cName, style: fillStyle });
       }
-      draws.push({
+      drawStrokes.push({
         kind: "DrawSector",
         o: bName,
         a: aName,
@@ -1312,7 +1350,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         { flex: true } // Keep angle arrows using flex
       );
       if (sectorArrowOverlay) {
-        draws.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
+        drawOverlays.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
       }
       continue;
     }
@@ -1323,15 +1361,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       exportAsRight && markKind === "rightSquare" && angle.style.fillEnabled ? rightSquareFillStyleToTikz(angle.style) : null;
     if (angle.style.fillEnabled && !rightSquareFillStyle) {
       const fillStyle = angleFillStyleToTikz(angle.style, options);
-      draws.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
+      drawFills.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
     }
     if (markKind === "rightSquare" || markKind === "rightArcDot") {
       const markStyle = angleMarkStyleToTikz(angle.style, true, options, markKind);
       const mergedStyle = rightSquareFillStyle ? [markStyle, rightSquareFillStyle].filter(Boolean).join(", ") : markStyle;
-      draws.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: mergedStyle });
+      drawOverlays.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: mergedStyle });
     } else if (markKind === "arc") {
       const markStyle = angleMarkStyleToTikz(angle.style, false, options, markKind);
-      draws.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
+      drawOverlays.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
     }
     if (markKind === "arc" || markKind === "rightArcDot") {
       const angleStart = Math.atan2(aWorld.y - bWorld.y, aWorld.x - bWorld.x);
@@ -1358,14 +1396,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         { flex: true } // Keep angle arrows using flex
       );
       if (arcArrowOverlay) {
-        draws.push({ kind: "DrawRaw", tex: arcArrowOverlay });
+        drawOverlays.push({ kind: "DrawRaw", tex: arcArrowOverlay });
       }
     }
     if (angle.style.showLabel || angle.style.showValue) {
       const labelText = buildAngleLabelTex(angle.style.labelText, angle.style.showLabel, angle.style.showValue, theta);
       if (labelText) {
         const labelStyle = angleLabelStyleToTikz(angle.style, bWorld, options);
-        draws.push({ kind: "LabelAngle", a: aName, b: bName, c: cName, text: labelText, style: labelStyle });
+        drawLabelsLayer.push({ kind: "LabelAngle", a: aName, b: bName, c: cName, text: labelText, style: labelStyle });
       }
     }
   }
@@ -1373,9 +1411,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const drawablePoints = scene.points.filter((point) => point.visible && definedPointIds.has(point.id));
   const pointStyleGroups = buildPointStyleGroups(drawablePoints, pointName, options);
   for (const group of pointStyleGroups) {
-    draws.push({ kind: "DrawPoints", style: group.styleName, points: group.points } as TikzCommand);
+    drawPointsLayer.push({ kind: "DrawPoints", style: group.styleName, points: group.points } as TikzCommand);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (draws[draws.length - 1] as any).styleExpr = group.styleExpr;
+    (drawPointsLayer[drawPointsLayer.length - 1] as any).styleExpr = group.styleExpr;
   }
 
   const labelPlacementById = computeLabelPlacementMap(scene, options);
@@ -1387,33 +1425,40 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const name = pointName.get(point.id);
     if (!name) continue;
     const labelOptions = pointLabelOptionsToTikz(point, labelPlacementById.get(point.id) ?? null, options);
-    const matchCanvas = options.matchCanvas ?? false;
     const labelGlowEnabled = options.labelGlow ?? true;
     if (point.showLabel === "name") {
       labels.push({
         name,
         text: point.name || name,
-        options: matchCanvas ? [labelOptions, `text=${rgbColorExpr(point.style.labelColor)}`].join(", ") : labelOptions,
-        useGlow: labelGlowEnabled && matchCanvas && point.style.labelHaloWidthPx > 0,
+        options: [labelOptions, `text=${rgbColorExpr(point.style.labelColor)}`].join(", "),
+        useGlow: labelGlowEnabled && point.style.labelHaloWidthPx > 0,
       });
     } else {
       labels.push({
         name,
         text: point.captionTex || point.name || name,
-        options: matchCanvas ? [labelOptions, `text=${rgbColorExpr(point.style.labelColor)}`].join(", ") : labelOptions,
-        useGlow: labelGlowEnabled && matchCanvas && point.style.labelHaloWidthPx > 0,
+        options: [labelOptions, `text=${rgbColorExpr(point.style.labelColor)}`].join(", "),
+        useGlow: labelGlowEnabled && point.style.labelHaloWidthPx > 0,
       });
     }
   }
   labels.sort((a, b) => a.name.localeCompare(b.name));
   for (const item of labels) {
-    draws.push({ kind: "LabelPoint", name: item.name, text: item.text, options: item.options, useGlow: item.useGlow });
+    drawLabelsLayer.push({ kind: "LabelPoint", name: item.name, text: item.text, options: item.options, useGlow: item.useGlow });
   }
 
-  return [...defs, ...constructions, ...draws];
+  return [
+    ...defs,
+    ...constructions,
+    ...drawFills,
+    ...drawStrokes,
+    ...drawOverlays,
+    ...drawPointsLayer,
+    ...drawLabelsLayer,
+  ];
 }
 
-export function renderTikz(cmds: TikzCommand[]): string {
+export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions, "emitTkzSetup"> = {}): string {
   const setupUnits = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupUnits" }> => c.kind === "SetupUnits");
   const setupLabelScale = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLabelScale" }> => c.kind === "SetupLabelScale");
   const setupViewport = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupViewport" }> => c.kind === "SetupViewport");
@@ -1436,8 +1481,10 @@ export function renderTikz(cmds: TikzCommand[]): string {
       c.kind !== "DrawRaw" &&
       c.kind !== "DrawLine" &&
       c.kind !== "DrawCircle" &&
+      c.kind !== "FillCircle" &&
       c.kind !== "DrawSector" &&
       c.kind !== "FillSector" &&
+      c.kind !== "FillCircleRadius" &&
       c.kind !== "FillAngle" &&
       c.kind !== "MarkAngle" &&
       c.kind !== "MarkRightAngle" &&
@@ -1453,9 +1500,11 @@ export function renderTikz(cmds: TikzCommand[]): string {
       c.kind === "DrawRaw" ||
       c.kind === "DrawLine" ||
       c.kind === "DrawCircle" ||
+      c.kind === "FillCircle" ||
       c.kind === "DrawSector" ||
       c.kind === "FillSector" ||
       c.kind === "DrawCircleRadius" ||
+      c.kind === "FillCircleRadius" ||
       c.kind === "FillAngle" ||
       c.kind === "MarkAngle" ||
       c.kind === "MarkRightAngle"
@@ -1464,6 +1513,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
   const drawPoints = cmds.filter((c) => c.kind === "DrawPoints");
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
   const hasGlowLabels = drawLabels.some((c) => c.kind === "LabelPoint" && Boolean(c.useGlow));
+  const emitTkzSetup = options.emitTkzSetup ?? true;
 
   const out: string[] = [];
   const scale = setupUnits?.scale ?? 1;
@@ -1476,7 +1526,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
   }
   // When explicit export clip rectangle is present, avoid tkz viewport clip to
   // prevent extra outer whitespace from a larger bounding box.
-  if (setupViewport && !clipRect && !clipPolygon) {
+  if (emitTkzSetup && setupViewport && !clipRect && !clipPolygon) {
     assertTkzMacro("tkzInit");
     assertTkzMacro("tkzClip");
     out.push(
@@ -1486,7 +1536,7 @@ export function renderTikz(cmds: TikzCommand[]): string {
     );
     out.push(`\\tkzClip[space=${fmt(setupViewport.space)}]`);
   }
-  if (setupLine) {
+  if (emitTkzSetup && setupLine) {
     assertTkzMacro("tkzSetUpLine");
     out.push(`\\tkzSetUpLine[add=${fmt(setupLine.addLeft)} and ${fmt(setupLine.addRight)}]`);
   }
@@ -1676,6 +1726,10 @@ export function renderTikz(cmds: TikzCommand[]): string {
       assertTkzMacro("tkzDrawLine");
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzDrawLine${opts}(${cmd.a},${cmd.b})`);
+    } else if (cmd.kind === "FillCircle") {
+      assertTkzMacro("tkzFillCircle");
+      const opts = cmd.style ? `[${cmd.style}]` : "";
+      out.push(`\\tkzFillCircle${opts}(${cmd.o},${cmd.x})`);
     } else if (cmd.kind === "DrawCircle") {
       assertTkzMacro("tkzDrawCircle");
       const opts = cmd.style ? `[${cmd.style}]` : "";
@@ -1697,6 +1751,15 @@ export function renderTikz(cmds: TikzCommand[]): string {
       out.push(`\\tkzDefCircle[R](${cmd.o},${fmt(cmd.radius)}) \\tkzGetPoint{${tmpThrough}}`);
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzDrawCircle${opts}(${cmd.o},${tmpThrough})`);
+    } else if (cmd.kind === "FillCircleRadius") {
+      assertCircleFixedMacro("tkzDefCircle");
+      assertCircleFixedMacro("tkzGetPoint");
+      assertCircleFixedMacro("tkzFillCircle");
+      drawCircleRadiusTmpIdx += 1;
+      const tmpThrough = `tkzCircleRFill_${drawCircleRadiusTmpIdx}`;
+      out.push(`\\tkzDefCircle[R](${cmd.o},${fmt(cmd.radius)}) \\tkzGetPoint{${tmpThrough}}`);
+      const opts = cmd.style ? `[${cmd.style}]` : "";
+      out.push(`\\tkzFillCircle${opts}(${cmd.o},${tmpThrough})`);
     } else if (cmd.kind === "FillAngle") {
       assertAngleMacro("tkzFillAngle", "Angle.fill");
       const opts = cmd.style ? `[${cmd.style}]` : "";
@@ -1774,7 +1837,9 @@ export function exportTikzWithOptions(scene: SceneModel, options: TikzExportOpti
   // Scene can be updated frequently; reset per-scene memoized lookups before each export.
   pointByIdCache.delete(normalizedScene);
   pointWorldCache.delete(normalizedScene);
-  const tex = renderTikz(buildTikzIR(normalizedScene, options));
+  const tex = renderTikz(buildTikzIR(normalizedScene, options), {
+    emitTkzSetup: options.emitTkzSetup,
+  });
   assertNoUnknownTkzMacro(tex);
   return tex;
 }
@@ -2312,19 +2377,16 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   const fill = rgbColorExpr(s.fillColor);
   const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
-  const matchCanvas = options.matchCanvas ?? false;
   const pointConv = TIKZ_EXPORT_CALIBRATION.pointConversion;
   const pointStrokeScale = clampPositive(options.pointStrokeScale ?? 1, 0.01, 100);
-  const lineWidthPt = (matchCanvas
-    ? Math.max(0.1, s.strokeWidth * lineScale * pointConv.matchCanvasPxToPt)
-    : Math.max(0.1, pointConv.nonMatchLineWidthFactor * lineScale * (s.strokeWidth / pointConv.basePointStrokePx))) *
+  const pointInnerSepScale = clampPositive(options.pointInnerSepScale ?? 1, 0.01, 100);
+  const lineWidthPt = Math.max(0.1, s.strokeWidth * lineScale * pointConv.matchCanvasPxToPt) *
     pointStrokeScale;
   const fixedInnerSep = options.pointInnerSepFixedPt;
-  const innerSepPt = fixedInnerSep !== undefined
+  const baseInnerSepPt = fixedInnerSep !== undefined
     ? Math.max(0.4, fixedInnerSep * pointScale)
-    : matchCanvas
-      ? Math.max(0.4, s.sizePx * pointScale * pointConv.matchCanvasPxToPt)
-      : Math.max(0.4, pointConv.nonMatchInnerSepFactorPt * pointScale * (s.sizePx / pointConv.basePointSizePx));
+    : Math.max(0.4, s.sizePx * pointScale * pointConv.matchCanvasPxToPt);
+  const innerSepPt = Math.max(0.4, baseInnerSepPt * pointInnerSepScale);
   const opts = [
     shape,
     `draw=${draw}`,
@@ -2737,14 +2799,17 @@ function lineStyleToTikz(style: SceneModel["lines"][number]["style"], options: T
   return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.dash, style.opacity, options);
 }
 
-function circleStyleToTikz(style: SceneModel["circles"][number]["style"], options: TikzExportOptions): string {
-  const opts = lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash, style.strokeOpacity, options);
-  const parts = opts.split(", ").filter(Boolean);
+function circleStrokeStyleToTikz(style: SceneModel["circles"][number]["style"], options: TikzExportOptions): string {
+  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash, style.strokeOpacity, options);
+}
+
+function circleFillStyleToTikz(style: SceneModel["circles"][number]["style"]): string | null {
   const fillOpacity = clamp01(style.fillOpacity ?? 0);
-  if (fillOpacity > 0) {
-    parts.push(`fill=${rgbColorExpr(style.fillColor ?? style.strokeColor)}`);
-    parts.push(`fill opacity=${fmt(fillOpacity)}`);
-  }
+  if (fillOpacity <= 0) return null;
+  const parts: string[] = [
+    `fill=${rgbColorExpr(style.fillColor ?? style.strokeColor)}`,
+    `fill opacity=${fmt(fillOpacity)}`,
+  ];
   const pattern = readPatternOption(style);
   if (pattern) {
     parts.push(pattern.patternExpr);
@@ -2753,14 +2818,17 @@ function circleStyleToTikz(style: SceneModel["circles"][number]["style"], option
   return parts.join(", ");
 }
 
-function polygonStyleToTikz(style: SceneModel["polygons"][number]["style"], options: TikzExportOptions): string {
-  const opts = lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash, style.strokeOpacity, options);
-  const parts = opts.split(", ").filter(Boolean);
+function polygonStrokeStyleToTikz(style: SceneModel["polygons"][number]["style"], options: TikzExportOptions): string {
+  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash, style.strokeOpacity, options);
+}
+
+function polygonFillStyleToTikz(style: SceneModel["polygons"][number]["style"]): string | null {
   const fillOpacity = clamp01(style.fillOpacity ?? 0);
-  if (fillOpacity > 0) {
-    parts.push(`fill=${rgbColorExpr(style.fillColor ?? style.strokeColor)}`);
-    parts.push(`fill opacity=${fmt(fillOpacity)}`);
-  }
+  if (fillOpacity <= 0) return null;
+  const parts: string[] = [
+    `fill=${rgbColorExpr(style.fillColor ?? style.strokeColor)}`,
+    `fill opacity=${fmt(fillOpacity)}`,
+  ];
   const pattern = readPatternOption(style);
   if (pattern) {
     parts.push(pattern.patternExpr);
@@ -2982,15 +3050,20 @@ function lineLikeStyleToTikz(
     const offPt = Math.max(2, Math.min(16, 4 * widthPt));
     opts.push(`dash pattern=on ${fmt(onPt)}pt off ${fmt(offPt)}pt`);
   }
-  if (dash === "dotted") opts.push("dotted");
+  if (dash === "dotted") {
+    // Use explicit round-cap dots so thick dotted strokes stay dotted (not tiny dashes).
+    const offPt = Math.max(1.8, Math.min(20, 3.2 * widthPt));
+    opts.push("line cap=round");
+    opts.push(`dash pattern=on 0pt off ${fmt(offPt)}pt`);
+  }
   if (opacity < 0.999) opts.push(`opacity=${fmt(clamp01(opacity))}`);
   return opts.join(", ");
 }
 
 function strokeWidthToTikzPt(strokeWidth: number, options: TikzExportOptions): number {
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
-  const matchCanvas = options.matchCanvas ?? false;
-  return Math.max(0.1, strokeWidth * lineScale * (matchCanvas ? 0.75 : 1));
+  const pxToPt = TIKZ_EXPORT_CALIBRATION.pointConversion.matchCanvasPxToPt;
+  return Math.max(0.1, strokeWidth * lineScale * pxToPt);
 }
 
 function mapPointShape(shape: ScenePoint["style"]["shape"]): string {
@@ -3014,44 +3087,15 @@ function mapPointShape(shape: ScenePoint["style"]["shape"]): string {
   }
 }
 
-function pointLabelOptionsToTikz(point: ScenePoint, placement: LabelPlacement | null, exportOptions: TikzExportOptions): string {
+function pointLabelOptionsToTikz(_point: ScenePoint, placement: LabelPlacement | null, _exportOptions: TikzExportOptions): string {
   const opts: string[] = [];
   const xShiftPt = placement?.xShiftPt ?? 12;
   const yShiftPt = placement?.yShiftPt ?? 12;
   const rawXShiftPt = placement?.rawXShiftPt ?? xShiftPt;
   const rawYShiftPt = placement?.rawYShiftPt ?? yShiftPt;
-  const matchCanvas = exportOptions.matchCanvas ?? false;
-  const fontPt = Math.max(6, Math.min(48, point.style.labelFontPx * (matchCanvas ? 0.75 : 1)));
-  if (matchCanvas) {
-    // Keep quadrant stable from user drag offset, so labels don't flip due to
-    // collision-spread/min-clear post-processing.
-    opts.push(directionOptionFromShift(rawXShiftPt, rawYShiftPt));
-  } else {
-    // Placement solver computes label center directly; keep node anchored at center.
-    opts.push("anchor=center");
-    if (Math.abs(xShiftPt) > 1e-9) opts.push(`xshift=${fmt(xShiftPt)}pt`);
-    if (Math.abs(yShiftPt) > 1e-9) opts.push(`yshift=${fmt(yShiftPt)}pt`);
-  }
-  if (!matchCanvas) {
-    const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
-    opts.push(`font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`);
-  }
-
-  // Reuse point halo style for label readability on dense diagrams.
-  if (!matchCanvas && point.style.labelHaloWidthPx > 0) {
-    opts.push("circle");
-    opts.push(`fill=${rgbColorExpr(point.style.labelHaloColor)}`);
-    opts.push("fill opacity=0.8");
-    opts.push("text opacity=1");
-    opts.push("outer sep=0pt");
-    opts.push("inner sep=0pt");
-    if (placement && placement.bubbleRadiusPt > 0) {
-      opts.push(`minimum size=${fmt(placement.bubbleRadiusPt * 1.62)}pt`);
-    }
-  }
-  if (!matchCanvas && point.style.labelColor) {
-    opts.push(`text=${rgbColorExpr(point.style.labelColor)}`);
-  }
+  // Keep quadrant stable from user drag offset, so labels don't flip due to
+  // collision-spread/min-clear post-processing.
+  opts.push(directionOptionFromShift(rawXShiftPt, rawYShiftPt));
   return opts.join(", ");
 }
 

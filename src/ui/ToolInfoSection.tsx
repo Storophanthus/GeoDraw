@@ -221,7 +221,13 @@ export function ToolInfoSection({
       )}
       {activeTool === "export_clip" && (
         <div className="toolInfo">
-          <div className="subSectionTitle">Export Clip</div>
+          <div className="subSectionTitle">Export Clip Polygon</div>
+          <div className="statusText">Click vertices, then click near the first vertex to close the clip path.</div>
+        </div>
+      )}
+      {activeTool === "export_clip_rect" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Export Clip Rectangle</div>
           <div className="statusText">Click first corner, then second corner to set TikZ clip rectangle.</div>
         </div>
       )}

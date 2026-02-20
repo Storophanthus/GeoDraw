@@ -21,6 +21,7 @@ const EMITTED_TKZ_MACROS = new Set<string>([
   "tkzMarkSegment",
   "tkzDrawLine",
   "tkzDrawCircle",
+  "tkzFillCircle",
   "tkzDrawSector",
   "tkzFillSector",
   "tkzFillAngle",

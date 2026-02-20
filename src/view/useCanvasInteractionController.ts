@@ -14,7 +14,12 @@ import {
 } from "./canvasInteractionHelpers";
 import { getAngleTextRenderSize, type ResolvedAngle } from "./labelOverlays";
 import { createCanvasAuxHandlers, createPointerHandlers } from "./pointerEventController";
-import { computeCanvasCursor, decideMovePointerDown, type PointerMode } from "./pointerInteraction";
+import {
+  computeCanvasCursor,
+  decideMovePointerDown,
+  shouldCancelOnCanvasDoubleClick,
+  type PointerMode,
+} from "./pointerInteraction";
 import { hitTestAngleLabelHandle, hitTestPointLabel, hitTestPointLabelFromDom } from "./labelHit";
 import {
   hitTestAngleId as engineHitTestAngleId,
@@ -63,6 +68,7 @@ type InteractionActions = {
   setCursorWorld: (value: Vec2 | null) => void;
   setHoveredHit: (hit: HoveredHit) => void;
   setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "number"; id: string } | null) => void;
+  clearPendingSelection: () => void;
   zoomAtScreenPoint: (vp: Viewport, screen: Vec2, zoomFactor: number) => void;
 };
 
@@ -252,10 +258,23 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       zoomAtScreenPoint: (screen, zoomFactor) => actions.zoomAtScreenPoint(vp, screen, zoomFactor),
     });
 
+    const onDoubleClick = (e: MouseEvent) => {
+      if (!shouldCancelOnCanvasDoubleClick(activeTool, pendingSelection)) return;
+      e.preventDefault();
+      if (pendingSelection) {
+        actions.clearPendingSelection();
+        return;
+      }
+      if (activeTool === "move") {
+        actions.setSelectedObject(null);
+      }
+    };
+
     const unbind = bindCanvasEventLifecycle(canvas, {
       onDown,
       onMove,
       onFinish: finish,
+      onDoubleClick,
       onLeave,
       onWheel,
     });

@@ -272,6 +272,28 @@ export function handleToolClick(
     return;
   }
 
+  if (activeTool === "export_clip_rect") {
+    const snap = hits.shiftKey ? null : hits.snap;
+    const world =
+      snap?.world
+      ?? (hits.hitPointId ? io.getPointWorldById(hits.hitPointId) : null)
+      ?? camMath.screenToWorld(screen, io.camera, io.vp);
+    if (!pendingSelection || pendingSelection.tool !== "export_clip_rect") {
+      io.setPendingSelection({ tool: "export_clip_rect", step: 2, first: { type: "world", world } });
+      return;
+    }
+    const first = pendingSelection.first.world;
+    io.setExportClipWorld({
+      kind: "rect",
+      xmin: Math.min(first.x, world.x),
+      xmax: Math.max(first.x, world.x),
+      ymin: Math.min(first.y, world.y),
+      ymax: Math.max(first.y, world.y),
+    });
+    io.clearPendingSelection();
+    return;
+  }
+
   if (activeTool === "segment") {
     if (!pendingSelection || pendingSelection.tool !== "segment") {
       io.setPendingSelection({ tool: "segment", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
@@ -648,7 +670,8 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     activeTool === "angle_bisector" ||
     activeTool === "angle" ||
     activeTool === "angle_fixed" ||
-    activeTool === "export_clip"
+    activeTool === "export_clip" ||
+    activeTool === "export_clip_rect"
   );
 }
 
@@ -712,7 +735,7 @@ export function isValidTarget(
     if (pendingSelection?.tool === "angle_fixed" && pendingSelection.step === 3) return false;
     return hoveredHit.type === "point";
   }
-  if (activeTool === "export_clip") return false;
+  if (activeTool === "export_clip" || activeTool === "export_clip_rect") return false;
   if (activeTool === "perp_line") {
     if (!pendingSelection || pendingSelection.tool !== "perp_line") {
       return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";

@@ -25,7 +25,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
   const [exportUseClipSelection, setExportUseClipSelection] = useState(false);
   const [exportEfficient, setExportEfficient] = useState(false);
-  const exportMatchCanvas = true;
+  const [exportEmitTkzSetup, setExportEmitTkzSetup] = useState(true);
   const [exportLabelGlow, setExportLabelGlow] = useState(true);
   const [exportGlobalScale, setExportGlobalScale] = useState("1");
   const [exportPointScale, setExportPointScale] = useState("1");
@@ -40,7 +40,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       ? `rect:${exportClipWorld.xmin},${exportClipWorld.xmax},${exportClipWorld.ymin},${exportClipWorld.ymax}`
       : `poly:${exportClipWorld.points.map((p) => `${p.x},${p.y}`).join(";")}`
     : "none";
-  const currentTikzOptionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
+  const currentTikzOptionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
   const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
   const tikzStatusText = useMemo(
     () =>
@@ -58,7 +58,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       const lineScale = Number(exportLineScale);
       const labelScale = Number(exportLabelScale);
       const globalScale = Number(exportGlobalScale);
-      const optionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportMatchCanvas}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
+      const optionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
       const viewport = exportUseCurrentView ? getViewportFromCanvas(camera) : undefined;
       const clipRect =
         exportUseClipSelection && exportClipWorld?.kind === "rect" ? exportClipWorld : undefined;
@@ -76,10 +76,11 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter,
           labelScale: Number.isFinite(labelScale) ? labelScale : 1,
           screenPxPerWorld: camera.zoom,
-          matchCanvas: exportMatchCanvas,
+          emitTkzSetup: exportEmitTkzSetup,
           labelGlow: exportLabelGlow,
           pointStrokeScale: TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
           pointInnerSepFixedPt: getPointInnerSepFixedPt(),
+          pointInnerSepScale: TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
           segmentMarkSizeScale: TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale,
           segmentMarkLineWidthScale: TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale,
           angleLabelFontScale: TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
@@ -163,6 +164,14 @@ export function ExportPanel({ visible }: ExportPanelProps) {
               onChange={(e) => setExportEfficient(e.target.checked)}
             />
             Efficient TikZ Code (Compact)
+          </label>
+          <label className="checkboxRow">
+            <input
+              type="checkbox"
+              checked={exportEmitTkzSetup}
+              onChange={(e) => setExportEmitTkzSetup(e.target.checked)}
+            />
+            Emit tkz setup (Init/Clip/SetUpLine)
           </label>
           <label className="checkboxRow">
             <input

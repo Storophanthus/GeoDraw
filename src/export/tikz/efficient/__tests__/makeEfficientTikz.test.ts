@@ -1,5 +1,14 @@
 import { makeEfficientTikz } from "../makeEfficientTikz";
-import assert from "assert";
+
+function assertOk(value: unknown, message = "Assertion failed"): asserts value {
+    if (!value) throw new Error(message);
+}
+
+function assertEqual(actual: unknown, expected: unknown, message = "Expected values to be equal"): void {
+    if (actual !== expected) {
+        throw new Error(`${message}\nExpected: ${String(expected)}\nActual: ${String(actual)}`);
+    }
+}
 
 function runTest(name: string, fn: () => void) {
     try {
@@ -8,7 +17,7 @@ function runTest(name: string, fn: () => void) {
     } catch (e) {
         console.error(`FAIL: ${name}`);
         console.error(e);
-        process.exit(1);
+        throw e;
     }
 }
 
@@ -31,7 +40,7 @@ runTest("formats numbers (scale, coordinates, pt values)", () => {
 \\end{tikzpicture}
     `.trim();
 
-    assert.strictEqual(makeEfficientTikz(input), expected);
+    assertEqual(makeEfficientTikz(input), expected);
 });
 
 runTest("simplifies colors", () => {
@@ -50,13 +59,13 @@ runTest("simplifies colors", () => {
 
     const output = makeEfficientTikz(input);
 
-    assert.ok(output.includes("\\definecolor{c0}{RGB}{100,100,100}"), "Should define c0");
-    assert.ok(!output.includes("\\definecolor{c1}"), "Should not define c1");
-    assert.ok(!output.includes("\\definecolor{c2}"), "Should not define c2");
-    assert.ok(!output.includes("color=c1"), "Should replace color=c1");
-    assert.ok(output.includes("color=black"), "Should use black");
-    assert.ok(output.includes("color=red"), "Should use red");
-    assert.ok(output.includes("text=c0"), "Should use c0");
+    assertOk(output.includes("\\definecolor{c0}{RGB}{100,100,100}"), "Should define c0");
+    assertOk(!output.includes("\\definecolor{c1}"), "Should not define c1");
+    assertOk(!output.includes("\\definecolor{c2}"), "Should not define c2");
+    assertOk(!output.includes("color=c1"), "Should replace color=c1");
+    assertOk(output.includes("color=black"), "Should use black");
+    assertOk(output.includes("color=red"), "Should use red");
+    assertOk(output.includes("text=c0"), "Should use c0");
 });
 
 runTest("groups consecutive labels", () => {
@@ -70,11 +79,15 @@ runTest("groups consecutive labels", () => {
 
     const output = makeEfficientTikz(input);
 
-    // Check for foreach structures
+    // Current optimizer may group consecutive labels with parameterized foreach tuple entries.
     try {
-        assert.ok(output.includes("\\foreach \\P in {A,B}{\\tkzLabelPoint[below](\\P){$\\P$}}"), "Missing A,B group");
-        assert.ok(output.includes("\\foreach \\P in {C,D}{\\tkzLabelPoint[above right](\\P){{\\gdLabelGlow{$\\P$}}}}"), "Missing C,D group");
-        assert.ok(output.includes("\\tkzLabelPoint[below](E){$E$}"), "Missing E");
+        assertOk(output.includes("\\foreach \\P/\\pos/\\descr in {"), "Missing grouped foreach header");
+        assertOk(output.includes("A/below/{$A$}"), "Missing A label tuple");
+        assertOk(output.includes("B/below/{$B$}"), "Missing B label tuple");
+        assertOk(output.includes("C/above right/{{\\gdLabelGlow{$C$}}}"), "Missing C label tuple");
+        assertOk(output.includes("D/above right/{{\\gdLabelGlow{$D$}}}"), "Missing D label tuple");
+        assertOk(output.includes("E/below/{$E$}"), "Missing E label tuple");
+        assertOk(output.includes("{\\tkzLabelPoint[\\pos](\\P){\\descr}}"), "Missing grouped foreach body");
     } catch (e) {
         console.log("OUTPUT:\n" + output);
         throw e;
@@ -87,7 +100,7 @@ runTest("handles complex label templates", () => {
 \\tkzLabelPoint[xshift=1pt](P2){$P2$}
      `.trim();
     const output = makeEfficientTikz(input);
-    assert.ok(output.includes("\\foreach \\P in {P1,P2}{\\tkzLabelPoint[xshift=1pt](\\P){$\\P$}}"));
+    assertOk(output.includes("\\foreach \\P in {P1,P2}{\\tkzLabelPoint[xshift=1pt](\\P){$\\P$}}"));
 });
 
 console.log("All tests passed");

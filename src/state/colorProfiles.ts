@@ -158,9 +158,9 @@ export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneSt
   return {
     pointDefaults: {
       shape: "circle",
-      sizePx: 4,
+      sizePx: 6,
       strokeColor: palette.pointStroke,
-      strokeWidth: 1.4,
+      strokeWidth: 1.7,
       strokeOpacity: 1,
       fillColor: palette.pointFill,
       fillOpacity: 1,

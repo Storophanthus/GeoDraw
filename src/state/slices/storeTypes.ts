@@ -37,7 +37,8 @@ export type ActiveTool =
   | "angle_bisector"
   | "angle"
   | "angle_fixed"
-  | "export_clip";
+  | "export_clip"
+  | "export_clip_rect";
 
 export type SelectedObject =
   | { type: "point"; id: string }
@@ -180,6 +181,11 @@ export type PendingSelection =
     tool: "export_clip";
     step: 2;
     points: Array<{ type: "world"; world: Vec2 }>;
+  }
+  | {
+    tool: "export_clip_rect";
+    step: 2;
+    first: { type: "world"; world: Vec2 };
   }
   | null;
 

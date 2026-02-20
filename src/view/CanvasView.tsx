@@ -474,6 +474,7 @@ export function CanvasView() {
       setCursorWorld,
       setHoveredHit,
       setSelectedObject,
+      clearPendingSelection,
       zoomAtScreenPoint,
     },
   });

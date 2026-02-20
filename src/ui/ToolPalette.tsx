@@ -32,6 +32,7 @@ import {
   IconTranslate,
   IconReflect,
   IconDilate,
+  IconExportClipPolygon,
 } from "./icons";
 
 type IconProps = {
@@ -54,7 +55,8 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   reflect: { icon: IconReflect, tooltip: "Reflect Object", ariaLabel: "Reflect tool" },
   dilate: { icon: IconDilate, tooltip: "Dilate Object", ariaLabel: "Dilate tool" },
   copyStyle: { icon: IconCopyStyle, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
-  export_clip: { icon: IconExportClip, tooltip: "Export Clip Rectangle", ariaLabel: "Export clip tool" },
+  export_clip_rect: { icon: IconExportClip, tooltip: "Export Clip Rectangle", ariaLabel: "Export clip rectangle tool" },
+  export_clip: { icon: IconExportClipPolygon, tooltip: "Export Clip Polygon", ariaLabel: "Export clip polygon tool" },
   midpoint: { icon: IconMidpoint, tooltip: "Midpoint (M)", ariaLabel: "Midpoint tool" },
   segment: { icon: IconSegment, tooltip: "Segment (S)", ariaLabel: "Segment tool" },
   line2p: { icon: IconLine, tooltip: "Line Through 2 Points (L)", ariaLabel: "Line tool" },
@@ -73,7 +75,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
 };
 
 const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }> = [
-  { id: "move", label: "MOVE", tools: ["move", "export_clip"] },
+  { id: "move", label: "MOVE", tools: ["move", "export_clip_rect", "export_clip"] },
   { id: "points", label: "POINTS", tools: ["point", "midpoint"] },
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },

@@ -127,3 +127,9 @@ export function computeCanvasCursor(
 
   return "default";
 }
+
+export function shouldCancelOnCanvasDoubleClick(activeTool: ActiveTool, pendingSelection: PendingSelection): boolean {
+  if (activeTool === "move") return true;
+  if (!pendingSelection) return false;
+  return pendingSelection.tool === "polygon" || pendingSelection.tool === "export_clip";
+}

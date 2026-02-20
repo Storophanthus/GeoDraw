@@ -240,6 +240,18 @@ export const IconExportClip = createIcon(() => (
     </>
 ), "IconExportClip");
 
+export const IconExportClipPolygon = createIcon(() => (
+    <>
+        <path d="M4 7 L9 3.5 L17.5 5 L20.5 12 L16.5 20 L7.5 19 L3.5 12 Z" strokeWidth={2} strokeDasharray="3 2" />
+        <path d="M8 8.5 L15.2 9.5 L13.5 15.2 L8.8 14.4 Z" strokeWidth={2.2} />
+        <path d="M15.2 9.5 L15.2 12.8 M15.2 9.5 L12 9.5" strokeWidth={2.2} />
+        <circle cx="8" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+        <circle cx="15.2" cy="9.5" r="1.2" fill="currentColor" stroke="none" />
+        <circle cx="13.5" cy="15.2" r="1.2" fill="currentColor" stroke="none" />
+        <circle cx="8.8" cy="14.4" r="1.2" fill="currentColor" stroke="none" />
+    </>
+), "IconExportClipPolygon");
+
 export const IconFitView = createIcon(() => (
     <>
         <path d="M3 9V3h6" strokeWidth={2.2} />
