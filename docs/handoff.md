@@ -36,6 +36,9 @@
     - Verified new UI allows adding/removing arrows on Circles/Angles.
     - Verified ghost arrows are gone for all object types.
     - `npm run type-check && npm run test:unit` passed.
+- 2026-02-20 Angle Interaction Refinement:
+  - **Selection**: Increased hit test tolerance (10px -> 20px) and min radius (12px -> 20px) for angles.
+  - **Labels**: Adjusted angle label positioning logic to place labels closer to the vertex/arc.
 - 2026-02-19 Efficient TikZ Export:
   - Implemented new export mode (`makeEfficientTikz`) that post-processes standard TikZ output for readability and compactness.
   - Key transformations:
