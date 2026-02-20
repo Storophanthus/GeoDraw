@@ -17,6 +17,7 @@ import {
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
 import { makeEfficientTikz } from "./tikz/efficient/makeEfficientTikz";
+import { TIKZ_EXPORT_CALIBRATION } from "./tikz/calibration";
 
 export { makeEfficientTikz };
 
@@ -151,8 +152,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   // Auto-fit viewport for document embedding when canvas-match export is enabled.
   // Fit both down and up so exported framing matches the current canvas view density.
   if (options.matchCanvas) {
-    const maxWidthCm = clampPositive(options.autoScaleToFitCm?.maxWidthCm ?? 14, 1, 200);
-    const maxHeightCm = clampPositive(options.autoScaleToFitCm?.maxHeightCm ?? 9, 1, 200);
+    const maxWidthCm = clampPositive(
+      options.autoScaleToFitCm?.maxWidthCm ?? TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
+      1,
+      200
+    );
+    const maxHeightCm = clampPositive(
+      options.autoScaleToFitCm?.maxHeightCm ?? TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,
+      1,
+      200
+    );
     const worldWidth = Math.max(1e-9, Math.abs(viewport.xmax - viewport.xmin));
     const worldHeight = Math.max(1e-9, Math.abs(viewport.ymax - viewport.ymin));
     const fitScale = Math.min(maxWidthCm / worldWidth, maxHeightCm / worldHeight);
@@ -2304,18 +2313,18 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
   const matchCanvas = options.matchCanvas ?? false;
-  const basePointStroke = 1.4;
-  const basePointSizePx = 4;
+  const pointConv = TIKZ_EXPORT_CALIBRATION.pointConversion;
   const pointStrokeScale = clampPositive(options.pointStrokeScale ?? 1, 0.01, 100);
   const lineWidthPt = (matchCanvas
-    ? Math.max(0.1, s.strokeWidth * lineScale * 0.75)
-    : Math.max(0.1, 1.05 * lineScale * (s.strokeWidth / basePointStroke))) * pointStrokeScale;
+    ? Math.max(0.1, s.strokeWidth * lineScale * pointConv.matchCanvasPxToPt)
+    : Math.max(0.1, pointConv.nonMatchLineWidthFactor * lineScale * (s.strokeWidth / pointConv.basePointStrokePx))) *
+    pointStrokeScale;
   const fixedInnerSep = options.pointInnerSepFixedPt;
   const innerSepPt = fixedInnerSep !== undefined
     ? Math.max(0.4, fixedInnerSep * pointScale)
     : matchCanvas
-      ? Math.max(0.4, s.sizePx * pointScale * 0.75)
-      : Math.max(0.4, 3.75 * pointScale * (s.sizePx / basePointSizePx));
+      ? Math.max(0.4, s.sizePx * pointScale * pointConv.matchCanvasPxToPt)
+      : Math.max(0.4, pointConv.nonMatchInnerSepFactorPt * pointScale * (s.sizePx / pointConv.basePointSizePx));
   const opts = [
     shape,
     `draw=${draw}`,

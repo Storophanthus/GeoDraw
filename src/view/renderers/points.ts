@@ -28,7 +28,8 @@ export function drawPoints(
   camera: Camera,
   vp: Viewport,
   copySource: DrawableObjectSelection,
-  dependencyGlowEnabled: boolean
+  dependencyGlowEnabled: boolean,
+  labelHaloColorOverride?: string
 ): void {
   ctx.save();
   ctx.textAlign = "left";
@@ -85,6 +86,7 @@ export function drawPoints(
 
     if (point.showLabel === "name" && point.name) {
       const labelOffset = point.style.labelOffsetPx;
+      const labelHaloColor = labelHaloColorOverride ?? point.style.labelHaloColor;
       const stackKey = `${Math.round(p.x * 2) / 2}:${Math.round(p.y * 2) / 2}`;
       const stackIndex = labelStack.get(stackKey) ?? 0;
       labelStack.set(stackKey, stackIndex + 1);
@@ -97,7 +99,7 @@ export function drawPoints(
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
       ctx.miterLimit = 2;
-      ctx.strokeStyle = point.style.labelHaloColor;
+      ctx.strokeStyle = labelHaloColor;
       ctx.lineWidth = point.style.labelHaloWidthPx;
       ctx.strokeText(point.name, lx, ly);
       ctx.fillStyle = point.style.labelColor;

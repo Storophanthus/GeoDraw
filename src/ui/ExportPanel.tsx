@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from "../export/constructionSnapshot";
 import { exportTikzWithOptions, makeEfficientTikz } from "../export/tikz";
+import { TIKZ_EXPORT_CALIBRATION } from "../export/tikz/calibration";
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
 import type { Camera } from "../view/camera";
@@ -70,20 +71,25 @@ export function ExportPanel({ visible }: ExportPanelProps) {
           clipPolygonWorld: clipPolygon,
           worldToTikzScale: Number.isFinite(globalScale) ? globalScale : 1,
           pointScale: Number.isFinite(pointScale) ? pointScale : 1,
-          lineScale: (Number.isFinite(lineScale) ? lineScale : 1) * (0.5 / 1.2),
+          lineScale:
+            (Number.isFinite(lineScale) ? lineScale : 1) *
+            TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter,
           labelScale: Number.isFinite(labelScale) ? labelScale : 1,
           screenPxPerWorld: camera.zoom,
           matchCanvas: exportMatchCanvas,
           labelGlow: exportLabelGlow,
-          pointStrokeScale: 0.4 / 1.05,
-          pointInnerSepFixedPt: 1.5,
-          segmentMarkSizeScale: 5 / 8,
-          segmentMarkLineWidthScale: 1 / 2.2,
-          angleLabelFontScale: 9 / 16,
-          angleArcSizeScale: 1,
-          angleMarkSizeScale: 0.5,
-          rightAngleSizeScale: 1,
-          autoScaleToFitCm: { maxWidthCm: 14, maxHeightCm: 9 },
+          pointStrokeScale: TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
+          pointInnerSepFixedPt: TIKZ_EXPORT_CALIBRATION.pointInnerSepFixedPt,
+          segmentMarkSizeScale: TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale,
+          segmentMarkLineWidthScale: TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale,
+          angleLabelFontScale: TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
+          angleArcSizeScale: TIKZ_EXPORT_CALIBRATION.angleArcSizeScale,
+          angleMarkSizeScale: TIKZ_EXPORT_CALIBRATION.angleMarkSizeScale,
+          rightAngleSizeScale: TIKZ_EXPORT_CALIBRATION.rightAngleSizeScale,
+          autoScaleToFitCm: {
+            maxWidthCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
+            maxHeightCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,
+          },
         })
       );
       if (exportEfficient) {

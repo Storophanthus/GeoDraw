@@ -1,124 +1,17 @@
 import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle } from "../../scene/points";
+import {
+  buildDefaultStylesForProfile,
+  DEFAULT_COLOR_PROFILE_ID,
+} from "../colorProfiles";
 
-const DEFAULT_PATH_ARROW_UI = 1.0;
-const DEFAULT_PATH_ARROW_LINE_WIDTH_PT = DEFAULT_PATH_ARROW_UI * 8;
+const profileDefaults = buildDefaultStylesForProfile(DEFAULT_COLOR_PROFILE_ID);
 
-export const defaultPointStyle: PointStyle = {
-  shape: "circle",
-  sizePx: 4,
-  strokeColor: "#0f172a",
-  strokeWidth: 1.4,
-  strokeOpacity: 1,
-  fillColor: "#60a5fa",
-  fillOpacity: 1,
-  labelFontPx: 18,
-  labelHaloWidthPx: 3.5,
-  labelHaloColor: "#ffffff",
-  labelColor: "#0f172a",
-  labelOffsetPx: { x: 8, y: -8 },
-};
-
-export const defaultSegmentStyle: LineStyle = {
-  strokeColor: "#0f766e",
-  strokeWidth: 2,
-  dash: "solid",
-  opacity: 1,
-  segmentMark: {
-    enabled: false,
-    mark: "none",
-    pos: 0.5,
-    sizePt: 4,
-  },
-  segmentArrowMark: {
-    enabled: false,
-    mode: "end",
-    direction: "->",
-    tip: "Stealth",
-    distribution: "single",
-    pos: 0.5,
-    startPos: 0.45,
-    endPos: 0.55,
-    step: 0.05,
-    sizeScale: DEFAULT_PATH_ARROW_UI,
-    lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
-    arrowLength: 1.0,
-  },
-};
-
-export const defaultLineStyle: LineStyle = {
-  strokeColor: "#334155",
-  strokeWidth: 1.6,
-  dash: "solid",
-  opacity: 1,
-};
-
-export const defaultCircleStyle: CircleStyle = {
-  strokeColor: "#334155",
-  strokeWidth: 1.6,
-  strokeDash: "solid",
-  strokeOpacity: 1,
-  fillOpacity: 0,
-  pattern: "",
-  arrowMark: {
-    enabled: false,
-    direction: "->",
-    tip: "Stealth",
-    distribution: "single",
-    pos: 0.5,
-    startPos: 0.45,
-    endPos: 0.55,
-    step: 0.05,
-    sizeScale: DEFAULT_PATH_ARROW_UI,
-    lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
-  },
-};
-
-export const defaultPolygonStyle: PolygonStyle = {
-  strokeColor: "#334155",
-  strokeWidth: 1.6,
-  strokeDash: "solid",
-  strokeOpacity: 1,
-  fillColor: "#93c5fd",
-  fillOpacity: 0.22,
-  pattern: "",
-};
-
-export const defaultAngleStyle: AngleStyle = {
-  strokeColor: "#334155",
-  strokeWidth: 1,
-  strokeDash: "solid",
-  strokeOpacity: 1,
-  textColor: "#0f172a",
-  textSize: 16,
-  fillEnabled: false,
-  fillColor: "#93c5fd",
-  fillOpacity: 0.2,
-  pattern: "",
-  markStyle: "arc",
-  markSymbol: "none",
-  arcMultiplicity: 1,
-  markPos: 0.5,
-  markSize: 7.4,
-  markColor: "#334155",
-  arcRadius: 1.95,
-  labelText: "",
-  labelPosWorld: { x: 0, y: 0 },
-  showLabel: true,
-  showValue: true,
-  promoteToSolid: false,
-  arcArrowMark: {
-    enabled: false,
-    direction: "->",
-    tip: "Stealth",
-    distribution: "single",
-    pos: 0.5,
-    startPos: 0.45,
-    endPos: 0.55,
-    step: 0.05,
-    sizeScale: DEFAULT_PATH_ARROW_UI,
-    lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
-  },
-};
+export const defaultPointStyle: PointStyle = profileDefaults.pointDefaults;
+export const defaultSegmentStyle: LineStyle = profileDefaults.segmentDefaults;
+export const defaultLineStyle: LineStyle = profileDefaults.lineDefaults;
+export const defaultCircleStyle: CircleStyle = profileDefaults.circleDefaults;
+export const defaultPolygonStyle: PolygonStyle = profileDefaults.polygonDefaults;
+export const defaultAngleStyle: AngleStyle = profileDefaults.angleDefaults;
 
 export function createSceneSliceState() {
   return {

@@ -7,6 +7,7 @@ import {
   type ScenePoint,
 } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
+import { getCanvasColorTheme } from "../state/colorProfiles";
 import type { Viewport } from "./camera";
 import type { ConstructClickIo } from "./constructClickAdapter";
 import { findBestSnap, type SnapCandidate } from "./snapEngine";
@@ -70,6 +71,7 @@ export function CanvasView() {
   const camera = useGeoStore((store) => store.camera);
   const activeTool = useGeoStore((store) => store.activeTool);
   const scene = useGeoStore((store) => store.scene);
+  const colorProfileId = useGeoStore((store) => store.colorProfileId);
   const selectedObject = useGeoStore((store) => store.selectedObject);
   const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
   const hoveredHit = useGeoStore((store) => store.hoveredHit);
@@ -135,6 +137,7 @@ export function CanvasView() {
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
   const [snapDisabled, setSnapDisabled] = useState(false);
+  const canvasTheme = useMemo(() => getCanvasColorTheme(colorProfileId), [colorProfileId]);
   const gridSettings = useMemo(
     () => ({
       ...GRID_SETTINGS_BASE,
@@ -314,8 +317,8 @@ export function CanvasView() {
   const resolvedAngles = useMemo(() => resolveAngles(scene), [scene]);
 
   const labelOverlays = useMemo(
-    () => createPointLabelOverlays(resolvedPoints, camera, vp),
-    [resolvedPoints, camera, vp]
+    () => createPointLabelOverlays(resolvedPoints, camera, vp, canvasTheme.backgroundColor),
+    [resolvedPoints, camera, vp, canvasTheme.backgroundColor]
   );
   const angleLabelOverlays = useMemo(
     () => createAngleLabelOverlays(resolvedAngles, camera, vp),
@@ -372,6 +375,7 @@ export function CanvasView() {
         vp,
         dpr,
         gridSettings,
+        canvasTheme,
         activeTool,
         pendingSelection,
         cursorWorld,
@@ -419,6 +423,7 @@ export function CanvasView() {
       dependencyGlowEnabled,
       exportClipWorld,
       gridSettings,
+      canvasTheme,
       circleFixedTool,
       regularPolygonTool,
       transformTool,

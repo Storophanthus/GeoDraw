@@ -13,6 +13,7 @@ import type {
   ShowLabelMode,
 } from "../../scene/points";
 import type { Camera, Viewport } from "../../view/camera";
+import type { ColorProfileId } from "../colorProfiles";
 
 export type ActiveTool =
   | "move"
@@ -190,6 +191,7 @@ export type AngleFixedDirection = "CCW" | "CW";
 
 export type GeoState = {
   camera: Camera;
+  colorProfileId: ColorProfileId;
   gridEnabled: boolean;
   axesEnabled: boolean;
   gridSnapEnabled: boolean;
@@ -317,6 +319,7 @@ export type GeoActions = {
   setGridEnabled: (enabled: boolean) => void;
   setAxesEnabled: (enabled: boolean) => void;
   setGridSnapEnabled: (enabled: boolean) => void;
+  setColorProfile: (profileId: ColorProfileId) => void;
   setDependencyGlowEnabled: (enabled: boolean) => void;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
   clearExportClipWorld: () => void;

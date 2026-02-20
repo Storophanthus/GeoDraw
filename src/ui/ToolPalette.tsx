@@ -1,10 +1,12 @@
 import {
+  type CSSProperties,
   useEffect,
   useRef,
   useState,
   type ComponentType,
 } from "react";
-import type { ActiveTool } from "../state/geoStore";
+import { useGeoStore, type ActiveTool } from "../state/geoStore";
+import { COLOR_PROFILE_OPTIONS, getColorProfile, type ColorProfileId } from "../state/colorProfiles";
 import {
   IconAngle,
   IconAngleFixed,
@@ -99,7 +101,11 @@ export function ToolPalette({
   collapsedWidth,
   onFlyoutVisibilityChange,
 }: ToolPaletteProps) {
+  const colorProfileId = useGeoStore((store) => store.colorProfileId);
+  const setColorProfile = useGeoStore((store) => store.setColorProfile);
+  const activeProfilePalette = getColorProfile(colorProfileId).palette;
   const [openFlyoutGroup, setOpenFlyoutGroup] = useState<ToolGroupId | null>(null);
+  const [profileFlyoutOpen, setProfileFlyoutOpen] = useState(false);
   const [groupLastSelected, setGroupLastSelected] = useState<Record<ToolGroupId, ActiveTool>>({
     move: "move",
     points: "point",
@@ -123,6 +129,7 @@ export function ToolPalette({
       if (!toolbarRef.current) return;
       if (!toolbarRef.current.contains(e.target as Node)) {
         setOpenFlyoutGroup(null);
+        setProfileFlyoutOpen(false);
       }
     };
     window.addEventListener("mousedown", onMouseDown);
@@ -136,18 +143,19 @@ export function ToolPalette({
       const isTextInput =
         tagName === "INPUT" || tagName === "TEXTAREA" || target?.isContentEditable === true;
       if (isTextInput) return;
-      if (e.key === "Escape" && openFlyoutGroup) {
+      if (e.key === "Escape" && (openFlyoutGroup || profileFlyoutOpen)) {
         e.preventDefault();
         setOpenFlyoutGroup(null);
+        setProfileFlyoutOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [openFlyoutGroup]);
+  }, [openFlyoutGroup, profileFlyoutOpen]);
 
   useEffect(() => {
-    onFlyoutVisibilityChange?.(openFlyoutGroup !== null);
-  }, [openFlyoutGroup, onFlyoutVisibilityChange]);
+    onFlyoutVisibilityChange?.(openFlyoutGroup !== null || profileFlyoutOpen);
+  }, [openFlyoutGroup, onFlyoutVisibilityChange, profileFlyoutOpen]);
 
   return (
     <aside
@@ -170,6 +178,7 @@ export function ToolPalette({
             className="sidebarToggleButton"
             onClick={() => {
               setOpenFlyoutGroup(null);
+              setProfileFlyoutOpen(false);
               setLeftCollapsed(true);
             }}
             aria-label="Collapse left sidebar"
@@ -199,10 +208,102 @@ export function ToolPalette({
               </div>
             );
           })}
+
+          <div className="toolGroupBlock toolProfileSection">
+            <div className="toolGroupDivider" />
+            <div className="toolGroupLabel">PALETTE</div>
+            <div
+              className="toolGroupWrap profileGroupWrap"
+              onMouseEnter={() => setProfileFlyoutOpen(true)}
+              onMouseLeave={() => setProfileFlyoutOpen(false)}
+            >
+              <div className={profileFlyoutOpen ? "toolButtonWrap suppressTooltip" : "toolButtonWrap"}>
+                <button
+                  type="button"
+                  className="profileSwatchButton active"
+                  onFocus={() => setProfileFlyoutOpen(true)}
+                  aria-label="Color palette"
+                  style={
+                    {
+                      "--profile-active-border": activeProfilePalette.lineStroke,
+                      "--profile-active-halo": toRgba(activeProfilePalette.backgroundColor, 0.9),
+                    } as CSSProperties
+                  }
+                >
+                  <ProfileSwatch profileId={colorProfileId} />
+                </button>
+                <span className="toolTooltip" role="tooltip">
+                  Color palette
+                </span>
+              </div>
+              {profileFlyoutOpen && (
+                <div className="toolFlyout profilePaletteFlyout" role="menu" aria-label="Color profile options">
+                  {COLOR_PROFILE_OPTIONS.filter((option) => option.id !== colorProfileId).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="profileSwatchButton"
+                      onClick={() => {
+                        setColorProfile(option.id);
+                        setProfileFlyoutOpen(false);
+                      }}
+                      title={option.label}
+                      aria-label={`Color profile: ${option.label}`}
+                      role="menuitem"
+                    >
+                      <ProfileSwatch profileId={option.id} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </>
       )}
     </aside>
   );
+}
+
+function ProfileSwatch({ profileId }: { profileId: ColorProfileId }) {
+  const palette = getColorProfile(profileId).palette;
+  return (
+    <span
+      className="profileSwatchVisual"
+      style={{
+        background: palette.backgroundColor,
+        borderColor: palette.lineStroke,
+      }}
+      aria-hidden
+    >
+      <span className="profileSwatchFill" style={{ background: palette.polygonFill }} />
+      <span className="profileSwatchLine" style={{ background: palette.lineStroke }} />
+      <span
+        className="profileSwatchDot"
+        style={{
+          background: palette.pointFill,
+          borderColor: palette.pointStroke,
+        }}
+      />
+    </span>
+  );
+}
+
+function toRgba(color: string, alpha: number): string {
+  const hex = color.trim();
+  const match3 = /^#([0-9a-fA-F]{3})$/.exec(hex);
+  if (match3) {
+    const [r, g, b] = match3[1].split("").map((d) => parseInt(d + d, 16));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  const match6 = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (match6) {
+    const raw = match6[1];
+    const r = parseInt(raw.slice(0, 2), 16);
+    const g = parseInt(raw.slice(2, 4), 16);
+    const b = parseInt(raw.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return color;
 }
 
 function getGroupIdForTool(tool: ActiveTool): ToolGroupId | null {

@@ -2406,3 +2406,134 @@ Date completed: February 17, 2026
 ### Verification
 - `npm run build` passed.
 - `npm run test:export` passed.
+
+## Latest Done (Color Profile Picker Moved to Left Toolbar Swatches)
+Date completed: February 20, 2026
+
+### User-requested UX change
+- Color profile control is no longer in the right properties area.
+- Profile choice is now shown as color-based swatch buttons on the left toolbar (under tools), not text options.
+
+### Files
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ToolPalette.tsx`
+  - Added left-toolbar `PALETTE` group with one-click swatch buttons.
+  - Each button shows miniature profile preview (background, line, fill, vertex).
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+  - Added swatch button styles and active/hover states.
+  - Updated swatches to square icon format for fast visual selection.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/PropertiesPanel.tsx`
+  - Removed right-panel profile selector UI (profile controls now live in left toolbar).
+
+### Verification
+- `npm run build` currently fails at existing repo issue unrelated to this move:
+  - `src/export/tikz/efficient/__tests__/makeEfficientTikz.test.ts` missing Node typings (`assert`, `process`).
+
+## Latest Done (Palette Group Flyout Behavior)
+Date completed: February 20, 2026
+
+### User-requested UX change
+- Left toolbar color profiles now behave like tool groups:
+  - only one main palette button is shown,
+  - hover/focus opens flyout with other profile options.
+- This reduces vertical space use while keeping one-click profile switching.
+
+### Files
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ToolPalette.tsx`
+  - Added dedicated palette flyout state (`profileFlyoutOpen`).
+  - Main button shows currently active profile swatch.
+  - Flyout lists non-active profiles.
+  - Escape/outside-click/collapse now closes palette flyout too.
+  - Sidebar "flyout open" signal includes palette flyout state.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+  - Added `.profileGroupWrap` and `.profilePaletteFlyout`.
+  - Removed now-unused stacked-list palette class.
+
+### Verification
+- `npm run build` still blocked by existing Node-typing issue in efficient exporter tests (`assert`, `process`), unrelated to palette flyout changes.
+
+## Latest Done (Palette Position + Flyout Hover Tolerance)
+Date completed: February 20, 2026
+
+### User-requested UX tweaks
+- Moved `PALETTE` group to below `STYLES` in the left toolbar.
+- Reduced accidental flyout close sensitivity by adding invisible hover tolerance area around flyouts.
+  - This specifically helps when cursor passes near upper-right flyout corners.
+- Made palette swatch button size match tool buttons (`40x40`).
+- Active palette halo/border now uses current profile colors (canvas/profile-driven), not fixed blue.
+
+### Files
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ToolPalette.tsx`
+  - Reordered layout so palette group renders after tool groups (`below STYLES`).
+  - Added dynamic CSS variables for active swatch halo/border:
+    - `--profile-active-border` from profile line color
+    - `--profile-active-halo` from profile canvas/background color
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+  - Updated palette spacing and swatch size (`40x40`).
+  - Active swatch halo/border now read CSS variables instead of hardcoded blue.
+  - Added invisible flyout tolerance area using `::before` around `.toolFlyout`:
+    - top/bottom/left: `12px`
+    - right: `14px`
+
+### Verification
+- `npm run build` still blocked by existing Node-typing issue in efficient exporter tests (`assert`, `process`), unrelated to this UI tweak.
+
+## Latest Done (Canvas Label Glow Uses Canvas Background)
+Date completed: February 20, 2026
+
+### Clarification applied
+- Kept TikZ export glow behavior unchanged (still uses existing `\\gdLabelGlow` macro with `\\thepagecolor`/`white` fallback).
+- Updated only canvas rendering so label halo/glow tracks current canvas background color exactly.
+
+### Scope
+- Applies to both:
+  - point name labels drawn on canvas (`showLabel = name`),
+  - caption/TeX point labels rendered as overlays (`showLabel = caption`).
+
+### Files
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderers/points.ts`
+  - Added optional halo override parameter to `drawPoints(...)`.
+  - Name-label halo stroke now uses override when provided.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/labelOverlays.ts`
+  - Added optional halo override parameter to `createPointLabelOverlays(...)`.
+  - Caption overlay glow now uses override when provided.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/renderFrame.ts`
+  - Passes `canvasTheme.backgroundColor` into `drawPoints(...)`.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/CanvasView.tsx`
+  - Passes `canvasTheme.backgroundColor` into `createPointLabelOverlays(...)`.
+
+### Verification
+- `npm run build` still blocked by existing Node-typing issue in efficient exporter tests (`assert`, `process`), unrelated to this canvas-label change.
+
+## Latest Done (TikZ Calibration Single-Source Block + God-File Refactor Priority Start)
+Date completed: February 20, 2026
+
+### Priority update
+- TikZ exporter maintainability is now treated as active priority.
+- First concrete step completed: calibration constants are centralized in one explicit module.
+
+### New single edit location for export calibration
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz/calibration.ts`
+  - Contains all calibration constants that were previously hardcoded in `ExportPanel` and parts of `tikz.ts`:
+    - line scale UI->export mapping,
+    - point stroke/size calibration,
+    - segment mark calibration,
+    - angle calibration,
+    - auto-fit default dimensions,
+    - point conversion constants used by point style export formulas.
+
+### Wiring changes
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ExportPanel.tsx`
+  - Export options now read calibration values from `TIKZ_EXPORT_CALIBRATION` instead of inline numeric literals.
+- `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/tikz.ts`
+  - Auto-fit fallback defaults now read from `TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm`.
+  - `pointStyleToTikz(...)` conversion constants now read from `TIKZ_EXPORT_CALIBRATION.pointConversion`.
+
+### Refactor intent (next)
+- Continue splitting `tikz.ts` by responsibility while keeping output stable:
+  1. style mappers,
+  2. label placement/render helpers,
+  3. arrow overlay builders,
+  4. IR construction helpers.
+
+### Verification
+- `npm run build` still blocked by existing Node-typing issue in efficient exporter tests (`assert`, `process`), unrelated to this calibration centralization.

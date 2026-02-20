@@ -25,6 +25,13 @@ type PendingPreviewTolerances = {
   segmentPx: number;
 };
 
+type CanvasColorTheme = {
+  backgroundColor: string;
+  gridMinorColor: string;
+  gridMajorColor: string;
+  axisColor: string;
+};
+
 type RenderFrameArgs = {
   canvas: HTMLCanvasElement;
   scene: Parameters<typeof beginSceneEvalTick>[0];
@@ -32,6 +39,7 @@ type RenderFrameArgs = {
   vp: Viewport;
   dpr: number;
   gridSettings: RectGridSettings;
+  canvasTheme: CanvasColorTheme;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
   cursorWorld: Vec2 | null;
@@ -63,6 +71,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     vp,
     dpr,
     gridSettings,
+    canvasTheme,
     activeTool,
     pendingSelection,
     cursorWorld,
@@ -96,10 +105,10 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, vp.widthPx, vp.heightPx);
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = canvasTheme.backgroundColor;
     ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
 
-    drawRectGrid(ctx, camera, vp, gridSettings);
+    drawRectGrid(ctx, camera, vp, gridSettings, canvasTheme);
     drawCircles(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
     drawPolygons(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
     drawLines(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
@@ -122,7 +131,16 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       anglePreviewArcRadius,
       pendingPreviewTolerances
     );
-    drawPoints(ctx, resolvedPoints, selectedDrawableObject, camera, vp, copySourceDrawable, dependencyGlowEnabled);
+    drawPoints(
+      ctx,
+      resolvedPoints,
+      selectedDrawableObject,
+      camera,
+      vp,
+      copySourceDrawable,
+      dependencyGlowEnabled,
+      canvasTheme.backgroundColor
+    );
     drawInteractionHighlights(
       ctx,
       activeTool,

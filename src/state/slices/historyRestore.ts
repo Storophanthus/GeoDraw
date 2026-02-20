@@ -2,6 +2,7 @@ import { normalizeSceneIntegrity } from "../../domain/sceneIntegrity";
 import { resolveIntersectionBranchIndexInScene } from "../../domain/intersectionReuse";
 import type { GeoState } from "./storeTypes";
 import type { HistorySnapshot } from "./historySlice";
+import { DEFAULT_COLOR_PROFILE_ID } from "../colorProfiles";
 
 export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoState {
   const normalizedScene = normalizeSceneIntegrity(snapshot.scene);
@@ -54,6 +55,7 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
   };
   return {
     ...prev,
+    colorProfileId: snapshot.colorProfileId ?? DEFAULT_COLOR_PROFILE_ID,
     gridEnabled: snapshot.gridEnabled ?? true,
     axesEnabled: snapshot.axesEnabled ?? true,
     gridSnapEnabled: snapshot.gridSnapEnabled ?? true,

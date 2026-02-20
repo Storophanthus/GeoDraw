@@ -63,7 +63,8 @@ function formatAngleDegreesValue(degRaw: number): string {
 export function createPointLabelOverlays(
   resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>,
   camera: Camera,
-  vp: Viewport
+  vp: Viewport,
+  labelHaloColorOverride?: string
 ): PointLabelOverlay[] {
   return resolvedPoints
     .filter(({ point }) => point.visible && point.showLabel === "caption" && Boolean(point.captionTex))
@@ -82,7 +83,7 @@ export function createPointLabelOverlays(
         html,
         labelFontPx: point.style.labelFontPx,
         labelColor: point.style.labelColor,
-        labelHaloColor: point.style.labelHaloColor,
+        labelHaloColor: labelHaloColorOverride ?? point.style.labelHaloColor,
         labelHaloWidthPx: point.style.labelHaloWidthPx,
       };
     });

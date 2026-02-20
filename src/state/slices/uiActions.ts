@@ -1,5 +1,10 @@
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
+import {
+  applyProfileColorsToDefaults,
+  recolorSceneForProfile,
+  type SceneStyleDefaults,
+} from "../colorProfiles";
 
 type UiContext = {
   setState: (updater: (prev: GeoState) => GeoState, options?: SetStateOptions) => void;
@@ -22,6 +27,7 @@ export function createUiActions(
   | "setGridEnabled"
   | "setAxesEnabled"
   | "setGridSnapEnabled"
+  | "setColorProfile"
   | "setDependencyGlowEnabled"
   | "setExportClipWorld"
   | "clearExportClipWorld"
@@ -146,6 +152,34 @@ export function createUiActions(
         ...prev,
         gridSnapEnabled: enabled,
       }));
+    },
+
+    setColorProfile(profileId) {
+      ctx.setState((prev) => {
+        if (prev.colorProfileId === profileId) return prev;
+        const nextDefaults = applyProfileColorsToDefaults(
+          {
+            pointDefaults: prev.pointDefaults,
+            segmentDefaults: prev.segmentDefaults,
+            lineDefaults: prev.lineDefaults,
+            circleDefaults: prev.circleDefaults,
+            polygonDefaults: prev.polygonDefaults,
+            angleDefaults: prev.angleDefaults,
+          } satisfies SceneStyleDefaults,
+          profileId
+        );
+        return {
+          ...prev,
+          colorProfileId: profileId,
+          scene: recolorSceneForProfile(prev.scene, prev.colorProfileId, profileId),
+          pointDefaults: nextDefaults.pointDefaults,
+          segmentDefaults: nextDefaults.segmentDefaults,
+          lineDefaults: nextDefaults.lineDefaults,
+          circleDefaults: nextDefaults.circleDefaults,
+          polygonDefaults: nextDefaults.polygonDefaults,
+          angleDefaults: nextDefaults.angleDefaults,
+        };
+      });
     },
 
     setDependencyGlowEnabled(enabled) {
