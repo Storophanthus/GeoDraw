@@ -1545,6 +1545,25 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     });
   }
 
+  for (const label of scene.textLabels ?? []) {
+    if (!label.visible) continue;
+    const text = label.style.useTex ? label.text : wrapPlainTextForMathMode(label.text);
+    const fontPt = Math.max(6, Math.min(72, label.style.textSize));
+    const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
+    drawLabelsLayer.push({
+      kind: "LabelAt",
+      x: label.positionWorld.x,
+      y: label.positionWorld.y,
+      text,
+      options: [
+        "anchor=center",
+        `text=${rgbColorExpr(label.style.textColor)}`,
+        `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
+      ].join(", "),
+      useGlow: false,
+    });
+  }
+
   labels.sort((a, b) => a.name.localeCompare(b.name));
   for (const item of labels) {
     drawLabelsLayer.push({ kind: "LabelPoint", name: item.name, text: item.text, options: item.options, useGlow: item.useGlow });
@@ -3736,6 +3755,21 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
 function escapeTikzText(value: string): string {
   // Pass TeX label content through so commands like \alpha and ^{\circ} work.
   return value;
+}
+
+function wrapPlainTextForMathMode(value: string): string {
+  const escaped = value
+    .replace(/\\/g, "\\textbackslash ")
+    .replace(/\{/g, "\\{")
+    .replace(/\}/g, "\\}")
+    .replace(/\$/g, "\\$")
+    .replace(/#/g, "\\#")
+    .replace(/%/g, "\\%")
+    .replace(/&/g, "\\&")
+    .replace(/_/g, "\\_")
+    .replace(/\^/g, "\\^{}")
+    .replace(/~/g, "\\~{}");
+  return `\\mbox{${escaped}}`;
 }
 
 function clamp01(v: number): number {

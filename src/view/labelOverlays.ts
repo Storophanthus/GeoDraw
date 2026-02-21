@@ -48,6 +48,26 @@ export type ObjectLabelOverlay = {
   textColor: string;
 };
 
+export type TextLabelOverlay = {
+  id: string;
+  x: number;
+  y: number;
+  html: string;
+  textSize: number;
+  textColor: string;
+};
+
+const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.5;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function getAngleTextRenderSize(rawTextSize: number): number {
   return Math.max(8, rawTextSize * (25 / 16));
 }
@@ -238,6 +258,35 @@ export function createObjectLabelOverlays(
       16
     );
     if (overlay) overlays.push(overlay);
+  }
+  return overlays;
+}
+
+export function createTextLabelOverlays(
+  scene: SceneModel,
+  camera: Camera,
+  vp: Viewport
+): TextLabelOverlay[] {
+  const overlays: TextLabelOverlay[] = [];
+  const labels = scene.textLabels ?? [];
+  for (const label of labels) {
+    if (!label.visible) continue;
+    const screen = camMath.worldToScreen(label.positionWorld, camera, vp);
+    const html = label.style.useTex
+      ? katex.renderToString(label.text || "\\text{}", {
+          throwOnError: false,
+          displayMode: false,
+          strict: "ignore",
+        })
+      : `<span>${escapeHtml(label.text).replace(/\n/g, "<br/>")}</span>`;
+    overlays.push({
+      id: label.id,
+      x: screen.x,
+      y: screen.y,
+      html,
+      textSize: Math.max(8, label.style.textSize) * TEXT_LABEL_CANVAS_SIZE_SCALE,
+      textColor: label.style.textColor,
+    });
   }
   return overlays;
 }

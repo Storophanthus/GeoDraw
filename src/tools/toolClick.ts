@@ -8,6 +8,7 @@ import type { SnapCandidate } from "../view/snapEngine";
 export type ToolClickHits = {
   hitPointId: string | null;
   hitSegmentId: string | null;
+  hitTextLabelId?: string | null;
   hitObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null;
   shiftKey: boolean;
   hasCopyStyleSource: boolean;
@@ -18,6 +19,7 @@ export type ToolClickIO = {
   setPendingSelection: (next: PendingSelection) => void;
   clearPendingSelection: () => void;
   createFreePoint: (world: Vec2) => string;
+  createTextLabel: (world: Vec2) => string;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
   createPolygon: (pointIds: string[]) => string | null;
@@ -59,7 +61,7 @@ export type ToolClickIO = {
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
-  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null) => void;
+  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string } | null) => void;
   setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
@@ -158,9 +160,14 @@ export function handleToolClick(
   }
 
   if (activeTool === "label") {
-    if (!hits.hitObject) return;
-    io.setSelectedObject(hits.hitObject);
-    io.enableObjectLabel(hits.hitObject);
+    if (hits.hitTextLabelId) {
+      io.setSelectedObject({ type: "textLabel", id: hits.hitTextLabelId });
+      return;
+    }
+    const snapWorld = !hits.shiftKey ? hits.snap?.world ?? null : null;
+    const world = snapWorld ?? maybeSnapWorldToGrid(camMath.screenToWorld(screen, io.camera, io.vp));
+    const id = io.createTextLabel(world);
+    io.setSelectedObject({ type: "textLabel", id });
     return;
   }
 
@@ -745,14 +752,7 @@ export function isValidTarget(
   }
   if (activeTool === "export_clip" || activeTool === "export_clip_rect") return false;
   if (activeTool === "label") {
-    return (
-      hoveredHit.type === "point" ||
-      hoveredHit.type === "segment" ||
-      hoveredHit.type === "line2p" ||
-      hoveredHit.type === "circle" ||
-      hoveredHit.type === "polygon" ||
-      hoveredHit.type === "angle"
-    );
+    return false;
   }
   if (activeTool === "perp_line") {
     if (!pendingSelection || pendingSelection.tool !== "perp_line") {

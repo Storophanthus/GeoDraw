@@ -3,6 +3,7 @@ import {
     Copy,
     Hash,
     Layers,
+    Type as TypeIcon,
 } from "lucide-react";
 import type { SceneModel } from "../scene/points";
 import type { SelectedObject } from "../state/slices/storeTypes";
@@ -16,7 +17,7 @@ type ObjectBrowserProps = {
     setSelectedObject: (obj: SelectedObject) => void;
 };
 
-type TabId = "all" | "points" | "lines" | "circles" | "angles" | "numbers";
+type TabId = "all" | "points" | "lines" | "circles" | "angles" | "text" | "numbers";
 
 export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: ObjectBrowserProps) {
     const [activeTab, setActiveTab] = useState<TabId>("all");
@@ -128,7 +129,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
     );
 
     const tabs: Array<{ id: TabId; icon: React.ElementType; label: string; description: string; count: number }> = [
-        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.polygons.length + scene.angles.length + scene.numbers.length },
+        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.polygons.length + scene.angles.length + (scene.textLabels?.length ?? 0) + scene.numbers.length },
         {
             id: "points",
             icon: IconPoint as React.ElementType,
@@ -139,6 +140,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         { id: "lines", icon: IconLine as React.ElementType, label: "Lines", description: "Filter by Lines & Segments", count: scene.segments.length + scene.lines.length },
         { id: "circles", icon: IconCircleRadius as React.ElementType, label: "Shapes", description: "Filter by Circles/Polygons", count: scene.circles.length + scene.polygons.length },
         { id: "angles", icon: IconAngle as React.ElementType, label: "Angles", description: "Filter by Angles", count: scene.angles.length },
+        { id: "text", icon: TypeIcon, label: "Labels", description: "Filter by Text Labels", count: scene.textLabels?.length ?? 0 },
         { id: "numbers", icon: Hash, label: "Numbers", description: "Filter by Numbers & Values", count: scene.numbers.length },
     ];
 
@@ -148,6 +150,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         const showLines = activeTab === "all" || activeTab === "lines";
         const showCircles = activeTab === "all" || activeTab === "circles";
         const showAngles = activeTab === "all" || activeTab === "angles";
+        const showTextLabels = activeTab === "all" || activeTab === "text";
         const showNumbers = activeTab === "all" || activeTab === "numbers";
 
         return (
@@ -290,6 +293,18 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     )
                 ))}
 
+                {showTextLabels && (scene.textLabels ?? []).map((label) => (
+                    renderObjectRow(
+                        `textLabel:${label.id}`,
+                        selectedObject?.type === "textLabel" && selectedObject.id === label.id,
+                        () => setSelectedObject({ type: "textLabel", id: label.id }),
+                        label.visible,
+                        (next) => setObjectVisibility({ type: "textLabel", id: label.id }, next),
+                        `Label ${label.name}`,
+                        `Text(${JSON.stringify(label.text)})`
+                    )
+                ))}
+
                 {showNumbers && scene.numbers.map((num) => (
                     renderObjectRow(
                         `number:${num.id}`,
@@ -316,11 +331,13 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
             scene.circles.length === 0 &&
             scene.polygons.length === 0 &&
             scene.angles.length === 0 &&
+            (scene.textLabels?.length ?? 0) === 0 &&
             scene.numbers.length === 0) ||
         (activeTab === "points" && scene.points.length === 0) ||
         (activeTab === "lines" && scene.segments.length === 0 && scene.lines.length === 0) ||
         (activeTab === "circles" && scene.circles.length === 0 && scene.polygons.length === 0) ||
         (activeTab === "angles" && scene.angles.length === 0) ||
+        (activeTab === "text" && (scene.textLabels?.length ?? 0) === 0) ||
         (activeTab === "numbers" && scene.numbers.length === 0);
 
     return (

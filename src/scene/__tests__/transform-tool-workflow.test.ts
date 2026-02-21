@@ -50,6 +50,9 @@ function makeHarness(activeTool: ActiveTool): {
     createFreePoint() {
       throw new Error("Unexpected free point creation.");
     },
+    createTextLabel() {
+      return "txt_new";
+    },
     createSegment() {
       return null;
     },

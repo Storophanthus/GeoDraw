@@ -25,6 +25,7 @@ export type HistorySnapshot = {
   nextAngleId: number;
   nextNumberId: number;
   nextVectorId?: number;
+  nextTextLabelId?: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
@@ -71,6 +72,7 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     nextAngleId: prev.nextAngleId,
     nextNumberId: prev.nextNumberId,
     nextVectorId: prev.nextVectorId,
+    nextTextLabelId: prev.nextTextLabelId,
     pointDefaults: prev.pointDefaults,
     segmentDefaults: prev.segmentDefaults,
     lineDefaults: prev.lineDefaults,
@@ -102,6 +104,7 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.nextAngleId !== next.nextAngleId ||
     prev.nextNumberId !== next.nextNumberId ||
     prev.nextVectorId !== next.nextVectorId ||
+    prev.nextTextLabelId !== next.nextTextLabelId ||
     prev.pointDefaults !== next.pointDefaults ||
     prev.segmentDefaults !== next.segmentDefaults ||
     prev.lineDefaults !== next.lineDefaults ||

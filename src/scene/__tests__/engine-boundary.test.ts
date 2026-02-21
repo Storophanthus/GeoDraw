@@ -86,12 +86,15 @@ let created = 0;
 let circleCircleTangents = 0;
 type TestIO = Parameters<typeof constructFromClick>[0]["io"];
 function makeIo(overrides: Partial<TestIO> = {}): TestIO {
-  return {
+  const baseIo: TestIO = {
     setPendingSelection() {},
     clearPendingSelection() {},
     createFreePoint() {
       created += 1;
       return "p_new";
+    },
+    createTextLabel() {
+      return "txt_new";
     },
     createSegment() {
       return null;
@@ -201,7 +204,11 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     },
     camera,
     vp,
+  };
+  return {
+    ...baseIo,
     ...overrides,
+    createTextLabel: overrides.createTextLabel ?? baseIo.createTextLabel,
   };
 }
 

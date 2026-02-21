@@ -35,6 +35,9 @@ const io: ConstructClickIo = {
   createFreePoint() {
     return "p_new";
   },
+  createTextLabel() {
+    return "txt_new";
+  },
   createSegment() {
     return null;
   },

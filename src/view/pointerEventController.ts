@@ -7,7 +7,7 @@ type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -19,6 +19,7 @@ type PointerStateRef = { current: PointerState };
 type DragFrameRef = { current: number | null };
 
 type PointerHits = {
+  hitTextLabelId?: string | null;
   hitPointId: string | null;
   hitLabelId: string | null;
   hitAngleLabelId: string | null;
@@ -46,6 +47,7 @@ type MoveDecision = {
     | { type: "circle"; id: string }
     | { type: "polygon"; id: string }
     | { type: "angle"; id: string }
+    | { type: "textLabel"; id: string }
     | null;
 };
 
@@ -77,6 +79,7 @@ type CreatePointerHandlersDeps = {
       | { type: "circle"; id: string }
       | { type: "polygon"; id: string }
       | { type: "angle"; id: string }
+      | { type: "textLabel"; id: string }
       | null
   ) => void;
   resolveHits: (screen: Vec2, e: PointerEvent) => PointerHits;
@@ -141,6 +144,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
         decision.mode === "drag-label"
         || decision.mode === "drag-angle-label"
         || decision.mode === "drag-object-label"
+        || decision.mode === "drag-text-label"
       ) {
         mode = decision.mode;
         pointId = decision.pointId;

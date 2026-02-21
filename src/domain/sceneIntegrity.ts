@@ -26,6 +26,38 @@ function objectRefAlive(
   return angles.some((angle) => angle.id === obj.id && angle.kind === "sector");
 }
 
+function normalizeTextLabels(
+  labels: NonNullable<SceneModel["textLabels"]>
+): NonNullable<SceneModel["textLabels"]> {
+  return labels
+    .filter((label) => typeof label.id === "string" && label.id.length > 0)
+    .map((label) => {
+      const textColor =
+        typeof label.style?.textColor === "string" && label.style.textColor.trim().length > 0
+          ? label.style.textColor
+          : "#111111";
+      const textSize =
+        typeof label.style?.textSize === "number" && Number.isFinite(label.style.textSize)
+          ? Math.max(8, Math.min(96, label.style.textSize))
+          : 12;
+      const useTex = Boolean(label.style?.useTex);
+      const x = Number.isFinite(label.positionWorld?.x) ? label.positionWorld.x : 0;
+      const y = Number.isFinite(label.positionWorld?.y) ? label.positionWorld.y : 0;
+      return {
+        ...label,
+        name: typeof label.name === "string" ? label.name : label.id,
+        text: typeof label.text === "string" ? label.text : "",
+        visible: Boolean(label.visible),
+        positionWorld: { x, y },
+        style: {
+          textColor,
+          textSize,
+          useTex,
+        },
+      };
+    });
+}
+
 export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   let points = scene.points;
   let vectors = scene.vectors ?? [];
@@ -35,6 +67,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   let polygons = scene.polygons;
   let angles = scene.angles;
   let numbers = scene.numbers;
+  let textLabels = Array.isArray(scene.textLabels) ? scene.textLabels : [];
   let changed = false;
 
   const sameIds = (a: Array<{ id: string }>, b: Array<{ id: string }>) =>
@@ -129,7 +162,19 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
 
     const nextLineIdsAfter = new Set(nextLines.map((l) => l.id));
 
-    const sceneForPass: SceneModel = { points, vectors: nextVectors, lines, segments, circles, polygons, angles, numbers };
+    const nextTextLabels = normalizeTextLabels(textLabels);
+
+    const sceneForPass: SceneModel = {
+      points,
+      vectors: nextVectors,
+      lines,
+      segments,
+      circles,
+      polygons,
+      angles,
+      numbers,
+      textLabels: nextTextLabels,
+    };
     const pointsWithBranches = points.map((point) => {
       if (
         point.kind !== "intersectionPoint" ||
@@ -358,13 +403,15 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       !sameIds(nextCirclesLabeled, circles) ||
       !sameIds(nextPolygonsLabeled, polygons) ||
       !sameIds(nextAngles, angles) ||
+      !sameIds(nextTextLabels, textLabels) ||
       !sameIds(nextNumbers, numbers) ||
       nextPoints.some((point, idx) => point !== points[idx]) ||
       nextVectors.some((vector, idx) => vector !== vectors[idx]) ||
       nextSegmentsLabeled.some((segment, idx) => segment !== segments[idx]) ||
       nextLinesLabeled.some((line, idx) => line !== lines[idx]) ||
       nextCirclesLabeled.some((circle, idx) => circle !== circles[idx]) ||
-      nextPolygonsLabeled.some((polygon, idx) => polygon !== polygons[idx]);
+      nextPolygonsLabeled.some((polygon, idx) => polygon !== polygons[idx]) ||
+      nextTextLabels.some((label, idx) => label !== textLabels[idx]);
 
     points = nextPoints;
     vectors = nextVectors;
@@ -374,10 +421,11 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     polygons = nextPolygonsLabeled;
     angles = nextAngles;
     numbers = nextNumbers;
+    textLabels = nextTextLabels;
     changed = changed || anyChanged;
     if (!anyChanged) break;
   }
 
   if (!changed) return scene;
-  return { ...scene, points, vectors, segments, lines, circles, polygons, angles, numbers };
+  return { ...scene, points, vectors, segments, lines, circles, polygons, angles, numbers, textLabels };
 }

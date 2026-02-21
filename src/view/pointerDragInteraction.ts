@@ -5,7 +5,7 @@ type PointerStateLike = {
   active: boolean;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
 };
 
 export type DragBufferAccess = {
@@ -30,6 +30,7 @@ type DragUpdateOps = {
     obj: { type: "segment" | "line" | "circle" | "polygon"; id: string },
     world: Vec2
   ) => void;
+  moveTextLabelTo: (id: string, world: Vec2) => void;
   screenToWorld: (screen: Vec2) => Vec2;
 };
 
@@ -82,6 +83,14 @@ export function applyBufferedDragUpdate(
     return;
   }
 
+  if (st.mode === "drag-text-label" && st.pointId) {
+    const textLabelScreen = buffers.getAngleLabelScreen();
+    if (textLabelScreen) {
+      ops.moveTextLabelTo(st.pointId, ops.screenToWorld(textLabelScreen));
+    }
+    return;
+  }
+
   if (st.mode === "drag-point") {
     const pointScreen = buffers.getPointScreen();
     const pointId = buffers.getPointId();
@@ -128,6 +137,11 @@ export function bufferDragForMode(
   }
 
   if (st.mode === "drag-object-label" && st.pointId) {
+    buffers.setAngleLabelScreen(screen);
+    return true;
+  }
+
+  if (st.mode === "drag-text-label" && st.pointId) {
     buffers.setAngleLabelScreen(screen);
     return true;
   }

@@ -151,8 +151,8 @@ export function defaultObjectLabelPosWorld(ref: LabelableObjectRef, scene: Scene
 }
 
 export function resolveObjectLabelText(raw: string | undefined, fallback: string): string {
-  const text = typeof raw === "string" ? raw.trim() : "";
-  return text.length > 0 ? text : fallback;
+  if (typeof raw !== "string") return fallback;
+  return raw.trim();
 }
 
 export function isFiniteLabelPosWorld(pos: Vec2 | null | undefined): pos is Vec2 {

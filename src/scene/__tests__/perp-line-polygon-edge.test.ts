@@ -116,6 +116,9 @@ const io: ConstructClickIo = {
   createFreePoint() {
     throw new Error("Unexpected free point creation in perpendicular regression.");
   },
+  createTextLabel() {
+    return "txt_new";
+  },
   createSegment() {
     return null;
   },

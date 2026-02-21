@@ -20,7 +20,7 @@ import {
   shouldCancelOnCanvasDoubleClick,
   type PointerMode,
 } from "./pointerInteraction";
-import { hitTestAngleLabelHandle, hitTestObjectLabelFromDom, hitTestPointLabel, hitTestPointLabelFromDom } from "./labelHit";
+import { hitTestAngleLabelHandle, hitTestObjectLabelFromDom, hitTestPointLabel, hitTestPointLabelFromDom, hitTestTextLabelFromDom } from "./labelHit";
 import {
   hitTestAngleId as engineHitTestAngleId,
   hitTestCircleId as engineHitTestCircleId,
@@ -42,7 +42,7 @@ export type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -65,11 +65,12 @@ type InteractionActions = {
   movePointLabelBy: (id: string, deltaScreenPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
   moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon"; id: string }, world: Vec2) => void;
+  moveTextLabelTo: (id: string, world: Vec2) => void;
   setHoverScreen: (value: Vec2 | null) => void;
   setSnapDisabled: (value: boolean) => void;
   setCursorWorld: (value: Vec2 | null) => void;
   setHoveredHit: (hit: HoveredHit) => void;
-  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "number"; id: string } | null) => void;
+  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null) => void;
   clearPendingSelection: () => void;
   zoomAtScreenPoint: (vp: Viewport, screen: Vec2, zoomFactor: number) => void;
 };
@@ -81,7 +82,7 @@ type InteractionDeps = {
   dragBuffers: DragBufferRefs;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null;
   scene: SceneModel;
   camera: Camera;
   vp: Viewport;
@@ -177,6 +178,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           movePointLabelBy: actions.movePointLabelBy,
           moveAngleLabelTo: actions.moveAngleLabelTo,
           moveObjectLabelTo: actions.moveObjectLabelTo,
+          moveTextLabelTo: actions.moveTextLabelTo,
           screenToWorld: (screen) => camMath.screenToWorld(screen, camera, vp),
         }
       );
@@ -216,6 +218,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       setHoveredHit: actions.setHoveredHit,
       setSelectedObject: actions.setSelectedObject,
       resolveHits: (screen, e) => ({
+        hitTextLabelId: hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current),
         hitPointId: engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
         hitLabelId:
           hitTestPointLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current) ??

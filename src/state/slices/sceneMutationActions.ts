@@ -30,6 +30,7 @@ export function createSceneMutationActions({
   | "movePointLabelBy"
   | "moveAngleLabelTo"
   | "moveObjectLabelTo"
+  | "moveTextLabelTo"
   | "enableObjectLabel"
   | "updateSelectedPointStyle"
   | "updateSelectedPointFields"
@@ -43,6 +44,8 @@ export function createSceneMutationActions({
   | "updateSelectedCircleFields"
   | "updateSelectedPolygonFields"
   | "updateSelectedAngleFields"
+  | "updateSelectedTextLabelFields"
+  | "updateSelectedTextLabelStyle"
   | "setObjectVisibility"
   | "deleteSelectedObject"
   | "setCopyStyleSource"
@@ -145,7 +148,6 @@ export function createSceneMutationActions({
 
     moveObjectLabelTo(obj, world) {
       if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return;
-      if (obj.type === "point" || obj.type === "number") return;
       if (obj.type === "angle") {
         setState(
           (prev) => ({
@@ -222,8 +224,23 @@ export function createSceneMutationActions({
       );
     },
 
+    moveTextLabelTo(id, world) {
+      if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels: (prev.scene.textLabels ?? []).map((label) =>
+              label.id === id ? { ...label, positionWorld: { x: world.x, y: world.y } } : label
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: `moveTextLabelTo:${id}` }
+      );
+    },
+
     enableObjectLabel(obj) {
-      if (obj.type === "number") return;
       setState((prev) => {
         if (obj.type === "point") {
           return {
@@ -515,6 +532,52 @@ export function createSceneMutationActions({
       });
     },
 
+    updateSelectedTextLabelFields(next) {
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "textLabel") return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels: (prev.scene.textLabels ?? []).map((label) =>
+              label.id === prev.selectedObject!.id
+                ? {
+                    ...label,
+                    ...next,
+                    positionWorld: next.positionWorld
+                      ? { x: next.positionWorld.x, y: next.positionWorld.y }
+                      : label.positionWorld,
+                  }
+                : label
+            ),
+          },
+        };
+      });
+    },
+
+    updateSelectedTextLabelStyle(next) {
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "textLabel") return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels: (prev.scene.textLabels ?? []).map((label) =>
+              label.id === prev.selectedObject!.id
+                ? {
+                    ...label,
+                    style: {
+                      ...label.style,
+                      ...next,
+                    },
+                  }
+                : label
+            ),
+          },
+        };
+      });
+    },
+
     setObjectVisibility(obj, visible) {
       setState((prev) => {
         if (obj.type === "point") {
@@ -579,6 +642,17 @@ export function createSceneMutationActions({
               ...prev.scene,
               angles: prev.scene.angles.map((angle) =>
                 angle.id === obj.id ? { ...angle, visible } : angle
+              ),
+            },
+          };
+        }
+        if (obj.type === "textLabel") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              textLabels: (prev.scene.textLabels ?? []).map((label) =>
+                label.id === obj.id ? { ...label, visible } : label
               ),
             },
           };
@@ -732,6 +806,10 @@ export function createSceneMutationActions({
           };
         }
 
+        if (obj.type === "textLabel") {
+          return prev;
+        }
+
         const line = prev.scene.lines.find((item) => item.id === obj.id);
         if (!line) return prev;
         return {
@@ -751,6 +829,10 @@ export function createSceneMutationActions({
 
     applyCopyStyleTo(obj) {
       setState((prev) => {
+        if (obj.type === "textLabel") {
+          return prev;
+        }
+
         if (obj.type === "point") {
           const sourcePointStyle =
             prev.copyStyle.pointStyle ??

@@ -6,7 +6,7 @@ import {
 } from "../../scene/points";
 
 export function selectConstructionDescription(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "number"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null,
   scene: SceneModel
 ): string | null {
   const pointNameById = new Map(scene.points.map((p) => [p.id, p.name]));
@@ -33,7 +33,7 @@ export function selectConstructionDescription(
 }
 
 function describeSelectedConstruction(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "number"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null,
   scene: SceneModel,
   pointNameById: Map<string, string>,
   pointById: Map<string, ScenePoint>,
@@ -203,6 +203,11 @@ function describeSelectedConstruction(
     const num = numberById.get(selectedObject.id);
     if (!num) return null;
     return describeNumberConstruction(num, pointNameById, segmentById, circleById, angleById, numberById);
+  }
+  if (selectedObject.type === "textLabel") {
+    const label = (scene.textLabels ?? []).find((item) => item.id === selectedObject.id);
+    if (!label) return null;
+    return `Text label ${label.name}.`;
   }
 
   const point = scene.points.find((item) => item.id === selectedObject.id);

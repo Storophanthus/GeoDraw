@@ -10,6 +10,7 @@ import type {
   SceneModel,
   SceneNumberDefinition,
   ScenePoint,
+  SceneTextLabelStyle,
   ShowLabelMode,
 } from "../../scene/points";
 import type { Camera, Viewport } from "../../view/camera";
@@ -54,6 +55,7 @@ export type SelectedObject =
   | { type: "circle"; id: string }
   | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
+  | { type: "textLabel"; id: string }
   | { type: "number"; id: string }
   | null;
 
@@ -226,6 +228,7 @@ export type GeoState = {
   nextAngleId: number;
   nextNumberId: number;
   nextVectorId: number;
+  nextTextLabelId: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
@@ -339,12 +342,14 @@ export type GeoActions = {
   createCircleCenterPoint: (circleId: string) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createNumber: (definition: SceneNumberDefinition, preferredName?: string) => string | null;
+  createTextLabel: (world: Vec2) => string;
 
   movePointTo: (id: string, world: Vec2) => void;
   movePointLabelBy: (id: string, deltaPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
-  moveObjectLabelTo: (obj: Exclude<SelectedObject, null>, world: Vec2) => void;
-  enableObjectLabel: (obj: Exclude<SelectedObject, null>) => void;
+  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon" | "angle"; id: string }, world: Vec2) => void;
+  moveTextLabelTo: (id: string, world: Vec2) => void;
+  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
 
   setPointDefaults: (next: Partial<PointStyle>) => void;
   setSegmentDefaults: (next: Partial<LineStyle>) => void;
@@ -389,6 +394,10 @@ export type GeoActions = {
     next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
   ) => void;
   updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;
+  updateSelectedTextLabelFields: (
+    next: Partial<Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld">>
+  ) => void;
+  updateSelectedTextLabelStyle: (next: Partial<SceneTextLabelStyle>) => void;
   setObjectVisibility: (
     obj: Exclude<SelectedObject, null>,
     visible: boolean

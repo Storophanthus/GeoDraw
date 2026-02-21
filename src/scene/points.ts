@@ -840,6 +840,21 @@ export type SceneNumber = {
   definition: SceneNumberDefinition;
 };
 
+export type SceneTextLabelStyle = {
+  textColor: string;
+  textSize: number;
+  useTex: boolean;
+};
+
+export type SceneTextLabel = {
+  id: string;
+  name: string;
+  text: string;
+  visible: boolean;
+  positionWorld: Vec2;
+  style: SceneTextLabelStyle;
+};
+
 export type SceneModel = {
   points: ScenePoint[];
   vectors?: SceneVector[];
@@ -849,6 +864,7 @@ export type SceneModel = {
   polygons: ScenePolygon[];
   angles: SceneAngle[];
   numbers: SceneNumber[];
+  textLabels?: SceneTextLabel[];
 };
 
 const sceneEvalContexts = new WeakMap<SceneModel, SceneEvalContext>();

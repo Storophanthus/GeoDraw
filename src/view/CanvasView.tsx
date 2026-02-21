@@ -15,6 +15,7 @@ import {
   createAngleLabelOverlays,
   createObjectLabelOverlays,
   createPointLabelOverlays,
+  createTextLabelOverlays,
 } from "./labelOverlays";
 import { resolveAngles } from "./angleResolution";
 import { CanvasLabelsLayer } from "./CanvasLabelsLayer";
@@ -107,6 +108,7 @@ export function CanvasView() {
   const panByScreenDelta = useGeoStore((store) => store.panByScreenDelta);
   const zoomAtScreenPoint = useGeoStore((store) => store.zoomAtScreenPoint);
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
+  const createTextLabel = useGeoStore((store) => store.createTextLabel);
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
   const createPolygon = useGeoStore((store) => store.createPolygon);
@@ -138,6 +140,7 @@ export function CanvasView() {
   const movePointLabelBy = useGeoStore((store) => store.movePointLabelBy);
   const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
   const moveObjectLabelTo = useGeoStore((store) => store.moveObjectLabelTo);
+  const moveTextLabelTo = useGeoStore((store) => store.moveTextLabelTo);
   const enableObjectLabel = useGeoStore((store) => store.enableObjectLabel);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
@@ -194,6 +197,7 @@ export function CanvasView() {
       setPendingSelection,
       clearPendingSelection,
       createFreePoint,
+      createTextLabel,
       createSegment,
       createLine,
       createPolygon,
@@ -291,6 +295,7 @@ export function CanvasView() {
       setPendingSelection,
       clearPendingSelection,
       createFreePoint,
+      createTextLabel,
       createSegment,
       createLine,
       createPolygon,
@@ -363,6 +368,10 @@ export function CanvasView() {
     () => createObjectLabelOverlays(scene, camera, vp),
     [scene, camera, vp]
   );
+  const textLabelOverlays = useMemo(
+    () => createTextLabelOverlays(scene, camera, vp),
+    [scene, camera, vp]
+  );
 
   const hoverSnap: SnapCandidate | null = useMemo(() => {
     if (!hoverScreen) return null;
@@ -404,9 +413,9 @@ export function CanvasView() {
     () => () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const selectedDrawableObject = selectedObject?.type === "number" ? null : selectedObject;
-      const recentDrawableObject = recentCreatedObject?.type === "number" ? null : recentCreatedObject;
-      const copySourceDrawable = copyStyle.source?.type === "number" ? null : copyStyle.source;
+      const selectedDrawableObject = selectedObject?.type === "number" || selectedObject?.type === "textLabel" ? null : selectedObject;
+      const recentDrawableObject = recentCreatedObject?.type === "number" || recentCreatedObject?.type === "textLabel" ? null : recentCreatedObject;
+      const copySourceDrawable = copyStyle.source?.type === "number" || copyStyle.source?.type === "textLabel" ? null : copyStyle.source;
       renderCanvasFrame({
         canvas,
         scene,
@@ -511,6 +520,7 @@ export function CanvasView() {
       movePointLabelBy,
       moveAngleLabelTo,
       moveObjectLabelTo,
+      moveTextLabelTo,
       setHoverScreen,
       setSnapDisabled,
       setCursorWorld,
@@ -529,6 +539,7 @@ export function CanvasView() {
         labelOverlays={labelOverlays}
         angleLabelOverlays={angleLabelOverlays}
         objectLabelOverlays={objectLabelOverlays}
+        textLabelOverlays={textLabelOverlays}
       />
     </div>
   );

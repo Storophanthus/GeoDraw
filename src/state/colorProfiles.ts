@@ -651,6 +651,13 @@ export function recolorSceneForProfile(scene: SceneModel, fromProfileId: ColorPr
         arcArrowMarks: angle.style.arcArrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
       },
     })),
+    textLabels: (scene.textLabels ?? []).map((label) => ({
+      ...label,
+      style: {
+        ...label.style,
+        textColor: remapColor(label.style.textColor, colorMap),
+      },
+    })),
     numbers: [...scene.numbers],
     vectors: scene.vectors ? [...scene.vectors] : undefined,
   };

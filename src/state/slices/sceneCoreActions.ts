@@ -27,11 +27,23 @@ function nextUnusedPointName(state: GeoState): string {
   return name;
 }
 
+function nextUnusedTextLabelName(state: GeoState): string {
+  const used = new Set((state.scene.textLabels ?? []).map((label) => label.name));
+  let idx = 1;
+  let name = `T${idx}`;
+  while (used.has(name)) {
+    idx += 1;
+    name = `T${idx}`;
+  }
+  return name;
+}
+
 export function createSceneCoreActions(
   ctx: SceneCoreContext
 ): Pick<
   GeoActions,
   | "createFreePoint"
+  | "createTextLabel"
   | "createMidpointFromPoints"
   | "createMidpointFromSegment"
   | "createSegment"
@@ -75,6 +87,41 @@ export function createSceneCoreActions(
           selectedObject: { type: "point", id },
           recentCreatedObject: { type: "point", id },
           nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createTextLabel(world) {
+      let createdId = "";
+      ctx.setState((prev) => {
+        if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return prev;
+        const name = nextUnusedTextLabelName(prev);
+        const id = `txt_${prev.nextTextLabelId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels: [
+              ...(prev.scene.textLabels ?? []),
+              {
+                id,
+                name,
+                text: name,
+                visible: true,
+                positionWorld: { x: world.x, y: world.y },
+                style: {
+                  textColor: prev.pointDefaults.labelColor,
+                  textSize: 12,
+                  useTex: true,
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "textLabel", id },
+          recentCreatedObject: { type: "textLabel", id },
+          nextTextLabelId: prev.nextTextLabelId + 1,
         };
       });
       return createdId;

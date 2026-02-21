@@ -57,6 +57,8 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
   const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
   const updateSelectedPolygonFields = useGeoStore((store) => store.updateSelectedPolygonFields);
+  const updateSelectedTextLabelFields = useGeoStore((store) => store.updateSelectedTextLabelFields);
+  const updateSelectedTextLabelStyle = useGeoStore((store) => store.updateSelectedTextLabelStyle);
   const createNumber = useGeoStore((store) => store.createNumber);
 
   const selectedPoint = useMemo(
@@ -86,6 +88,10 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const selectedNumber = useMemo(
     () => (selectedObject?.type === "number" ? scene.numbers.find((item) => item.id === selectedObject.id) ?? null : null),
     [scene.numbers, selectedObject]
+  );
+  const selectedTextLabel = useMemo(
+    () => (selectedObject?.type === "textLabel" ? (scene.textLabels ?? []).find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.textLabels, selectedObject]
   );
   const selectedPointWorld = useMemo(() => {
     if (!selectedPoint) return null;
@@ -245,7 +251,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     </button>
   </div>
 )}
-{!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedPolygon && !selectedAngle && !selectedNumber && (
+{!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedPolygon && !selectedAngle && !selectedTextLabel && !selectedNumber && (
   <div className="emptyState">Select an object to edit properties</div>
 )}
 {selectedPoint && (
@@ -264,6 +270,87 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     updateSelectedPointStyle={updateSelectedPointStyle}
     deleteSelectedObject={deleteSelectedObject}
   />
+)}
+{selectedTextLabel && (
+  <div className="toolInfo">
+    <div className="subSectionTitle">Text Label</div>
+    <div className="statusText">
+      Position: ({selectedTextLabel.positionWorld.x.toFixed(3)}, {selectedTextLabel.positionWorld.y.toFixed(3)})
+    </div>
+
+    <div className="fieldBlock">
+      <label className="fieldLabel">Name</label>
+      <input
+        className="renameInput"
+        value={selectedTextLabel.name}
+        onChange={(e) => updateSelectedTextLabelFields({ name: e.target.value })}
+      />
+    </div>
+
+    <div className="fieldBlock">
+      <label className="fieldLabel">Text</label>
+      <textarea
+        className="renameInput"
+        value={selectedTextLabel.text}
+        rows={3}
+        onChange={(e) => updateSelectedTextLabelFields({ text: e.target.value })}
+      />
+    </div>
+
+    <label className="checkboxRow">
+      <input
+        type="checkbox"
+        checked={selectedTextLabel.style.useTex}
+        onChange={(e) => updateSelectedTextLabelStyle({ useTex: e.target.checked })}
+      />
+      Render as TeX
+    </label>
+
+    <label className="checkboxRow">
+      <input
+        type="checkbox"
+        checked={selectedTextLabel.visible}
+        onChange={(e) => updateSelectedTextLabelFields({ visible: e.target.checked })}
+      />
+      Visible
+    </label>
+
+    <div className="controlRow">
+      <label className="controlLabel">Text Color</label>
+      <input
+        className="colorInput"
+        type="color"
+        value={selectedTextLabel.style.textColor}
+        onChange={(e) => updateSelectedTextLabelStyle({ textColor: e.target.value })}
+      />
+    </div>
+
+    <div className="controlRow controlRowWithNumeric">
+      <label className="controlLabel">Text Size</label>
+      <input
+        className="sizeSlider"
+        type="range"
+        min={8}
+        max={96}
+        step={1}
+        value={selectedTextLabel.style.textSize}
+        onChange={(e) => updateSelectedTextLabelStyle({ textSize: Number(e.target.value) })}
+      />
+      <input
+        className="scaleInputCompact"
+        type="number"
+        min={8}
+        max={96}
+        step={1}
+        value={selectedTextLabel.style.textSize}
+        onChange={(e) => updateSelectedTextLabelStyle({ textSize: Number(e.target.value) })}
+      />
+    </div>
+
+    <button className="deleteButton" onClick={deleteSelectedObject}>
+      Delete
+    </button>
+  </div>
 )}
 <ObjectStyleSections
   selectedPointPresent={Boolean(selectedPoint)}

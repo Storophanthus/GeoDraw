@@ -10,6 +10,7 @@ export type PointerMode =
   | "drag-label"
   | "drag-angle-label"
   | "drag-object-label"
+  | "drag-text-label"
   | "tool-click";
 
 type MovePointerDownDecision = {
@@ -23,10 +24,12 @@ type MovePointerDownDecision = {
     | { type: "circle"; id: string }
     | { type: "polygon"; id: string }
     | { type: "angle"; id: string }
+    | { type: "textLabel"; id: string }
     | null;
 };
 
 type MovePointerDownInput = {
+  hitTextLabelId?: string | null;
   hitLabelId: string | null;
   hitAngleLabelId: string | null;
   hitPointId: string | null;
@@ -46,6 +49,7 @@ type MovePointerDownInput = {
 
 export function decideMovePointerDown(input: MovePointerDownInput): MovePointerDownDecision {
   const {
+    hitTextLabelId,
     hitLabelId,
     hitAngleLabelId,
     hitPointId,
@@ -57,6 +61,15 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     hitObjectLabel = null,
     scenePoints,
   } = input;
+
+  if (hitTextLabelId) {
+    return {
+      mode: "drag-text-label",
+      pointId: hitTextLabelId,
+      dragObjectType: null,
+      selectedObject: { type: "textLabel", id: hitTextLabelId },
+    };
+  }
 
   if (hitLabelId) {
     return {
@@ -131,6 +144,7 @@ export function computeCanvasCursor(
       || mode === "drag-label"
       || mode === "drag-angle-label"
       || mode === "drag-object-label"
+      || mode === "drag-text-label"
     ) {
       return "grabbing";
     }
@@ -141,10 +155,10 @@ export function computeCanvasCursor(
   }
 
   if (activeTool === "label") {
-    if (mode === "drag-label" || mode === "drag-angle-label" || mode === "drag-object-label") {
+    if (mode === "drag-label" || mode === "drag-angle-label" || mode === "drag-object-label" || mode === "drag-text-label") {
       return "grabbing";
     }
-    return hoveredHit ? "pointer" : "default";
+    return "crosshair";
   }
 
   if (activeTool === "copyStyle") {

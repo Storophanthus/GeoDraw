@@ -70,6 +70,9 @@ function runScenario(activeTool: ActiveTool): void {
       freePointCreates += 1;
       return "p_new";
     },
+    createTextLabel() {
+      return "txt_new";
+    },
     createSegment() {
       return null;
     },

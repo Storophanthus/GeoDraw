@@ -70,6 +70,13 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
       };
     }),
   };
+  let inferredNextTextLabelId = 1;
+  for (const label of sceneWithBranches.textLabels ?? []) {
+    const match = /^txt_(\d+)$/.exec(label.id);
+    if (!match) continue;
+    const n = Number(match[1]);
+    if (Number.isFinite(n) && n >= inferredNextTextLabelId) inferredNextTextLabelId = n + 1;
+  }
   return {
     ...prev,
     colorProfileId: snapshot.colorProfileId ?? DEFAULT_COLOR_PROFILE_ID,
@@ -95,6 +102,7 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     nextAngleId: snapshot.nextAngleId,
     nextNumberId: snapshot.nextNumberId,
     nextVectorId: snapshot.nextVectorId ?? prev.nextVectorId,
+    nextTextLabelId: snapshot.nextTextLabelId ?? Math.max(prev.nextTextLabelId, inferredNextTextLabelId),
     pointDefaults: snapshot.pointDefaults ?? prev.pointDefaults,
     segmentDefaults: snapshot.segmentDefaults ?? prev.segmentDefaults,
     lineDefaults: snapshot.lineDefaults ?? prev.lineDefaults,

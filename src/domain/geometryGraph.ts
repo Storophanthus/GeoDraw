@@ -1,7 +1,7 @@
 import type { GeometryObjectRef, SceneModel } from "../scene/points";
 import type { SelectedObject } from "../state/slices/storeTypes";
 
-type NodeType = "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "number";
+type NodeType = "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number";
 type NodeKey = `${NodeType}:${string}`;
 
 type Graph = {
@@ -26,6 +26,7 @@ function selectedToKey(selected: Exclude<SelectedObject, null>): NodeKey {
   if (selected.type === "polygon") return key("polygon", selected.id);
   if (selected.type === "point") return key("point", selected.id);
   if (selected.type === "angle") return key("angle", selected.id);
+  if (selected.type === "textLabel") return key("textLabel", selected.id);
   return key("number", selected.id);
 }
 
@@ -197,6 +198,10 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
     }
   }
 
+  for (const label of scene.textLabels ?? []) {
+    ensureNode(graph, key("textLabel", label.id));
+  }
+
   return graph;
 }
 
@@ -249,9 +254,10 @@ export function applyDeletion(scene: SceneModel, deleted: Set<NodeKey>): SceneMo
   const circles = scene.circles.filter((c) => !drop("circle", c.id));
   const polygons = scene.polygons.filter((p) => !drop("polygon", p.id));
   const angles = scene.angles.filter((a) => !drop("angle", a.id));
+  const textLabels = (scene.textLabels ?? []).filter((label) => !drop("textLabel", label.id));
   const numbers = scene.numbers.filter((n) => !drop("number", n.id));
 
-  return { ...scene, points, segments, lines, circles, polygons, angles, numbers };
+  return { ...scene, points, segments, lines, circles, polygons, angles, textLabels, numbers };
 }
 
 export function isSelectedObjectAlive(scene: SceneModel, selected: SelectedObject): boolean {
@@ -262,5 +268,6 @@ export function isSelectedObjectAlive(scene: SceneModel, selected: SelectedObjec
   if (selected.type === "circle") return scene.circles.some((c) => c.id === selected.id);
   if (selected.type === "polygon") return scene.polygons.some((p) => p.id === selected.id);
   if (selected.type === "angle") return scene.angles.some((a) => a.id === selected.id);
+  if (selected.type === "textLabel") return (scene.textLabels ?? []).some((label) => label.id === selected.id);
   return scene.numbers.some((n) => n.id === selected.id);
 }
