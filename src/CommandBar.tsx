@@ -84,9 +84,9 @@ export function CommandBar() {
   const [collapsed, setCollapsed] = useState(false);
 
   const statusColor = useMemo(() => {
-    if (status.kind === "ok") return "#166534";
-    if (status.kind === "error") return "#b91c1c";
-    return "#475569";
+    if (status.kind === "ok") return "var(--gd-ui-success-text, #166534)";
+    if (status.kind === "error") return "var(--gd-ui-danger-text, #b91c1c)";
+    return "var(--gd-ui-text-muted, #475569)";
   }, [status.kind]);
 
   const pushHistory = (entry: string) => {
@@ -437,15 +437,15 @@ export function CommandBar() {
             type="button"
             onClick={() => setCollapsed(false)}
             style={{
-              border: "1px solid #cbd5e1",
+              border: "1px solid var(--gd-ui-border, #cbd5e1)",
               borderRadius: 999,
-              background: "rgba(255,255,255,0.96)",
-              color: "#0f172a",
+              background: "var(--gd-ui-glass-bg-strong, rgba(255,255,255,0.96))",
+              color: "var(--gd-ui-text-strong, #0f172a)",
               padding: "6px 12px",
               cursor: "pointer",
               fontSize: 12,
               fontWeight: 600,
-              boxShadow: "0 2px 8px rgba(15,23,42,0.08)",
+              boxShadow: "0 2px 8px var(--gd-ui-shadow, rgba(15,23,42,0.08))",
             }}
             title="Show command bar"
           >
@@ -455,10 +455,10 @@ export function CommandBar() {
       ) : (
         <div
           style={{
-            background: "rgba(255,255,255,0.95)",
-            border: "1px solid #cbd5e1",
+            background: "var(--gd-ui-glass-bg, rgba(255,255,255,0.95))",
+            border: "1px solid var(--gd-ui-border, #cbd5e1)",
             borderRadius: 10,
-            boxShadow: "0 2px 10px rgba(15,23,42,0.08)",
+            boxShadow: "0 2px 10px var(--gd-ui-shadow, rgba(15,23,42,0.08))",
             padding: "8px 10px",
             display: "grid",
             gridTemplateColumns: "1fr auto auto",
@@ -474,21 +474,21 @@ export function CommandBar() {
             style={{
               width: "100%",
               minWidth: 0,
-              border: "1px solid #cbd5e1",
+              border: "1px solid var(--gd-ui-border, #cbd5e1)",
               borderRadius: 8,
               padding: "8px 10px",
               fontSize: 13,
-              background: "#fff",
+              background: "var(--gd-ui-surface, #fff)",
             }}
           />
           <button
             type="button"
             onClick={runCommand}
             style={{
-              border: "1px solid #cbd5e1",
+              border: "1px solid var(--gd-ui-border, #cbd5e1)",
               borderRadius: 8,
-              background: "#f8fafc",
-              color: "#0f172a",
+              background: "var(--gd-ui-surface-soft, #f8fafc)",
+              color: "var(--gd-ui-text-strong, #0f172a)",
               padding: "8px 12px",
               cursor: "pointer",
               fontWeight: 600,
@@ -500,10 +500,10 @@ export function CommandBar() {
             type="button"
             onClick={() => setCollapsed(true)}
             style={{
-              border: "1px solid #cbd5e1",
+              border: "1px solid var(--gd-ui-border, #cbd5e1)",
               borderRadius: 8,
-              background: "#fff",
-              color: "#334155",
+              background: "var(--gd-ui-surface, #fff)",
+              color: "var(--gd-ui-text, #334155)",
               padding: "8px 10px",
               cursor: "pointer",
               fontWeight: 700,

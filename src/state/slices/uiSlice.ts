@@ -1,10 +1,12 @@
 import type { Camera } from "../../view/camera";
 import type { ActiveTool, AngleFixedDirection, SelectedObject, TransformToolMode } from "./storeTypes";
-import { DEFAULT_COLOR_PROFILE_ID } from "../colorProfiles";
+import { DEFAULT_COLOR_PROFILE_ID, DEFAULT_UI_COLOR_PROFILE_ID } from "../colorProfiles";
 
 export type UiSliceState = {
   camera: Camera;
   colorProfileId: import("../colorProfiles").ColorProfileId;
+  uiColorProfileId: import("../colorProfiles").UiColorProfileId;
+  uiCssOverrides: Partial<import("../colorProfiles").UiCssVariables>;
   gridEnabled: boolean;
   axesEnabled: boolean;
   gridSnapEnabled: boolean;
@@ -44,6 +46,8 @@ export function createUiSliceState(): UiSliceState {
   return {
     camera: { pos: { x: 0, y: 0 }, zoom: initialZoom, logZoom: Math.log(initialZoom) },
     colorProfileId: DEFAULT_COLOR_PROFILE_ID,
+    uiColorProfileId: DEFAULT_UI_COLOR_PROFILE_ID,
+    uiCssOverrides: {},
     gridEnabled: true,
     axesEnabled: true,
     gridSnapEnabled: true,

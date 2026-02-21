@@ -173,7 +173,7 @@ function ArrowListControl({
             style={{
               height: "32px",
               borderRadius: "6px",
-              borderColor: "#cbd5e1",
+              borderColor: "var(--gd-ui-border, #cbd5e1)",
               padding: "0 8px",
               flex: 1,
               fontSize: "13px"
@@ -186,7 +186,7 @@ function ArrowListControl({
             ))}
           </select>
 
-          <div style={{ display: "flex", gap: "1px", background: "#cbd5e1", padding: "1px", borderRadius: "6px", overflow: "hidden" }}>
+          <div style={{ display: "flex", gap: "1px", background: "var(--gd-ui-border, #cbd5e1)", padding: "1px", borderRadius: "6px", overflow: "hidden" }}>
             <button
               className="iconButton"
               onClick={addArrow}
@@ -200,11 +200,11 @@ function ArrowListControl({
                 justifyContent: "center",
                 border: "none",
                 borderRadius: "4px 0 0 4px",
-                background: "#fff",
+                background: "var(--gd-ui-surface, #fff)",
                 cursor: "pointer"
               }}
             >
-              <Plus size={15} color="#334155" />
+              <Plus size={15} color="var(--gd-ui-text, #334155)" />
             </button>
             <button
               className="iconButton"
@@ -219,12 +219,12 @@ function ArrowListControl({
                 alignItems: "center",
                 justifyContent: "center",
                 border: "none",
-                background: "#fff",
+                background: "var(--gd-ui-surface, #fff)",
                 cursor: safeArrows.length === 0 ? "not-allowed" : "pointer",
                 opacity: safeArrows.length === 0 ? 0.6 : 1
               }}
             >
-              <Copy size={14} color="#334155" />
+              <Copy size={14} color="var(--gd-ui-text, #334155)" />
             </button>
             <button
               className="iconButton"
@@ -240,12 +240,12 @@ function ArrowListControl({
                 justifyContent: "center",
                 border: "none",
                 borderRadius: "0 4px 4px 0",
-                background: "#fff",
+                background: "var(--gd-ui-surface, #fff)",
                 cursor: safeArrows.length === 0 ? "not-allowed" : "pointer",
                 opacity: safeArrows.length === 0 ? 0.6 : 1
               }}
             >
-              <Trash2 size={14} color={safeArrows.length === 0 ? "#94a3b8" : "#b91c1c"} />
+              <Trash2 size={14} color={safeArrows.length === 0 ? "var(--gd-ui-border-strong, #94a3b8)" : "var(--gd-ui-danger-text, #b91c1c)"} />
             </button>
           </div>
         </div>
@@ -255,8 +255,8 @@ function ArrowListControl({
         safeArrows.length > 0 && (
           <div className="arrowDetail" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {/* Detail Header */}
-            <div style={{ paddingBottom: "8px", borderBottom: "1px solid #e2e8f0", marginBottom: "4px" }}>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <div style={{ paddingBottom: "8px", borderBottom: "1px solid var(--gd-ui-border-soft, #e2e8f0)", marginBottom: "4px" }}>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--gd-ui-text-subtle, #64748b)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Editing Arrow {actualIndex + 1}
               </span>
             </div>
@@ -315,8 +315,8 @@ function ArrowListControl({
             {/* Group 2: Sub-panel for Positioning */}
             {selectedArrow.distribution === "multi" ? (
               <div className="nestedGroup" style={{
-                background: "#f8fafca6", /* subtle tint */
-                border: "1px solid #e2e8f0",
+                background: "var(--gd-ui-surface-soft, #f8fafc)", /* subtle tint */
+                border: "1px solid var(--gd-ui-border-soft, #e2e8f0)",
                 borderRadius: "8px",
                 padding: "10px 12px",
                 display: "flex",
@@ -414,8 +414,8 @@ function ArrowListControl({
 
             {/* Group 3: Appearance */}
             <div className="controlGroup nestedGroup" style={{
-              background: "#f8fafca6",
-              border: "1px solid #e2e8f0",
+              background: "var(--gd-ui-surface-soft, #f8fafc)",
+              border: "1px solid var(--gd-ui-border-soft, #e2e8f0)",
               borderRadius: "8px",
               padding: "10px 12px",
               display: "flex",

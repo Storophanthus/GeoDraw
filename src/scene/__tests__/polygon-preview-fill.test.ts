@@ -104,6 +104,15 @@ const fixedToolState = {
   transformTool: { mode: "translate" as const, angleExpr: "90", direction: "CCW" as const, factorExpr: "2" },
   anglePreviewArcRadius: 40,
   tolerances: { linePx: 10, segmentPx: 10 },
+  previewTheme: {
+    stroke: "#0ea5e9",
+    strokeStrong: "#0284c7",
+    fillSoft: "rgba(14,165,233,0.08)",
+    fill: "rgba(14,165,233,0.18)",
+    fillStrong: "rgba(14,165,233,0.95)",
+    snapStroke: "#f97316",
+    lineWidthPx: 1.3,
+  },
 };
 
 const twoPointPending: PendingSelection = {
@@ -131,7 +140,8 @@ const twoPointPending: PendingSelection = {
     fixedToolState.circleFixedTool,
     fixedToolState.transformTool,
     fixedToolState.anglePreviewArcRadius,
-    fixedToolState.tolerances
+    fixedToolState.tolerances,
+    fixedToolState.previewTheme
   );
   const fillIndex = calls.indexOf("fill");
   const strokeIndex = calls.indexOf("stroke");
@@ -162,7 +172,8 @@ const onePointPending: PendingSelection = {
     fixedToolState.circleFixedTool,
     fixedToolState.transformTool,
     fixedToolState.anglePreviewArcRadius,
-    fixedToolState.tolerances
+    fixedToolState.tolerances,
+    fixedToolState.previewTheme
   );
   const fillCount = calls.filter((call) => call === "fill").length;
   assert(fillCount === 0, "Polygon preview should not fill before a third preview vertex exists.");

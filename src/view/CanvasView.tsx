@@ -7,7 +7,7 @@ import {
   type ScenePoint,
 } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
-import { getCanvasColorTheme } from "../state/colorProfiles";
+import { getCanvasColorTheme, getUiCssVariables } from "../state/colorProfiles";
 import type { Viewport } from "./camera";
 import type { ConstructClickIo } from "./constructClickAdapter";
 import { findBestSnap, type SnapCandidate } from "./snapEngine";
@@ -22,6 +22,7 @@ import { useCanvasInteractionController, type PointerState } from "./useCanvasIn
 import { isValidTarget } from "../tools/toolClick";
 import { applyDilationToObject, applyReflectionToObject, applyTranslationToObject } from "../tools/objectTransforms";
 import { snapWorldToRectGrid } from "../render/rectGrid";
+import type { PendingPreviewTheme } from "./previews/pendingPreview";
 
 const POINT_HIT_TOLERANCE_PX = 12;
 const SEGMENT_HIT_TOLERANCE_PX = 10;
@@ -45,6 +46,12 @@ const ANGLE_STROKE_RENDER_SCALE = 3.25 / 1.8;
 
 function getAngleStrokeRenderWidth(rawStrokeWidth: number): number {
   return rawStrokeWidth * ANGLE_STROKE_RENDER_SCALE;
+}
+
+function parsePositiveNumber(raw: string, fallback: number): number {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return value;
 }
 
 export function CanvasView() {
@@ -72,6 +79,8 @@ export function CanvasView() {
   const activeTool = useGeoStore((store) => store.activeTool);
   const scene = useGeoStore((store) => store.scene);
   const colorProfileId = useGeoStore((store) => store.colorProfileId);
+  const uiColorProfileId = useGeoStore((store) => store.uiColorProfileId);
+  const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
   const selectedObject = useGeoStore((store) => store.selectedObject);
   const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
   const hoveredHit = useGeoStore((store) => store.hoveredHit);
@@ -138,6 +147,22 @@ export function CanvasView() {
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
   const [snapDisabled, setSnapDisabled] = useState(false);
   const canvasTheme = useMemo(() => getCanvasColorTheme(colorProfileId), [colorProfileId]);
+  const uiCssVariables = useMemo(
+    () => getUiCssVariables(uiColorProfileId, uiCssOverrides),
+    [uiColorProfileId, uiCssOverrides]
+  );
+  const previewTheme = useMemo<PendingPreviewTheme>(
+    () => ({
+      stroke: uiCssVariables["--gd-ui-preview-stroke"],
+      strokeStrong: uiCssVariables["--gd-ui-preview-stroke-strong"],
+      fillSoft: uiCssVariables["--gd-ui-preview-fill-soft"],
+      fill: uiCssVariables["--gd-ui-preview-fill"],
+      fillStrong: uiCssVariables["--gd-ui-preview-fill-strong"],
+      snapStroke: uiCssVariables["--gd-ui-preview-snap-stroke"],
+      lineWidthPx: parsePositiveNumber(uiCssVariables["--gd-ui-preview-line-width"], 1.3),
+    }),
+    [uiCssVariables]
+  );
   const gridSettings = useMemo(
     () => ({
       ...GRID_SETTINGS_BASE,
@@ -394,6 +419,7 @@ export function CanvasView() {
           linePx: LINE_HIT_TOLERANCE_PX,
           segmentPx: SEGMENT_HIT_TOLERANCE_PX,
         },
+        previewTheme,
         selectedDrawableObject,
         recentDrawableObject,
         copySourceDrawable,
@@ -418,6 +444,7 @@ export function CanvasView() {
       recentCreatedObject,
       resolvedPoints,
       resolvedAngles,
+      previewTheme,
       scene,
       selectedObject,
       dependencyGlowEnabled,

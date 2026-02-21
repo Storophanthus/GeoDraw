@@ -38,6 +38,15 @@ export type TransformToolState = {
   direction: "CCW" | "CW";
   factorExpr: string;
 };
+export type PendingPreviewTheme = {
+  stroke: string;
+  strokeStrong: string;
+  fillSoft: string;
+  fill: string;
+  fillStrong: string;
+  snapStroke: string;
+  lineWidthPx: number;
+};
 
 function circumcircleFromThreePoints(a: Vec2, b: Vec2, c: Vec2): { center: Vec2; radius: number } | null {
   const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
@@ -87,7 +96,8 @@ export function drawPendingPreview(
   circleFixedTool: CircleFixedToolState,
   transformTool: TransformToolState,
   anglePreviewArcRadius: number,
-  tolerances: { linePx: number; segmentPx: number }
+  tolerances: { linePx: number; segmentPx: number },
+  previewTheme: PendingPreviewTheme
 ): void {
   if (!pendingSelection) return;
   const firstSelection = "first" in pendingSelection ? pendingSelection.first : null;
@@ -99,8 +109,8 @@ export function drawPendingPreview(
   ctx.save();
   ctx.globalAlpha = 0.65;
   ctx.setLineDash([6, 5]);
-  ctx.strokeStyle = "#0ea5e9";
-  ctx.lineWidth = 1.3;
+  ctx.strokeStyle = previewTheme.stroke;
+  ctx.lineWidth = previewTheme.lineWidthPx;
 
   const drawInfinitePreviewLine = (through: Vec2, dirVec: Vec2): void => {
     const len = Math.hypot(dirVec.x, dirVec.y);
@@ -127,9 +137,9 @@ export function drawPendingPreview(
     ctx.save();
     ctx.setLineDash([]);
     ctx.globalAlpha = 0.95;
-    ctx.fillStyle = "#0ea5e9";
-    ctx.strokeStyle = "#0284c7";
-    ctx.lineWidth = 1.3;
+    ctx.fillStyle = previewTheme.fillStrong;
+    ctx.strokeStyle = previewTheme.strokeStrong;
+    ctx.lineWidth = previewTheme.lineWidthPx;
     ctx.beginPath();
     ctx.arc(screen.x, screen.y, 4.5, 0, Math.PI * 2);
     ctx.fill();
@@ -153,9 +163,9 @@ export function drawPendingPreview(
     if (points.length >= 1) {
       const first = camMath.worldToScreen(points[0], camera, vp);
       ctx.globalAlpha = 0.85;
-      ctx.strokeStyle = "#0ea5e9";
-      ctx.fillStyle = "rgba(14,165,233,0.08)";
-      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = previewTheme.stroke;
+      ctx.fillStyle = previewTheme.fillSoft;
+      ctx.lineWidth = previewTheme.lineWidthPx;
       ctx.beginPath();
       ctx.moveTo(first.x, first.y);
       for (let i = 1; i < points.length; i += 1) {
@@ -172,13 +182,13 @@ export function drawPendingPreview(
       ctx.setLineDash([]);
       const canClose = points.length >= 3 && cursorScreen && Math.hypot(cursorScreen.x - first.x, cursorScreen.y - first.y) <= 14;
       ctx.beginPath();
-      ctx.fillStyle = "rgba(14,165,233,0.95)";
+      ctx.fillStyle = previewTheme.fillStrong;
       ctx.arc(first.x, first.y, 4, 0, Math.PI * 2);
       ctx.fill();
       if (canClose) {
         ctx.beginPath();
-        ctx.strokeStyle = "rgba(14,165,233,0.95)";
-        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = previewTheme.fillStrong;
+        ctx.lineWidth = Math.max(previewTheme.lineWidthPx, 1.4);
         ctx.arc(first.x, first.y, 9, 0, Math.PI * 2);
         ctx.stroke();
       }
@@ -200,9 +210,9 @@ export function drawPendingPreview(
     const w = Math.abs(pMax.x - pMin.x);
     const h = Math.abs(pMax.y - pMin.y);
     ctx.globalAlpha = 0.85;
-    ctx.strokeStyle = "#0ea5e9";
-    ctx.fillStyle = "rgba(14,165,233,0.08)";
-    ctx.lineWidth = 1.3;
+    ctx.strokeStyle = previewTheme.stroke;
+    ctx.fillStyle = previewTheme.fillSoft;
+    ctx.lineWidth = previewTheme.lineWidthPx;
     ctx.beginPath();
     ctx.rect(x, y, w, h);
     ctx.fill();
@@ -235,7 +245,7 @@ export function drawPendingPreview(
       if (previewPath.length >= 3) {
         const prevAlpha = ctx.globalAlpha;
         ctx.globalAlpha = 0.14;
-        ctx.fillStyle = "#0ea5e9";
+        ctx.fillStyle = previewTheme.fill;
         ctx.beginPath();
         ctx.moveTo(previewPath[0].x, previewPath[0].y);
         for (let i = 1; i < previewPath.length; i += 1) {
@@ -314,7 +324,7 @@ export function drawPendingPreview(
   if (p1 && pendingSelection.tool === "circle_cp" && cursorScreen) {
     const radiusPx = Math.hypot(cursorScreen.x - p1.x, cursorScreen.y - p1.y);
     ctx.globalAlpha = 0.45;
-    ctx.lineWidth = 1.1;
+    ctx.lineWidth = previewTheme.lineWidthPx;
     ctx.beginPath();
     ctx.arc(p1.x, p1.y, radiusPx, 0, Math.PI * 2);
     ctx.stroke();
@@ -329,7 +339,7 @@ export function drawPendingPreview(
       if (geom) {
         const c = camMath.worldToScreen(geom.center, camera, vp);
         ctx.globalAlpha = 0.45;
-        ctx.lineWidth = 1.1;
+        ctx.lineWidth = previewTheme.lineWidthPx;
         ctx.beginPath();
         ctx.arc(c.x, c.y, geom.radius * camera.zoom, 0, Math.PI * 2);
         ctx.stroke();
@@ -342,7 +352,7 @@ export function drawPendingPreview(
     if (evaluated.ok && Number.isFinite(evaluated.value) && evaluated.value > 0) {
       const radiusPx = evaluated.value * camera.zoom;
       ctx.globalAlpha = 0.45;
-      ctx.lineWidth = 1.1;
+      ctx.lineWidth = previewTheme.lineWidthPx;
       ctx.beginPath();
       ctx.arc(p1.x, p1.y, radiusPx, 0, Math.PI * 2);
       ctx.stroke();
@@ -486,7 +496,7 @@ export function drawPendingPreview(
       if (close && screenPoints.length >= 3 && fillAlpha > 0) {
         const prevAlpha = ctx.globalAlpha;
         ctx.globalAlpha = fillAlpha;
-        ctx.fillStyle = "#0ea5e9";
+        ctx.fillStyle = previewTheme.fill;
         ctx.beginPath();
         ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
         for (let i = 1; i < screenPoints.length; i += 1) ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
@@ -923,7 +933,7 @@ export function drawPendingPreview(
         if (rightStatus === "none") {
           drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
         } else {
-          const rightMarkSizePx = computeRightMarkSizePx(radiusPx, 1.3);
+          const rightMarkSizePx = computeRightMarkSizePx(radiusPx, previewTheme.lineWidthPx);
           ctx.save();
           ctx.setLineDash(rightStatus === "approx" ? [5, 4] : []);
           drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx);
@@ -937,7 +947,7 @@ export function drawPendingPreview(
         ctx.save();
         ctx.globalAlpha = 0.9;
         ctx.setLineDash([]);
-        ctx.fillStyle = "#0284c7";
+        ctx.fillStyle = previewTheme.strokeStrong;
         ctx.font = "12px system-ui";
         const deg = (theta * 180) / Math.PI;
         ctx.fillText(`${formatPreviewAngleDegrees(deg)}°`, lx, ly);
@@ -993,16 +1003,16 @@ export function drawPendingPreview(
 
     ctx.save();
     ctx.globalAlpha = 0.18;
-    ctx.fillStyle = "#0ea5e9";
+    ctx.fillStyle = previewTheme.fill;
     drawAngleSector(ctx, as, os, theta, radiusPx);
     ctx.fill();
     ctx.restore();
 
     ctx.save();
     ctx.globalAlpha = 0.7;
-    ctx.strokeStyle = "#0284c7";
+    ctx.strokeStyle = previewTheme.strokeStrong;
     ctx.setLineDash([6, 5]);
-    ctx.lineWidth = 1.3;
+    ctx.lineWidth = previewTheme.lineWidthPx;
     ctx.beginPath();
     ctx.moveTo(os.x, os.y);
     ctx.lineTo(os.x + Math.cos(start) * radiusPx, os.y + Math.sin(start) * radiusPx);

@@ -74,12 +74,12 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     };
   }
 
-  if (hitPolygonId) {
-    return { mode: "idle", pointId: null, selectedObject: { type: "polygon", id: hitPolygonId } };
-  }
-
   if (hitSegmentId) {
     return { mode: "idle", pointId: null, selectedObject: { type: "segment", id: hitSegmentId } };
+  }
+
+  if (hitAngleId) {
+    return { mode: "idle", pointId: null, selectedObject: { type: "angle", id: hitAngleId } };
   }
 
   if (hitLineId) {
@@ -90,8 +90,8 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     return { mode: "idle", pointId: null, selectedObject: { type: "circle", id: hitCircleId } };
   }
 
-  if (hitAngleId) {
-    return { mode: "idle", pointId: null, selectedObject: { type: "angle", id: hitAngleId } };
+  if (hitPolygonId) {
+    return { mode: "idle", pointId: null, selectedObject: { type: "polygon", id: hitPolygonId } };
   }
 
   return { mode: "pan", pointId: null, selectedObject: null };

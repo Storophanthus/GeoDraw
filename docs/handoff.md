@@ -2828,3 +2828,286 @@ Date completed: February 20, 2026
 ### Verification
 - `node --import tsx src/view/__tests__/pointer-interaction-double-click.test.ts` passed.
 - `npm run build` passed.
+
+## Latest Done (Tokenized UI Color Profile System)
+Date completed: February 20, 2026
+
+### Why
+- User requested UI colors to follow the active profile (not only canvas/object defaults), with centralized tokens for easier tuning.
+
+### What changed
+- Added centralized profile-driven UI CSS variable mapping in:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/colorProfiles.ts`
+  - New exported helper: `getUiCssVariables(profileId)`
+  - New defaults map: `UI_CSS_VARIABLE_DEFAULTS`
+  - Profile overrides map: `UI_CSS_VARIABLE_PROFILE_OVERRIDES` for:
+    - `classic`
+    - `grayscale_white_dot`
+    - `beige_light`
+
+- Wired UI CSS variables into app shell:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.tsx`
+    - reads `colorProfileId` from store
+    - computes `uiCssVariables` via `getUiCssVariables`
+    - passes vars into `WorkspaceShell`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/WorkspaceShell.tsx`
+    - accepts `uiCssVariables` prop and applies on root `.appShell` style
+
+- Migrated shell/component colors to CSS vars:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+    - added `:root` defaults for `--gd-ui-*` tokens
+    - replaced hardcoded palette colors in toolbar/sidebar/buttons/sections/tabs/forms/lists/details blocks with token vars
+    - replaced key shadow/focus/hover rgba values with token vars
+
+- Migrated inline-style hardcoded colors:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/CommandBar.tsx`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/ObjectStyleSections.tsx`
+  - now use `var(--gd-ui-...)` for border/background/text/status colors.
+
+### Verification
+- `npm run build` passed.
+
+## Latest Done (Slider Color Token + Settings Tab for UI Profile)
+Date completed: February 20, 2026
+
+### Why
+- User reported slider controls still showing default browser blue.
+- User requested a dedicated Settings place to change UI color/profile.
+
+### Changes
+- Slider theming:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+  - Added:
+    - `input[type="range"] { accent-color: var(--gd-ui-accent, #2563eb); }`
+  - Result: range bars/thumb tint now follows active UI token color.
+
+- Settings tab + UI profile controls:
+  - Added:
+    - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/SettingsPanel.tsx`
+      - exposes `UI Color Profile` selector with palette swatch cards.
+  - Updated:
+    - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/RightSidebar.tsx`
+      - new right tab: `Settings`
+      - renders `SettingsPanel` when active.
+    - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+      - added styles for settings profile cards (`profileOption*` classes).
+
+### Verification
+- `npm run build` passed.
+
+## Latest Done (Moved UI Theme Setting to File -> Preferences)
+Date completed: February 20, 2026
+
+### User correction
+- UI theme setting must **not** live in right sidebar.
+- UI theme setting must be under **File -> Preferences**.
+- This setting is for **UI colors only**, not scene/object palette colors.
+
+### What changed
+- File menu + preferences popover:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/FileControls.tsx`
+  - Replaced standalone top-left icon group with `File` dropdown:
+    - `Open…`
+    - `Save`
+    - `Save As…`
+    - `Preferences…`
+  - Added `Preferences` popover with swatch-based UI theme picker.
+  - Picker updates `setUiColorProfile(...)` (UI-only profile state).
+  - Scene palette state (`colorProfileId`) remains unchanged.
+
+- Styling for new controls:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+  - Added styles for:
+    - file menu button/dropdown items
+    - preferences popover
+    - top-left action positioning helper (`canvasTopActionsLeft`)
+
+- Removed obsolete sidebar settings component:
+  - deleted `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/SettingsPanel.tsx`
+
+### Notes
+- Left toolbar palette swatches still control scene/canvas/object palette via `setColorProfile(...)`.
+- File -> Preferences controls only UI token theme via `setUiColorProfile(...)`.
+
+## Latest Done (Native File Menu Preferences + Reverted Canvas File Buttons)
+Date completed: February 21, 2026
+
+### User correction
+- Canvas top-left controls should stay as icon buttons (`Open`, `Save`, `Save As`).
+- `Preferences` must live in the app-level `File` menu (macOS menubar), not as an in-canvas File dropdown.
+
+### What changed
+- Restored top-left file controls:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/FileControls.tsx`
+  - reverted from custom in-canvas File dropdown back to three icon buttons.
+
+- Added native `File` menu integration in Tauri:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src-tauri/src/lib.rs`
+  - Builds default app menu and injects:
+    - `Open…` (`Cmd/Ctrl+O`)
+    - `Save` (`Cmd/Ctrl+S`)
+    - `Save As…` (`Shift+Cmd/Ctrl+S`)
+    - `Preferences…` (`Cmd/Ctrl+,`)
+  - Menu events are bridged to frontend via Tauri events:
+    - `gd-menu-file-open`
+    - `gd-menu-file-save`
+    - `gd-menu-file-save-as`
+    - `gd-menu-preferences`
+
+- Frontend now listens for those menu events:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/FileControls.tsx`
+  - `Open/Save/Save As` trigger existing handlers.
+  - `Preferences` opens a dedicated preferences modal for UI theme selection.
+
+- Updated modal styles:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+  - added `preferencesOverlay` / `preferencesModal` style block.
+
+## Latest Done (Decoupled UI Theme Profiles from Scene Color Profiles)
+Date completed: February 21, 2026
+
+### Problem fixed
+- UI theme selector was incorrectly reusing scene palette IDs (`classic`, `grayscale_white_dot`, `beige_light`).
+- `classic` UI theme looked beige because UI token defaults had been overwritten to beige.
+
+### What changed
+- Added dedicated UI profile ID model in:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/colorProfiles.ts`
+  - New type: `UiColorProfileId = "vanilla" | "grayscale" | "beige"`
+  - New default: `DEFAULT_UI_COLOR_PROFILE_ID = "vanilla"`
+  - New options: `UI_COLOR_PROFILE_OPTIONS`
+  - New UI swatch helper: `getUiColorProfileSwatch(...)`
+  - `getUiCssVariables(...)` now consumes `UiColorProfileId` (not scene profile id)
+
+- Restored true vanilla UI token defaults in:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/colorProfiles.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css` (`:root`)
+
+- Store typing updated to enforce separation:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/slices/storeTypes.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/slices/uiSlice.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/slices/historySlice.ts`
+
+- Backward compatibility for older snapshots:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/slices/historyRestore.ts`
+  - Legacy values map:
+    - `classic -> vanilla`
+    - `grayscale_white_dot -> grayscale`
+    - `beige_light -> beige`
+
+- Preferences modal now uses dedicated UI profile options/swatches:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/FileControls.tsx`
+
+## Latest Done (Full UI Color Customize in Preferences)
+Date completed: February 21, 2026
+
+### Goal
+- Enable full UI token customization (not just preset UI profiles), while keeping scene/object palette controls separate.
+
+### What changed
+- Added UI token override model in store state:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/slices/storeTypes.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/slices/uiSlice.ts`
+  - New state:
+    - `uiCssOverrides: Partial<UiCssVariables>`
+  - New actions:
+    - `setUiCssVariable(name, value)`
+    - `clearUiCssOverrides()`
+
+- Added preset-base + custom-override merge pipeline:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/colorProfiles.ts`
+  - New exports:
+    - `UI_CSS_VARIABLE_DEFAULTS`
+    - `UI_CSS_VARIABLE_KEYS`
+    - `getUiProfileBaseVariables(profileId)`
+  - `getUiCssVariables(profileId, customOverrides?)` now merges:
+    - defaults -> profile preset -> per-token custom overrides
+
+- App shell now applies custom UI overrides:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.tsx`
+  - Reads `uiCssOverrides` from store and passes them into `getUiCssVariables(...)`.
+
+- Snapshot persistence for custom UI overrides:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/slices/historySlice.ts`
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/state/slices/historyRestore.ts`
+  - Saves/loads `uiCssOverrides` and sanitizes keys on restore.
+
+- Preferences modal upgraded to full token editor:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/FileControls.tsx`
+  - Keeps preset swatch picker (vanilla/grayscale/beige).
+  - Adds `Full Customize` section with:
+    - per-token row
+    - color picker (when value parseable as color)
+    - text field (any CSS color string)
+    - per-token reset button
+    - global `Reset to preset`
+    - custom-token count
+
+- Styling for token editor:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/App.css`
+  - Added `preferencesCustomize*` and `preferencesToken*` classes.
+
+- Regression test:
+  - Added `/Users/ajatadriansyah/Documents/GeoDraw-core/src/scene/__tests__/ui-color-profile-overrides.test.ts`
+  - Included in `test:scene` script in `/Users/ajatadriansyah/Documents/GeoDraw-core/package.json`
+
+### Verification
+- `npm run build` passed.
+- `node --import tsx src/scene/__tests__/ui-color-profile-overrides.test.ts` passed.
+- `node --import tsx src/scene/__tests__/color-profile-regression.test.ts` passed.
+
+## Latest Done (Preferences Entry Moved to Gear Icon)
+Date completed: February 21, 2026
+
+### User correction
+- UI Preferences should open from a gear icon next to `Save As` in top-left actions.
+- Do not keep Preferences under native `File` menu.
+
+### What changed
+- Added gear button to canvas top-left action cluster:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/ui/FileControls.tsx`
+  - New icon button opens the existing Preferences modal.
+
+- Removed Preferences menu bridge from Tauri File menu:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src-tauri/src/lib.rs`
+  - Deleted `Preferences…` menu item/event forwarding.
+  - Native menu now forwards only:
+    - Open
+    - Save
+    - Save As
+
+## Latest Done (Selection Priority: Angle Over Filled Polygon)
+Date completed: February 21, 2026
+
+### Problem fixed
+- Filled polygon interior was swallowing clicks, preventing angle selection when angle lay inside polygon area (example: selecting `∠BCD` over filled `ABCD`).
+
+### What changed
+- Reordered engine top-hit priority so polygon fill is a fallback, not a blocker:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/engine/hitTest.ts`
+  - New order:
+    - point -> segment -> angle -> line -> circle -> polygon
+
+- Reordered hover hit resolution to match runtime UX behavior:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/canvasInteractionHelpers.ts`
+  - Polygon now evaluated after angle/line/circle.
+
+- Reordered move-tool pointer-down object choice:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/view/pointerInteraction.ts`
+  - Angle now prioritized over polygon when both are hit.
+
+- Added regression test:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/scene/__tests__/angle-polygon-hit-priority.test.ts`
+  - Covers:
+    - `hitTestTopObject` chooses angle over polygon fill.
+    - move selection chooser prefers angle over polygon when both IDs are present.
+    - polygon remains selectable when angle is not visible.
+
+- Wired regression into scene test suite:
+  - `/Users/ajatadriansyah/Documents/GeoDraw-core/package.json`
+  - Added `angle-polygon-hit-priority.test.ts` to `test:scene`.
+
+### Verification
+- `node --import tsx src/scene/__tests__/angle-polygon-hit-priority.test.ts` passed.
+- `npm run test:scene` passed.
+- `npm run build` passed.

@@ -9,6 +9,7 @@ import type {
 } from "../scene/points";
 
 export type ColorProfileId = "classic" | "grayscale_white_dot" | "beige_light";
+export type UiColorProfileId = "vanilla" | "grayscale" | "beige";
 
 export type CanvasColorTheme = {
   backgroundColor: string;
@@ -51,9 +52,196 @@ export type SceneStyleDefaults = {
 };
 
 export const DEFAULT_COLOR_PROFILE_ID: ColorProfileId = "classic";
+export const DEFAULT_UI_COLOR_PROFILE_ID: UiColorProfileId = "vanilla";
 
 const DEFAULT_PATH_ARROW_UI = 1.0;
 const DEFAULT_PATH_ARROW_LINE_WIDTH_PT = DEFAULT_PATH_ARROW_UI * 8;
+
+export const UI_CSS_VARIABLE_DEFAULTS = {
+  "--gd-ui-app-text": "#1f2937",
+  "--gd-ui-app-bg": "#f3f5f8",
+  "--gd-ui-toolbar-bg": "#eef2f7",
+  "--gd-ui-sidebar-bg": "#f3f6fb",
+  "--gd-ui-canvas-bg": "#ffffff",
+  "--gd-ui-surface": "#ffffff",
+  "--gd-ui-surface-soft": "#f8fafc",
+  "--gd-ui-surface-muted": "#edf3fa",
+  "--gd-ui-surface-elevated": "#f8fbff",
+  "--gd-ui-border": "#cbd5e1",
+  "--gd-ui-border-soft": "#dbe2ea",
+  "--gd-ui-border-panel": "#d7dfe8",
+  "--gd-ui-border-strong": "#94a3b8",
+  "--gd-ui-text-strong": "#0f172a",
+  "--gd-ui-text": "#334155",
+  "--gd-ui-text-muted": "#475569",
+  "--gd-ui-text-subtle": "#64748b",
+  "--gd-ui-accent": "#2563eb",
+  "--gd-ui-accent-strong": "#1d4ed8",
+  "--gd-ui-accent-deeper": "#1e40af",
+  "--gd-ui-accent-text": "#1e3a8a",
+  "--gd-ui-accent-bg": "#dbeafe",
+  "--gd-ui-accent-bg-soft": "#eef4fb",
+  "--gd-ui-accent-bg-strong": "#eff6ff",
+  "--gd-ui-preview-stroke": "#0ea5e9",
+  "--gd-ui-preview-stroke-strong": "#0284c7",
+  "--gd-ui-preview-fill-soft": "rgba(14, 165, 233, 0.08)",
+  "--gd-ui-preview-fill": "rgba(14, 165, 233, 0.18)",
+  "--gd-ui-preview-fill-strong": "rgba(14, 165, 233, 0.95)",
+  "--gd-ui-preview-snap-stroke": "#f97316",
+  "--gd-ui-preview-line-width": "1.3",
+  "--gd-ui-danger": "#ef4444",
+  "--gd-ui-danger-text": "#b91c1c",
+  "--gd-ui-success-text": "#0f766e",
+  "--gd-ui-icon-tone": "#475569",
+  "--gd-ui-icon-tone-strong": "#334155",
+  "--gd-ui-title-tone": "#64748b",
+  "--gd-ui-focus-outline": "rgba(37, 99, 235, 0.26)",
+  "--gd-ui-focus-outline-strong": "rgba(37, 99, 235, 0.34)",
+  "--gd-ui-accent-ring": "rgba(37, 99, 235, 0.22)",
+  "--gd-ui-overlay-hover": "rgba(248, 250, 252, 0.62)",
+  "--gd-ui-overlay-shadow": "rgba(15, 23, 42, 0.12)",
+  "--gd-ui-resize-hover": "rgba(59, 130, 246, 0.2)",
+  "--gd-ui-shadow-soft": "rgba(15, 23, 42, 0.04)",
+  "--gd-ui-shadow": "rgba(15, 23, 42, 0.1)",
+  "--gd-ui-shadow-strong": "rgba(15, 23, 42, 0.16)",
+  "--gd-ui-glass-bg": "rgba(255, 255, 255, 0.95)",
+  "--gd-ui-glass-bg-strong": "rgba(255, 255, 255, 0.97)",
+} as const;
+
+export type UiCssVariableName = keyof typeof UI_CSS_VARIABLE_DEFAULTS;
+export type UiCssVariables = Record<UiCssVariableName, string>;
+export const UI_CSS_VARIABLE_KEYS = Object.keys(UI_CSS_VARIABLE_DEFAULTS) as UiCssVariableName[];
+
+const UI_CSS_VARIABLE_PROFILE_OVERRIDES: Record<UiColorProfileId, Partial<UiCssVariables>> = {
+  vanilla: {},
+  grayscale: {
+    "--gd-ui-app-text": "#111111",
+    "--gd-ui-app-bg": "#f5f5f5",
+    "--gd-ui-toolbar-bg": "#efefef",
+    "--gd-ui-sidebar-bg": "#f4f4f4",
+    "--gd-ui-canvas-bg": "#ffffff",
+    "--gd-ui-surface": "#ffffff",
+    "--gd-ui-surface-soft": "#f3f4f6",
+    "--gd-ui-surface-muted": "#eceff2",
+    "--gd-ui-surface-elevated": "#f8f8f8",
+    "--gd-ui-border": "#c5c9cf",
+    "--gd-ui-border-soft": "#d9dde3",
+    "--gd-ui-border-panel": "#d2d7df",
+    "--gd-ui-border-strong": "#8f98a7",
+    "--gd-ui-text-strong": "#111111",
+    "--gd-ui-text": "#1f2937",
+    "--gd-ui-text-muted": "#374151",
+    "--gd-ui-text-subtle": "#4b5563",
+    "--gd-ui-accent": "#1f2937",
+    "--gd-ui-accent-strong": "#111827",
+    "--gd-ui-accent-deeper": "#0f172a",
+    "--gd-ui-accent-text": "#0f172a",
+    "--gd-ui-accent-bg": "#e5e7eb",
+    "--gd-ui-accent-bg-soft": "#eef0f2",
+    "--gd-ui-accent-bg-strong": "#f3f4f6",
+    "--gd-ui-preview-stroke": "#4b5563",
+    "--gd-ui-preview-stroke-strong": "#1f2937",
+    "--gd-ui-preview-fill-soft": "rgba(75, 85, 99, 0.08)",
+    "--gd-ui-preview-fill": "rgba(75, 85, 99, 0.18)",
+    "--gd-ui-preview-fill-strong": "rgba(31, 41, 55, 0.95)",
+    "--gd-ui-preview-snap-stroke": "#6b7280",
+    "--gd-ui-icon-tone": "#4b5563",
+    "--gd-ui-icon-tone-strong": "#1f2937",
+    "--gd-ui-title-tone": "#4b5563",
+    "--gd-ui-focus-outline": "rgba(31, 41, 55, 0.24)",
+    "--gd-ui-focus-outline-strong": "rgba(31, 41, 55, 0.32)",
+    "--gd-ui-accent-ring": "rgba(31, 41, 55, 0.22)",
+    "--gd-ui-overlay-hover": "rgba(255, 255, 255, 0.58)",
+    "--gd-ui-resize-hover": "rgba(31, 41, 55, 0.2)",
+    "--gd-ui-shadow-soft": "rgba(0, 0, 0, 0.03)",
+    "--gd-ui-shadow": "rgba(0, 0, 0, 0.08)",
+    "--gd-ui-shadow-strong": "rgba(0, 0, 0, 0.14)",
+  },
+  beige: {
+    "--gd-ui-app-text": "#3d352b",
+    "--gd-ui-app-bg": "#f5f1e6",
+    "--gd-ui-toolbar-bg": "#efe7d6",
+    "--gd-ui-sidebar-bg": "#f3ecdc",
+    "--gd-ui-canvas-bg": "#f5f1e6",
+    "--gd-ui-surface": "#fffaf0",
+    "--gd-ui-surface-soft": "#f8f1e2",
+    "--gd-ui-surface-muted": "#ede2cd",
+    "--gd-ui-surface-elevated": "#fbf5e8",
+    "--gd-ui-border": "#cbbca3",
+    "--gd-ui-border-soft": "#ddcfb8",
+    "--gd-ui-border-panel": "#d4c5ad",
+    "--gd-ui-border-strong": "#9f8b6e",
+    "--gd-ui-text-strong": "#2e271f",
+    "--gd-ui-text": "#3d352b",
+    "--gd-ui-text-muted": "#5a4c3d",
+    "--gd-ui-text-subtle": "#6f5f4c",
+    "--gd-ui-accent": "#8a5a2b",
+    "--gd-ui-accent-strong": "#7a4f24",
+    "--gd-ui-accent-deeper": "#623f1e",
+    "--gd-ui-accent-text": "#4e3318",
+    "--gd-ui-accent-bg": "#ecd8b4",
+    "--gd-ui-accent-bg-soft": "#f3e4c8",
+    "--gd-ui-accent-bg-strong": "#f8ead2",
+    "--gd-ui-preview-stroke": "#8a5a2b",
+    "--gd-ui-preview-stroke-strong": "#7a4f24",
+    "--gd-ui-preview-fill-soft": "rgba(138, 90, 43, 0.08)",
+    "--gd-ui-preview-fill": "rgba(138, 90, 43, 0.18)",
+    "--gd-ui-preview-fill-strong": "rgba(122, 79, 36, 0.95)",
+    "--gd-ui-preview-snap-stroke": "#d97706",
+    "--gd-ui-icon-tone": "#81684b",
+    "--gd-ui-icon-tone-strong": "#624a33",
+    "--gd-ui-title-tone": "#7a6546",
+    "--gd-ui-focus-outline": "rgba(122, 79, 36, 0.28)",
+    "--gd-ui-focus-outline-strong": "rgba(122, 79, 36, 0.36)",
+    "--gd-ui-accent-ring": "rgba(122, 79, 36, 0.24)",
+    "--gd-ui-overlay-hover": "rgba(255, 250, 240, 0.55)",
+    "--gd-ui-overlay-shadow": "rgba(59, 43, 24, 0.08)",
+    "--gd-ui-resize-hover": "rgba(122, 79, 36, 0.2)",
+    "--gd-ui-shadow-soft": "rgba(59, 43, 24, 0.04)",
+    "--gd-ui-shadow": "rgba(59, 43, 24, 0.1)",
+    "--gd-ui-shadow-strong": "rgba(59, 43, 24, 0.16)",
+    "--gd-ui-glass-bg": "rgba(255, 250, 240, 0.95)",
+    "--gd-ui-glass-bg-strong": "rgba(255, 250, 240, 0.97)",
+  },
+};
+
+export const UI_COLOR_PROFILE_OPTIONS: ReadonlyArray<{ id: UiColorProfileId; label: string }> = [
+  { id: "vanilla", label: "Vanilla" },
+  { id: "grayscale", label: "Grayscale" },
+  { id: "beige", label: "Beige" },
+] as const;
+
+type UiProfileSwatch = {
+  background: string;
+  line: string;
+  fill: string;
+  dotFill: string;
+  dotStroke: string;
+};
+
+const UI_COLOR_PROFILE_SWATCHES: Record<UiColorProfileId, UiProfileSwatch> = {
+  vanilla: {
+    background: "#f3f5f8",
+    line: "#334155",
+    fill: "#dbeafe",
+    dotFill: "#60a5fa",
+    dotStroke: "#0f172a",
+  },
+  grayscale: {
+    background: "#f5f5f5",
+    line: "#1f2937",
+    fill: "#e5e7eb",
+    dotFill: "#ffffff",
+    dotStroke: "#111111",
+  },
+  beige: {
+    background: "#f5f1e6",
+    line: "#3d352b",
+    fill: "#ecd8b4",
+    dotFill: "#fffaf0",
+    dotStroke: "#3d352b",
+  },
+};
 
 const COLOR_PROFILES: readonly ColorProfile[] = [
   {
@@ -151,6 +339,35 @@ export function getCanvasColorTheme(profileId: ColorProfileId): CanvasColorTheme
     gridMajorColor: palette.gridMajorColor,
     axisColor: palette.axisColor,
   };
+}
+
+export function getUiProfileBaseVariables(profileId: UiColorProfileId): UiCssVariables {
+  const overrides = UI_CSS_VARIABLE_PROFILE_OVERRIDES[profileId] ?? {};
+  return {
+    ...UI_CSS_VARIABLE_DEFAULTS,
+    ...overrides,
+  };
+}
+
+export function getUiCssVariables(
+  profileId: UiColorProfileId,
+  customOverrides?: Partial<UiCssVariables>
+): UiCssVariables {
+  const base = getUiProfileBaseVariables(profileId);
+  if (!customOverrides) return base;
+  const merged: UiCssVariables = { ...base };
+  for (const key of UI_CSS_VARIABLE_KEYS) {
+    const value = customOverrides[key];
+    if (typeof value !== "string") continue;
+    const normalized = value.trim();
+    if (!normalized) continue;
+    merged[key] = normalized;
+  }
+  return merged;
+}
+
+export function getUiColorProfileSwatch(profileId: UiColorProfileId): UiProfileSwatch {
+  return UI_COLOR_PROFILE_SWATCHES[profileId] ?? UI_COLOR_PROFILE_SWATCHES[DEFAULT_UI_COLOR_PROFILE_ID];
 }
 
 export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneStyleDefaults {

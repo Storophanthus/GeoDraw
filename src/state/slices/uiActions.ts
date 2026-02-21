@@ -2,6 +2,7 @@ import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
 import {
   applyProfileColorsToDefaults,
+  getUiProfileBaseVariables,
   recolorSceneForProfile,
   type SceneStyleDefaults,
 } from "../colorProfiles";
@@ -28,6 +29,9 @@ export function createUiActions(
   | "setAxesEnabled"
   | "setGridSnapEnabled"
   | "setColorProfile"
+  | "setUiColorProfile"
+  | "setUiCssVariable"
+  | "clearUiCssOverrides"
   | "setDependencyGlowEnabled"
   | "setExportClipWorld"
   | "clearExportClipWorld"
@@ -182,6 +186,55 @@ export function createUiActions(
       });
     },
 
+    setUiColorProfile(profileId) {
+      ctx.setState(
+        (prev) => {
+          if (prev.uiColorProfileId === profileId) return prev;
+          return {
+            ...prev,
+            uiColorProfileId: profileId,
+          };
+        },
+        { history: "skip", actionKey: "ui-color-profile" }
+      );
+    },
+
+    setUiCssVariable(name, value) {
+      ctx.setState(
+        (prev) => {
+          const baseValue = getUiProfileBaseVariables(prev.uiColorProfileId)[name];
+          const normalized = value.trim();
+          const nextOverrides = { ...prev.uiCssOverrides };
+          if (!normalized || normalized === baseValue) {
+            if (!(name in nextOverrides)) return prev;
+            delete nextOverrides[name];
+          } else {
+            if (nextOverrides[name] === normalized) return prev;
+            nextOverrides[name] = normalized;
+          }
+          if (areUiOverridesEqual(prev.uiCssOverrides, nextOverrides)) return prev;
+          return {
+            ...prev,
+            uiCssOverrides: nextOverrides,
+          };
+        },
+        { history: "skip", actionKey: "ui-color-customize" }
+      );
+    },
+
+    clearUiCssOverrides() {
+      ctx.setState(
+        (prev) => {
+          if (Object.keys(prev.uiCssOverrides).length === 0) return prev;
+          return {
+            ...prev,
+            uiCssOverrides: {},
+          };
+        },
+        { history: "skip", actionKey: "ui-color-customize" }
+      );
+    },
+
     setDependencyGlowEnabled(enabled) {
       ctx.setState((prev) => ({
         ...prev,
@@ -203,4 +256,17 @@ export function createUiActions(
       }));
     },
   };
+}
+
+function areUiOverridesEqual(
+  left: Record<string, string | undefined>,
+  right: Record<string, string | undefined>
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) return false;
+  }
+  return true;
 }

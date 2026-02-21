@@ -13,7 +13,12 @@ import type {
   ShowLabelMode,
 } from "../../scene/points";
 import type { Camera, Viewport } from "../../view/camera";
-import type { ColorProfileId } from "../colorProfiles";
+import type {
+  ColorProfileId,
+  UiColorProfileId,
+  UiCssVariableName,
+  UiCssVariables,
+} from "../colorProfiles";
 
 export type ActiveTool =
   | "move"
@@ -198,6 +203,8 @@ export type AngleFixedDirection = "CCW" | "CW";
 export type GeoState = {
   camera: Camera;
   colorProfileId: ColorProfileId;
+  uiColorProfileId: UiColorProfileId;
+  uiCssOverrides: Partial<UiCssVariables>;
   gridEnabled: boolean;
   axesEnabled: boolean;
   gridSnapEnabled: boolean;
@@ -326,6 +333,9 @@ export type GeoActions = {
   setAxesEnabled: (enabled: boolean) => void;
   setGridSnapEnabled: (enabled: boolean) => void;
   setColorProfile: (profileId: ColorProfileId) => void;
+  setUiColorProfile: (profileId: UiColorProfileId) => void;
+  setUiCssVariable: (name: UiCssVariableName, value: string) => void;
+  clearUiCssOverrides: () => void;
   setDependencyGlowEnabled: (enabled: boolean) => void;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
   clearExportClipWorld: () => void;

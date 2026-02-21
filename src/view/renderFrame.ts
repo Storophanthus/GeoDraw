@@ -11,6 +11,7 @@ import {
   drawPendingPreview,
   type AngleFixedToolState,
   type CircleFixedToolState,
+  type PendingPreviewTheme,
   type RegularPolygonToolState,
   type TransformToolState,
 } from "./previews/pendingPreview";
@@ -55,6 +56,7 @@ type RenderFrameArgs = {
   transformTool: TransformToolState;
   anglePreviewArcRadius: number;
   pendingPreviewTolerances: PendingPreviewTolerances;
+  previewTheme: PendingPreviewTheme;
   selectedDrawableObject: DrawableObjectSelection;
   recentDrawableObject: DrawableObjectSelection;
   copySourceDrawable: DrawableObjectSelection;
@@ -87,6 +89,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     transformTool,
     anglePreviewArcRadius,
     pendingPreviewTolerances,
+    previewTheme,
     selectedDrawableObject,
     recentDrawableObject,
     copySourceDrawable,
@@ -129,7 +132,8 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       circleFixedTool,
       transformTool,
       anglePreviewArcRadius,
-      pendingPreviewTolerances
+      pendingPreviewTolerances,
+      previewTheme
     );
     drawPoints(
       ctx,
@@ -156,14 +160,14 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       pendingSelection && pendingSelection.tool === "export_clip"
         ? pendingSelection.points.map((p) => p.world)
         : [];
-    drawExportClipOverlay(ctx, exportClipWorld, clipPreviewPoints, cursorWorld, camera, vp);
+    drawExportClipOverlay(ctx, exportClipWorld, clipPreviewPoints, cursorWorld, camera, vp, previewTheme);
 
     if (hoverSnap && (activeTool === "point" || activeTool === "move")) {
       const s = camMath.worldToScreen(hoverSnap.world, camera, vp);
       ctx.save();
       ctx.beginPath();
       ctx.arc(s.x, s.y, 6, 0, Math.PI * 2);
-      ctx.strokeStyle = "#f97316";
+      ctx.strokeStyle = previewTheme.snapStroke;
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 3]);
       ctx.stroke();
@@ -184,13 +188,14 @@ function drawExportClipOverlay(
   pendingPoints: Vec2[],
   cursorWorld: Vec2 | null,
   camera: Camera,
-  vp: Viewport
+  vp: Viewport,
+  previewTheme: PendingPreviewTheme
 ): void {
   ctx.save();
   ctx.setLineDash([5, 4]);
-  ctx.strokeStyle = "rgba(14,165,233,0.95)";
-  ctx.fillStyle = "rgba(14,165,233,0.05)";
-  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = previewTheme.strokeStrong;
+  ctx.fillStyle = previewTheme.fillSoft;
+  ctx.lineWidth = Math.max(0.8, previewTheme.lineWidthPx);
 
   if (clip?.kind === "rect") {
     const pMin = camMath.worldToScreen({ x: clip.xmin, y: clip.ymin }, camera, vp);
