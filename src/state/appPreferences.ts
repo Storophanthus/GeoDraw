@@ -74,11 +74,11 @@ function normalizeUiOverrides(raw: unknown): UiPreferencesState["uiCssOverrides"
 }
 
 function isUiProfileId(value: unknown): value is UiPreferencesState["uiColorProfileId"] {
-  return value === "vanilla" || value === "grayscale" || value === "beige";
+  return value === "vanilla" || value === "grayscale" || value === "beige" || value === "dark";
 }
 
 function isColorProfileId(value: unknown): value is ConstructionPreferencesState["colorProfileId"] {
-  return value === "classic" || value === "grayscale_white_dot" || value === "beige_light";
+  return value === "classic" || value === "grayscale_white_dot" || value === "beige_light" || value === "dark_mode";
 }
 
 function normalizeCanvasThemeOverrides(raw: unknown): ConstructionPreferencesState["canvasThemeOverrides"] {

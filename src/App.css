@@ -74,6 +74,7 @@ input,
 select,
 textarea {
   font: inherit;
+  color: inherit;
 }
 
 input[type="range"] {
@@ -641,6 +642,69 @@ input[type="range"] {
   right: 5px;
 }
 
+.constructionProfileSwatchVisual {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  border: 1px solid;
+  overflow: hidden;
+}
+
+.constructionProfileSwatchGridMinor {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: 8px;
+  height: 1px;
+}
+
+.constructionProfileSwatchGridMajor {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 9px;
+  width: 1px;
+}
+
+.constructionProfileSwatchAxis {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 50%;
+  width: 1.4px;
+  transform: translateX(-50%);
+}
+
+.constructionProfileSwatchFill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 45%;
+  clip-path: polygon(0 100%, 100% 100%, 100% 28%, 0 58%);
+}
+
+.constructionProfileSwatchLine {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 58%;
+  height: 1.35px;
+  transform: translateY(-50%) rotate(-14deg);
+  transform-origin: 50% 50%;
+}
+
+.constructionProfileSwatchDot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  border: 1px solid;
+  top: 4px;
+  right: 4px;
+}
+
 .profileOptionsGrid {
   display: grid;
   grid-template-columns: 1fr;
@@ -1052,11 +1116,17 @@ body.sidebar-resizing .rightSidebar {
   height: 36px;
   box-sizing: border-box;
   background: var(--gd-ui-surface, #fff);
+  color: var(--gd-ui-text, #334155);
+  caret-color: var(--gd-ui-accent, #2563eb);
 }
 
 .renameInput:focus-visible {
   outline: 2px solid var(--gd-ui-focus-outline, rgba(37, 99, 235, 0.2));
   border-color: var(--gd-ui-accent, #3b82f6);
+}
+
+.renameInput::placeholder {
+  color: var(--gd-ui-text-subtle, #64748b);
 }
 
 .selectInput {
@@ -1066,6 +1136,7 @@ body.sidebar-resizing .rightSidebar {
   padding: 7px 9px;
   font-size: 13px;
   background: var(--gd-ui-surface, #fff);
+  color: var(--gd-ui-text, #334155);
   height: 36px;
   box-sizing: border-box;
 }
@@ -1104,6 +1175,7 @@ body.sidebar-resizing .rightSidebar {
 .deleteButton {
   border: 1px solid var(--gd-ui-border, #cbd5e1);
   background: var(--gd-ui-surface, #ffffff);
+  color: var(--gd-ui-text, #334155);
   border-radius: 12px;
   padding: 0 14px;
   height: 38px;
@@ -1170,6 +1242,17 @@ body.sidebar-resizing .rightSidebar {
   resize: none;
   overflow: auto;
   background: var(--gd-ui-surface-muted, #fbfbfc);
+  color: var(--gd-ui-text, #334155);
+  caret-color: var(--gd-ui-accent, #2563eb);
+}
+
+.exportTextarea::placeholder {
+  color: var(--gd-ui-text-subtle, #64748b);
+}
+
+.exportTextarea::selection {
+  background: var(--gd-ui-accent-ring, rgba(37, 99, 235, 0.22));
+  color: var(--gd-ui-text-strong, #0f172a);
 }
 
 .exportTextarea:focus-visible {
@@ -1277,6 +1360,7 @@ body.sidebar-resizing .rightSidebar {
   /* Flexbox safety */
   border: none;
   background: transparent;
+  color: var(--gd-ui-text, #334155);
   font-size: 12px;
   text-align: right;
   padding: 0;
@@ -1300,6 +1384,8 @@ body.sidebar-resizing .rightSidebar {
   font-size: 12px;
   border: 1px solid var(--gd-ui-border, #cbd5e1);
   border-radius: 10px;
+  background: var(--gd-ui-surface, #fff);
+  color: var(--gd-ui-text, #334155);
   text-align: center;
   box-sizing: border-box;
 }
@@ -1309,6 +1395,7 @@ body.sidebar-resizing .rightSidebar {
   border: 1px solid var(--gd-ui-border, #cbd5e1);
   border-radius: 8px;
   background: var(--gd-ui-surface, #fff);
+  color: var(--gd-ui-text, #334155);
   padding: 7px 9px;
   display: flex;
   gap: 8px;
@@ -1361,6 +1448,7 @@ body.sidebar-resizing .rightSidebar {
   border: 1px solid var(--gd-ui-border, #cbd5e1);
   border-radius: 10px;
   background: var(--gd-ui-surface, #fff);
+  color: var(--gd-ui-text, #334155);
   box-sizing: border-box;
 }
 

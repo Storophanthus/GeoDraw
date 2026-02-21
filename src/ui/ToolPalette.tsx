@@ -234,7 +234,7 @@ export function ToolPalette({
                     } as CSSProperties
                   }
                 >
-                  <ProfileSwatch profileId={colorProfileId} />
+                  <ConstructionProfileSwatch profileId={colorProfileId} />
                 </button>
                 <span className="toolTooltip" role="tooltip">
                   Color palette
@@ -255,7 +255,7 @@ export function ToolPalette({
                       aria-label={`Color profile: ${option.label}`}
                       role="menuitem"
                     >
-                      <ProfileSwatch profileId={option.id} />
+                      <ConstructionProfileSwatch profileId={option.id} />
                     </button>
                   ))}
                 </div>
@@ -268,21 +268,24 @@ export function ToolPalette({
   );
 }
 
-function ProfileSwatch({ profileId }: { profileId: ColorProfileId }) {
+function ConstructionProfileSwatch({ profileId }: { profileId: ColorProfileId }) {
   const palette = getColorProfile(profileId).palette;
   return (
     <span
-      className="profileSwatchVisual"
+      className="constructionProfileSwatchVisual"
       style={{
         background: palette.backgroundColor,
         borderColor: palette.lineStroke,
       }}
       aria-hidden
     >
-      <span className="profileSwatchFill" style={{ background: palette.polygonFill }} />
-      <span className="profileSwatchLine" style={{ background: palette.lineStroke }} />
+      <span className="constructionProfileSwatchGridMinor" style={{ background: toRgba(palette.gridMinorColor, 0.5) }} />
+      <span className="constructionProfileSwatchGridMajor" style={{ background: toRgba(palette.gridMajorColor, 0.8) }} />
+      <span className="constructionProfileSwatchAxis" style={{ background: palette.axisColor }} />
+      <span className="constructionProfileSwatchFill" style={{ background: palette.polygonFill }} />
+      <span className="constructionProfileSwatchLine" style={{ background: palette.segmentStroke }} />
       <span
-        className="profileSwatchDot"
+        className="constructionProfileSwatchDot"
         style={{
           background: palette.pointFill,
           borderColor: palette.pointStroke,

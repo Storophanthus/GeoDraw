@@ -8,8 +8,8 @@ import type {
   SceneModel,
 } from "../scene/points";
 
-export type ColorProfileId = "classic" | "grayscale_white_dot" | "beige_light";
-export type UiColorProfileId = "vanilla" | "grayscale" | "beige";
+export type ColorProfileId = "classic" | "grayscale_white_dot" | "beige_light" | "dark_mode";
+export type UiColorProfileId = "vanilla" | "grayscale" | "beige" | "dark";
 
 export type CanvasColorTheme = {
   backgroundColor: string;
@@ -203,12 +203,61 @@ const UI_CSS_VARIABLE_PROFILE_OVERRIDES: Record<UiColorProfileId, Partial<UiCssV
     "--gd-ui-glass-bg": "rgba(255, 250, 240, 0.95)",
     "--gd-ui-glass-bg-strong": "rgba(255, 250, 240, 0.97)",
   },
+  dark: {
+    "--gd-ui-app-text": "#e5e7eb",
+    "--gd-ui-app-bg": "#0b1220",
+    "--gd-ui-toolbar-bg": "#0f172a",
+    "--gd-ui-sidebar-bg": "#111827",
+    "--gd-ui-canvas-bg": "#0f172a",
+    "--gd-ui-surface": "#111827",
+    "--gd-ui-surface-soft": "#1f2937",
+    "--gd-ui-surface-muted": "#0f172a",
+    "--gd-ui-surface-elevated": "#1b2434",
+    "--gd-ui-border": "#334155",
+    "--gd-ui-border-soft": "#3b4759",
+    "--gd-ui-border-panel": "#2a3648",
+    "--gd-ui-border-strong": "#64748b",
+    "--gd-ui-text-strong": "#f8fafc",
+    "--gd-ui-text": "#e2e8f0",
+    "--gd-ui-text-muted": "#cbd5e1",
+    "--gd-ui-text-subtle": "#94a3b8",
+    "--gd-ui-accent": "#60a5fa",
+    "--gd-ui-accent-strong": "#3b82f6",
+    "--gd-ui-accent-deeper": "#2563eb",
+    "--gd-ui-accent-text": "#dbeafe",
+    "--gd-ui-accent-bg": "#1e3a8a",
+    "--gd-ui-accent-bg-soft": "#1f3765",
+    "--gd-ui-accent-bg-strong": "#27457a",
+    "--gd-ui-preview-stroke": "#38bdf8",
+    "--gd-ui-preview-stroke-strong": "#0ea5e9",
+    "--gd-ui-preview-fill-soft": "rgba(56, 189, 248, 0.12)",
+    "--gd-ui-preview-fill": "rgba(56, 189, 248, 0.26)",
+    "--gd-ui-preview-fill-strong": "rgba(14, 165, 233, 0.95)",
+    "--gd-ui-preview-snap-stroke": "#fb923c",
+    "--gd-ui-danger-text": "#fca5a5",
+    "--gd-ui-success-text": "#5eead4",
+    "--gd-ui-icon-tone": "#cbd5e1",
+    "--gd-ui-icon-tone-strong": "#f8fafc",
+    "--gd-ui-title-tone": "#94a3b8",
+    "--gd-ui-focus-outline": "rgba(96, 165, 250, 0.34)",
+    "--gd-ui-focus-outline-strong": "rgba(96, 165, 250, 0.44)",
+    "--gd-ui-accent-ring": "rgba(96, 165, 250, 0.3)",
+    "--gd-ui-overlay-hover": "rgba(15, 23, 42, 0.54)",
+    "--gd-ui-overlay-shadow": "rgba(2, 6, 23, 0.55)",
+    "--gd-ui-resize-hover": "rgba(56, 189, 248, 0.28)",
+    "--gd-ui-shadow-soft": "rgba(0, 0, 0, 0.35)",
+    "--gd-ui-shadow": "rgba(0, 0, 0, 0.48)",
+    "--gd-ui-shadow-strong": "rgba(0, 0, 0, 0.6)",
+    "--gd-ui-glass-bg": "rgba(15, 23, 42, 0.92)",
+    "--gd-ui-glass-bg-strong": "rgba(15, 23, 42, 0.96)",
+  },
 };
 
 export const UI_COLOR_PROFILE_OPTIONS: ReadonlyArray<{ id: UiColorProfileId; label: string }> = [
   { id: "vanilla", label: "Vanilla" },
   { id: "grayscale", label: "Grayscale" },
   { id: "beige", label: "Beige" },
+  { id: "dark", label: "Dark Mode" },
 ] as const;
 
 type UiProfileSwatch = {
@@ -240,6 +289,13 @@ const UI_COLOR_PROFILE_SWATCHES: Record<UiColorProfileId, UiProfileSwatch> = {
     fill: "#ecd8b4",
     dotFill: "#fffaf0",
     dotStroke: "#3d352b",
+  },
+  dark: {
+    background: "#0f172a",
+    line: "#e2e8f0",
+    fill: "#1e3a8a",
+    dotFill: "#111827",
+    dotStroke: "#f8fafc",
   },
 };
 
@@ -317,6 +373,31 @@ const COLOR_PROFILES: readonly ColorProfile[] = [
       angleMark: "#000000",
       arrow: "#000000",
       marking: "#000000",
+    },
+  },
+  {
+    id: "dark_mode",
+    label: "Dark Mode",
+    palette: {
+      backgroundColor: "#0f141d",
+      gridMinorColor: "#293447",
+      gridMajorColor: "#3e4d66",
+      axisColor: "#94a3b8",
+      pointStroke: "#e2e8f0",
+      pointFill: "#0f141d",
+      pointLabel: "#f8fafc",
+      pointLabelHalo: "#0f141d",
+      segmentStroke: "#e2e8f0",
+      lineStroke: "#cbd5e1",
+      circleStroke: "#cbd5e1",
+      polygonStroke: "#cbd5e1",
+      polygonFill: "#22b8e6",
+      angleStroke: "#cbd5e1",
+      angleText: "#f8fafc",
+      angleFill: "#22b8e6",
+      angleMark: "#cbd5e1",
+      arrow: "#e2e8f0",
+      marking: "#e2e8f0",
     },
   },
 ] as const;
