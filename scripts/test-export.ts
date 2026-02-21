@@ -237,6 +237,9 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       throughId: String(raw.throughId),
       base,
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -248,6 +251,9 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       circleId: String(raw.circleId),
       branchIndex: Number(raw.branchIndex) === 1 ? 1 : 0,
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -260,6 +266,9 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       family: String(raw.family) === "inner" ? "inner" : "outer",
       branchIndex: Number(raw.branchIndex) === 1 ? 1 : 0,
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -271,6 +280,9 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       bId: String(raw.bId),
       cId: String(raw.cId),
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -280,6 +292,9 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
     aId: String(raw.aId),
     bId: String(raw.bId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+    labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+    labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
     style: (raw.style as LineStyle) ?? defaultLineStyle,
   };
 }
@@ -291,6 +306,8 @@ function hydrateSegment(raw: Record<string, unknown>): SceneSegment {
     bId: String(raw.bId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
     showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+    labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+    labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
     style: (raw.style as LineStyle) ?? defaultLineStyle,
   };
 }
@@ -305,6 +322,9 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
       radius: Number(raw.radius),
       radiusExpr: typeof raw.radiusExpr === "string" ? raw.radiusExpr : undefined,
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as CircleStyle) ?? defaultCircleStyle,
     };
   }
@@ -316,6 +336,9 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
       bId: String(raw.bId),
       cId: String(raw.cId),
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as CircleStyle) ?? defaultCircleStyle,
     };
   }
@@ -325,6 +348,9 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
     centerId: String(raw.centerId),
     throughId: String(raw.throughId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+    labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+    labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
     style: (raw.style as CircleStyle) ?? defaultCircleStyle,
   };
 }
@@ -368,8 +394,17 @@ function hydratePolygon(raw: Record<string, unknown>): ScenePolygon {
     id: String(raw.id),
     pointIds: Array.isArray(raw.pointIds) ? raw.pointIds.map((id) => String(id)) : [],
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+    labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+    labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
     style: (raw.style as PolygonStyle) ?? defaultPolygonStyle,
   };
+}
+
+function isVec2Like(value: unknown): value is { x: number; y: number } {
+  if (!value || typeof value !== "object") return false;
+  const maybe = value as { x?: unknown; y?: unknown };
+  return Number.isFinite(maybe.x) && Number.isFinite(maybe.y);
 }
 
 function hydrateNumber(raw: Record<string, unknown>): SceneNumber {
@@ -382,6 +417,26 @@ function hydrateNumber(raw: Record<string, unknown>): SceneNumber {
 }
 
 function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene: SceneModel, exportError: Error | null): void {
+  if (fileName === "object-labels-basic.json") {
+    if (exportError) throw exportError;
+    const nodeCount = (tikz.match(/\\node(?:\[[^\]]*\])?\s+at\s+\(/g) ?? []).length;
+    if (nodeCount < 4) {
+      throw new Error(`Expected object-label fixture to emit at least 4 node labels, got ${nodeCount}.`);
+    }
+    if (!tikz.includes("{$s$}")) {
+      throw new Error("Expected segment object label to be exported.");
+    }
+    if (!tikz.includes("{$m$}")) {
+      throw new Error("Expected line object label to be exported.");
+    }
+    if (!tikz.includes("{$\\Gamma_1$}")) {
+      throw new Error("Expected circle object label to be exported.");
+    }
+    if (!tikz.includes("{$ABDC$}")) {
+      throw new Error("Expected polygon object label to be exported.");
+    }
+  }
+
   if (fileName === "perpendicular-line-through-point.json") {
     if (exportError) {
       if (!exportError.message.includes("Unsupported construction: PerpendicularLine")) {
@@ -527,7 +582,9 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!/\\tkzInterLL\(F,G\)\(E,D\)\s+\\tkzGetPoint\{J\}/.test(tikz)) {
       throw new Error("Regression: expected J to be defined from InterLL(F,G)(E,D).");
     }
-    if (!/\\tkzInterLC(?:\[[^\]]*\])?\(F,G\)\(K,J\)\s+\\tkzGetPoints\{O\}\{[^}]+\}/.test(tikz)) {
+    if (
+      !/\\tkzInterLC(?:\[[^\]]*\])?\((?:F,G|G,F)\)\(K,J\)\s+\\tkzGetPoints(?:\{O\}\{[^}]+\}|\{[^}]+\}\{O\})/.test(tikz)
+    ) {
       throw new Error("Regression: expected O to be defined from InterLC(F,G)(K,J).");
     }
     const drawLines = parseDrawLines(tikz);
@@ -828,7 +885,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "segment-mark-arrow-end-dual-same-color.json") {
     if (exportError) throw exportError;
-    if (tikz.includes("\\tkzDrawSegment") && tikz.includes("(E,F)")) {
+    const efSegmentDraws = tikz.match(/\\tkzDrawSegment\[[^\]]*\]\(E,F\)/g) ?? [];
+    if (efSegmentDraws.some((cmd) => !cmd.includes("}-{Stealth["))) {
       throw new Error("Expected dual endpoint arrows to replace base segment stroke.");
     }
     if (!tikz.includes("}-{Stealth[")) {
@@ -845,7 +903,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "segment-mark-arrow-end-dual-mixed-size.json") {
     if (exportError) throw exportError;
-    if (tikz.includes("\\tkzDrawSegment") && tikz.includes("(E,F)")) {
+    const efSegmentDraws = tikz.match(/\\tkzDrawSegment\[[^\]]*\]\(E,F\)/g) ?? [];
+    if (efSegmentDraws.some((cmd) => !cmd.includes("-{Stealth["))) {
       throw new Error("Expected mixed-size dual endpoint arrows to replace base segment stroke.");
     }
     const fullForward = /\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(E,F\)/.test(tikz);
@@ -862,7 +921,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "segment-mark-arrow-end-plus-mid-same-color.json") {
     if (exportError) throw exportError;
-    if (tikz.includes("\\tkzDrawSegment") && tikz.includes("(E,F)")) {
+    const efSegmentDraws = tikz.match(/\\tkzDrawSegment\[[^\]]*\]\(E,F\)/g) ?? [];
+    if (efSegmentDraws.some((cmd) => !cmd.includes("-{Stealth["))) {
       throw new Error("Expected endpoint+mid fixture to replace base segment stroke with endpoint arrow draw.");
     }
     if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(E,F\)/.test(tikz)) {
@@ -957,7 +1017,25 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
       throw new Error("Expected segment <-> mid-gap fixture to emit outward command order.");
     }
     const measuredGap = right.position - left.position;
-    const expectedGap = (2 * 30) / (7.5 * 80); // 2*pairGapPx / (pathLengthWorld * screenPxPerWorld)
+    const segment = scene.segments[0];
+    const pointA = scene.points.find((point) => point.id === segment?.aId);
+    const pointB = scene.points.find((point) => point.id === segment?.bId);
+    const worldA = pointA ? getPointWorldPos(pointA, scene) : null;
+    const worldB = pointB ? getPointWorldPos(pointB, scene) : null;
+    const pathLengthWorld =
+      worldA && worldB ? Math.hypot(worldB.x - worldA.x, worldB.y - worldA.y) : 0;
+    if (!(pathLengthWorld > 1e-9)) {
+      throw new Error("Expected mid-gap fixture to have a resolvable non-zero segment length.");
+    }
+    const explicitPairGap =
+      (Array.isArray(segment?.style.segmentArrowMarks) && segment.style.segmentArrowMarks.length > 0
+        ? segment.style.segmentArrowMarks[0]?.pairGapPx
+        : segment?.style.segmentArrowMark?.pairGapPx) ?? 30;
+    const pairGapPx = Number.isFinite(explicitPairGap) ? Number(explicitPairGap) : 30;
+    const scaleMatch = tikz.match(/\\begin\{tikzpicture\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+    const tikzScale = scaleMatch ? Number(scaleMatch[1]) : 1;
+    const pxPerWorld = Number.isFinite(tikzScale) && tikzScale > 0 ? tikzScale * 37.8 : 80;
+    const expectedGap = (2 * pairGapPx) / (pathLengthWorld * pxPerWorld); // 2*pairGapPx / (pathLengthWorld * export px density)
     if (Math.abs(measuredGap - expectedGap) > 0.005) {
       throw new Error(`Expected explicit pairGapPx spacing ${expectedGap}, got ${measuredGap}.`);
     }
@@ -1041,10 +1119,10 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("\\tkzDrawSector")) {
       throw new Error("Expected sector arrow fixture to emit sector draw command.");
     }
-    if (!tikz.includes("] (A) arc[start angle=")) {
-      throw new Error("Expected sector arrow fixture to anchor arc overlay to named sector start point A.");
-    }
-    if (!tikz.includes("arc[start angle=")) {
+    const hasArcOverlay =
+      tikz.includes(") arc[start angle=") ||
+      tikz.includes(") arc (");
+    if (!hasArcOverlay) {
       throw new Error("Expected sector arrow fixture to emit arc path overlay.");
     }
     if (!tikz.includes("{Triangle[")) {

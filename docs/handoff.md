@@ -3112,6 +3112,58 @@ Date completed: February 21, 2026
 - `npm run test:scene` passed.
 - `npm run build` passed.
 
+## Latest Done (Label System Expansion: Object Labels + Label Tool + TikZ Export)
+Date completed: February 21, 2026
+
+### Goal completed
+- Added non-point object labels end-to-end and kept export parity with canvas behavior.
+
+### What changed
+- Data model and normalization:
+  - Added object label fields for segment/line/circle/polygon:
+    - `showLabel`
+    - `labelText`
+    - `labelPosWorld`
+  - Added object-label defaults/helpers:
+    - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/scene/objectLabels.ts`
+  - Added integrity normalization/backfill for label fields in:
+    - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/domain/sceneIntegrity.ts`
+
+- State/actions:
+  - Creation actions now initialize object label defaults.
+  - Added mutation actions:
+    - `enableObjectLabel(...)`
+    - `moveObjectLabelTo(...)`
+  - `updateSelected*Fields` for segment/line/circle/polygon now handle label fields.
+
+- UI and interaction:
+  - Added `Label` tool to `STYLES` group (beside `Copy Style`).
+  - Label tool behavior:
+    - click object => enable/select label target
+    - drag label => move label position
+  - Added object label overlays + DOM hit test + pointer drag mode for:
+    - segment, line, circle, polygon
+  - Added object label property controls:
+    - `Show Label`
+    - `Label Text`
+
+- TikZ export parity:
+  - Added object-label emission in TikZ export for segment/line/circle/polygon with deterministic ordering.
+  - Uses explicit label world position (or deterministic fallback) and exports via `\node ... at (...)`.
+  - Preserved existing point/angle label behavior.
+
+- Export regression coverage:
+  - Added object-label export fixture:
+    - `/Users/ajatadriansyah/Documents/GeoDraw-core/src/export/__fixtures__/object-labels-basic.json`
+  - Updated export test hydration/assertions in:
+    - `/Users/ajatadriansyah/Documents/GeoDraw-core/scripts/test-export.ts`
+
+### Verification
+- `npm run test:export` passed (`All 65 export fixtures compiled successfully.`)
+- `npm run test:scene` passed.
+- `npm run test:command` passed.
+- `npm run build` passed.
+
 ## Homework (Pinned Next Work)
 Date pinned: February 21, 2026
 

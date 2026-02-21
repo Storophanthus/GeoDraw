@@ -185,6 +185,7 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     setSelectedObject() {},
     setCopyStyleSource() {},
     applyCopyStyleTo() {},
+    enableObjectLabel() {},
     getPointWorldById() {
       return null;
     },

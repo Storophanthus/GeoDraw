@@ -161,6 +161,7 @@ function runScenario(activeTool: ActiveTool): void {
     setSelectedObject() {},
     setCopyStyleSource() {},
     applyCopyStyleTo() {},
+    enableObjectLabel() {},
     getPointWorldById(id) {
       return id === "pB" ? { x: 2, y: 3 } : null;
     },

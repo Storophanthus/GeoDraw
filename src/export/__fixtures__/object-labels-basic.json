@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "A",
+      "visible": true,
+      "showLabel": "none",
+      "definition": { "kind": "free", "x": 0, "y": 0 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_2",
+      "name": "B",
+      "visible": true,
+      "showLabel": "none",
+      "definition": { "kind": "free", "x": 4, "y": 0 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_3",
+      "name": "C",
+      "visible": true,
+      "showLabel": "none",
+      "definition": { "kind": "free", "x": 0, "y": 3 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_4",
+      "name": "D",
+      "visible": true,
+      "showLabel": "none",
+      "definition": { "kind": "free", "x": 3, "y": 3 },
+      "dependsOn": []
+    }
+  ],
+  "lines": [
+    {
+      "id": "l_1",
+      "kind": "twoPoint",
+      "aId": "p_1",
+      "bId": "p_3",
+      "visible": true,
+      "showLabel": true,
+      "labelText": "m",
+      "labelPosWorld": { "x": -0.3, "y": 1.5 },
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "dash": "solid",
+        "opacity": 1
+      }
+    }
+  ],
+  "segments": [
+    {
+      "id": "s_1",
+      "aId": "p_1",
+      "bId": "p_2",
+      "visible": true,
+      "showLabel": true,
+      "labelText": "s",
+      "labelPosWorld": { "x": 2, "y": 0.6 },
+      "style": {
+        "strokeColor": "#1f2937",
+        "strokeWidth": 1.8,
+        "dash": "solid",
+        "opacity": 1
+      }
+    }
+  ],
+  "circles": [
+    {
+      "id": "c_1",
+      "kind": "twoPoint",
+      "centerId": "p_1",
+      "throughId": "p_3",
+      "visible": true,
+      "showLabel": true,
+      "labelText": "\\Gamma_1",
+      "labelPosWorld": { "x": 2.2, "y": 2.2 },
+      "style": {
+        "strokeColor": "#0f766e",
+        "strokeWidth": 1.8,
+        "strokeDash": "solid",
+        "strokeOpacity": 1
+      }
+    }
+  ],
+  "polygons": [
+    {
+      "id": "pg_1",
+      "pointIds": ["p_1", "p_2", "p_4", "p_3"],
+      "visible": true,
+      "showLabel": true,
+      "labelText": "ABDC",
+      "labelPosWorld": { "x": 1.9, "y": 1.4 },
+      "style": {
+        "strokeColor": "#7c3aed",
+        "strokeWidth": 1.8,
+        "strokeDash": "solid",
+        "strokeOpacity": 1,
+        "fillColor": "#93c5fd",
+        "fillOpacity": 0.2
+      }
+    }
+  ],
+  "angles": [],
+  "numbers": []
+}

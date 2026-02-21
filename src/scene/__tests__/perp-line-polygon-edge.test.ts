@@ -208,6 +208,7 @@ const io: ConstructClickIo = {
   setSelectedObject() {},
   setCopyStyleSource() {},
   applyCopyStyleTo() {},
+  enableObjectLabel() {},
   getPointWorldById(id) {
     return worldByPointId.get(id) ?? null;
   },

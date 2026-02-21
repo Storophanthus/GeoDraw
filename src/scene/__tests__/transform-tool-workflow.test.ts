@@ -144,6 +144,7 @@ function makeHarness(activeTool: ActiveTool): {
     setSelectedObject() {},
     setCopyStyleSource() {},
     applyCopyStyleTo() {},
+    enableObjectLabel() {},
     angleFixedTool: { angleExpr: "45", direction: "CCW" },
     regularPolygonTool: { sides: 5, direction: "CCW" },
     transformTool: {
