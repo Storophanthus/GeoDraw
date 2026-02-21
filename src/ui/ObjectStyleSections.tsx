@@ -11,6 +11,7 @@ import type {
   SceneLine,
   ScenePolygon,
   SceneSegment,
+  SegmentArrowMark,
 } from "../scene/points";
 import * as React from "react";
 
@@ -50,6 +51,10 @@ const DEFAULT_PATH_ARROW_MARK: PathArrowMark = {
   sizeScale: DEFAULT_PATH_ARROW_UI,
   lineWidthPt: DEFAULT_PATH_ARROW_LINE_WIDTH_PT,
   arrowLength: 1.0,
+};
+const DEFAULT_SEGMENT_ARROW_MARK: SegmentArrowMark = {
+  ...DEFAULT_PATH_ARROW_MARK,
+  mode: "end",
 };
 
 function isPairArrowDirection(direction: ArrowDirection | undefined): boolean {
@@ -102,32 +107,47 @@ type ObjectStyleSectionsProps = {
 
 import { Trash2, Plus, Copy } from "lucide-react";
 
-function ArrowListControl({
+type ArrowListControlProps<T extends PathArrowMark> = {
+  arrows: T[] | undefined;
+  onChange: (arrows: T[]) => void;
+  strokeColor: string;
+  createArrow?: () => T;
+  renderPlacementControl?: (args: {
+    selectedArrow: T;
+    updateSelectedArrow: (updates: Record<string, unknown>) => void;
+  }) => React.ReactNode;
+};
+
+function ArrowListControl<T extends PathArrowMark>({
   arrows,
   onChange,
   strokeColor,
-}: {
-  arrows: PathArrowMark[] | undefined;
-  onChange: (arrows: PathArrowMark[]) => void;
-  strokeColor: string;
-}) {
+  createArrow,
+  renderPlacementControl,
+}: ArrowListControlProps<T>) {
+  const makeArrow = React.useCallback(() => {
+    if (createArrow) return createArrow();
+    return { ...DEFAULT_PATH_ARROW_MARK } as T;
+  }, [createArrow]);
   // Local state to track which arrow is being edited
   const [selectedByIndex, setSelectedByIndex] = React.useState<number>(0);
   const safeArrows = arrows ?? [];
 
   // Ensure we clamp the selection if the list shrank
   const actualIndex = Math.max(0, Math.min(selectedByIndex, safeArrows.length - 1));
-  const selectedArrow = safeArrows[actualIndex] ?? DEFAULT_PATH_ARROW_MARK;
+  const selectedArrow = safeArrows[actualIndex] ?? makeArrow();
+  const selectedPlacementMode = (selectedArrow as { mode?: SegmentArrowMark["mode"] }).mode;
+  const isEndpointPlacement = selectedPlacementMode === "end";
 
-  const updateSelectedArrow = (updates: Partial<PathArrowMark>) => {
+  const updateSelectedArrow = (updates: Record<string, unknown>) => {
     const newArrows = [...safeArrows];
     if (newArrows.length === 0) return;
-    newArrows[actualIndex] = { ...newArrows[actualIndex], ...updates };
+    newArrows[actualIndex] = { ...newArrows[actualIndex], ...(updates as Partial<T>) };
     onChange(newArrows);
   };
 
   const addArrow = () => {
-    const newArrows = [...safeArrows, { ...DEFAULT_PATH_ARROW_MARK }];
+    const newArrows = [...safeArrows, makeArrow()];
     onChange(newArrows);
     setSelectedByIndex(newArrows.length - 1);
   };
@@ -266,18 +286,37 @@ function ArrowListControl({
               {/* Direction */}
               <div className="controlRow" style={{ gridTemplateColumns: "100px 1fr" }}>
                 <label className="controlLabel">Direction</label>
-                <select
-                  className="selectInput arrowIconSelect"
-                  value={selectedArrow.direction}
-                  onChange={(e) => updateSelectedArrow({ direction: e.target.value as ArrowDirection })}
-                  style={{ height: "32px", borderRadius: "6px" }}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "4px",
+                  }}
                 >
                   {ARROW_DIRECTION_OPTIONS.filter((opt) => !isPairArrowDirection(opt.value)).map((direction) => (
-                    <option key={direction.value} value={direction.value}>
+                    <button
+                      key={direction.value}
+                      type="button"
+                      className="iconButton"
+                      onClick={() => updateSelectedArrow({ direction: direction.value })}
+                      style={{
+                        height: "32px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--gd-ui-border, #cbd5e1)",
+                        background:
+                          selectedArrow.direction === direction.value
+                            ? "var(--gd-ui-accent, #2563eb)"
+                            : "var(--gd-ui-surface, #fff)",
+                        color:
+                          selectedArrow.direction === direction.value
+                            ? "var(--gd-ui-accent-contrast, #fff)"
+                            : "var(--gd-ui-text, #334155)",
+                      }}
+                    >
                       {direction.label}
-                    </option>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
               {/* Tip Style */}
@@ -297,23 +336,41 @@ function ArrowListControl({
                 </select>
               </div>
 
+              {renderPlacementControl?.({ selectedArrow, updateSelectedArrow })}
+
               {/* Distribution */}
-              <div className="controlRow" style={{ gridTemplateColumns: "100px 1fr" }}>
-                <label className="controlLabel">Distribution</label>
-                <select
-                  className="selectInput"
-                  value={selectedArrow.distribution ?? "single"}
-                  onChange={(e) => updateSelectedArrow({ distribution: e.target.value as "single" | "multi" })}
-                  style={{ height: "32px", borderRadius: "6px" }}
-                >
-                  <option value="single">Single</option>
-                  <option value="multi">Multi</option>
-                </select>
-              </div>
+              {!isEndpointPlacement && (
+                <div className="controlRow" style={{ gridTemplateColumns: "100px 1fr" }}>
+                  <label className="controlLabel">Distribution</label>
+                  <select
+                    className="selectInput"
+                    value={selectedArrow.distribution ?? "single"}
+                    onChange={(e) => updateSelectedArrow({ distribution: e.target.value as "single" | "multi" })}
+                    style={{ height: "32px", borderRadius: "6px" }}
+                  >
+                    <option value="single">Single</option>
+                    <option value="multi">Multi</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Group 2: Sub-panel for Positioning */}
-            {selectedArrow.distribution === "multi" ? (
+            {isEndpointPlacement ? (
+              <div className="nestedGroup" style={{
+                background: "var(--gd-ui-surface-soft, #f8fafc)",
+                border: "1px solid var(--gd-ui-border-soft, #e2e8f0)",
+                borderRadius: "8px",
+                padding: "10px 12px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px"
+              }}>
+                <span style={{ fontSize: "12px", color: "var(--gd-ui-text-subtle, #64748b)" }}>
+                  Endpoint placement anchors arrow tips to segment ends.
+                </span>
+              </div>
+            ) : selectedArrow.distribution === "multi" ? (
               <div className="nestedGroup" style={{
                 background: "var(--gd-ui-surface-soft, #f8fafc)", /* subtle tint */
                 border: "1px solid var(--gd-ui-border-soft, #e2e8f0)",
@@ -816,36 +873,74 @@ export function ObjectStyleSections({
             <div className="subSectionTitle" style={{ marginTop: 10 }}>
               Arrow Mark
             </div>
-            <ArrowListControl
+            <ArrowListControl<SegmentArrowMark>
               arrows={
                 selectedSegment.style.segmentArrowMarks ??
                 (selectedSegment.style.segmentArrowMark?.enabled
                   ? [
                     {
-                      ...DEFAULT_PATH_ARROW_MARK,
+                      ...DEFAULT_SEGMENT_ARROW_MARK,
                       ...selectedSegment.style.segmentArrowMark,
-                      // Map segment-specific 'mode' to something PathArrowMark handles if needed,
-                      // or just rely on common properties. PathArrowMark doesn't have 'mode'.
-                      // For now we assume 'mid' behavior for the list.
-                      // If we need to support 'end' arrows in the new system, we might need a property for it,
-                      // or simpler: deprecate 'mode' and just use 'pos=1' or 'pos=0'.
-                    } as PathArrowMark,
+                    },
                   ]
                   : [])
               }
+              createArrow={() => ({ ...DEFAULT_SEGMENT_ARROW_MARK })}
               strokeColor={selectedSegment.style.strokeColor}
-              onChange={(newArrows) => {
-                // Convert back to SegmentArrowMark[] if needed, but we defined segmentArrowMarks as SegmentArrowMark[]
-                // which extends PathArrowMark slightly (adds mode?).
-                // Let's check SceneModel again. PathArrowMark doesn't have 'mode'. SegmentArrowMark does.
-                // We should probably strip 'mode' and rely on 'pos' for new system, or cast.
-                // For this refactor, we cast to any to satisfy the callback, assuming we migrate away from 'mode'.
-                const castArrows = newArrows.map((a) => ({
-                  ...a,
-                  mode: "mid", // Default to mid for list-based arrows
-                })) as any[];
-                updateSelectedSegmentStyle({ segmentArrowMarks: castArrows });
-              }}
+              onChange={(newArrows) => updateSelectedSegmentStyle({ segmentArrowMarks: newArrows })}
+              renderPlacementControl={({ selectedArrow, updateSelectedArrow }) => (
+                <div className="controlRow" style={{ gridTemplateColumns: "100px 1fr" }}>
+                  <label className="controlLabel">Placement</label>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "4px",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="iconButton"
+                      onClick={() => updateSelectedArrow({ mode: "mid" })}
+                      style={{
+                        height: "32px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--gd-ui-border, #cbd5e1)",
+                        background:
+                          selectedArrow.mode === "mid"
+                            ? "var(--gd-ui-accent, #2563eb)"
+                            : "var(--gd-ui-surface, #fff)",
+                        color:
+                          selectedArrow.mode === "mid"
+                            ? "var(--gd-ui-accent-contrast, #fff)"
+                            : "var(--gd-ui-text, #334155)",
+                      }}
+                    >
+                      Middle
+                    </button>
+                    <button
+                      type="button"
+                      className="iconButton"
+                      onClick={() => updateSelectedArrow({ mode: "end", distribution: "single" })}
+                      style={{
+                        height: "32px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--gd-ui-border, #cbd5e1)",
+                        background:
+                          selectedArrow.mode === "end"
+                            ? "var(--gd-ui-accent, #2563eb)"
+                            : "var(--gd-ui-surface, #fff)",
+                        color:
+                          selectedArrow.mode === "end"
+                            ? "var(--gd-ui-accent-contrast, #fff)"
+                            : "var(--gd-ui-text, #334155)",
+                      }}
+                    >
+                      Endpoint
+                    </button>
+                  </div>
+                </div>
+              )}
             />
           </details>
         </div>

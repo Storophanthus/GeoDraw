@@ -1,6 +1,6 @@
 import { sub } from "../geo/geometry";
 import type { Vec2 } from "../geo/vec2";
-import type { SceneModel } from "../scene/points";
+import type { SceneModel, SegmentArrowMark } from "../scene/points";
 import {
   arrowCanvasLineWidthFromStoredPt,
   clamp01,
@@ -127,10 +127,12 @@ export function drawSegmentArrowOverlay(
   ctx: CanvasRenderingContext2D,
   p1: Vec2,
   p2: Vec2,
-  style: SceneModel["segments"][number]["style"]
+  style: SceneModel["segments"][number]["style"],
+  suppressedArrowKeys?: ReadonlySet<string>
 ): void {
   const arrows = style.segmentArrowMarks ?? (style.segmentArrowMark ? [style.segmentArrowMark] : []);
-  if (arrows.length === 0) return;
+  const effectiveArrows = canonicalizeSegmentArrows(arrows);
+  if (effectiveArrows.length === 0) return;
   const d = sub(p2, p1);
   const len = Math.hypot(d.x, d.y);
   if (len < 1e-6) return;
@@ -143,34 +145,140 @@ export function drawSegmentArrowOverlay(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  for (const arrow of arrows) {
-    if (!arrow.enabled) continue;
-    const color = arrow.color ?? style.strokeColor;
+  for (const effectiveArrow of effectiveArrows) {
+    const arrowKey = segmentArrowCanonicalKey(effectiveArrow);
+    if (suppressedArrowKeys?.has(arrowKey)) continue;
+    const color = effectiveArrow.color ?? style.strokeColor;
     const lineWidthPt =
-      typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) && arrow.lineWidthPt > 0
-        ? arrow.lineWidthPt
+      typeof effectiveArrow.lineWidthPt === "number" &&
+      Number.isFinite(effectiveArrow.lineWidthPt) &&
+      effectiveArrow.lineWidthPt > 0
+        ? effectiveArrow.lineWidthPt
         : DEFAULT_ARROW_LINE_WIDTH_PT;
     const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
-    const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale, arrow.arrowLength);
-    const pairGapPx = resolveArrowPairGapPx(arrow.pairGapPx, separation);
+    const { headSize, separation, widthScale } = segmentArrowHeadSize(
+      lineWidth,
+      effectiveArrow.sizeScale,
+      effectiveArrow.arrowLength
+    );
+    const pairGapPx = resolveArrowPairGapPx(effectiveArrow.pairGapPx, separation);
 
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.lineWidth = lineWidth;
 
-    if (arrow.mode === "end") {
-      const placements = resolveEndArrowPlacements(p1, p2, ux, uy, arrow.direction);
-      drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
+    if (effectiveArrow.mode === "end") {
+      const placements = resolveEndArrowPlacements(p1, p2, ux, uy, effectiveArrow.direction);
+      drawArrowPlacements(ctx, placements, headSize, effectiveArrow.tip, widthScale);
     } else {
       // mode === "mid"
-      const positions = collectArrowPositions(arrow, style.segmentMark?.pos ?? 0.5);
+      const positions = collectArrowPositions(effectiveArrow, style.segmentMark?.pos ?? 0.5);
       for (let i = 0; i < positions.length; i += 1) {
         const t = clamp01(positions[i]);
         const tip = { x: p1.x + ux * len * t, y: p1.y + uy * len * t };
-        const placements = resolveMidArrowPlacements(tip, ux, uy, arrow.direction, pairGapPx);
-        drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
+        const placements = resolveMidArrowPlacements(tip, ux, uy, effectiveArrow.direction, pairGapPx);
+        drawArrowPlacements(ctx, placements, headSize, effectiveArrow.tip, widthScale);
       }
     }
   }
   ctx.restore();
+}
+
+export function resolveSegmentEndpointReplacementArrow(
+  style: SceneModel["segments"][number]["style"]
+): { arrow: SegmentArrowMark; key: string } | null {
+  if (style.dash !== "solid") return null;
+  const arrows = style.segmentArrowMarks ?? (style.segmentArrowMark ? [style.segmentArrowMark] : []);
+  const enabledArrows = canonicalizeSegmentArrows(arrows);
+  const strokeColor = style.strokeColor.trim().toLowerCase();
+  for (const arrow of enabledArrows) {
+    if (arrow.mode !== "end") continue;
+    if (arrow.direction !== "->" && arrow.direction !== "<-") continue;
+    const arrowColor = (arrow.color ?? style.strokeColor).trim().toLowerCase();
+    if (arrowColor !== strokeColor) continue;
+    return { arrow, key: segmentArrowCanonicalKey(arrow) };
+  }
+  return null;
+}
+
+export function drawSegmentWithEndpointArrow(
+  ctx: CanvasRenderingContext2D,
+  p1: Vec2,
+  p2: Vec2,
+  style: SceneModel["segments"][number]["style"],
+  arrow: SegmentArrowMark
+): void {
+  const d = sub(p2, p1);
+  const len = Math.hypot(d.x, d.y);
+  if (len < 1e-6) return;
+  const ux = d.x / len;
+  const uy = d.y / len;
+  const color = arrow.color ?? style.strokeColor;
+
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = Number.isFinite(style.opacity) ? clamp01(style.opacity) : 1;
+  ctx.lineCap = "butt";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = style.strokeWidth;
+
+  if (arrow.direction === "->") {
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(p2.x, p2.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.stroke();
+  }
+
+  const lineWidthPt =
+    typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) && arrow.lineWidthPt > 0
+      ? arrow.lineWidthPt
+      : DEFAULT_ARROW_LINE_WIDTH_PT;
+  const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
+  const { headSize, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale, arrow.arrowLength);
+  ctx.lineWidth = lineWidth;
+  const placements = resolveEndArrowPlacements(p1, p2, ux, uy, arrow.direction);
+  drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
+  ctx.restore();
+}
+
+function canonicalizeSegmentArrows(arrows: SegmentArrowMark[]): SegmentArrowMark[] {
+  const filtered = arrows.filter((arrow) => Boolean(arrow?.enabled));
+  const out: SegmentArrowMark[] = [];
+  const seen = new Set<string>();
+  for (const arrow of filtered) {
+    const key = segmentArrowCanonicalKey(arrow);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(arrow);
+  }
+  return out;
+}
+
+function segmentArrowCanonicalKey(arrow: SegmentArrowMark): string {
+  const round = (value: unknown): string => {
+    if (!Number.isFinite(value)) return "";
+    return (value as number).toFixed(4);
+  };
+  return [
+    arrow.mode,
+    arrow.direction,
+    arrow.tip ?? "",
+    arrow.distribution ?? "single",
+    round(arrow.pos),
+    round(arrow.startPos),
+    round(arrow.endPos),
+    round(arrow.step),
+    round(arrow.sizeScale),
+    round(arrow.lineWidthPt),
+    round(arrow.arrowLength),
+    round(arrow.pairGapPx),
+    arrow.color ?? "",
+  ].join("|");
 }

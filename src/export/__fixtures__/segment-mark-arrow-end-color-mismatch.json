@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "E",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": -1.4, "y": -0.6 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_2",
+      "name": "F",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 2.8, "y": -0.6 },
+      "dependsOn": []
+    }
+  ],
+  "lines": [],
+  "segments": [
+    {
+      "id": "s_1",
+      "aId": "p_1",
+      "bId": "p_2",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "dash": "solid",
+        "opacity": 1,
+        "segmentArrowMarks": [
+          {
+            "enabled": true,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#0f766e"
+          }
+        ]
+      }
+    }
+  ],
+  "circles": [],
+  "angles": [],
+  "numbers": []
+}

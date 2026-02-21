@@ -103,4 +103,16 @@ runTest("handles complex label templates", () => {
     assertOk(output.includes("\\foreach \\P in {P1,P2}{\\tkzLabelPoint[xshift=1pt](\\P){$\\P$}}"));
 });
 
+runTest("rounds angle-label options and angle keyword syntax", () => {
+    const input = `
+\\tkzDefPointOnCircle[through = center O angle -150.161929357818 point tkzCircleR_1]
+\\tkzLabelAngle[dist=0.376926862445237, angle=24.0822396243238, text=black](Y,A,D){$30^{\\circ}$}
+    `.trim();
+    const expected = `
+\\tkzDefPointOnCircle[through = center O angle -150.16 point tkzCircleR_1]
+\\tkzLabelAngle[dist=0.38, angle=24.08, text=black](Y,A,D){$30^{\\circ}$}
+    `.trim();
+    assertEqual(makeEfficientTikz(input), expected);
+});
+
 console.log("All tests passed");

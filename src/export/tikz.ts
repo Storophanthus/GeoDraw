@@ -1102,12 +1102,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     }
     const aName = mustName(pointName, seg.aId);
     const bName = mustName(pointName, seg.bId);
-    drawStrokes.push({
-      kind: "DrawSegment",
-      a: aName,
-      b: bName,
-      style: segmentStyleToTikz(seg.style, options),
-    });
+    const segmentArrows = seg.style.segmentArrowMarks ?? seg.style.segmentArrowMark;
+    const segmentStrokeCarrierKey = selectSegmentStrokeCarrierArrowKey(seg.style, segmentArrows);
+    if (!segmentStrokeCarrierKey) {
+      drawStrokes.push({
+        kind: "DrawSegment",
+        a: aName,
+        b: bName,
+        style: segmentStyleToTikz(seg.style, options, hasEnabledEndpointSegmentArrow(segmentArrows)),
+      });
+    }
     const markStyle = segmentMarkToTikz(
       seg.style.segmentMark,
       seg.style.strokeColor,
@@ -1127,13 +1131,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const bWorld = getPointWorldPosCached(scene, seg.bId);
     const segmentLengthWorld = aWorld && bWorld ? distance(aWorld, bWorld) : undefined;
     const arrowOverlay = segmentArrowsToTikz(
-      seg.style.segmentArrowMarks ?? seg.style.segmentArrowMark,
+      segmentArrows,
       aName,
       bName,
       {
         strokeColor: seg.style.strokeColor,
         strokeWidth: seg.style.strokeWidth,
         opacity: seg.style.opacity,
+        segmentStrokeWidthPt: strokeWidthToTikzPt(seg.style.strokeWidth, options),
+        segmentStrokeCarrierKey,
       },
       {
         pathLengthWorld: segmentLengthWorld,
@@ -2399,8 +2405,17 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   return opts.join(", ");
 }
 
-function segmentStyleToTikz(style: SceneModel["segments"][number]["style"], options: TikzExportOptions): string {
-  return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.dash, style.opacity, options);
+function segmentStyleToTikz(
+  style: SceneModel["segments"][number]["style"],
+  options: TikzExportOptions,
+  hasEndpointArrow = false
+): string {
+  const base = lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.dash, style.opacity, options);
+  if (!hasEndpointArrow) return base;
+  // Avoid round-cap protrusion beyond endpoints when an endpoint arrowhead is present.
+  if (style.dash === "dotted") return base;
+  if (base.includes("line cap=")) return base;
+  return `${base},line cap=butt`;
 }
 
 function segmentMarkToTikz(
@@ -2446,19 +2461,31 @@ function segmentArrowsToTikz(
   styleArrows: SegmentArrowMark | SegmentArrowMark[] | undefined,
   aName: string,
   bName: string,
-  base: { strokeColor: string; strokeWidth: number; opacity: number },
+  base: {
+    strokeColor: string;
+    strokeWidth: number;
+    opacity: number;
+    segmentStrokeWidthPt: number;
+    segmentStrokeCarrierKey: string | null;
+  },
   metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number }
 ): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
   const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
   if (arrows.length === 0) return null;
+  const effectiveArrows = canonicalizeSegmentArrows(arrows);
+  if (effectiveArrows.length === 0) return null;
 
   const rawTexs: string[] = [];
 
-  for (const arrow of arrows) {
-    if (!arrow.enabled) continue;
-
-    if (arrow.mode === "mid") {
-      const midOverlay = pathArrowOverlayToTikz(arrow, `(${aName}) -- (${bName})`, base, arrow.pos ?? 0.5, metrics as { pathLengthWorld: number; screenPxPerWorld: number });
+  for (const effectiveArrow of effectiveArrows) {
+    if (effectiveArrow.mode === "mid") {
+      const midOverlay = pathArrowOverlayToTikz(
+        effectiveArrow,
+        `(${aName}) -- (${bName})`,
+        base,
+        effectiveArrow.pos ?? 0.5,
+        metrics as { pathLengthWorld: number; screenPxPerWorld: number }
+      );
       if (midOverlay) {
         rawTexs.push(midOverlay);
       }
@@ -2466,43 +2493,233 @@ function segmentArrowsToTikz(
     }
 
     // End arrow logic
-    ensureSupportedArrowDirection(arrow.direction, "SegmentArrowMark");
-    const tip = resolveArrowTipName(arrow.tip, "SegmentArrowMark");
-    const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
+    ensureSupportedArrowDirection(effectiveArrow.direction, "SegmentArrowMark");
+    const tip = resolveArrowTipName(effectiveArrow.tip, "SegmentArrowMark");
+    const arrowColor = rgbColorExpr(effectiveArrow.color ?? base.strokeColor);
     const opacity = normalizedOpacity(base.opacity);
     const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
-    const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
-    // User snippet requires scale=0.85 for segments.
-    const arrowScale = clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.85;
-    const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
-    const tipMetrics = resolvePathArrowTipMetricsPx(tip, arrowScale, arrowWidthUi, "SegmentArrowMark");
+    const overlayArrowWidthPt = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
+    const normalizedSegmentColor = base.strokeColor.trim().toLowerCase();
+    const normalizedArrowColor = (effectiveArrow.color ?? base.strokeColor).trim().toLowerCase();
+    const arrowKey = segmentArrowCanonicalKey(effectiveArrow);
+    const isCarrierArrow = base.segmentStrokeCarrierKey !== null && arrowKey === base.segmentStrokeCarrierKey;
+    const hasSameColorCarrier = base.segmentStrokeCarrierKey !== null && normalizedArrowColor === normalizedSegmentColor;
+    const useSegmentStrokeWidthForEndpoint =
+      effectiveArrow.mode === "end" &&
+      (isCarrierArrow || hasSameColorCarrier);
+    const arrowWidth = useSegmentStrokeWidthForEndpoint ? base.segmentStrokeWidthPt : overlayArrowWidthPt;
+    // Keep endpoint-arrow defaults aligned with decoration arrows.
+    const effectiveScale = clampPositive(effectiveArrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.75;
+    const arrowWidthUi = resolvePathArrowWidthUi(effectiveArrow.lineWidthPt);
+    const tipMetrics = resolvePathArrowTipMetricsPx(
+      tip,
+      1.0,
+      arrowWidthUi,
+      "PathArrowMark",
+      effectiveArrow.arrowLength
+    );
     const tipSpec = resolveArrowTipSpec(
       tip,
-      tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT,
-      tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT
+      tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
+      tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale
     );
-    const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * arrowScale));
-    const t = fmt(1 - tailFrac);
-    const tNeg = fmt(-tailFrac);
-    const drawStyle = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,-{${tipSpec}}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
+    const drawStyleBase = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,line cap=butt${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
       }`;
+    const drawStyleForward = `${drawStyleBase},-{${tipSpec}}`;
+    const pathLengthPx =
+      Number.isFinite(metrics?.pathLengthWorld) &&
+      Number.isFinite(metrics?.screenPxPerWorld) &&
+      (metrics?.pathLengthWorld as number) > 0 &&
+      (metrics?.screenPxPerWorld as number) > 0
+        ? (metrics?.pathLengthWorld as number) * (metrics?.screenPxPerWorld as number)
+        : NaN;
+    const tipLengthPx = tipMetrics.lengthPx * effectiveScale;
+    const shortTailFrac = Number.isFinite(pathLengthPx)
+      ? Math.max(0.01, Math.min(0.35, (tipLengthPx * 1.1) / (pathLengthPx as number)))
+      : 0.06;
+    const shortTailT = fmt(1 - shortTailFrac);
+    const preferHeadOnlyEndpointOverlay = hasSameColorCarrier && !isCarrierArrow;
 
-    if (arrow.direction === "->") {
-      rawTexs.push(`\\draw[${drawStyle}] ($(${aName})!${t}!(${bName})$) -- (${bName});`);
-    } else if (arrow.direction === "<-") {
-      rawTexs.push(`\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`);
-    } else if (arrow.direction === "<->") {
-      rawTexs.push(`\\draw[${drawStyle}] ($(${aName})!${t}!(${bName})$) -- (${bName});`);
-      rawTexs.push(`\\draw[${drawStyle}] ($(${bName})!${t}!(${aName})$) -- (${aName});`);
+    if (effectiveArrow.direction === "->") {
+      if (preferHeadOnlyEndpointOverlay) {
+        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${aName})!${shortTailT}!(${bName})$,${bName})`);
+      } else {
+        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}](${aName},${bName})`);
+      }
+    } else if (effectiveArrow.direction === "<-") {
+      if (preferHeadOnlyEndpointOverlay) {
+        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${bName})!${shortTailT}!(${aName})$,${aName})`);
+      } else {
+        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}](${bName},${aName})`);
+      }
+    } else if (effectiveArrow.direction === "<->") {
+      if (preferHeadOnlyEndpointOverlay) {
+        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${aName})!${shortTailT}!(${bName})$,${bName})`);
+        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${bName})!${shortTailT}!(${aName})$,${aName})`);
+      } else {
+        rawTexs.push(`\\tkzDrawSegment[${drawStyleBase},{${tipSpec}}-{${tipSpec}}](${aName},${bName})`);
+      }
     } else {
-      // >-< or other
-      rawTexs.push(`\\draw[${drawStyle}] ($(${aName})!${tNeg}!(${bName})$) -- (${aName});`);
-      rawTexs.push(`\\draw[${drawStyle}] ($(${bName})!${tNeg}!(${aName})$) -- (${bName});`);
+      // >-< inward endpoint arrows need a short extension outside each endpoint
+      // to orient arrowheads toward the segment interior.
+      const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * effectiveScale));
+      const tNeg = fmt(-tailFrac);
+      rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${aName})!${tNeg}!(${bName})$,${aName})`);
+      rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${bName})!${tNeg}!(${aName})$,${bName})`);
     }
   }
 
   if (rawTexs.length === 0) return null;
   return { kind: "raw", tex: rawTexs.join("\n") };
+}
+
+function normalizeLegacyEndpointMidArrow(arrow: SegmentArrowMark): SegmentArrowMark {
+  if (arrow.mode !== "mid") return arrow;
+  if ((arrow.distribution ?? "single") !== "single") return arrow;
+  const pos = Number.isFinite(arrow.pos) ? (arrow.pos as number) : 0.5;
+  const endpointEpsilon = 1e-6;
+  // Backward-compat for older UI that approximated endpoint arrows via mid-pos 0/1.
+  if (arrow.direction === "->" && pos >= 1 - endpointEpsilon) {
+    return { ...arrow, mode: "end", distribution: "single" };
+  }
+  if (arrow.direction === "<-" && pos <= endpointEpsilon) {
+    return { ...arrow, mode: "end", distribution: "single" };
+  }
+  return arrow;
+}
+
+function hasEnabledEndpointSegmentArrow(styleArrows: SegmentArrowMark | SegmentArrowMark[] | undefined): boolean {
+  const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
+  return canonicalizeSegmentArrows(arrows).some((arrow) => arrow.mode === "end");
+}
+
+function selectSegmentStrokeCarrierArrowKey(
+  style: SceneModel["segments"][number]["style"],
+  styleArrows: SegmentArrowMark | SegmentArrowMark[] | undefined
+): string | null {
+  if (style.dash !== "solid") return null;
+  const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
+  const canonical = canonicalizeSegmentArrows(arrows);
+  const strokeColor = style.strokeColor.trim().toLowerCase();
+  for (const arrow of canonical) {
+    if (arrow.mode !== "end") continue;
+    if (arrow.direction !== "->" && arrow.direction !== "<-" && arrow.direction !== "<->") continue;
+    const arrowColor = (arrow.color ?? style.strokeColor).trim().toLowerCase();
+    if (arrowColor !== strokeColor) continue;
+    return segmentArrowCanonicalKey(arrow);
+  }
+  return null;
+}
+
+function canonicalizeSegmentArrows(arrows: SegmentArrowMark[]): SegmentArrowMark[] {
+  const normalized = arrows
+    .filter((arrow) => Boolean(arrow?.enabled))
+    .map((arrow) => normalizeLegacyEndpointMidArrow(arrow))
+    .filter((arrow) => arrow.enabled);
+  if (normalized.length === 0) return [];
+
+  const hasEndpoint = normalized.some((arrow) => arrow.mode === "end");
+  const filtered = hasEndpoint
+    ? normalized.filter((arrow) => arrow.mode === "end" || !isBoundarySingleMidArrow(arrow))
+    : normalized;
+
+  const out: SegmentArrowMark[] = [];
+  const seen = new Set<string>();
+  for (const arrow of filtered) {
+    const key = segmentArrowCanonicalKey(arrow);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(arrow);
+  }
+  return mergeBidirectionalEndpointPairs(out);
+}
+
+function mergeBidirectionalEndpointPairs(arrows: SegmentArrowMark[]): SegmentArrowMark[] {
+  const merged: SegmentArrowMark[] = [];
+  const pendingForwardByKey = new Map<string, number>();
+  const pendingBackwardByKey = new Map<string, number>();
+  for (const arrow of arrows) {
+    if (arrow.mode !== "end") {
+      merged.push(arrow);
+      continue;
+    }
+    if (arrow.direction !== "->" && arrow.direction !== "<-") {
+      merged.push(arrow);
+      continue;
+    }
+    const mergeKey = bidirectionalEndpointMergeKey(arrow);
+    if (arrow.direction === "->") {
+      const oppositeIndex = pendingBackwardByKey.get(mergeKey);
+      if (oppositeIndex !== undefined) {
+        merged[oppositeIndex] = { ...merged[oppositeIndex], direction: "<->" };
+        pendingBackwardByKey.delete(mergeKey);
+        continue;
+      }
+      pendingForwardByKey.set(mergeKey, merged.length);
+      merged.push(arrow);
+      continue;
+    }
+    const oppositeIndex = pendingForwardByKey.get(mergeKey);
+    if (oppositeIndex !== undefined) {
+      merged[oppositeIndex] = { ...merged[oppositeIndex], direction: "<->" };
+      pendingForwardByKey.delete(mergeKey);
+      continue;
+    }
+    pendingBackwardByKey.set(mergeKey, merged.length);
+    merged.push(arrow);
+  }
+  return merged;
+}
+
+function bidirectionalEndpointMergeKey(arrow: SegmentArrowMark): string {
+  const round = (value: unknown): string => {
+    if (!Number.isFinite(value)) return "";
+    return (value as number).toFixed(4);
+  };
+  return [
+    arrow.mode,
+    arrow.tip ?? "",
+    arrow.distribution ?? "single",
+    round(arrow.pos),
+    round(arrow.startPos),
+    round(arrow.endPos),
+    round(arrow.step),
+    round(arrow.sizeScale),
+    round(arrow.lineWidthPt),
+    round(arrow.arrowLength),
+    round(arrow.pairGapPx),
+    arrow.color ?? "",
+  ].join("|");
+}
+
+function isBoundarySingleMidArrow(arrow: SegmentArrowMark): boolean {
+  if (arrow.mode !== "mid") return false;
+  if ((arrow.distribution ?? "single") !== "single") return false;
+  const pos = Number.isFinite(arrow.pos) ? (arrow.pos as number) : 0.5;
+  const endpointEpsilon = 1e-6;
+  return pos <= endpointEpsilon || pos >= 1 - endpointEpsilon;
+}
+
+function segmentArrowCanonicalKey(arrow: SegmentArrowMark): string {
+  const round = (value: unknown): string => {
+    if (!Number.isFinite(value)) return "";
+    return (value as number).toFixed(4);
+  };
+  return [
+    arrow.mode,
+    arrow.direction,
+    arrow.tip ?? "",
+    arrow.distribution ?? "single",
+    round(arrow.pos),
+    round(arrow.startPos),
+    round(arrow.endPos),
+    round(arrow.step),
+    round(arrow.sizeScale),
+    round(arrow.lineWidthPt),
+    round(arrow.arrowLength),
+    round(arrow.pairGapPx),
+    arrow.color ?? "",
+  ].join("|");
 }
 
 function pathArrowOverlayToTikz(

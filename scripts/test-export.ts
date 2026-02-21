@@ -715,8 +715,78 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("-{Stealth")) {
       throw new Error("Expected segment end-arrow fixture to emit Stealth end-arrow draw.");
     }
-    if (!tikz.includes("-- (E);")) {
+    if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\([^,]+,E\)/.test(tikz)) {
       throw new Error("Expected segment end-arrow fixture to draw to endpoint.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-end-list-priority.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("-{Stealth")) {
+      throw new Error("Expected list-based segment end-arrow fixture to emit Stealth end-arrow draw.");
+    }
+    if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\([^,]+,E\)/.test(tikz)) {
+      throw new Error("Expected list-based segment end-arrow fixture to draw to endpoint.");
+    }
+    if (tikz.includes("mark=at position")) {
+      throw new Error("Expected list-based segment end-arrow fixture to avoid mid-position markings.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-end-dual-same-color.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDrawSegment") && tikz.includes("(E,F)")) {
+      throw new Error("Expected dual endpoint arrows to replace base segment stroke.");
+    }
+    if (!tikz.includes("}-{Stealth[")) {
+      throw new Error("Expected dual endpoint arrows to merge into a single bidirectional endpoint draw.");
+    }
+    const mergedCount = (tikz.match(/\\tkzDrawSegment\[[^\]]*\{Stealth\[[^\]]*\]\}-\{Stealth\[[^\]]*\]\}[^\]]*\]\(E,F\)/g) ?? []).length;
+    if (mergedCount !== 1) {
+      throw new Error(`Expected one merged E,F bidirectional segment draw command; found ${mergedCount}.`);
+    }
+    if (/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(F,E\)/.test(tikz)) {
+      throw new Error("Expected no separate reverse full-length tkz segment draw after bidirectional merge.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-end-dual-mixed-size.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDrawSegment") && tikz.includes("(E,F)")) {
+      throw new Error("Expected mixed-size dual endpoint arrows to replace base segment stroke.");
+    }
+    const fullForward = /\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(E,F\)/.test(tikz);
+    if (!fullForward) {
+      throw new Error("Expected mixed-size dual endpoint arrows to keep one full carrier draw.");
+    }
+    if (/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(F,E\)/.test(tikz)) {
+      throw new Error("Expected non-carrier reverse endpoint arrow to avoid full-length reverse draw.");
+    }
+    if (!tikz.includes("$(") || !tikz.includes("!0.")) {
+      throw new Error("Expected non-carrier reverse endpoint arrow to emit short head-only endpoint draw.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-end-plus-mid-same-color.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDrawSegment") && tikz.includes("(E,F)")) {
+      throw new Error("Expected endpoint+mid fixture to replace base segment stroke with endpoint arrow draw.");
+    }
+    if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(E,F\)/.test(tikz)) {
+      throw new Error("Expected endpoint+mid fixture to emit endpoint draw for E->F.");
+    }
+    if (!tikz.includes("mark=at position")) {
+      throw new Error("Expected endpoint+mid fixture to preserve midpoint arrow marks.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-end-color-mismatch.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDrawSegment") || !tikz.includes("(E,F)")) {
+      throw new Error("Expected color-mismatch endpoint fixture to keep base segment stroke.");
+    }
+    if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(E,F\)/.test(tikz)) {
+      throw new Error("Expected color-mismatch endpoint fixture to still emit endpoint draw.");
     }
   }
 
@@ -747,6 +817,37 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (right.position - left.position < 0.04) {
       throw new Error("Expected segment <-> mid-arrow marks to be separated enough to be visually distinct.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-mid-near-edge.json") {
+    if (exportError) throw exportError;
+    if (/\\tkzDrawSegment\[[^\]]*-\{(?:Stealth|Latex|Triangle)\[[^\]]*\][^\]]*\]/.test(tikz)) {
+      throw new Error("Expected near-edge mid arrow fixture to remain decoration-based (not endpoint draw).");
+    }
+    const marks = extractMarkCommands(tikz);
+    if (marks.length < 1) {
+      throw new Error("Expected near-edge mid arrow fixture to emit parseable mark commands.");
+    }
+    const first = marks[0];
+    if (first.cmd !== "arrowreversed") {
+      throw new Error("Expected near-edge mid <- arrow to emit arrowreversed command.");
+    }
+    if (Math.abs(first.position - 0.02) > 0.005) {
+      throw new Error(`Expected near-edge mid arrow position ~0.02, got ${first.position}.`);
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-mid-endpoint-compat.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("-{Stealth")) {
+      throw new Error("Expected endpoint-compat fixture to emit end-arrow draw for legacy mid pos=1.");
+    }
+    if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\([^,]+,F\)/.test(tikz)) {
+      throw new Error("Expected endpoint-compat fixture to draw to endpoint F.");
+    }
+    if (tikz.includes("mark=at position")) {
+      throw new Error("Expected endpoint-compat fixture to avoid mark-at-position output.");
     }
   }
 
@@ -862,6 +963,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (
     fileName === "segment-mark-arrow-mid.json" ||
+    fileName === "segment-mark-arrow-end-plus-mid-same-color.json" ||
+    fileName === "segment-mark-arrow-mid-near-edge.json" ||
     fileName === "segment-mark-arrow-mid-gap.json" ||
     fileName === "segment-mark-arrow-mid-inward.json" ||
     fileName === "circle-arrow-basic.json" ||

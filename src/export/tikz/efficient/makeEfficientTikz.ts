@@ -22,6 +22,7 @@ function applyNumericRounding(tex: string): string {
         // This automatically handles stripping trailing zeros and -0 -> 0 (JS 0 is always positive 0 usually, but Math.round handles it)
         return rounded.toString();
     };
+    const numberToken = "[-+]?\\d*\\.?\\d+(?:[eE][-+]?\\d+)?";
 
 
     // 1. scale=... in \begin{tikzpicture}[...]
@@ -72,9 +73,13 @@ function applyNumericRounding(tex: string): string {
 
     // 5. Unitless numeric fields (size=, mksize=, mkpos=)
     // These keys appear in options usually without 'pt' (defaulting to cm or factor)
-    const unitlessKeys = ["size", "mksize", "mkpos"];
-    const unitlessKeysRegex = new RegExp(`(${unitlessKeys.join("|")})=([\\d\\.-]+)`, "g");
+    const unitlessKeys = ["size", "mksize", "mkpos", "dist", "angle"];
+    const unitlessKeysRegex = new RegExp(`(${unitlessKeys.join("|")})=(${numberToken})`, "g");
     tex = tex.replace(unitlessKeysRegex, (_, key, val) => `${key}=${fmt(val)}`);
+
+    // 5b. tkz angle syntax variants use "angle <value>" (e.g., tkzDefPointOnCircle / rotation options).
+    const angleKeywordRegex = new RegExp(`(\\bangle\\s+)(${numberToken})(?=\\b)`, "g");
+    tex = tex.replace(angleKeywordRegex, (_, prefix, val) => `${prefix}${fmt(val)}`);
 
     // 5. Arrow decorations (mark=..., mark size=...)
     // We need to look inside \tkzDrawSegment[..., postaction={decorate, decoration={markings, mark=at position 0.5 ...}}]
