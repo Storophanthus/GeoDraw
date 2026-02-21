@@ -7,6 +7,7 @@ type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -26,11 +27,18 @@ type PointerHits = {
   hitSegmentId: string | null;
   hitLineId: string | null;
   hitCircleId: string | null;
+  hitObjectLabel:
+    | { type: "segment"; id: string }
+    | { type: "line"; id: string }
+    | { type: "circle"; id: string }
+    | { type: "polygon"; id: string }
+    | null;
 };
 
 type MoveDecision = {
   mode: PointerMode;
   pointId: string | null;
+  dragObjectType: "segment" | "line" | "circle" | "polygon" | null;
   selectedObject:
     | { type: "point"; id: string }
     | { type: "segment"; id: string }
@@ -119,12 +127,32 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
 
     let mode: PointerMode = "idle";
     let pointId: string | null = null;
+    let objectType: PointerState["objectType"] = null;
 
     if (deps.activeTool === "move") {
       const decision = deps.decideMovePointerDown(hits);
       mode = decision.mode;
       pointId = decision.pointId;
+      objectType = decision.dragObjectType;
       deps.setSelectedObject(decision.selectedObject);
+    } else if (deps.activeTool === "label") {
+      const decision = deps.decideMovePointerDown(hits);
+      if (
+        decision.mode === "drag-label"
+        || decision.mode === "drag-angle-label"
+        || decision.mode === "drag-object-label"
+      ) {
+        mode = decision.mode;
+        pointId = decision.pointId;
+        objectType = decision.dragObjectType;
+      } else {
+        mode = "tool-click";
+        pointId = null;
+        objectType = null;
+      }
+      if (decision.selectedObject) {
+        deps.setSelectedObject(decision.selectedObject);
+      }
     } else {
       mode = "tool-click";
     }
@@ -135,6 +163,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pid: e.pointerId,
       mode,
       pointId,
+      objectType,
       lastX: e.clientX,
       lastY: e.clientY,
       startX: e.clientX,
@@ -202,6 +231,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pid: -1,
       mode: "idle",
       pointId: null,
+      objectType: null,
       lastX: 0,
       lastY: 0,
       startX: 0,

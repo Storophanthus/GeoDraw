@@ -232,6 +232,14 @@ export const IconCopyStyle = createIcon(() => (
     </>
 ), "IconCopyStyle");
 
+export const IconLabel = createIcon(() => (
+    <>
+        <path d="M4 20 L10 4 L16 20" strokeWidth={2.2} />
+        <path d="M6 14 H14" strokeWidth={2.2} />
+        <path d="M16.5 6.5 C18.4 4.8 21.5 5.2 21.5 7.8 C21.5 10.3 18.2 10.8 16.6 9.2 V20" strokeWidth={2} />
+    </>
+), "IconLabel");
+
 export const IconExportClip = createIcon(() => (
     <>
         <rect x="2" y="2" width="20" height="20" rx="2" strokeWidth={2} strokeDasharray="3 2" />

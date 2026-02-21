@@ -69,7 +69,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
   const snappedHitPointId = snappedScreen ? hitTestPointId(snappedScreen, resolvedPoints, camera, vp, tolerances.point) : null;
 
   let snap =
-    !pointerEvent.shiftKey && activeTool !== "move" && activeTool !== "copyStyle"
+    !pointerEvent.shiftKey && activeTool !== "move" && activeTool !== "copyStyle" && activeTool !== "label"
       ? findBestSnap(screen, camera, vp, scene, tolerances.point)
       : null;
   if (snappedHitPointId && (!snap || snap.kind !== "point")) {

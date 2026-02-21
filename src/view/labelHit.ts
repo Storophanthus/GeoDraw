@@ -4,6 +4,7 @@ import { camera as camMath, type Camera, type Viewport } from "./camera";
 
 export type ResolvedPoint = { point: ScenePoint; world: Vec2 };
 export type ResolvedAngle = { angle: SceneModel["angles"][number]; a: Vec2; b: Vec2; c: Vec2; theta: number };
+export type ObjectLabelHit = { type: "segment" | "line" | "circle" | "polygon"; id: string };
 
 export function hitTestPointLabel(
   screenPoint: Vec2,
@@ -62,6 +63,29 @@ export function hitTestPointLabelFromDom(
     if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
       return el.dataset.pointId ?? null;
     }
+  }
+  return null;
+}
+
+export function hitTestObjectLabelFromDom(
+  clientX: number,
+  clientY: number,
+  labelsLayer: HTMLDivElement | null
+): ObjectLabelHit | null {
+  if (!labelsLayer) return null;
+  const labels = labelsLayer.querySelectorAll<HTMLElement>(".pointLabel[data-object-type][data-object-id]");
+  for (let i = labels.length - 1; i >= 0; i -= 1) {
+    const el = labels[i];
+    const rect = el.getBoundingClientRect();
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) continue;
+    const objectType = el.dataset.objectType;
+    const objectId = el.dataset.objectId;
+    if (!objectId) continue;
+    if (objectType !== "segment" && objectType !== "line" && objectType !== "circle" && objectType !== "polygon") continue;
+    return {
+      type: objectType,
+      id: objectId,
+    };
   }
   return null;
 }

@@ -8,6 +8,12 @@ import {
   nextLabelFromIndex,
 } from "../../scene/points";
 import type { SceneModel } from "../../scene/points";
+import {
+  defaultLineLabelPosWorld,
+  defaultLineLabelText,
+  defaultSegmentLabelPosWorld,
+  defaultSegmentLabelText,
+} from "../../scene/objectLabels";
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
 
@@ -67,6 +73,15 @@ export function createSceneLineAngleActions(
         const anchors = getLineWorldAnchors(tempLine, prev.scene);
         if (!anchors) return prev;
         id = `l_${prev.nextLineId}`;
+        const lineForLabel = {
+          id,
+          kind: "perpendicular" as const,
+          throughId,
+          base,
+          visible: true,
+          showLabel: false,
+          style: prev.lineDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -79,6 +94,9 @@ export function createSceneLineAngleActions(
                 throughId,
                 base,
                 visible: true,
+                showLabel: false,
+                labelText: defaultLineLabelText(lineForLabel, prev.scene),
+                labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
                 style: { ...prev.lineDefaults },
               },
             ],
@@ -113,6 +131,15 @@ export function createSceneLineAngleActions(
         const anchors = getLineWorldAnchors(tempLine, prev.scene);
         if (!anchors) return prev;
         id = `l_${prev.nextLineId}`;
+        const lineForLabel = {
+          id,
+          kind: "parallel" as const,
+          throughId,
+          base,
+          visible: true,
+          showLabel: false,
+          style: prev.lineDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -125,6 +152,9 @@ export function createSceneLineAngleActions(
                 throughId,
                 base,
                 visible: true,
+                showLabel: false,
+                labelText: defaultLineLabelText(lineForLabel, prev.scene),
+                labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
                 style: { ...prev.lineDefaults },
               },
             ],
@@ -171,6 +201,16 @@ export function createSceneLineAngleActions(
         let nextLineId = prev.nextLineId;
 
         const id0 = `l_${nextLineId++}`;
+        const line0ForLabel = {
+          id: id0,
+          kind: "tangent" as const,
+          throughId,
+          circleId,
+          branchIndex: 0 as const,
+          visible: true,
+          showLabel: false,
+          style: prev.lineDefaults,
+        };
         nextLines.push({
           id: id0,
           kind: "tangent",
@@ -178,6 +218,9 @@ export function createSceneLineAngleActions(
           circleId,
           branchIndex: 0,
           visible: true,
+          showLabel: false,
+          labelText: defaultLineLabelText(line0ForLabel, prev.scene),
+          labelPosWorld: defaultLineLabelPosWorld(line0ForLabel, prev.scene) ?? undefined,
           style: { ...prev.lineDefaults },
         });
         created.push(id0);
@@ -188,6 +231,16 @@ export function createSceneLineAngleActions(
             Math.hypot(a0.b.x - a1.b.x, a0.b.y - a1.b.y) <= 1e-9;
           if (!same) {
             const id1 = `l_${nextLineId++}`;
+            const line1ForLabel = {
+              id: id1,
+              kind: "tangent" as const,
+              throughId,
+              circleId,
+              branchIndex: 1 as const,
+              visible: true,
+              showLabel: false,
+              style: prev.lineDefaults,
+            };
             nextLines.push({
               id: id1,
               kind: "tangent",
@@ -195,6 +248,9 @@ export function createSceneLineAngleActions(
               circleId,
               branchIndex: 1,
               visible: true,
+              showLabel: false,
+              labelText: defaultLineLabelText(line1ForLabel, prev.scene),
+              labelPosWorld: defaultLineLabelPosWorld(line1ForLabel, prev.scene) ?? undefined,
               style: { ...prev.lineDefaults },
             });
             created.push(id1);
@@ -250,6 +306,17 @@ export function createSceneLineAngleActions(
           signatures.add(signature);
 
           const id = `l_${nextLineId++}`;
+          const lineForLabel = {
+            id,
+            kind: "circleCircleTangent" as const,
+            circleAId,
+            circleBId,
+            family: candidate.family,
+            branchIndex: candidate.branchIndex,
+            visible: true,
+            showLabel: false,
+            style: prev.lineDefaults,
+          };
           nextLines.push({
             id,
             kind: "circleCircleTangent",
@@ -258,6 +325,9 @@ export function createSceneLineAngleActions(
             family: candidate.family,
             branchIndex: candidate.branchIndex,
             visible: true,
+            showLabel: false,
+            labelText: defaultLineLabelText(lineForLabel, prev.scene),
+            labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
             style: { ...prev.lineDefaults },
           });
           created.push(id);
@@ -296,6 +366,16 @@ export function createSceneLineAngleActions(
         const anchors = getLineWorldAnchors(tempLine, prev.scene);
         if (!anchors) return prev;
         id = `l_${prev.nextLineId}`;
+        const lineForLabel = {
+          id,
+          kind: "angleBisector" as const,
+          aId,
+          bId,
+          cId,
+          visible: true,
+          showLabel: false,
+          style: prev.lineDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -309,6 +389,9 @@ export function createSceneLineAngleActions(
                 bId,
                 cId,
                 visible: true,
+                showLabel: false,
+                labelText: defaultLineLabelText(lineForLabel, prev.scene),
+                labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
                 style: { ...prev.lineDefaults },
               },
             ],
@@ -426,6 +509,15 @@ export function createSceneLineAngleActions(
           }
           const segId = `s_${nextSegmentId}`;
           nextSegmentId += 1;
+          const segForLabel = {
+            id: segId,
+            aId,
+            bId,
+            ownedBySectorIds: [id],
+            visible: true,
+            showLabel: false,
+            style: prev.segmentDefaults,
+          };
           newSegments.push({
             id: segId,
             aId,
@@ -433,6 +525,8 @@ export function createSceneLineAngleActions(
             ownedBySectorIds: [id],
             visible: true,
             showLabel: false,
+            labelText: defaultSegmentLabelText(segForLabel, prev.scene),
+            labelPosWorld: defaultSegmentLabelPosWorld(segForLabel, prev.scene) ?? undefined,
             style: { ...prev.segmentDefaults },
           });
           edgeIndexByKey.set(k, newSegments.length - 1);
@@ -560,6 +654,7 @@ export function createSceneLineAngleActions(
                 aId: vertexId,
                 bId: pointId,
                 visible: true,
+                showLabel: false,
                 style: { ...prev.lineDefaults },
               },
             ],

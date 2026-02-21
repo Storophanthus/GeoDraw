@@ -1,4 +1,16 @@
 import type { GeometryObjectRef, SceneModel } from "../scene/points";
+import {
+  defaultCircleLabelPosWorld,
+  defaultCircleLabelText,
+  defaultLineLabelPosWorld,
+  defaultLineLabelText,
+  defaultPolygonLabelPosWorld,
+  defaultPolygonLabelText,
+  defaultSegmentLabelPosWorld,
+  defaultSegmentLabelText,
+  isFiniteLabelPosWorld,
+  resolveObjectLabelText,
+} from "../scene/objectLabels";
 import { resolveIntersectionBranchIndexInScene } from "./intersectionReuse";
 
 function objectRefAlive(
@@ -212,25 +224,154 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       return numberIds.has(num.definition.numeratorId) && numberIds.has(num.definition.denominatorId);
     });
 
+    const sceneForLabels: SceneModel = {
+      points: nextPoints,
+      vectors: nextVectors,
+      segments: nextSegmentsNormalized,
+      lines: nextLines,
+      circles: nextCircles,
+      polygons: nextPolygons,
+      angles: nextAngles,
+      numbers: nextNumbers,
+    };
+
+    const nextSegmentsLabeled = nextSegmentsNormalized.map((segment) => {
+      const fallbackText = defaultSegmentLabelText(segment, sceneForLabels);
+      const fallbackPos = defaultSegmentLabelPosWorld(segment, sceneForLabels) ?? undefined;
+      const showLabel = Boolean(segment.showLabel);
+      const labelText = resolveObjectLabelText(segment.labelText, fallbackText);
+      const labelPosWorld = isFiniteLabelPosWorld(segment.labelPosWorld) ? segment.labelPosWorld : fallbackPos;
+      const sameShow = segment.showLabel === showLabel;
+      const sameText = segment.labelText === labelText;
+      const samePos =
+        (segment.labelPosWorld === undefined && labelPosWorld === undefined)
+        || (
+          segment.labelPosWorld !== undefined
+          && labelPosWorld !== undefined
+          && segment.labelPosWorld.x === labelPosWorld.x
+          && segment.labelPosWorld.y === labelPosWorld.y
+        );
+      if (sameShow && sameText && samePos) return segment;
+      return {
+        ...segment,
+        showLabel,
+        labelText,
+        labelPosWorld,
+      };
+    });
+
+    const sceneForLineLabels: SceneModel = {
+      ...sceneForLabels,
+      segments: nextSegmentsLabeled,
+    };
+
+    const nextLinesLabeled = nextLines.map((line) => {
+      const fallbackText = defaultLineLabelText(line, sceneForLineLabels);
+      const fallbackPos = defaultLineLabelPosWorld(line, sceneForLineLabels) ?? undefined;
+      const showLabel = Boolean(line.showLabel);
+      const labelText = resolveObjectLabelText(line.labelText, fallbackText);
+      const labelPosWorld = isFiniteLabelPosWorld(line.labelPosWorld) ? line.labelPosWorld : fallbackPos;
+      const sameShow = Boolean(line.showLabel) === showLabel;
+      const sameText = line.labelText === labelText;
+      const samePos =
+        (line.labelPosWorld === undefined && labelPosWorld === undefined)
+        || (
+          line.labelPosWorld !== undefined
+          && labelPosWorld !== undefined
+          && line.labelPosWorld.x === labelPosWorld.x
+          && line.labelPosWorld.y === labelPosWorld.y
+        );
+      if (sameShow && sameText && samePos) return line;
+      return {
+        ...line,
+        showLabel,
+        labelText,
+        labelPosWorld,
+      };
+    });
+
+    const sceneForCircleLabels: SceneModel = {
+      ...sceneForLineLabels,
+      lines: nextLinesLabeled,
+    };
+
+    const nextCirclesLabeled = nextCircles.map((circle) => {
+      const fallbackText = defaultCircleLabelText(circle, sceneForCircleLabels);
+      const fallbackPos = defaultCircleLabelPosWorld(circle, sceneForCircleLabels) ?? undefined;
+      const showLabel = Boolean(circle.showLabel);
+      const labelText = resolveObjectLabelText(circle.labelText, fallbackText);
+      const labelPosWorld = isFiniteLabelPosWorld(circle.labelPosWorld) ? circle.labelPosWorld : fallbackPos;
+      const sameShow = Boolean(circle.showLabel) === showLabel;
+      const sameText = circle.labelText === labelText;
+      const samePos =
+        (circle.labelPosWorld === undefined && labelPosWorld === undefined)
+        || (
+          circle.labelPosWorld !== undefined
+          && labelPosWorld !== undefined
+          && circle.labelPosWorld.x === labelPosWorld.x
+          && circle.labelPosWorld.y === labelPosWorld.y
+        );
+      if (sameShow && sameText && samePos) return circle;
+      return {
+        ...circle,
+        showLabel,
+        labelText,
+        labelPosWorld,
+      };
+    });
+
+    const sceneForPolygonLabels: SceneModel = {
+      ...sceneForCircleLabels,
+      circles: nextCirclesLabeled,
+    };
+
+    const nextPolygonsLabeled = nextPolygons.map((polygon) => {
+      const fallbackText = defaultPolygonLabelText(polygon, sceneForPolygonLabels);
+      const fallbackPos = defaultPolygonLabelPosWorld(polygon, sceneForPolygonLabels) ?? undefined;
+      const showLabel = Boolean(polygon.showLabel);
+      const labelText = resolveObjectLabelText(polygon.labelText, fallbackText);
+      const labelPosWorld = isFiniteLabelPosWorld(polygon.labelPosWorld) ? polygon.labelPosWorld : fallbackPos;
+      const sameShow = Boolean(polygon.showLabel) === showLabel;
+      const sameText = polygon.labelText === labelText;
+      const samePos =
+        (polygon.labelPosWorld === undefined && labelPosWorld === undefined)
+        || (
+          polygon.labelPosWorld !== undefined
+          && labelPosWorld !== undefined
+          && polygon.labelPosWorld.x === labelPosWorld.x
+          && polygon.labelPosWorld.y === labelPosWorld.y
+        );
+      if (sameShow && sameText && samePos) return polygon;
+      return {
+        ...polygon,
+        showLabel,
+        labelText,
+        labelPosWorld,
+      };
+    });
+
     const anyChanged =
       !sameIds(nextPoints, points) ||
       !sameIds(nextVectors, vectors) ||
-      !sameIds(nextSegmentsNormalized, segments) ||
-      !sameIds(nextLines, lines) ||
-      !sameIds(nextCircles, circles) ||
-      !sameIds(nextPolygons, polygons) ||
+      !sameIds(nextSegmentsLabeled, segments) ||
+      !sameIds(nextLinesLabeled, lines) ||
+      !sameIds(nextCirclesLabeled, circles) ||
+      !sameIds(nextPolygonsLabeled, polygons) ||
       !sameIds(nextAngles, angles) ||
       !sameIds(nextNumbers, numbers) ||
       nextPoints.some((point, idx) => point !== points[idx]) ||
       nextVectors.some((vector, idx) => vector !== vectors[idx]) ||
-      nextSegmentsNormalized.some((segment, idx) => segment !== segments[idx]);
+      nextSegmentsLabeled.some((segment, idx) => segment !== segments[idx]) ||
+      nextLinesLabeled.some((line, idx) => line !== lines[idx]) ||
+      nextCirclesLabeled.some((circle, idx) => circle !== circles[idx]) ||
+      nextPolygonsLabeled.some((polygon, idx) => polygon !== polygons[idx]);
 
     points = nextPoints;
     vectors = nextVectors;
-    segments = nextSegmentsNormalized;
-    lines = nextLines;
-    circles = nextCircles;
-    polygons = nextPolygons;
+    segments = nextSegmentsLabeled;
+    lines = nextLinesLabeled;
+    circles = nextCirclesLabeled;
+    polygons = nextPolygonsLabeled;
     angles = nextAngles;
     numbers = nextNumbers;
     changed = changed || anyChanged;

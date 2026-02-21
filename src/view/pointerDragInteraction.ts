@@ -5,6 +5,7 @@ type PointerStateLike = {
   active: boolean;
   mode: PointerMode;
   pointId: string | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | null;
 };
 
 export type DragBufferAccess = {
@@ -25,6 +26,10 @@ type DragUpdateOps = {
   movePointTo: (pointId: string, world: Vec2) => void;
   movePointLabelBy: (pointId: string, delta: Vec2) => void;
   moveAngleLabelTo: (angleId: string, world: Vec2) => void;
+  moveObjectLabelTo: (
+    obj: { type: "segment" | "line" | "circle" | "polygon"; id: string },
+    world: Vec2
+  ) => void;
   screenToWorld: (screen: Vec2) => Vec2;
 };
 
@@ -57,6 +62,22 @@ export function applyBufferedDragUpdate(
     const angleLabelScreen = buffers.getAngleLabelScreen();
     if (angleLabelScreen) {
       ops.moveAngleLabelTo(st.pointId, ops.screenToWorld(angleLabelScreen));
+    }
+    return;
+  }
+
+  if (st.mode === "drag-object-label" && st.pointId && st.objectType) {
+    if (
+      st.objectType !== "segment"
+      && st.objectType !== "line"
+      && st.objectType !== "circle"
+      && st.objectType !== "polygon"
+    ) {
+      return;
+    }
+    const objectLabelScreen = buffers.getAngleLabelScreen();
+    if (objectLabelScreen) {
+      ops.moveObjectLabelTo({ type: st.objectType, id: st.pointId }, ops.screenToWorld(objectLabelScreen));
     }
     return;
   }
@@ -102,6 +123,11 @@ export function bufferDragForMode(
   }
 
   if (st.mode === "drag-angle-label" && st.pointId) {
+    buffers.setAngleLabelScreen(screen);
+    return true;
+  }
+
+  if (st.mode === "drag-object-label" && st.pointId) {
     buffers.setAngleLabelScreen(screen);
     return true;
   }

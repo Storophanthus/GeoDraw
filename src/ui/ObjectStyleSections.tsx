@@ -111,6 +111,10 @@ type ObjectStyleSectionsProps = {
   updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
   updateSelectedPolygonStyle: (style: Partial<ScenePolygon["style"]>) => void;
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
+  updateSelectedSegmentFields: (fields: Partial<Pick<SceneSegment, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+  updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+  updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+  updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   deleteSelectedObject: () => void;
 
 };
@@ -594,6 +598,10 @@ export function ObjectStyleSections({
   updateSelectedCircleStyle,
   updateSelectedPolygonStyle,
   updateSelectedAngleStyle,
+  updateSelectedSegmentFields,
+  updateSelectedLineFields,
+  updateSelectedCircleFields,
+  updateSelectedPolygonFields,
   deleteSelectedObject,
 }: ObjectStyleSectionsProps) {
   const selectedAngleIsRight = selectedAngleRightStatus !== "none";
@@ -608,6 +616,27 @@ export function ObjectStyleSections({
       return;
     }
     updateSelectedCircleStyle(style);
+  };
+  const selectedAreaShowLabel = selectedPolygon
+    ? Boolean(selectedPolygon.showLabel)
+    : selectedCircle
+      ? Boolean(selectedCircle.showLabel)
+      : false;
+  const selectedAreaLabelText = selectedPolygon
+    ? selectedPolygon.labelText ?? ""
+    : selectedCircle
+      ? selectedCircle.labelText ?? ""
+      : "";
+  const updateSelectedAreaFields = (
+    fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "visible">>
+  ) => {
+    if (selectedPolygon) {
+      updateSelectedPolygonFields(fields);
+      return;
+    }
+    if (selectedCircle) {
+      updateSelectedCircleFields(fields);
+    }
   };
 
   const resolvedSegmentMarks = React.useMemo(
@@ -700,6 +729,24 @@ export function ObjectStyleSections({
       {!selectedPointPresent && !selectedAngle && selectedSegment && (
         <div className="cosmeticsBlock">
           <div className="subSectionTitle">Segment Style</div>
+          <label className="checkboxRow">
+            <input
+              type="checkbox"
+              checked={Boolean(selectedSegment.showLabel)}
+              onChange={(e) => updateSelectedSegmentFields({ showLabel: e.target.checked })}
+            />
+            Show Label
+          </label>
+          {Boolean(selectedSegment.showLabel) && (
+            <div className="controlRow">
+              <label className="controlLabel">Label Text</label>
+              <input
+                className="renameInput"
+                value={selectedSegment.labelText ?? ""}
+                onChange={(e) => updateSelectedSegmentFields({ labelText: e.target.value })}
+              />
+            </div>
+          )}
           <div className="controlRow">
             <label className="controlLabel">Stroke Color</label>
             <input
@@ -1188,6 +1235,24 @@ export function ObjectStyleSections({
       {!selectedPointPresent && !selectedAngle && selectedLine && (
         <div className="cosmeticsBlock">
           <div className="subSectionTitle">Line Style</div>
+          <label className="checkboxRow">
+            <input
+              type="checkbox"
+              checked={Boolean(selectedLine.showLabel)}
+              onChange={(e) => updateSelectedLineFields({ showLabel: e.target.checked })}
+            />
+            Show Label
+          </label>
+          {Boolean(selectedLine.showLabel) && (
+            <div className="controlRow">
+              <label className="controlLabel">Label Text</label>
+              <input
+                className="renameInput"
+                value={selectedLine.labelText ?? ""}
+                onChange={(e) => updateSelectedLineFields({ labelText: e.target.value })}
+              />
+            </div>
+          )}
           <div className="controlRow">
             <label className="controlLabel">Stroke Color</label>
             <input
@@ -1248,6 +1313,24 @@ export function ObjectStyleSections({
       {!selectedPointPresent && !selectedAngle && selectedAreaStyle && (
         <div className="cosmeticsBlock">
           <div className="subSectionTitle">{selectedPolygon ? "Polygon Style" : "Circle Style"}</div>
+          <label className="checkboxRow">
+            <input
+              type="checkbox"
+              checked={selectedAreaShowLabel}
+              onChange={(e) => updateSelectedAreaFields({ showLabel: e.target.checked })}
+            />
+            Show Label
+          </label>
+          {selectedAreaShowLabel && (
+            <div className="controlRow">
+              <label className="controlLabel">Label Text</label>
+              <input
+                className="renameInput"
+                value={selectedAreaLabelText}
+                onChange={(e) => updateSelectedAreaFields({ labelText: e.target.value })}
+              />
+            </div>
+          )}
           <div className="controlRow">
             <label className="controlLabel">Stroke Color</label>
             <input

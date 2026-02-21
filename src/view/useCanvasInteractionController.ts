@@ -20,7 +20,7 @@ import {
   shouldCancelOnCanvasDoubleClick,
   type PointerMode,
 } from "./pointerInteraction";
-import { hitTestAngleLabelHandle, hitTestPointLabel, hitTestPointLabelFromDom } from "./labelHit";
+import { hitTestAngleLabelHandle, hitTestObjectLabelFromDom, hitTestPointLabel, hitTestPointLabelFromDom } from "./labelHit";
 import {
   hitTestAngleId as engineHitTestAngleId,
   hitTestCircleId as engineHitTestCircleId,
@@ -42,6 +42,7 @@ export type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -63,6 +64,7 @@ type InteractionActions = {
   movePointTo: (id: string, world: Vec2) => void;
   movePointLabelBy: (id: string, deltaScreenPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
+  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon"; id: string }, world: Vec2) => void;
   setHoverScreen: (value: Vec2 | null) => void;
   setSnapDisabled: (value: boolean) => void;
   setCursorWorld: (value: Vec2 | null) => void;
@@ -174,6 +176,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           movePointTo: actions.movePointTo,
           movePointLabelBy: actions.movePointLabelBy,
           moveAngleLabelTo: actions.moveAngleLabelTo,
+          moveObjectLabelTo: actions.moveObjectLabelTo,
           screenToWorld: (screen) => camMath.screenToWorld(screen, camera, vp),
         }
       );
@@ -223,6 +226,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
         hitPolygonId: engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment),
         hitLineId: engineHitTestLineId(screen, scene, camera, vp, tolerances.line),
         hitCircleId: engineHitTestCircleId(screen, scene, camera, vp, tolerances.circle),
+        hitObjectLabel: hitTestObjectLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current),
       }),
       decideMovePointerDown: (hits) =>
         decideMovePointerDown({

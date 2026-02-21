@@ -18,6 +18,12 @@ import {
   SegmentArrowMark,
   type PathArrowMark,
 } from "../scene/points";
+import {
+  defaultObjectLabelPosWorld,
+  defaultObjectLabelText,
+  isFiniteLabelPosWorld,
+  resolveObjectLabelText,
+} from "../scene/objectLabels";
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
 import { makeEfficientTikz } from "./tikz/efficient/makeEfficientTikz";
@@ -110,7 +116,8 @@ export type TikzCommand =
   | { kind: "LabelAngle"; a: string; b: string; c: string; text: string; style?: string }
   | { kind: "DrawPoints"; style: string; points: string[] }
   | { kind: "LabelPoints"; points: string[] }
-  | { kind: "LabelPoint"; name: string; text: string; options?: string; useGlow?: boolean };
+  | { kind: "LabelPoint"; name: string; text: string; options?: string; useGlow?: boolean }
+  | { kind: "LabelAt"; x: number; y: number; text: string; options?: string; useGlow?: boolean };
 
 type PointStyleDef = {
   styleName: string;
@@ -1435,6 +1442,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   const labelPlacementById = computeLabelPlacementMap(scene, options);
   const labels: Array<{ name: string; text: string; options?: string; useGlow?: boolean }> = [];
+  const objectLabels: Array<{
+    type: "segment" | "line" | "circle" | "polygon";
+    id: string;
+    x: number;
+    y: number;
+    text: string;
+    color: string;
+  }> = [];
+  const objectLabelGlowEnabled = options.labelGlow ?? true;
+
   for (const point of scene.points) {
     if (!point.visible) continue;
     if (!definedPointIds.has(point.id)) continue;
@@ -1459,9 +1476,95 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       });
     }
   }
+
+  for (const segment of scene.segments) {
+    if (!segment.visible || !segment.showLabel) continue;
+    const fallbackText = defaultObjectLabelText({ type: "segment", id: segment.id }, scene);
+    const text = resolveObjectLabelText(segment.labelText, fallbackText);
+    const fallbackPos = defaultObjectLabelPosWorld({ type: "segment", id: segment.id }, scene);
+    const labelPos = isFiniteLabelPosWorld(segment.labelPosWorld) ? segment.labelPosWorld : fallbackPos;
+    if (!labelPos) continue;
+    objectLabels.push({
+      type: "segment",
+      id: segment.id,
+      x: labelPos.x,
+      y: labelPos.y,
+      text,
+      color: segment.style.strokeColor,
+    });
+  }
+
+  for (const line of scene.lines) {
+    if (!line.visible || !line.showLabel) continue;
+    const fallbackText = defaultObjectLabelText({ type: "line", id: line.id }, scene);
+    const text = resolveObjectLabelText(line.labelText, fallbackText);
+    const fallbackPos = defaultObjectLabelPosWorld({ type: "line", id: line.id }, scene);
+    const labelPos = isFiniteLabelPosWorld(line.labelPosWorld) ? line.labelPosWorld : fallbackPos;
+    if (!labelPos) continue;
+    objectLabels.push({
+      type: "line",
+      id: line.id,
+      x: labelPos.x,
+      y: labelPos.y,
+      text,
+      color: line.style.strokeColor,
+    });
+  }
+
+  for (const circle of scene.circles) {
+    if (!circle.visible || !circle.showLabel) continue;
+    const fallbackText = defaultObjectLabelText({ type: "circle", id: circle.id }, scene);
+    const text = resolveObjectLabelText(circle.labelText, fallbackText);
+    const fallbackPos = defaultObjectLabelPosWorld({ type: "circle", id: circle.id }, scene);
+    const labelPos = isFiniteLabelPosWorld(circle.labelPosWorld) ? circle.labelPosWorld : fallbackPos;
+    if (!labelPos) continue;
+    objectLabels.push({
+      type: "circle",
+      id: circle.id,
+      x: labelPos.x,
+      y: labelPos.y,
+      text,
+      color: circle.style.strokeColor,
+    });
+  }
+
+  for (const polygon of scene.polygons) {
+    if (!polygon.visible || !polygon.showLabel) continue;
+    const fallbackText = defaultObjectLabelText({ type: "polygon", id: polygon.id }, scene);
+    const text = resolveObjectLabelText(polygon.labelText, fallbackText);
+    const fallbackPos = defaultObjectLabelPosWorld({ type: "polygon", id: polygon.id }, scene);
+    const labelPos = isFiniteLabelPosWorld(polygon.labelPosWorld) ? polygon.labelPosWorld : fallbackPos;
+    if (!labelPos) continue;
+    objectLabels.push({
+      type: "polygon",
+      id: polygon.id,
+      x: labelPos.x,
+      y: labelPos.y,
+      text,
+      color: polygon.style.strokeColor,
+    });
+  }
+
   labels.sort((a, b) => a.name.localeCompare(b.name));
   for (const item of labels) {
     drawLabelsLayer.push({ kind: "LabelPoint", name: item.name, text: item.text, options: item.options, useGlow: item.useGlow });
+  }
+  objectLabels.sort((a, b) => {
+    const typeOrder = (type: "segment" | "line" | "circle" | "polygon") =>
+      type === "segment" ? 0 : type === "line" ? 1 : type === "circle" ? 2 : 3;
+    const byType = typeOrder(a.type) - typeOrder(b.type);
+    if (byType !== 0) return byType;
+    return a.id.localeCompare(b.id);
+  });
+  for (const item of objectLabels) {
+    drawLabelsLayer.push({
+      kind: "LabelAt",
+      x: item.x,
+      y: item.y,
+      text: item.text,
+      options: [`anchor=center`, `text=${rgbColorExpr(item.color)}`].join(", "),
+      useGlow: objectLabelGlowEnabled,
+    });
   }
 
   return [
@@ -1508,7 +1611,8 @@ export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions,
       c.kind !== "LabelAngle" &&
       c.kind !== "DrawPoints" &&
       c.kind !== "LabelPoints" &&
-      c.kind !== "LabelPoint"
+      c.kind !== "LabelPoint" &&
+      c.kind !== "LabelAt"
   );
   const drawObjects = cmds.filter(
     (c) =>
@@ -1528,8 +1632,10 @@ export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions,
   );
   const drawAngleLabels = cmds.filter((c): c is Extract<TikzCommand, { kind: "LabelAngle" }> => c.kind === "LabelAngle");
   const drawPoints = cmds.filter((c) => c.kind === "DrawPoints");
-  const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
-  const hasGlowLabels = drawLabels.some((c) => c.kind === "LabelPoint" && Boolean(c.useGlow));
+  const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint" || c.kind === "LabelAt");
+  const hasGlowLabels = drawLabels.some(
+    (c) => (c.kind === "LabelPoint" || c.kind === "LabelAt") && Boolean(c.useGlow)
+  );
   const emitTkzSetup = options.emitTkzSetup ?? true;
 
   const out: string[] = [];
@@ -1538,7 +1644,7 @@ export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions,
   if (hasGlowLabels) {
     // Reusable text halo macro using contour stroke (page-color aware).
     out.push(
-      "\\newcommand{\\gdLabelGlow}[1]{\\begingroup\\contourlength{0.42pt}\\ifcsname thepagecolor\\endcsname\\contour{\\thepagecolor}{#1}\\else\\contour{white}{#1}\\fi\\endgroup}"
+      "\\newcommand{\\gdLabelGlow}[1]{\\begingroup\\ifcsname contour\\endcsname\\contourlength{0.42pt}\\ifcsname thepagecolor\\endcsname\\contour{\\thepagecolor}{#1}\\else\\contour{white}{#1}\\fi\\else#1\\fi\\endgroup}"
     );
   }
   // When explicit export clip rectangle is present, avoid tkz viewport clip to
@@ -1816,12 +1922,20 @@ export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions,
       out.push(`\\tkzLabelPoints(${cmd.points.join(",")})`);
       continue;
     }
-    assertTkzMacro("tkzLabelPoint");
+    if (cmd.kind === "LabelPoint") {
+      assertTkzMacro("tkzLabelPoint");
+      const opts = cmd.options ? `[${cmd.options}]` : "";
+      const labelText = cmd.useGlow
+        ? `\\gdLabelGlow{$${escapeTikzText(cmd.text)}$}`
+        : `$${escapeTikzText(cmd.text)}$`;
+      out.push(`\\tkzLabelPoint${opts}(${cmd.name}){${labelText}}`);
+      continue;
+    }
     const opts = cmd.options ? `[${cmd.options}]` : "";
     const labelText = cmd.useGlow
       ? `\\gdLabelGlow{$${escapeTikzText(cmd.text)}$}`
       : `$${escapeTikzText(cmd.text)}$`;
-    out.push(`\\tkzLabelPoint${opts}(${cmd.name}){${labelText}}`);
+    out.push(`\\node${opts} at (${fmt(cmd.x)},${fmt(cmd.y)}){${labelText}};`);
   }
   if (shouldScaleLabels) {
     out.push("\\end{scope}");

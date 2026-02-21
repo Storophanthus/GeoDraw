@@ -1,6 +1,10 @@
 import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
 import type { GeometryObjectRef, LineLikeObjectRef, SceneModel, SceneNumberDefinition, ScenePoint, ShowLabelMode } from "../../scene/points";
 import { evaluateNumberExpression } from "../../scene/points";
+import {
+  defaultCircleLabelPosWorld,
+  defaultCircleLabelText,
+} from "../../scene/objectLabels";
 import type { Vec2 } from "../../geo/vec2";
 import type { SceneCreationStateLike } from "../../domain/intersectionReuse";
 import type { SetStateOptions } from "./historySlice";
@@ -82,6 +86,15 @@ export function createSceneCreationActions(
           return prev;
         }
         id = `c_${prev.nextCircleId}`;
+        const circleForLabel = {
+          id,
+          kind: "twoPoint" as const,
+          centerId,
+          throughId,
+          visible: false,
+          showLabel: false,
+          style: prev.circleDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -94,6 +107,9 @@ export function createSceneCreationActions(
                 centerId,
                 throughId,
                 visible: false,
+                showLabel: false,
+                labelText: defaultCircleLabelText(circleForLabel, prev.scene),
+                labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
               },
             ],
@@ -112,6 +128,15 @@ export function createSceneCreationActions(
         const t = prev.scene.points.find((p) => p.id === throughId);
         if (!c || !t) return prev;
         id = `c_${prev.nextCircleId}`;
+        const circleForLabel = {
+          id,
+          kind: "twoPoint" as const,
+          centerId,
+          throughId,
+          visible: true,
+          showLabel: false,
+          style: prev.circleDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -124,6 +149,9 @@ export function createSceneCreationActions(
                 centerId,
                 throughId,
                 visible: true,
+                showLabel: false,
+                labelText: defaultCircleLabelText(circleForLabel, prev.scene),
+                labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
               },
             ],
@@ -151,6 +179,16 @@ export function createSceneCreationActions(
         const area2 = (bw.x - aw.x) * (cw.y - aw.y) - (bw.y - aw.y) * (cw.x - aw.x);
         if (Math.abs(area2) <= 1e-9) return prev;
         id = `c_${prev.nextCircleId}`;
+        const circleForLabel = {
+          id,
+          kind: "threePoint" as const,
+          aId,
+          bId,
+          cId,
+          visible: true,
+          showLabel: false,
+          style: prev.circleDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -164,6 +202,9 @@ export function createSceneCreationActions(
                 bId,
                 cId,
                 visible: true,
+                showLabel: false,
+                labelText: defaultCircleLabelText(circleForLabel, prev.scene),
+                labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
               },
             ],
@@ -186,6 +227,16 @@ export function createSceneCreationActions(
         const evaluated = evaluateNumberExpression(prev.scene, expr);
         if (!evaluated.ok || !Number.isFinite(evaluated.value) || evaluated.value <= 0) return prev;
         id = `c_${prev.nextCircleId}`;
+        const circleForLabel = {
+          id,
+          kind: "fixedRadius" as const,
+          centerId,
+          radius: evaluated.value,
+          radiusExpr: expr,
+          visible: true,
+          showLabel: false,
+          style: prev.circleDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -199,6 +250,9 @@ export function createSceneCreationActions(
                 radius: evaluated.value,
                 radiusExpr: expr,
                 visible: true,
+                showLabel: false,
+                labelText: defaultCircleLabelText(circleForLabel, prev.scene),
+                labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
               },
             ],

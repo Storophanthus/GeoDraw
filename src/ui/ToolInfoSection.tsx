@@ -60,6 +60,11 @@ export function ToolInfoSection({
             : "Copy Style: click an object to pick source (Shift-click anytime to change source)"}
         </div>
       )}
+      {activeTool === "label" && (
+        <div className="toolInfo">
+          Label: click object to show/select label, then drag label anchor to reposition.
+        </div>
+      )}
       {activeTool === "angle_fixed" && (
         <div className="toolInfo">
           <div className="subSectionTitle">Fixed Angle Tool</div>

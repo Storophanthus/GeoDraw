@@ -62,6 +62,7 @@ export type ToolClickIO = {
   setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null) => void;
   setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
+  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
   regularPolygonTool: { sides: number; direction: "CCW" | "CW" };
   transformTool: {
@@ -153,6 +154,13 @@ export function handleToolClick(
       return;
     }
     io.applyCopyStyleTo(hits.hitObject);
+    return;
+  }
+
+  if (activeTool === "label") {
+    if (!hits.hitObject) return;
+    io.setSelectedObject(hits.hitObject);
+    io.enableObjectLabel(hits.hitObject);
     return;
   }
 
@@ -736,6 +744,16 @@ export function isValidTarget(
     return hoveredHit.type === "point";
   }
   if (activeTool === "export_clip" || activeTool === "export_clip_rect") return false;
+  if (activeTool === "label") {
+    return (
+      hoveredHit.type === "point" ||
+      hoveredHit.type === "segment" ||
+      hoveredHit.type === "line2p" ||
+      hoveredHit.type === "circle" ||
+      hoveredHit.type === "polygon" ||
+      hoveredHit.type === "angle"
+    );
+  }
   if (activeTool === "perp_line") {
     if (!pendingSelection || pendingSelection.tool !== "perp_line") {
       return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";

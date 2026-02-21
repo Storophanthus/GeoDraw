@@ -1,6 +1,18 @@
 import type { Vec2 } from "../../geo/vec2";
 import { projectPointToCircle, projectPointToLine, projectPointToSegment } from "../../geo/geometry";
 import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos, type AngleStyle, type CircleStyle, type LineStyle, type PathArrowMark, type PointStyle, type PolygonStyle, type SceneModel, type SegmentArrowMark } from "../../scene/points";
+import {
+  defaultCircleLabelPosWorld,
+  defaultCircleLabelText,
+  defaultLineLabelPosWorld,
+  defaultLineLabelText,
+  defaultPolygonLabelPosWorld,
+  defaultPolygonLabelText,
+  defaultSegmentLabelPosWorld,
+  defaultSegmentLabelText,
+  isFiniteLabelPosWorld,
+  resolveObjectLabelText,
+} from "../../scene/objectLabels";
 import { applyDeletion, collectCascadeDelete, isSelectedObjectAlive } from "../../domain/geometryGraph";
 import { rebuildRightAngleProvenance } from "../../domain/rightAngleProvenance";
 import type { SetStateOptions } from "./historySlice";
@@ -17,6 +29,8 @@ export function createSceneMutationActions({
   | "movePointTo"
   | "movePointLabelBy"
   | "moveAngleLabelTo"
+  | "moveObjectLabelTo"
+  | "enableObjectLabel"
   | "updateSelectedPointStyle"
   | "updateSelectedPointFields"
   | "updateSelectedSegmentStyle"
@@ -127,6 +141,176 @@ export function createSceneMutationActions({
         }),
         { history: "coalesce", actionKey: `moveAngleLabelTo:${id}` }
       );
+    },
+
+    moveObjectLabelTo(obj, world) {
+      if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return;
+      if (obj.type === "point" || obj.type === "number") return;
+      if (obj.type === "angle") {
+        setState(
+          (prev) => ({
+            ...prev,
+            scene: {
+              ...prev.scene,
+              angles: prev.scene.angles.map((angle) =>
+                angle.id === obj.id
+                  ? {
+                      ...angle,
+                      style: {
+                        ...angle.style,
+                        labelPosWorld: { x: world.x, y: world.y },
+                      },
+                    }
+                  : angle
+              ),
+            },
+          }),
+          { history: "coalesce", actionKey: `moveObjectLabelTo:angle:${obj.id}` }
+        );
+        return;
+      }
+
+      setState(
+        (prev) => {
+          if (obj.type === "segment") {
+            return {
+              ...prev,
+              scene: {
+                ...prev.scene,
+                segments: prev.scene.segments.map((segment) =>
+                  segment.id === obj.id ? { ...segment, labelPosWorld: { x: world.x, y: world.y } } : segment
+                ),
+              },
+            };
+          }
+          if (obj.type === "line") {
+            return {
+              ...prev,
+              scene: {
+                ...prev.scene,
+                lines: prev.scene.lines.map((line) =>
+                  line.id === obj.id ? { ...line, labelPosWorld: { x: world.x, y: world.y } } : line
+                ),
+              },
+            };
+          }
+          if (obj.type === "circle") {
+            return {
+              ...prev,
+              scene: {
+                ...prev.scene,
+                circles: prev.scene.circles.map((circle) =>
+                  circle.id === obj.id ? { ...circle, labelPosWorld: { x: world.x, y: world.y } } : circle
+                ),
+              },
+            };
+          }
+          if (obj.type === "polygon") {
+            return {
+              ...prev,
+              scene: {
+                ...prev.scene,
+                polygons: prev.scene.polygons.map((polygon) =>
+                  polygon.id === obj.id ? { ...polygon, labelPosWorld: { x: world.x, y: world.y } } : polygon
+                ),
+              },
+            };
+          }
+          return prev;
+        },
+        { history: "coalesce", actionKey: `moveObjectLabelTo:${obj.type}:${obj.id}` }
+      );
+    },
+
+    enableObjectLabel(obj) {
+      if (obj.type === "number") return;
+      setState((prev) => {
+        if (obj.type === "point") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              points: prev.scene.points.map((point) => {
+                if (point.id !== obj.id) return point;
+                if (point.showLabel !== "none") return point;
+                return { ...point, showLabel: "name" };
+              }),
+            },
+          };
+        }
+        if (obj.type === "angle") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              angles: prev.scene.angles.map((angle) =>
+                angle.id === obj.id
+                  ? {
+                      ...angle,
+                      style: {
+                        ...angle.style,
+                        showLabel: true,
+                      },
+                    }
+                  : angle
+              ),
+            },
+          };
+        }
+        if (obj.type === "segment") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              segments: prev.scene.segments.map((segment) => {
+                if (segment.id !== obj.id) return segment;
+                const withDefaults = ensureSegmentLabelFields({ ...segment, showLabel: true }, prev.scene);
+                return withDefaults;
+              }),
+            },
+          };
+        }
+        if (obj.type === "line") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              lines: prev.scene.lines.map((line) => {
+                if (line.id !== obj.id) return line;
+                const withDefaults = ensureLineLabelFields({ ...line, showLabel: true }, prev.scene);
+                return withDefaults;
+              }),
+            },
+          };
+        }
+        if (obj.type === "circle") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              circles: prev.scene.circles.map((circle) => {
+                if (circle.id !== obj.id) return circle;
+                const withDefaults = ensureCircleLabelFields({ ...circle, showLabel: true }, prev.scene);
+                return withDefaults;
+              }),
+            },
+          };
+        }
+        if (obj.type === "polygon") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              polygons: prev.scene.polygons.map((polygon) => {
+                if (polygon.id !== obj.id) return polygon;
+                const withDefaults = ensurePolygonLabelFields({ ...polygon, showLabel: true }, prev.scene);
+                return withDefaults;
+              }),
+            },
+          };
+        }
+        return prev;
+      });
     },
 
     updateSelectedPointStyle(next) {
@@ -256,7 +440,9 @@ export function createSceneMutationActions({
           scene: {
             ...prev.scene,
             segments: prev.scene.segments.map((seg) =>
-              seg.id === prev.selectedObject!.id ? { ...seg, ...next } : seg
+              seg.id === prev.selectedObject!.id
+                ? ensureSegmentLabelFields({ ...seg, ...next }, prev.scene)
+                : seg
             ),
           },
         };
@@ -271,7 +457,9 @@ export function createSceneMutationActions({
           scene: {
             ...prev.scene,
             lines: prev.scene.lines.map((line) =>
-              line.id === prev.selectedObject!.id ? { ...line, ...next } : line
+              line.id === prev.selectedObject!.id
+                ? ensureLineLabelFields({ ...line, ...next }, prev.scene)
+                : line
             ),
           },
         };
@@ -286,7 +474,9 @@ export function createSceneMutationActions({
           scene: {
             ...prev.scene,
             circles: prev.scene.circles.map((circle) =>
-              circle.id === prev.selectedObject!.id ? { ...circle, ...next } : circle
+              circle.id === prev.selectedObject!.id
+                ? ensureCircleLabelFields({ ...circle, ...next }, prev.scene)
+                : circle
             ),
           },
         };
@@ -301,7 +491,9 @@ export function createSceneMutationActions({
           scene: {
             ...prev.scene,
             polygons: prev.scene.polygons.map((polygon) =>
-              polygon.id === prev.selectedObject!.id ? { ...polygon, ...next } : polygon
+              polygon.id === prev.selectedObject!.id
+                ? ensurePolygonLabelFields({ ...polygon, ...next }, prev.scene)
+                : polygon
             ),
           },
         };
@@ -699,6 +891,71 @@ export function createSceneMutationActions({
         },
       }));
     },
+  };
+}
+
+function ensureSegmentLabelFields(
+  segment: SceneModel["segments"][number],
+  scene: SceneModel
+): SceneModel["segments"][number] {
+  const fallbackText = defaultSegmentLabelText(segment, scene);
+  const labelText = resolveObjectLabelText(segment.labelText, fallbackText);
+  const fallbackPos = defaultSegmentLabelPosWorld(segment, scene) ?? undefined;
+  const labelPosWorld = isFiniteLabelPosWorld(segment.labelPosWorld) ? segment.labelPosWorld : fallbackPos;
+  const showLabel = Boolean(segment.showLabel);
+  return {
+    ...segment,
+    showLabel,
+    labelText,
+    labelPosWorld,
+  };
+}
+
+function ensureLineLabelFields(
+  line: SceneModel["lines"][number],
+  scene: SceneModel
+): SceneModel["lines"][number] {
+  const fallbackText = defaultLineLabelText(line, scene);
+  const labelText = resolveObjectLabelText(line.labelText, fallbackText);
+  const fallbackPos = defaultLineLabelPosWorld(line, scene) ?? undefined;
+  const labelPosWorld = isFiniteLabelPosWorld(line.labelPosWorld) ? line.labelPosWorld : fallbackPos;
+  return {
+    ...line,
+    showLabel: Boolean(line.showLabel),
+    labelText,
+    labelPosWorld,
+  };
+}
+
+function ensureCircleLabelFields(
+  circle: SceneModel["circles"][number],
+  scene: SceneModel
+): SceneModel["circles"][number] {
+  const fallbackText = defaultCircleLabelText(circle, scene);
+  const labelText = resolveObjectLabelText(circle.labelText, fallbackText);
+  const fallbackPos = defaultCircleLabelPosWorld(circle, scene) ?? undefined;
+  const labelPosWorld = isFiniteLabelPosWorld(circle.labelPosWorld) ? circle.labelPosWorld : fallbackPos;
+  return {
+    ...circle,
+    showLabel: Boolean(circle.showLabel),
+    labelText,
+    labelPosWorld,
+  };
+}
+
+function ensurePolygonLabelFields(
+  polygon: SceneModel["polygons"][number],
+  scene: SceneModel
+): SceneModel["polygons"][number] {
+  const fallbackText = defaultPolygonLabelText(polygon, scene);
+  const labelText = resolveObjectLabelText(polygon.labelText, fallbackText);
+  const fallbackPos = defaultPolygonLabelPosWorld(polygon, scene) ?? undefined;
+  const labelPosWorld = isFiniteLabelPosWorld(polygon.labelPosWorld) ? polygon.labelPosWorld : fallbackPos;
+  return {
+    ...polygon,
+    showLabel: Boolean(polygon.showLabel),
+    labelText,
+    labelPosWorld,
   };
 }
 

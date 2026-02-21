@@ -15,6 +15,7 @@ import {
   IconCircleCenterPoint,
   IconCircleRadius,
   IconCopyStyle,
+  IconLabel,
   IconExportClip,
   IconLine,
   IconMidpoint,
@@ -55,6 +56,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   reflect: { icon: IconReflect, tooltip: "Reflect Object", ariaLabel: "Reflect tool" },
   dilate: { icon: IconDilate, tooltip: "Dilate Object", ariaLabel: "Dilate tool" },
   copyStyle: { icon: IconCopyStyle, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
+  label: { icon: IconLabel, tooltip: "Label Tool", ariaLabel: "Label tool" },
   export_clip_rect: { icon: IconExportClip, tooltip: "Export Clip Rectangle", ariaLabel: "Export clip rectangle tool" },
   export_clip: { icon: IconExportClipPolygon, tooltip: "Export Clip Polygon", ariaLabel: "Export clip polygon tool" },
   midpoint: { icon: IconMidpoint, tooltip: "Midpoint (M)", ariaLabel: "Midpoint tool" },
@@ -81,7 +83,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "SHAPES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon", "regular_polygon"] },
   { id: "transform", label: "TRANSFORM", tools: ["translate", "reflect", "dilate"] },
-  { id: "styles", label: "STYLES", tools: ["copyStyle"] },
+  { id: "styles", label: "STYLES", tools: ["copyStyle", "label"] },
 ];
 
 type ToolPaletteProps = {

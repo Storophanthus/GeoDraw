@@ -610,6 +610,12 @@ export type ScenePoint =
   | CircleSegmentIntersectionPoint
   | CircleCircleIntersectionPoint;
 
+export type ObjectLabelFields = {
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
+};
+
 export type SceneSegment = {
   id: string;
   aId: string;
@@ -622,6 +628,8 @@ export type SceneSegment = {
   ownedBySectorIds?: string[];
   visible: boolean;
   showLabel: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -631,6 +639,9 @@ export type SceneLineTwoPoint = {
   aId: string;
   bId: string;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -640,6 +651,9 @@ export type SceneLinePerpendicular = {
   throughId: string;
   base: LineLikeObjectRef;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -649,6 +663,9 @@ export type SceneLineParallel = {
   throughId: string;
   base: LineLikeObjectRef;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -659,6 +676,9 @@ export type SceneLineAngleBisector = {
   bId: string;
   cId: string;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -669,6 +689,9 @@ export type SceneLineTangent = {
   circleId: string;
   branchIndex: 0 | 1;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -680,6 +703,9 @@ export type SceneLineCircleCircleTangent = {
   family: "outer" | "inner";
   branchIndex: 0 | 1;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -697,6 +723,9 @@ export type SceneCircleTwoPoint = {
   centerId: string;
   throughId: string;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: CircleStyle;
 };
 
@@ -707,6 +736,9 @@ export type SceneCircleThreePoint = {
   bId: string;
   cId: string;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: CircleStyle;
 };
 
@@ -717,6 +749,9 @@ export type SceneCircleFixedRadius = {
   radius: number;
   radiusExpr?: string;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: CircleStyle;
 };
 
@@ -726,6 +761,9 @@ export type ScenePolygon = {
   id: string;
   pointIds: string[];
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: PolygonStyle;
 };
 

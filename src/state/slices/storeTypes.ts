@@ -27,6 +27,7 @@ export type ActiveTool =
   | "reflect"
   | "dilate"
   | "copyStyle"
+  | "label"
   | "midpoint"
   | "segment"
   | "line2p"
@@ -339,6 +340,8 @@ export type GeoActions = {
   movePointTo: (id: string, world: Vec2) => void;
   movePointLabelBy: (id: string, deltaPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
+  moveObjectLabelTo: (obj: Exclude<SelectedObject, null>, world: Vec2) => void;
+  enableObjectLabel: (obj: Exclude<SelectedObject, null>) => void;
 
   setPointDefaults: (next: Partial<PointStyle>) => void;
   setSegmentDefaults: (next: Partial<LineStyle>) => void;
@@ -370,10 +373,18 @@ export type GeoActions = {
   updateSelectedCircleStyle: (next: Partial<CircleStyle>) => void;
   updateSelectedPolygonStyle: (next: Partial<PolygonStyle>) => void;
   updateSelectedAngleStyle: (next: Partial<AngleStyle>) => void;
-  updateSelectedSegmentFields: (next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel">>) => void;
-  updateSelectedLineFields: (next: Partial<Pick<SceneModel["lines"][number], "visible">>) => void;
-  updateSelectedCircleFields: (next: Partial<Pick<SceneModel["circles"][number], "visible">>) => void;
-  updateSelectedPolygonFields: (next: Partial<Pick<SceneModel["polygons"][number], "visible">>) => void;
+  updateSelectedSegmentFields: (
+    next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+  ) => void;
+  updateSelectedLineFields: (
+    next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+  ) => void;
+  updateSelectedCircleFields: (
+    next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+  ) => void;
+  updateSelectedPolygonFields: (
+    next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+  ) => void;
   updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;
   setObjectVisibility: (
     obj: Exclude<SelectedObject, null>,

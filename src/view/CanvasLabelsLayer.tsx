@@ -1,16 +1,18 @@
 import type { RefObject } from "react";
-import type { AngleLabelOverlay, PointLabelOverlay } from "./labelOverlays";
+import type { AngleLabelOverlay, ObjectLabelOverlay, PointLabelOverlay } from "./labelOverlays";
 
 type CanvasLabelsLayerProps = {
   labelsLayerRef: RefObject<HTMLDivElement | null>;
   labelOverlays: PointLabelOverlay[];
   angleLabelOverlays: AngleLabelOverlay[];
+  objectLabelOverlays: ObjectLabelOverlay[];
 };
 
 export function CanvasLabelsLayer({
   labelsLayerRef,
   labelOverlays,
   angleLabelOverlays,
+  objectLabelOverlays,
 }: CanvasLabelsLayerProps) {
   return (
     <div className="labelsLayer" aria-hidden ref={labelsLayerRef}>
@@ -36,6 +38,20 @@ export function CanvasLabelsLayer({
           key={label.id}
           className="pointLabel tex"
           data-angle-id={label.id}
+          style={{
+            transform: `translate(${label.x}px, ${label.y}px)`,
+            fontSize: `${Math.max(8, label.textSize)}px`,
+            color: label.textColor,
+          }}
+          dangerouslySetInnerHTML={{ __html: label.html }}
+        />
+      ))}
+      {objectLabelOverlays.map((label) => (
+        <div
+          key={`${label.type}:${label.id}`}
+          className="pointLabel tex"
+          data-object-type={label.type}
+          data-object-id={label.id}
           style={{
             transform: `translate(${label.x}px, ${label.y}px)`,
             fontSize: `${Math.max(8, label.textSize)}px`,

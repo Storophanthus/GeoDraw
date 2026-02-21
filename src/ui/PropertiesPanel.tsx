@@ -53,6 +53,10 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const updateSelectedCircleStyle = useGeoStore((store) => store.updateSelectedCircleStyle);
   const updateSelectedPolygonStyle = useGeoStore((store) => store.updateSelectedPolygonStyle);
   const updateSelectedAngleStyle = useGeoStore((store) => store.updateSelectedAngleStyle);
+  const updateSelectedSegmentFields = useGeoStore((store) => store.updateSelectedSegmentFields);
+  const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
+  const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
+  const updateSelectedPolygonFields = useGeoStore((store) => store.updateSelectedPolygonFields);
   const createNumber = useGeoStore((store) => store.createNumber);
 
   const selectedPoint = useMemo(
@@ -274,6 +278,10 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   updateSelectedCircleStyle={updateSelectedCircleStyle}
   updateSelectedPolygonStyle={updateSelectedPolygonStyle}
   updateSelectedAngleStyle={updateSelectedAngleStyle}
+  updateSelectedSegmentFields={updateSelectedSegmentFields}
+  updateSelectedLineFields={updateSelectedLineFields}
+  updateSelectedCircleFields={updateSelectedCircleFields}
+  updateSelectedPolygonFields={updateSelectedPolygonFields}
   deleteSelectedObject={deleteSelectedObject}
 />
 

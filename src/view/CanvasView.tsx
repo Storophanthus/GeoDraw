@@ -13,6 +13,7 @@ import type { ConstructClickIo } from "./constructClickAdapter";
 import { findBestSnap, type SnapCandidate } from "./snapEngine";
 import {
   createAngleLabelOverlays,
+  createObjectLabelOverlays,
   createPointLabelOverlays,
 } from "./labelOverlays";
 import { resolveAngles } from "./angleResolution";
@@ -62,6 +63,7 @@ export function CanvasView() {
     pid: -1,
     mode: "idle",
     pointId: null,
+    objectType: null,
     lastX: 0,
     lastY: 0,
     startX: 0,
@@ -134,6 +136,8 @@ export function CanvasView() {
   const movePointTo = useGeoStore((store) => store.movePointTo);
   const movePointLabelBy = useGeoStore((store) => store.movePointLabelBy);
   const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
+  const moveObjectLabelTo = useGeoStore((store) => store.moveObjectLabelTo);
+  const enableObjectLabel = useGeoStore((store) => store.enableObjectLabel);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
   const setExportClipWorld = useGeoStore((store) => store.setExportClipWorld);
@@ -270,6 +274,7 @@ export function CanvasView() {
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
+      enableObjectLabel,
       setExportClipWorld,
       getPointWorldById: (id) => {
         const point = scene.points.find((p) => p.id === id);
@@ -312,6 +317,7 @@ export function CanvasView() {
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
+      enableObjectLabel,
       setExportClipWorld,
       setObjectVisibility,
       effectiveGridSnapEnabled,
@@ -348,6 +354,10 @@ export function CanvasView() {
   const angleLabelOverlays = useMemo(
     () => createAngleLabelOverlays(resolvedAngles, camera, vp),
     [resolvedAngles, camera, vp]
+  );
+  const objectLabelOverlays = useMemo(
+    () => createObjectLabelOverlays(scene, camera, vp),
+    [scene, camera, vp]
   );
 
   const hoverSnap: SnapCandidate | null = useMemo(() => {
@@ -496,6 +506,7 @@ export function CanvasView() {
       movePointTo,
       movePointLabelBy,
       moveAngleLabelTo,
+      moveObjectLabelTo,
       setHoverScreen,
       setSnapDisabled,
       setCursorWorld,
@@ -513,6 +524,7 @@ export function CanvasView() {
         labelsLayerRef={labelsLayerRef}
         labelOverlays={labelOverlays}
         angleLabelOverlays={angleLabelOverlays}
+        objectLabelOverlays={objectLabelOverlays}
       />
     </div>
   );
