@@ -4,12 +4,6 @@ import type { GeoState } from "./storeTypes";
 import type { HistorySnapshot } from "./historySlice";
 import {
   DEFAULT_COLOR_PROFILE_ID,
-  DEFAULT_UI_COLOR_PROFILE_ID,
-  type ColorProfileId,
-  UI_CSS_VARIABLE_KEYS,
-  type UiCssVariableName,
-  type UiCssVariables,
-  type UiColorProfileId,
 } from "../colorProfiles";
 
 export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoState {
@@ -28,13 +22,15 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
       return { ...point, branchIndex };
     }),
     segments: normalizedScene.segments.map((seg) => {
-      if (seg.style.segmentArrowMarks?.length) return seg;
-      if (!seg.style.segmentArrowMark) return seg;
+      const needsArrowMigration = !seg.style.segmentArrowMarks?.length && Boolean(seg.style.segmentArrowMark);
+      const needsMarkMigration = !seg.style.segmentMarks?.length && Boolean(seg.style.segmentMark);
+      if (!needsArrowMigration && !needsMarkMigration) return seg;
       return {
         ...seg,
         style: {
           ...seg.style,
-          segmentArrowMarks: migrateArrowMark(seg.style.segmentArrowMark),
+          segmentArrowMarks: needsArrowMigration ? migrateArrowMark(seg.style.segmentArrowMark!) : seg.style.segmentArrowMarks,
+          segmentMarks: needsMarkMigration ? [seg.style.segmentMark!] : seg.style.segmentMarks,
         },
       };
     }),
@@ -50,13 +46,26 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
       };
     }),
     angles: normalizedScene.angles.map((a) => {
-      if (a.style.arcArrowMarks?.length) return a;
-      if (!a.style.arcArrowMark) return a;
+      const needsArrowMigration = !a.style.arcArrowMarks?.length && Boolean(a.style.arcArrowMark);
+      const needsMarkMigration = !a.style.angleMarks?.length && a.style.markStyle === "arc";
+      if (!needsArrowMigration && !needsMarkMigration) return a;
       return {
         ...a,
         style: {
           ...a.style,
-          arcArrowMarks: migrateArrowMark(a.style.arcArrowMark),
+          arcArrowMarks: needsArrowMigration ? migrateArrowMark(a.style.arcArrowMark!) : a.style.arcArrowMarks,
+          angleMarks: needsMarkMigration
+            ? [
+                {
+                  enabled: true,
+                  arcMultiplicity: a.style.arcMultiplicity ?? 1,
+                  markSymbol: a.style.markSymbol ?? "none",
+                  markPos: a.style.markPos ?? 0.5,
+                  markSize: a.style.markSize ?? 4,
+                  markColor: a.style.markColor,
+                },
+              ]
+            : a.style.angleMarks,
         },
       };
     }),
@@ -64,8 +73,9 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
   return {
     ...prev,
     colorProfileId: snapshot.colorProfileId ?? DEFAULT_COLOR_PROFILE_ID,
-    uiColorProfileId: resolveUiColorProfileId(snapshot.uiColorProfileId, snapshot.colorProfileId),
-    uiCssOverrides: normalizeUiCssOverrides(snapshot.uiCssOverrides),
+    // UI preferences are app-level and intentionally not restored from scene snapshots/files.
+    uiColorProfileId: prev.uiColorProfileId,
+    uiCssOverrides: prev.uiCssOverrides,
     gridEnabled: snapshot.gridEnabled ?? true,
     axesEnabled: snapshot.axesEnabled ?? true,
     gridSnapEnabled: snapshot.gridSnapEnabled ?? true,
@@ -96,40 +106,6 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     exportClipWorld: snapshot.exportClipWorld ?? null,
     copyStyle: snapshot.copyStyle,
   };
-}
-
-function resolveUiColorProfileId(
-  uiProfileId: HistorySnapshot["uiColorProfileId"] | string | undefined,
-  sceneProfileId: ColorProfileId | undefined
-): UiColorProfileId {
-  if (uiProfileId === "vanilla" || uiProfileId === "grayscale" || uiProfileId === "beige") {
-    return uiProfileId;
-  }
-
-  // Backward compatibility: older snapshots reused scene profile ids.
-  if (uiProfileId === "classic") return "vanilla";
-  if (uiProfileId === "grayscale_white_dot") return "grayscale";
-  if (uiProfileId === "beige_light") return "beige";
-
-  if (sceneProfileId === "classic") return "vanilla";
-  if (sceneProfileId === "grayscale_white_dot") return "grayscale";
-  if (sceneProfileId === "beige_light") return "beige";
-
-  return DEFAULT_UI_COLOR_PROFILE_ID;
-}
-
-function normalizeUiCssOverrides(raw: HistorySnapshot["uiCssOverrides"] | unknown): Partial<UiCssVariables> {
-  if (!raw || typeof raw !== "object") return {};
-  const input = raw as Record<string, unknown>;
-  const out: Partial<UiCssVariables> = {};
-  for (const key of UI_CSS_VARIABLE_KEYS) {
-    const value = input[key];
-    if (typeof value !== "string") continue;
-    const normalized = value.trim();
-    if (!normalized) continue;
-    out[key as UiCssVariableName] = normalized;
-  }
-  return out;
 }
 
 function migrateArrowMark<T extends { direction: string; pos?: number; pairGapPx?: number }>(arrow: T): T[] {

@@ -368,7 +368,9 @@ function lineStyleEqual(a: SceneModel["segments"][number]["style"], b: SceneMode
     a.dash === b.dash &&
     a.opacity === b.opacity &&
     JSON.stringify(a.segmentMark ?? null) === JSON.stringify(b.segmentMark ?? null) &&
-    JSON.stringify(a.segmentArrowMark ?? null) === JSON.stringify(b.segmentArrowMark ?? null)
+    JSON.stringify(a.segmentMarks ?? null) === JSON.stringify(b.segmentMarks ?? null) &&
+    JSON.stringify(a.segmentArrowMark ?? null) === JSON.stringify(b.segmentArrowMark ?? null) &&
+    JSON.stringify(a.segmentArrowMarks ?? null) === JSON.stringify(b.segmentArrowMarks ?? null)
   );
 }
 
@@ -422,6 +424,8 @@ function angleStyleEqual(a: SceneModel["angles"][number]["style"], b: SceneModel
     a.showLabel === b.showLabel &&
     a.showValue === b.showValue &&
     Boolean(a.promoteToSolid) === Boolean(b.promoteToSolid) &&
-    JSON.stringify(a.arcArrowMark ?? null) === JSON.stringify(b.arcArrowMark ?? null)
+    JSON.stringify(a.angleMarks ?? null) === JSON.stringify(b.angleMarks ?? null) &&
+    JSON.stringify(a.arcArrowMark ?? null) === JSON.stringify(b.arcArrowMark ?? null) &&
+    JSON.stringify(a.arcArrowMarks ?? null) === JSON.stringify(b.arcArrowMarks ?? null)
   );
 }

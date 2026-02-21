@@ -261,6 +261,27 @@ export type GeoState = {
   canRedo: boolean;
 };
 
+export type AppPreferencesState = Pick<
+  GeoState,
+  | "colorProfileId"
+  | "uiColorProfileId"
+  | "uiCssOverrides"
+  | "gridEnabled"
+  | "axesEnabled"
+  | "gridSnapEnabled"
+  | "pointDefaults"
+  | "segmentDefaults"
+  | "lineDefaults"
+  | "circleDefaults"
+  | "polygonDefaults"
+  | "angleDefaults"
+  | "angleFixedTool"
+  | "circleFixedTool"
+  | "regularPolygonTool"
+  | "transformTool"
+  | "dependencyGlowEnabled"
+>;
+
 export type RenameResult = { ok: true; name: string } | { ok: false; error: string };
 
 export type GeoActions = {
@@ -336,6 +357,7 @@ export type GeoActions = {
   setUiColorProfile: (profileId: UiColorProfileId) => void;
   setUiCssVariable: (name: UiCssVariableName, value: string) => void;
   clearUiCssOverrides: () => void;
+  applyAppPreferences: (next: Partial<AppPreferencesState>) => void;
   setDependencyGlowEnabled: (enabled: boolean) => void;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
   clearExportClipWorld: () => void;

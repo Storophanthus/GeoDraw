@@ -23,20 +23,36 @@ function applyNumericRounding(tex: string): string {
         return rounded.toString();
     };
     const numberToken = "[-+]?\\d*\\.?\\d+(?:[eE][-+]?\\d+)?";
-
+    const numberOnly = new RegExp(`^${numberToken}$`);
+    const splitTopLevelComma = (input: string): string[] => {
+        const out: string[] = [];
+        let depth = 0;
+        let token = "";
+        for (let i = 0; i < input.length; i += 1) {
+            const ch = input[i];
+            if (ch === "{") depth += 1;
+            if (ch === "}") depth = Math.max(0, depth - 1);
+            if (ch === "," && depth === 0) {
+                out.push(token);
+                token = "";
+                continue;
+            }
+            token += ch;
+        }
+        out.push(token);
+        return out;
+    };
 
     // 1. scale=... in \begin{tikzpicture}[...]
-    // Look for scale=NUMBER or scale=NUMBER, or ,scale=NUMBER
-    tex = tex.replace(/(\\begin{tikzpicture}\[[^\]]*?scale=)([\d\.-]+)/g, (_, prefix, val) => prefix + fmt(val));
+    tex = tex.replace(
+        new RegExp(`(\\\\begin\\{tikzpicture\\}\\[[^\\]]*?\\bscale=)(${numberToken})`, "g"),
+        (_m, prefix, val) => `${prefix}${fmt(val)}`
+    );
 
-    // 2. \tkzInit matches (xmin=..., xmax=..., ymin=..., ymax=...)
-    // We'll just target the specific keys inside tkzInit
-    tex = tex.replace(/(\\tkzInit\[.*?)(xmin|xmax|ymin|ymax)=([\d\.-]+)/g, (_, prefix, key, val) => `${prefix}${key}=${fmt(val)}`);
-    // Handle multiple occurrences/ordering in tkzInit requires being careful. 
-    // Actually, standard export emits tkzInit in a specific way. 
-    // But to be safe and robust, let's use a replacer that scans the inner content of tkzInit.
-    tex = tex.replace(/(\\tkzInit\[)([^\]]+)(\])/g, (_, start, content, end) => {
-        const newContent = content.replace(/(xmin|xmax|ymin|ymax)=([\d\.-]+)/g, (_m: string, k: string, v: string) => `${k}=${fmt(v)}`);
+    // 2. \tkzInit values (xmin/xmax/ymin/ymax)
+    tex = tex.replace(/(\\tkzInit\[)([^\]]+)(\])/g, (_m, start, content, end) => {
+        const keyRegex = new RegExp(`\\b(xmin|xmax|ymin|ymax)=(${numberToken})`, "g");
+        const newContent = String(content).replace(keyRegex, (_mm: string, k: string, v: string) => `${k}=${fmt(v)}`);
         return `${start}${newContent}${end}`;
     });
 
@@ -63,12 +79,13 @@ function applyNumericRounding(tex: string): string {
 
     // Simple keys first
     const simpleKeys = ["line width", "length", "width", "size"]; // Added size= for angles
-    const simpleKeysRegex = new RegExp(`(${simpleKeys.join("|")})=([\\d\\.-]+)pt`, "g");
+    const simpleKeysRegex = new RegExp(`(${simpleKeys.join("|")})=(${numberToken})pt`, "g");
     tex = tex.replace(simpleKeysRegex, (_, key, val) => `${key}=${fmt(val)}pt`);
 
     // Dash pattern: "on 2pt off 3pt", etc.
     tex = tex.replace(/(dash pattern=[^\]]+)/g, (match) => {
-        return match.replace(/([on|off]\s+)([\d\.-]+)pt/g, (_, type, val) => `${type}${fmt(val)}pt`);
+        const dashPieceRegex = new RegExp(`\\b(on|off)\\s+(${numberToken})pt`, "g");
+        return match.replace(dashPieceRegex, (_m, kind, val) => `${kind} ${fmt(val)}pt`);
     });
 
     // 5. Unitless numeric fields (size=, mksize=, mkpos=)
@@ -81,24 +98,47 @@ function applyNumericRounding(tex: string): string {
     const angleKeywordRegex = new RegExp(`(\\bangle\\s+)(${numberToken})(?=\\b)`, "g");
     tex = tex.replace(angleKeywordRegex, (_, prefix, val) => `${prefix}${fmt(val)}`);
 
+    // 5c. Numeric \foreach lists (e.g., \foreach \gdPos in {0.825000000000001,...})
+    // Keep non-numeric tokens unchanged (like A/above).
+    tex = tex.replace(
+        /(\\foreach\s+\\[a-zA-Z@]+(?:\s*\/\s*\\[a-zA-Z@]+)*\s+in\s*\{)([^}]*)(\})/g,
+        (_m, prefix, listBody, suffix) => {
+            const items = splitTopLevelComma(String(listBody)).map((raw) => {
+                const token = raw.trim();
+                if (!token) return token;
+                return numberOnly.test(token) ? fmt(token) : token;
+            });
+            return `${prefix}${items.join(",")}${suffix}`;
+        }
+    );
+
     // 5. Arrow decorations (mark=..., mark size=...)
     // We need to look inside \tkzDrawSegment[..., postaction={decorate, decoration={markings, mark=at position 0.5 ...}}]
     // The prompt mentions "arrow decoration numeric fields (positions, line widths, tip sizes)".
     // Position is usually "at position 0.5" or "0.6".
     // Arrow tip size is "length=...pt, width=...pt". (Handled directly by point 4?)
     // Let's explicitly handle "at position NUMBER with"
-    tex = tex.replace(/(mark=at position\s+)([\d\.-]+)(\s+with)/g, (_, pre, val, post) => `${pre}${fmt(val)}${post}`);
+    tex = tex.replace(
+        new RegExp(`(mark=at position\\s+)(${numberToken})(\\s+with)`, "g"),
+        (_m, pre, val, post) => `${pre}${fmt(val)}${post}`
+    );
 
     // Also handle arrow tip size in standard tikz arrows if present
     // We already handled "length=...pt" and "width=...pt" generally above.
 
     // 6. Coordinates (x,y)
     // Matches (Number, Number) or (Number,Number)
-    tex = tex.replace(/\(([\d\.-]+)\s*,\s*([\d\.-]+)\)/g, (_, x, y) => `(${fmt(x)},${fmt(y)})`);
+    tex = tex.replace(
+        new RegExp(`\\(\\s*(${numberToken})\\s*,\\s*(${numberToken})\\s*\\)`, "g"),
+        (_m, x, y) => `(${fmt(x)},${fmt(y)})`
+    );
 
     // 7. Arc parameters (start:end:radius)
     // Matches (Number:Number:Number)
-    tex = tex.replace(/\(([\d\.-]+)\s*:\s*([\d\.-]+)\s*:\s*([\d\.-]+)\)/g, (_, a, b, r) => `(${fmt(a)}:${fmt(b)}:${fmt(r)})`);
+    tex = tex.replace(
+        new RegExp(`\\(\\s*(${numberToken})\\s*:\\s*(${numberToken})\\s*:\\s*(${numberToken})\\s*\\)`, "g"),
+        (_m, a, b, r) => `(${fmt(a)}:${fmt(b)}:${fmt(r)})`
+    );
 
     return tex;
 }

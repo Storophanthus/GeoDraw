@@ -3111,3 +3111,39 @@ Date completed: February 21, 2026
 - `node --import tsx src/scene/__tests__/angle-polygon-hit-priority.test.ts` passed.
 - `npm run test:scene` passed.
 - `npm run build` passed.
+
+## Homework (Pinned Next Work)
+Date pinned: February 21, 2026
+
+### Label System Expansion (Object labels + Label tool)
+Goal:
+- Support labels for non-point objects with explicit label workflow.
+- Keep export parity with canvas behavior.
+
+Scope agreed:
+1. Add object-attached label fields for:
+   - segment
+   - line
+   - circle
+   - polygon
+2. Auto-create/enable label when `Show Label` is enabled in object properties.
+3. Add dedicated `Label` tool in `STYLES` group beside `Copy Style`.
+4. Label tool behavior:
+   - click object => enable/select label target
+   - click/drag label anchor => reposition label
+   - supports existing object types + points/angles consistently
+5. Export:
+   - include new object labels in TikZ output with deterministic placement rules
+   - preserve existing point/angle label behavior
+
+Implementation phases:
+- Phase A: data model + state actions for non-point object labels.
+- Phase B: canvas overlay render/hit-test/drag for all object labels.
+- Phase C: tool palette + `label` active tool flow.
+- Phase D: TikZ export + regression tests.
+
+Acceptance checks:
+1. For filled polygon + inner angle/objects, label selection remains selectable (no fill-block regression).
+2. Toggling `Show Label` on any supported object immediately shows label.
+3. Label position drag persists through save/open and export.
+4. `npm run test:scene` and `npm run build` remain green.

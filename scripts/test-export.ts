@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { exportTikz, exportTikzWithOptions } from "../src/export/tikz.ts";
+import { exportTikz, exportTikzWithOptions, makeEfficientTikz } from "../src/export/tikz.ts";
 import type {
   CircleStyle,
   GeometryObjectRef,
@@ -658,6 +658,41 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("mkpos=0.35")) throw new Error("Expected mark-bars angle to emit mkpos=0.35.");
   }
 
+  if (fileName === "angle-mark-list-quad.json") {
+    if (exportError) throw exportError;
+    const markAngleLines = tikz.match(/\\tkzMarkAngle\[[^\]]*\]/g) ?? [];
+    if (markAngleLines.length < 2) {
+      throw new Error("Expected angle mark list quad fixture to emit multiple \\tkzMarkAngle commands.");
+    }
+    const doubleArcLines = markAngleLines.filter((line) => line.includes("arc=ll"));
+    if (doubleArcLines.length < 2) {
+      throw new Error("Expected angle mark list quad fixture to emit two double-arc mark commands.");
+    }
+    const sizes = doubleArcLines
+      .map((line) => {
+        const m = line.match(/size=([0-9.]+)/);
+        return m ? Number(m[1]) : NaN;
+      })
+      .filter((value) => Number.isFinite(value));
+    if (sizes.length < 2 || !(sizes[1] > sizes[0])) {
+      throw new Error("Expected stacked angle mark list to increase arc size on later entries.");
+    }
+  }
+
+  if (fileName === "angle-mark-list-bars.json") {
+    if (exportError) throw exportError;
+    const markAngleLines = tikz.match(/\\tkzMarkAngle\[[^\]]*\]/g) ?? [];
+    if (markAngleLines.length < 2) {
+      throw new Error("Expected angle mark list bars fixture to emit multiple \\tkzMarkAngle commands.");
+    }
+    if (!markAngleLines.some((line) => line.includes("mark=||") && line.includes("mkpos=0.3"))) {
+      throw new Error("Expected angle mark list bars fixture to emit first bar-mark entry with mkpos=0.3.");
+    }
+    if (!markAngleLines.some((line) => line.includes("mark=|") && line.includes("mkpos=0.72"))) {
+      throw new Error("Expected angle mark list bars fixture to emit second bar-mark entry with mkpos=0.72.");
+    }
+  }
+
   if (fileName === "angle-right-square.json") {
     if (exportError) throw exportError;
     if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-square angle to emit \\tkzMarkRightAngles.");
@@ -707,6 +742,64 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("line width=1pt")) {
       throw new Error("Expected segment mark fixture to emit line width=1pt.");
+    }
+  }
+
+  if (fileName === "segment-mark-list.json") {
+    if (exportError) throw exportError;
+    const markLines = tikz.match(/\\tkzMarkSegment\[[^\]]*\]/g) ?? [];
+    if (markLines.length < 2) {
+      throw new Error("Expected segment mark list fixture to emit multiple \\tkzMarkSegment commands.");
+    }
+    if (!markLines.some((line) => line.includes("mark=||") && line.includes("pos=0.25"))) {
+      throw new Error("Expected segment mark list fixture to include first mark at pos=0.25.");
+    }
+    if (!markLines.some((line) => line.includes("mark=x") && line.includes("pos=0.75"))) {
+      throw new Error("Expected segment mark list fixture to include second mark at pos=0.75.");
+    }
+  }
+
+  if (fileName === "segment-mark-multi.json") {
+    if (exportError) throw exportError;
+    const usesForeach = tikz.includes("\\foreach \\gdPos in {");
+    if (usesForeach) {
+      if (!tikz.includes("\\tkzMarkSegment[") || !tikz.includes("pos=\\gdPos")) {
+        throw new Error("Expected segment multi-mark fixture to use foreach-driven \\tkzMarkSegment output.");
+      }
+      if (!tikz.includes("{0.2,0.3,0.4}")) {
+        throw new Error("Expected segment multi-mark foreach export to include positions 0.2,0.3,0.4.");
+      }
+    } else {
+      const markLines = tikz.match(/\\tkzMarkSegment\[[^\]]*\]/g) ?? [];
+      if (markLines.length < 3) {
+        throw new Error("Expected segment multi-mark fixture to emit repeated \\tkzMarkSegment commands.");
+      }
+      if (!markLines.some((line) => line.includes("pos=0.2"))) {
+        throw new Error("Expected segment multi-mark fixture to include pos=0.2.");
+      }
+      if (!markLines.some((line) => line.includes("pos=0.3"))) {
+        throw new Error("Expected segment multi-mark fixture to include pos=0.3.");
+      }
+      if (!markLines.some((line) => line.includes("pos=0.4"))) {
+        throw new Error("Expected segment multi-mark fixture to include pos=0.4.");
+      }
+    }
+  }
+
+  if (fileName === "segment-mark-multi-fine-step.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\foreach \\gdPos in {")) {
+      throw new Error("Expected fine-step multi-mark fixture to emit foreach compact segment mark output.");
+    }
+    if (tikz.includes("000000000000") || tikz.includes("000000000001")) {
+      throw new Error("Expected fine-step multi-mark standard export to avoid floating-tail precision artifacts.");
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (!efficient.includes("\\foreach \\gdPos in {")) {
+      throw new Error("Expected fine-step multi-mark efficient export to keep foreach compact segment mark output.");
+    }
+    if (efficient.includes("000000000000") || efficient.includes("000000000001")) {
+      throw new Error("Expected fine-step multi-mark efficient export to avoid floating-tail precision artifacts.");
     }
   }
 
@@ -971,8 +1064,12 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     fileName === "circle-arrow-mid-position-parity.json" ||
     fileName === "sector-arrow-basic.json"
   ) {
-    if (!tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta}")) {
-      throw new Error("Expected arrow fixtures to emit decorations.markings + arrows.meta library line.");
+    const hasMarkingArrowLib =
+      tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta}") ||
+      tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta,bending}");
+    const hasConstructiveArrowLib = tikz.includes("\\usetikzlibrary{arrows.meta,bending}");
+    if (!hasMarkingArrowLib && !hasConstructiveArrowLib) {
+      throw new Error("Expected arrow fixtures to emit an arrows.meta (+ optional markings/bending) library line.");
     }
   }
 

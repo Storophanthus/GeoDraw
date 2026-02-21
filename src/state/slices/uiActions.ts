@@ -32,6 +32,7 @@ export function createUiActions(
   | "setUiColorProfile"
   | "setUiCssVariable"
   | "clearUiCssOverrides"
+  | "applyAppPreferences"
   | "setDependencyGlowEnabled"
   | "setExportClipWorld"
   | "clearExportClipWorld"
@@ -232,6 +233,88 @@ export function createUiActions(
           };
         },
         { history: "skip", actionKey: "ui-color-customize" }
+      );
+    },
+
+    applyAppPreferences(next) {
+      ctx.setState(
+        (prev) => {
+          if (!next || Object.keys(next).length === 0) return prev;
+
+          const nextColorProfileId = next.colorProfileId ?? prev.colorProfileId;
+          const colorProfileChanged = nextColorProfileId !== prev.colorProfileId;
+
+          const baseDefaults = colorProfileChanged
+            ? applyProfileColorsToDefaults(
+              {
+                pointDefaults: prev.pointDefaults,
+                segmentDefaults: prev.segmentDefaults,
+                lineDefaults: prev.lineDefaults,
+                circleDefaults: prev.circleDefaults,
+                polygonDefaults: prev.polygonDefaults,
+                angleDefaults: prev.angleDefaults,
+              } satisfies SceneStyleDefaults,
+              nextColorProfileId
+            )
+            : {
+              pointDefaults: prev.pointDefaults,
+              segmentDefaults: prev.segmentDefaults,
+              lineDefaults: prev.lineDefaults,
+              circleDefaults: prev.circleDefaults,
+              polygonDefaults: prev.polygonDefaults,
+              angleDefaults: prev.angleDefaults,
+            };
+
+          const pointDefaults = next.pointDefaults
+            ? {
+              ...next.pointDefaults,
+              labelOffsetPx: { ...next.pointDefaults.labelOffsetPx },
+            }
+            : baseDefaults.pointDefaults;
+          const segmentDefaults = next.segmentDefaults
+            ? { ...next.segmentDefaults }
+            : baseDefaults.segmentDefaults;
+          const lineDefaults = next.lineDefaults
+            ? { ...next.lineDefaults }
+            : baseDefaults.lineDefaults;
+          const circleDefaults = next.circleDefaults
+            ? { ...next.circleDefaults }
+            : baseDefaults.circleDefaults;
+          const polygonDefaults = next.polygonDefaults
+            ? { ...next.polygonDefaults }
+            : baseDefaults.polygonDefaults;
+          const angleDefaults = next.angleDefaults
+            ? {
+              ...next.angleDefaults,
+              labelPosWorld: { ...next.angleDefaults.labelPosWorld },
+            }
+            : baseDefaults.angleDefaults;
+
+          return {
+            ...prev,
+            colorProfileId: nextColorProfileId,
+            scene: colorProfileChanged
+              ? recolorSceneForProfile(prev.scene, prev.colorProfileId, nextColorProfileId)
+              : prev.scene,
+            uiColorProfileId: next.uiColorProfileId ?? prev.uiColorProfileId,
+            uiCssOverrides: next.uiCssOverrides ? { ...next.uiCssOverrides } : prev.uiCssOverrides,
+            gridEnabled: next.gridEnabled ?? prev.gridEnabled,
+            axesEnabled: next.axesEnabled ?? prev.axesEnabled,
+            gridSnapEnabled: next.gridSnapEnabled ?? prev.gridSnapEnabled,
+            pointDefaults,
+            segmentDefaults,
+            lineDefaults,
+            circleDefaults,
+            polygonDefaults,
+            angleDefaults,
+            angleFixedTool: next.angleFixedTool ? { ...next.angleFixedTool } : prev.angleFixedTool,
+            circleFixedTool: next.circleFixedTool ? { ...next.circleFixedTool } : prev.circleFixedTool,
+            regularPolygonTool: next.regularPolygonTool ? { ...next.regularPolygonTool } : prev.regularPolygonTool,
+            transformTool: next.transformTool ? { ...next.transformTool } : prev.transformTool,
+            dependencyGlowEnabled: next.dependencyGlowEnabled ?? prev.dependencyGlowEnabled,
+          };
+        },
+        { history: "skip", actionKey: "apply-app-preferences" }
       );
     },
 

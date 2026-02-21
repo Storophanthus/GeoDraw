@@ -1,5 +1,5 @@
 import type { Vec2 } from "../../geo/vec2";
-import type { SceneModel } from "../../scene/points";
+import { resolveAngleMarks, type SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import {
   computeRightMarkSizePx,
@@ -52,6 +52,8 @@ export function drawAngles(
     const rightApprox = !rightExact && Boolean(angle.isRightApprox);
     const rightLike = rightExact || rightApprox;
     const rightSolid = rightExact || (rightApprox && Boolean(angle.style.promoteToSolid));
+    const resolvedArcMarks = resolveAngleMarks(angle.style);
+    const totalArcLayers = resolvedArcMarks.reduce((sum, mark) => sum + mark.arcMultiplicity, 0);
     const rawMarkStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
     const drawRightSquareShape =
       !isSector && (rawMarkStyle === "rightSquare" || (rightLike && rawMarkStyle === "arc"));
@@ -60,7 +62,6 @@ export function drawAngles(
       | "none"
       | "rightSquare"
       | "rightArcDot";
-    const markSizePx = Math.max(3, Math.min(16, angle.style.markSize ?? 4));
     const rightMarkSizePx = computeRightMarkSizePx(radiusPx, mapStrokeWidth(angle.style.strokeWidth));
     const startAngle = Math.atan2(as.y - bs.y, as.x - bs.x);
     const canRenderArcArrow =
@@ -107,23 +108,29 @@ export function drawAngles(
         drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx);
         ctx.stroke();
       } else {
-        drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
         if (!rightLike) {
-          if ((angle.style.arcMultiplicity ?? 1) >= 2) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 6);
-          if ((angle.style.arcMultiplicity ?? 1) >= 3) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 12);
-          drawArcBarMarks(
-            ctx,
-            as,
-            bs,
-            entry.theta,
-            radiusPx,
-            angle.style.markSymbol ?? "none",
-            markSizePx,
-            angle.style.markPos ?? 0.5,
-            angle.style.markColor ?? angle.style.strokeColor,
-            mapStrokeWidth(angle.style.strokeWidth)
-          );
+          let arcLayerOffset = 0;
+          for (const mark of resolvedArcMarks) {
+            for (let layer = 0; layer < mark.arcMultiplicity; layer += 1) {
+              drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + (arcLayerOffset + layer) * 6);
+            }
+            const markRadius = radiusPx + (arcLayerOffset + (mark.arcMultiplicity - 1) * 0.5) * 6;
+            drawArcBarMarks(
+              ctx,
+              as,
+              bs,
+              entry.theta,
+              markRadius,
+              mark.markSymbol,
+              mark.markSize,
+              mark.markPos,
+              mark.markColor ?? angle.style.markColor ?? angle.style.strokeColor,
+              mapStrokeWidth(angle.style.strokeWidth)
+            );
+            arcLayerOffset += mark.arcMultiplicity;
+          }
         } else if (resolvedMarkStyle === "rightArcDot") {
+          drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
           drawRightInnerDot(ctx, as, bs, cs, rightMarkSizePx, Math.max(1.8, Math.min(4.5, rightMarkSizePx * 0.18)));
         }
       }
@@ -161,10 +168,13 @@ export function drawAngles(
           drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx + 2);
           ctx.stroke();
         } else {
-          drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);
           if (!rightLike) {
-            if ((angle.style.arcMultiplicity ?? 1) >= 2) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 8);
-            if ((angle.style.arcMultiplicity ?? 1) >= 3) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 14);
+            const layers = Math.max(1, totalArcLayers);
+            for (let layer = 0; layer < layers; layer += 1) {
+              drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2 + layer * 6);
+            }
+          } else {
+            drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);
           }
         }
       }

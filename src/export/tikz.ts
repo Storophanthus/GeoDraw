@@ -2,7 +2,11 @@ import { circleCircleIntersections, distance, lineCircleIntersectionBranches } f
 import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import { normalizeSceneIntegrity } from "../domain/sceneIntegrity";
 import {
+  collectSegmentMarkPositions,
   computeOrientedAngleRad,
+  type AngleMarkSymbol,
+  resolveAngleMarks,
+  resolveSegmentMarks,
   evaluateAngleExpressionDegrees,
   evaluateNumberExpression,
   getCircleWorldGeometry,
@@ -1112,21 +1116,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         style: segmentStyleToTikz(seg.style, options, hasEnabledEndpointSegmentArrow(segmentArrows)),
       });
     }
-    const markStyle = segmentMarkToTikz(
-      seg.style.segmentMark,
+    const markCommands = segmentMarksToTikz(
+      seg.style,
       seg.style.strokeColor,
       seg.style.strokeWidth,
       seg.style.opacity,
-      options
+      options,
+      aName,
+      bName
     );
-    if (markStyle) {
-      drawOverlays.push({
-        kind: "MarkSegment",
-        a: aName,
-        b: bName,
-        style: markStyle,
-      });
-    }
+    drawOverlays.push(...markCommands);
     const aWorld = getPointWorldPosCached(scene, seg.aId);
     const bWorld = getPointWorldPosCached(scene, seg.bId);
     const segmentLengthWorld = aWorld && bWorld ? distance(aWorld, bWorld) : undefined;
@@ -1374,8 +1373,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const mergedStyle = rightSquareFillStyle ? [markStyle, rightSquareFillStyle].filter(Boolean).join(", ") : markStyle;
       drawOverlays.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: mergedStyle });
     } else if (markKind === "arc") {
-      const markStyle = angleMarkStyleToTikz(angle.style, false, options, markKind);
-      drawOverlays.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
+      const marks = resolveAngleMarks(angle.style);
+      let arcLayerOffset = 0;
+      for (const mark of marks) {
+        const markStyle = angleMarkStyleToTikz(angle.style, false, options, markKind, {
+          arcMultiplicity: mark.arcMultiplicity,
+          markSymbol: mark.markSymbol,
+          markPos: mark.markPos,
+          markSize: mark.markSize,
+          markColor: mark.markColor,
+          arcLayerOffset,
+        });
+        drawOverlays.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
+        arcLayerOffset += mark.arcMultiplicity;
+      }
     }
     if (markKind === "arc" || markKind === "rightArcDot") {
       const angleStart = Math.atan2(aWorld.y - bWorld.y, aWorld.x - bWorld.x);
@@ -1870,6 +1881,12 @@ function mustName(names: Map<string, string>, pointId: string): string {
 function fmt(v: number): string {
   if (!Number.isFinite(v)) return "0";
   return Number(v.toPrecision(15)).toString();
+}
+
+function roundDecimal(v: number, decimals: number): number {
+  if (!Number.isFinite(v)) return 0;
+  const factor = 10 ** decimals;
+  return Math.round(v * factor) / factor;
 }
 
 function resolveCircleSimilitudeCenter(
@@ -2418,8 +2435,8 @@ function segmentStyleToTikz(
   return `${base},line cap=butt`;
 }
 
-function segmentMarkToTikz(
-  mark: SceneModel["segments"][number]["style"]["segmentMark"],
+function segmentMarkStyleBaseToTikz(
+  mark: NonNullable<SceneModel["segments"][number]["style"]["segmentMark"]>,
   segmentStrokeColor: string,
   segmentStrokeWidth: number,
   segmentOpacity: number,
@@ -2430,19 +2447,12 @@ function segmentMarkToTikz(
   if (!allowedMarks.has(mark.mark)) {
     throw new Error(`Unsupported SegmentMark: mark=${String(mark.mark)}`);
   }
-  if (!Number.isFinite(mark.pos) || mark.pos < 0 || mark.pos > 1) {
-    throw new Error("Unsupported SegmentMark: pos");
-  }
   if (!Number.isFinite(mark.sizePt) || mark.sizePt <= 0) {
     throw new Error("Unsupported SegmentMark: sizePt");
   }
   const sizeScale = clampPositive(options.segmentMarkSizeScale ?? 1, 0.01, 100);
   const widthScale = clampPositive(options.segmentMarkLineWidthScale ?? 1, 0.01, 100);
-  const opts: string[] = [
-    `mark=${mark.mark}`,
-    `pos=${fmt(mark.pos)}`,
-    `size=${fmt(mark.sizePt * sizeScale)}pt`,
-  ];
+  const opts: string[] = [`mark=${mark.mark}`, `size=${fmt(mark.sizePt * sizeScale)}pt`];
   opts.push(`color=${rgbColorExpr(mark.color ?? segmentStrokeColor)}`);
   const opacity = clamp01(segmentOpacity);
   if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
@@ -2455,6 +2465,61 @@ function segmentMarkToTikz(
     opts.push(`line width=${fmt(strokeWidthToTikzPt(segmentStrokeWidth, options))}pt`);
   }
   return opts.join(", ");
+}
+
+function segmentMarkToTikz(
+  mark: NonNullable<SceneModel["segments"][number]["style"]["segmentMark"]>,
+  pos: number,
+  segmentStrokeColor: string,
+  segmentStrokeWidth: number,
+  segmentOpacity: number,
+  options: TikzExportOptions
+): string | null {
+  if (!Number.isFinite(pos) || pos < 0 || pos > 1) {
+    throw new Error("Unsupported SegmentMark: pos");
+  }
+  const baseStyle = segmentMarkStyleBaseToTikz(mark, segmentStrokeColor, segmentStrokeWidth, segmentOpacity, options);
+  if (!baseStyle) return null;
+  return `${baseStyle}, pos=${fmt(pos)}`;
+}
+
+function segmentMarksToTikz(
+  style: Pick<SceneModel["segments"][number]["style"], "segmentMark" | "segmentMarks">,
+  segmentStrokeColor: string,
+  segmentStrokeWidth: number,
+  segmentOpacity: number,
+  options: TikzExportOptions,
+  aName: string,
+  bName: string
+): TikzCommand[] {
+  const marks = resolveSegmentMarks(style);
+  if (marks.length === 0) return [];
+  const out: TikzCommand[] = [];
+  for (const mark of marks) {
+    const positions = collectSegmentMarkPositions(mark, 0.5);
+    if ((mark.distribution ?? "single") === "multi" && positions.length > 1) {
+      const baseStyle = segmentMarkStyleBaseToTikz(mark, segmentStrokeColor, segmentStrokeWidth, segmentOpacity, options);
+      if (!baseStyle) continue;
+      const posList = positions.map((p) => fmt(p)).join(",");
+      out.push({
+        kind: "DrawRaw",
+        tex: `\\foreach \\gdPos in {${posList}}{\\tkzMarkSegment[${baseStyle}, pos=\\gdPos](${aName},${bName})}`,
+      });
+      continue;
+    }
+    for (let i = 0; i < positions.length; i += 1) {
+      const styleExpr = segmentMarkToTikz(mark, positions[i], segmentStrokeColor, segmentStrokeWidth, segmentOpacity, options);
+      if (styleExpr) {
+        out.push({
+          kind: "MarkSegment",
+          a: aName,
+          b: bName,
+          style: styleExpr,
+        });
+      }
+    }
+  }
+  return out;
 }
 
 function segmentArrowsToTikz(
@@ -2881,8 +2946,11 @@ function collectPathArrowPositions(
   }
   const step = Math.max(0.001, Math.min(1, arrow.step ?? 0.05));
   const out: number[] = [];
-  for (let t = start; t <= end + 1e-9 && out.length < 600; t += step) {
-    out.push(clamp01(t));
+  // Compute from start + i*step to avoid cumulative float drift in exported positions.
+  for (let i = 0; i < 600; i += 1) {
+    const t = start + i * step;
+    if (t > end + 1e-9) break;
+    out.push(clamp01(roundDecimal(t, 12)));
   }
   if (out.length === 0) out.push(clamp01(arrow.pos ?? fallbackPos));
   return out;
@@ -3058,7 +3126,15 @@ function angleMarkStyleToTikz(
   style: SceneModel["angles"][number]["style"],
   isRightAngle: boolean,
   options: TikzExportOptions,
-  markKind: "arc" | "rightSquare" | "rightArcDot"
+  markKind: "arc" | "rightSquare" | "rightArcDot",
+  arcMarkOverride?: {
+    arcMultiplicity?: 1 | 2 | 3;
+    markSymbol?: AngleMarkSymbol;
+    markPos?: number;
+    markSize?: number;
+    markColor?: string;
+    arcLayerOffset?: number;
+  }
 ): string {
   if (!Number.isFinite(style.arcRadius) || style.arcRadius <= 0) {
     throw new Error("Unsupported Angle style: arcRadius must be > 0.");
@@ -3075,10 +3151,15 @@ function angleMarkStyleToTikz(
     : isRightAngle
       ? rightAngleMarkSizeWorldFromStyle(style, options)
       : nonSectorAngleRadiusWorldFromStyle(style, options);
+  const arcLayerOffset =
+    !isRightAngle && markKind === "arc"
+      ? Math.max(0, Math.floor(Number(arcMarkOverride?.arcLayerOffset ?? 0)))
+      : 0;
+  const layeredSizeWorld = baseSizeWorld + arcLayerOffset * angleArcLayerGapWorld(options);
   const opts: string[] = [
     `color=${rgbColorExpr(style.strokeColor)}`,
     `line width=${fmt(strokeWidthToTikzPt(style.strokeWidth, options))}pt`,
-    `size=${fmt(baseSizeWorld * sizeScale)}`,
+    `size=${fmt(layeredSizeWorld * sizeScale)}`,
   ];
   if (isRightArcDot) {
     opts.push("german");
@@ -3089,25 +3170,42 @@ function angleMarkStyleToTikz(
     opts.push(`dotsize=${fmt(dotSize)}`);
   }
   if (!isRightAngle && markKind === "arc") {
-    const arcMultiplicity = style.arcMultiplicity ?? 1;
+    const arcMultiplicity = normalizeArcMultiplicity(arcMarkOverride?.arcMultiplicity ?? style.arcMultiplicity ?? 1);
     const arcExpr = arcMultiplicity === 3 ? "lll" : arcMultiplicity === 2 ? "ll" : "l";
     opts.push(`arc=${arcExpr}`);
-    const markSymbol = style.markSymbol ?? "none";
+    const markSymbol = arcMarkOverride?.markSymbol ?? style.markSymbol ?? "none";
     if (markSymbol !== "none" && markSymbol !== "|" && markSymbol !== "||" && markSymbol !== "|||") {
       throw new Error(`Unsupported construction: angle mark style symbol ${String(markSymbol)}`);
     }
     opts.push(`mark=${markSymbol}`);
-    const mkPos = Number.isFinite(style.markPos) ? Math.max(0, Math.min(1, style.markPos)) : 0.5;
-    const mkSizeBase = Number.isFinite(style.markSize) ? Math.max(0.1, style.markSize) : 4;
+    const mkPosRaw = arcMarkOverride?.markPos;
+    const mkPos = Number.isFinite(mkPosRaw) ? Math.max(0, Math.min(1, mkPosRaw as number)) : Number.isFinite(style.markPos) ? Math.max(0, Math.min(1, style.markPos)) : 0.5;
+    const mkSizeRaw = arcMarkOverride?.markSize;
+    const mkSizeBase = Number.isFinite(mkSizeRaw) ? Math.max(0.1, mkSizeRaw as number) : Number.isFinite(style.markSize) ? Math.max(0.1, style.markSize) : 4;
     const mkSizeScale = clampPositive(options.angleMarkSizeScale ?? 1, 0.01, 100);
     const mkSize = mkSizeBase * mkSizeScale;
-    const mkColor = style.markColor && style.markColor.trim() ? style.markColor : style.strokeColor;
+    const mkColorSource = arcMarkOverride?.markColor ?? style.markColor;
+    const mkColor = mkColorSource && mkColorSource.trim() ? mkColorSource : style.strokeColor;
     opts.push(`mkpos=${fmt(mkPos)}`);
     opts.push(`mksize=${fmt(mkSize)}`);
     opts.push(`mkcolor=${rgbColorExpr(mkColor)}`);
   }
   if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
   return opts.join(", ");
+}
+
+function angleArcLayerGapWorld(options: TikzExportOptions): number {
+  const pxPerWorld = Number.isFinite(options.screenPxPerWorld) && (options.screenPxPerWorld as number) > 1e-9
+    ? (options.screenPxPerWorld as number)
+    : 80;
+  return 6 / pxPerWorld;
+}
+
+function normalizeArcMultiplicity(value: unknown): 1 | 2 | 3 {
+  const n = Number(value);
+  if (n >= 3) return 3;
+  if (n >= 2) return 2;
+  return 1;
 }
 
 function resolveAngleMarkKind(

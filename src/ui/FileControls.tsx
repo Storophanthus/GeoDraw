@@ -14,6 +14,13 @@ import {
   type UiCssVariableName,
   type UiColorProfileId,
 } from "../state/colorProfiles";
+import {
+  captureConstructionPreferences,
+  clearStoredConstructionPreferences,
+  hasStoredConstructionPreferences,
+  loadStoredConstructionPreferences,
+  saveStoredConstructionPreferences,
+} from "../state/appPreferences";
 
 const MENU_EVENT_FILE_OPEN = "gd-menu-file-open";
 const MENU_EVENT_FILE_SAVE = "gd-menu-file-save";
@@ -32,8 +39,24 @@ type PickerWindow = Window & {
 
 export function FileControls() {
   const loadSnapshot = useGeoStore((state) => state.loadSnapshot);
+  const applyAppPreferences = useGeoStore((state) => state.applyAppPreferences);
+  const colorProfileId = useGeoStore((state) => state.colorProfileId);
   const uiColorProfileId = useGeoStore((state) => state.uiColorProfileId);
   const uiCssOverrides = useGeoStore((state) => state.uiCssOverrides);
+  const gridEnabled = useGeoStore((state) => state.gridEnabled);
+  const axesEnabled = useGeoStore((state) => state.axesEnabled);
+  const gridSnapEnabled = useGeoStore((state) => state.gridSnapEnabled);
+  const pointDefaults = useGeoStore((state) => state.pointDefaults);
+  const segmentDefaults = useGeoStore((state) => state.segmentDefaults);
+  const lineDefaults = useGeoStore((state) => state.lineDefaults);
+  const circleDefaults = useGeoStore((state) => state.circleDefaults);
+  const polygonDefaults = useGeoStore((state) => state.polygonDefaults);
+  const angleDefaults = useGeoStore((state) => state.angleDefaults);
+  const angleFixedTool = useGeoStore((state) => state.angleFixedTool);
+  const circleFixedTool = useGeoStore((state) => state.circleFixedTool);
+  const regularPolygonTool = useGeoStore((state) => state.regularPolygonTool);
+  const transformTool = useGeoStore((state) => state.transformTool);
+  const dependencyGlowEnabled = useGeoStore((state) => state.dependencyGlowEnabled);
   const setUiColorProfile = useGeoStore((state) => state.setUiColorProfile);
   const setUiCssVariable = useGeoStore((state) => state.setUiCssVariable);
   const clearUiCssOverrides = useGeoStore((state) => state.clearUiCssOverrides);
@@ -49,12 +72,51 @@ export function FileControls() {
 
   const [savedName, setSavedName] = useState<string | null>(null);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [constructionPresetStatus, setConstructionPresetStatus] = useState<string>("");
+  const [hasConstructionPreset, setHasConstructionPreset] = useState(() => hasStoredConstructionPreferences());
   const uiBaseVariables = useMemo(() => getUiProfileBaseVariables(uiColorProfileId), [uiColorProfileId]);
   const uiEffectiveVariables = useMemo(
     () => getUiCssVariables(uiColorProfileId, uiCssOverrides),
     [uiColorProfileId, uiCssOverrides]
   );
   const uiOverrideCount = useMemo(() => Object.keys(uiCssOverrides).length, [uiCssOverrides]);
+  const currentConstructionPreferences = useMemo(
+    () =>
+      captureConstructionPreferences({
+        colorProfileId,
+        gridEnabled,
+        axesEnabled,
+        gridSnapEnabled,
+        pointDefaults,
+        segmentDefaults,
+        lineDefaults,
+        circleDefaults,
+        polygonDefaults,
+        angleDefaults,
+        angleFixedTool,
+        circleFixedTool,
+        regularPolygonTool,
+        transformTool,
+        dependencyGlowEnabled,
+      }),
+    [
+      colorProfileId,
+      gridEnabled,
+      axesEnabled,
+      gridSnapEnabled,
+      pointDefaults,
+      segmentDefaults,
+      lineDefaults,
+      circleDefaults,
+      polygonDefaults,
+      angleDefaults,
+      angleFixedTool,
+      circleFixedTool,
+      regularPolygonTool,
+      transformTool,
+      dependencyGlowEnabled,
+    ]
+  );
 
   const buildSnapshotJson = (): string => {
     const state = getGeoStore();
@@ -270,6 +332,8 @@ export function FileControls() {
   useEffect(() => {
     if (!preferencesOpen) return;
 
+    setHasConstructionPreset(hasStoredConstructionPreferences());
+
     const onMouseDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
@@ -291,6 +355,38 @@ export function FileControls() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [preferencesOpen]);
+
+  const saveConstructionPreset = () => {
+    const ok = saveStoredConstructionPreferences(currentConstructionPreferences);
+    if (!ok) {
+      setConstructionPresetStatus("Could not save preset (storage unavailable).");
+      return;
+    }
+    setHasConstructionPreset(true);
+    setConstructionPresetStatus("Saved current construction settings as preferred preset.");
+  };
+
+  const loadConstructionPreset = () => {
+    const preset = loadStoredConstructionPreferences();
+    if (!preset) {
+      setHasConstructionPreset(false);
+      setConstructionPresetStatus("No preferred preset found.");
+      return;
+    }
+    applyAppPreferences(preset);
+    setHasConstructionPreset(true);
+    setConstructionPresetStatus("Loaded preferred construction preset.");
+  };
+
+  const clearConstructionPreset = () => {
+    const ok = clearStoredConstructionPreferences();
+    if (!ok) {
+      setConstructionPresetStatus("Could not clear preset (storage unavailable).");
+      return;
+    }
+    setHasConstructionPreset(false);
+    setConstructionPresetStatus("Cleared preferred construction preset.");
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -442,8 +538,41 @@ export function FileControls() {
               })}
             </div>
 
+            <div className="preferencesSectionTitle">Construction Preset</div>
+            <div className="preferencesPresetActions">
+              <button
+                type="button"
+                className="preferencesResetButton"
+                onClick={saveConstructionPreset}
+              >
+                Save Current as Preferred
+              </button>
+              <button
+                type="button"
+                className="preferencesResetButton"
+                onClick={loadConstructionPreset}
+                disabled={!hasConstructionPreset}
+              >
+                Load Preferred
+              </button>
+              <button
+                type="button"
+                className="preferencesResetButton"
+                onClick={clearConstructionPreset}
+                disabled={!hasConstructionPreset}
+              >
+                Clear Preferred
+              </button>
+            </div>
+            <div className="preferencesPresetStatus">
+              {constructionPresetStatus || (hasConstructionPreset ? "Preferred preset is saved." : "No preferred preset saved yet.")}
+            </div>
+
             <div className="preferencesHint">
-              This changes UI colors only. Canvas/object palette stays in the left toolbar palette tool.
+              UI theme is persisted across restarts and is not loaded from scene files.
+            </div>
+            <div className="preferencesHint">
+              Construction preset saves palette/default styles/tool defaults so you can re-apply them after opening any file.
             </div>
           </section>
         </div>

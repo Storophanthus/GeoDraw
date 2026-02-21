@@ -508,6 +508,10 @@ export function applyProfileColorsToDefaults(defaults: SceneStyleDefaults, profi
       segmentMark: defaults.segmentDefaults.segmentMark
         ? { ...defaults.segmentDefaults.segmentMark, color: palette.marking }
         : defaults.segmentDefaults.segmentMark,
+      segmentMarks: defaults.segmentDefaults.segmentMarks?.map((mark) => ({
+        ...mark,
+        color: mark.color === undefined ? undefined : palette.marking,
+      })),
       segmentArrowMark: defaults.segmentDefaults.segmentArrowMark
         ? { ...defaults.segmentDefaults.segmentArrowMark, color: palette.arrow }
         : defaults.segmentDefaults.segmentArrowMark,
@@ -544,6 +548,10 @@ export function applyProfileColorsToDefaults(defaults: SceneStyleDefaults, profi
       fillColor: palette.angleFill,
       markColor: palette.angleMark,
       labelPosWorld: { ...defaults.angleDefaults.labelPosWorld },
+      angleMarks: defaults.angleDefaults.angleMarks?.map((mark) => ({
+        ...mark,
+        markColor: mark.markColor === undefined ? undefined : palette.angleMark,
+      })),
       arcArrowMark: defaults.angleDefaults.arcArrowMark
         ? { ...defaults.angleDefaults.arcArrowMark, color: palette.arrow }
         : defaults.angleDefaults.arcArrowMark,
@@ -582,6 +590,10 @@ export function recolorSceneForProfile(scene: SceneModel, fromProfileId: ColorPr
             color: remapOptionalColor(segment.style.segmentMark.color, colorMap),
           }
           : segment.style.segmentMark,
+        segmentMarks: segment.style.segmentMarks?.map((mark) => ({
+          ...mark,
+          color: remapOptionalColor(mark.color, colorMap),
+        })),
         segmentArrowMark: remapArrowMark(segment.style.segmentArrowMark, colorMap),
         segmentArrowMarks: segment.style.segmentArrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
       },
@@ -623,6 +635,10 @@ export function recolorSceneForProfile(scene: SceneModel, fromProfileId: ColorPr
         fillColor: remapColor(angle.style.fillColor, colorMap),
         patternColor: remapOptionalColor(angle.style.patternColor, colorMap),
         markColor: remapColor(angle.style.markColor, colorMap),
+        angleMarks: angle.style.angleMarks?.map((mark) => ({
+          ...mark,
+          markColor: remapOptionalColor(mark.markColor, colorMap),
+        })),
         labelPosWorld: { ...angle.style.labelPosWorld },
         arcArrowMark: remapArrowMark(angle.style.arcArrowMark, colorMap),
         arcArrowMarks: angle.style.arcArrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
