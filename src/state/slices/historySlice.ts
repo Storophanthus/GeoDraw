@@ -1,6 +1,6 @@
 import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneModel } from "../../scene/points";
 import type { ActiveTool, GeoState, SelectedObject } from "./storeTypes";
-import type { ColorProfileId } from "../colorProfiles";
+import type { CanvasColorTheme, ColorProfileId } from "../colorProfiles";
 
 export type SetStateOptions = {
   history?: "auto" | "push" | "coalesce" | "skip";
@@ -9,6 +9,7 @@ export type SetStateOptions = {
 
 export type HistorySnapshot = {
   colorProfileId?: ColorProfileId;
+  canvasThemeOverrides?: Partial<CanvasColorTheme>;
   gridEnabled: boolean;
   axesEnabled: boolean;
   gridSnapEnabled: boolean;
@@ -54,6 +55,7 @@ export const MAX_HISTORY = 200;
 export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
   return {
     colorProfileId: prev.colorProfileId,
+    canvasThemeOverrides: prev.canvasThemeOverrides,
     gridEnabled: prev.gridEnabled,
     axesEnabled: prev.axesEnabled,
     gridSnapEnabled: prev.gridSnapEnabled,
@@ -90,6 +92,7 @@ export function cloneHistorySnapshot(snapshot: HistorySnapshot): HistorySnapshot
 export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
   return (
     prev.colorProfileId !== next.colorProfileId ||
+    prev.canvasThemeOverrides !== next.canvasThemeOverrides ||
     prev.scene !== next.scene ||
     prev.nextPointId !== next.nextPointId ||
     prev.nextSegmentId !== next.nextSegmentId ||

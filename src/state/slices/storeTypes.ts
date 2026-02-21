@@ -14,6 +14,7 @@ import type {
 } from "../../scene/points";
 import type { Camera, Viewport } from "../../view/camera";
 import type {
+  CanvasColorTheme,
   ColorProfileId,
   UiColorProfileId,
   UiCssVariableName,
@@ -204,6 +205,7 @@ export type AngleFixedDirection = "CCW" | "CW";
 export type GeoState = {
   camera: Camera;
   colorProfileId: ColorProfileId;
+  canvasThemeOverrides: Partial<CanvasColorTheme>;
   uiColorProfileId: UiColorProfileId;
   uiCssOverrides: Partial<UiCssVariables>;
   gridEnabled: boolean;
@@ -265,6 +267,7 @@ export type GeoState = {
 export type AppPreferencesState = Pick<
   GeoState,
   | "colorProfileId"
+  | "canvasThemeOverrides"
   | "uiColorProfileId"
   | "uiCssOverrides"
   | "gridEnabled"

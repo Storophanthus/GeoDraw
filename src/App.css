@@ -238,6 +238,8 @@ input[type="range"] {
 
 .preferencesModal {
   width: min(680px, calc(100% - 40px));
+  max-height: min(86vh, 920px);
+  overflow: auto;
   border: 1px solid var(--gd-ui-border-panel, #d3c19d);
   border-radius: 14px;
   background: var(--gd-ui-glass-bg-strong, rgba(245, 238, 220, 0.97));
@@ -286,6 +288,40 @@ input[type="range"] {
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--gd-ui-title-tone, #27548a);
+}
+
+.preferencesTabs {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--gd-ui-border-soft, #dbe2ea);
+  border-radius: 12px;
+  background: var(--gd-ui-surface-soft, #f8fafc);
+}
+
+.preferencesTabButton {
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--gd-ui-text-muted, #475569);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.preferencesTabButton.active {
+  border-color: var(--gd-ui-border-strong, #94a3b8);
+  background: var(--gd-ui-surface, #fff);
+  color: var(--gd-ui-text-strong, #0f172a);
+}
+
+.preferencesTabButton:hover,
+.preferencesTabButton:focus-visible {
+  border-color: var(--gd-ui-border, #cbd5e1);
+  outline: none;
 }
 
 .preferencesSwatchRow {
@@ -393,6 +429,10 @@ input[type="range"] {
   grid-template-columns: 36px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
+}
+
+.preferencesTokenControlsCompact {
+  grid-template-columns: 36px minmax(0, 1fr);
 }
 
 .preferencesTokenColor {

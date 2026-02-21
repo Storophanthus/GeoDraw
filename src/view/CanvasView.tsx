@@ -81,6 +81,7 @@ export function CanvasView() {
   const activeTool = useGeoStore((store) => store.activeTool);
   const scene = useGeoStore((store) => store.scene);
   const colorProfileId = useGeoStore((store) => store.colorProfileId);
+  const canvasThemeOverrides = useGeoStore((store) => store.canvasThemeOverrides);
   const uiColorProfileId = useGeoStore((store) => store.uiColorProfileId);
   const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
   const selectedObject = useGeoStore((store) => store.selectedObject);
@@ -150,7 +151,10 @@ export function CanvasView() {
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
   const [snapDisabled, setSnapDisabled] = useState(false);
-  const canvasTheme = useMemo(() => getCanvasColorTheme(colorProfileId), [colorProfileId]);
+  const canvasTheme = useMemo(
+    () => getCanvasColorTheme(colorProfileId, canvasThemeOverrides),
+    [colorProfileId, canvasThemeOverrides]
+  );
   const uiCssVariables = useMemo(
     () => getUiCssVariables(uiColorProfileId, uiCssOverrides),
     [uiColorProfileId, uiCssOverrides]

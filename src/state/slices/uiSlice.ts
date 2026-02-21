@@ -5,6 +5,7 @@ import { DEFAULT_COLOR_PROFILE_ID, DEFAULT_UI_COLOR_PROFILE_ID } from "../colorP
 export type UiSliceState = {
   camera: Camera;
   colorProfileId: import("../colorProfiles").ColorProfileId;
+  canvasThemeOverrides: Partial<import("../colorProfiles").CanvasColorTheme>;
   uiColorProfileId: import("../colorProfiles").UiColorProfileId;
   uiCssOverrides: Partial<import("../colorProfiles").UiCssVariables>;
   gridEnabled: boolean;
@@ -46,6 +47,7 @@ export function createUiSliceState(): UiSliceState {
   return {
     camera: { pos: { x: 0, y: 0 }, zoom: initialZoom, logZoom: Math.log(initialZoom) },
     colorProfileId: DEFAULT_COLOR_PROFILE_ID,
+    canvasThemeOverrides: {},
     uiColorProfileId: DEFAULT_UI_COLOR_PROFILE_ID,
     uiCssOverrides: {},
     gridEnabled: true,

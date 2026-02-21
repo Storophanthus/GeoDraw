@@ -15,6 +15,7 @@ const createdPointId = store.createFreePoint({ x: 0, y: 0 });
 store.applyAppPreferences({
   uiColorProfileId: "beige",
   uiCssOverrides: { "--gd-ui-app-bg": "#112233" },
+  canvasThemeOverrides: { backgroundColor: "#faf3e0", gridMinorColor: "#111111" },
   gridEnabled: false,
   axesEnabled: false,
   gridSnapEnabled: false,
@@ -28,6 +29,10 @@ store.applyAppPreferences({
 let current = getGeoStore();
 assert(current.uiColorProfileId === "beige", "applyAppPreferences should update UI profile");
 assert(current.uiCssOverrides["--gd-ui-app-bg"] === "#112233", "applyAppPreferences should update UI overrides");
+assert(
+  current.canvasThemeOverrides.backgroundColor === "#faf3e0",
+  "applyAppPreferences should update canvas theme overrides"
+);
 assert(current.gridEnabled === false, "applyAppPreferences should update grid toggle");
 assert(current.axesEnabled === false, "applyAppPreferences should update axes toggle");
 assert(current.gridSnapEnabled === false, "applyAppPreferences should update snap toggle");

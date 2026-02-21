@@ -289,6 +289,9 @@ export function createUiActions(
               labelPosWorld: { ...next.angleDefaults.labelPosWorld },
             }
             : baseDefaults.angleDefaults;
+          const canvasThemeOverrides = next.canvasThemeOverrides
+            ? { ...next.canvasThemeOverrides }
+            : prev.canvasThemeOverrides;
 
           return {
             ...prev,
@@ -296,6 +299,7 @@ export function createUiActions(
             scene: colorProfileChanged
               ? recolorSceneForProfile(prev.scene, prev.colorProfileId, nextColorProfileId)
               : prev.scene,
+            canvasThemeOverrides,
             uiColorProfileId: next.uiColorProfileId ?? prev.uiColorProfileId,
             uiCssOverrides: next.uiCssOverrides ? { ...next.uiCssOverrides } : prev.uiCssOverrides,
             gridEnabled: next.gridEnabled ?? prev.gridEnabled,

@@ -5,6 +5,7 @@ type UiPreferencesState = Pick<AppPreferencesState, "uiColorProfileId" | "uiCssO
 type ConstructionPreferencesState = Pick<
   AppPreferencesState,
   | "colorProfileId"
+  | "canvasThemeOverrides"
   | "gridEnabled"
   | "axesEnabled"
   | "gridSnapEnabled"
@@ -80,6 +81,28 @@ function isColorProfileId(value: unknown): value is ConstructionPreferencesState
   return value === "classic" || value === "grayscale_white_dot" || value === "beige_light";
 }
 
+function normalizeCanvasThemeOverrides(raw: unknown): ConstructionPreferencesState["canvasThemeOverrides"] {
+  if (!isRecord(raw)) return {};
+  const out: ConstructionPreferencesState["canvasThemeOverrides"] = {};
+  const backgroundColor = raw.backgroundColor;
+  if (typeof backgroundColor === "string" && backgroundColor.trim().length > 0) {
+    out.backgroundColor = backgroundColor.trim();
+  }
+  const gridMinorColor = raw.gridMinorColor;
+  if (typeof gridMinorColor === "string" && gridMinorColor.trim().length > 0) {
+    out.gridMinorColor = gridMinorColor.trim();
+  }
+  const gridMajorColor = raw.gridMajorColor;
+  if (typeof gridMajorColor === "string" && gridMajorColor.trim().length > 0) {
+    out.gridMajorColor = gridMajorColor.trim();
+  }
+  const axisColor = raw.axisColor;
+  if (typeof axisColor === "string" && axisColor.trim().length > 0) {
+    out.axisColor = axisColor.trim();
+  }
+  return out;
+}
+
 export function captureUiPreferences(state: UiPreferencesState): UiPreferencesState {
   return {
     uiColorProfileId: state.uiColorProfileId,
@@ -90,6 +113,7 @@ export function captureUiPreferences(state: UiPreferencesState): UiPreferencesSt
 export function captureConstructionPreferences(state: ConstructionPreferencesState): ConstructionPreferencesState {
   return structuredClone({
     colorProfileId: state.colorProfileId,
+    canvasThemeOverrides: { ...state.canvasThemeOverrides },
     gridEnabled: state.gridEnabled,
     axesEnabled: state.axesEnabled,
     gridSnapEnabled: state.gridSnapEnabled,
@@ -155,6 +179,7 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
 
   return {
     colorProfileId: value.colorProfileId,
+    canvasThemeOverrides: normalizeCanvasThemeOverrides(value.canvasThemeOverrides),
     gridEnabled: value.gridEnabled,
     axesEnabled: value.axesEnabled,
     gridSnapEnabled: value.gridSnapEnabled,

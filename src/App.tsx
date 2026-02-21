@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { getUiCssVariables } from "./state/colorProfiles";
 import { useGeoStore } from "./state/geoStore";
 import {
+  loadStoredConstructionPreferences,
   captureUiPreferences,
   loadStoredUiPreferences,
   saveStoredUiPreferences,
@@ -21,9 +22,17 @@ export default function App() {
   );
 
   useEffect(() => {
-    const stored = loadStoredUiPreferences();
-    if (stored) {
-      applyAppPreferences(stored);
+    const storedUi = loadStoredUiPreferences();
+    const storedConstruction = loadStoredConstructionPreferences();
+    const merged =
+      storedUi || storedConstruction
+        ? {
+            ...(storedConstruction ?? {}),
+            ...(storedUi ?? {}),
+          }
+        : null;
+    if (merged) {
+      applyAppPreferences(merged);
     }
     const timer = window.setTimeout(() => setUiPrefsHydrated(true), 0);
     return () => window.clearTimeout(timer);

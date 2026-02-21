@@ -331,13 +331,20 @@ export function getColorProfile(profileId: ColorProfileId): ColorProfile {
   return found ?? COLOR_PROFILES[0];
 }
 
-export function getCanvasColorTheme(profileId: ColorProfileId): CanvasColorTheme {
+export function getCanvasColorTheme(profileId: ColorProfileId, overrides?: Partial<CanvasColorTheme>): CanvasColorTheme {
   const palette = getColorProfile(profileId).palette;
-  return {
+  const base: CanvasColorTheme = {
     backgroundColor: palette.backgroundColor,
     gridMinorColor: palette.gridMinorColor,
     gridMajorColor: palette.gridMajorColor,
     axisColor: palette.axisColor,
+  };
+  if (!overrides) return base;
+  return {
+    backgroundColor: normalizeCanvasColorOverride(overrides.backgroundColor, base.backgroundColor),
+    gridMinorColor: normalizeCanvasColorOverride(overrides.gridMinorColor, base.gridMinorColor),
+    gridMajorColor: normalizeCanvasColorOverride(overrides.gridMajorColor, base.gridMajorColor),
+    axisColor: normalizeCanvasColorOverride(overrides.axisColor, base.axisColor),
   };
 }
 
@@ -709,4 +716,10 @@ function normalizeColorToken(value: string): string {
     return `#${r}${r}${g}${g}${b}${b}`;
   }
   return trimmed;
+}
+
+function normalizeCanvasColorOverride(value: string | undefined, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : fallback;
 }
