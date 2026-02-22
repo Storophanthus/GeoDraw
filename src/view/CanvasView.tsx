@@ -137,6 +137,7 @@ export function CanvasView() {
   const createCircleCenterPoint = useGeoStore((store) => store.createCircleCenterPoint);
   const createIntersectionPoint = useGeoStore((store) => store.createIntersectionPoint);
   const movePointTo = useGeoStore((store) => store.movePointTo);
+  const movePolygonByWorldDelta = useGeoStore((store) => store.movePolygonByWorldDelta);
   const movePointLabelBy = useGeoStore((store) => store.movePointLabelBy);
   const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
   const moveObjectLabelTo = useGeoStore((store) => store.moveObjectLabelTo);
@@ -517,6 +518,7 @@ export function CanvasView() {
     actions: {
       panByScreenDelta,
       movePointTo,
+      movePolygonByWorldDelta,
       movePointLabelBy,
       moveAngleLabelTo,
       moveObjectLabelTo,

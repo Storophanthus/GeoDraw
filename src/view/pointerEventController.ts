@@ -84,7 +84,7 @@ type CreatePointerHandlersDeps = {
   ) => void;
   resolveHits: (screen: Vec2, e: PointerEvent) => PointerHits;
   decideMovePointerDown: (hits: PointerHits) => MoveDecision;
-  onToolClickRelease: (screen: Vec2, e: PointerEvent) => void;
+  onToolClickRelease: (screen: Vec2, e: PointerEvent, hits: PointerHits) => void;
 };
 
 export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
@@ -227,7 +227,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
 
     if (st.mode === "tool-click" && !st.moved) {
       const screen = deps.readScreen(e);
-      deps.onToolClickRelease(screen, e);
+      deps.onToolClickRelease(screen, e, deps.resolveHits(screen, e));
     }
 
     deps.pointerRef.current = {

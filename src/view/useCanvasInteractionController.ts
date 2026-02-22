@@ -62,6 +62,7 @@ type DragBufferRefs = {
 type InteractionActions = {
   panByScreenDelta: (delta: Vec2) => void;
   movePointTo: (id: string, world: Vec2) => void;
+  movePolygonByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   movePointLabelBy: (id: string, deltaScreenPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
   moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon"; id: string }, world: Vec2) => void;
@@ -175,11 +176,20 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
         {
           panByScreenDelta: actions.panByScreenDelta,
           movePointTo: actions.movePointTo,
+          movePolygonByWorldDelta: actions.movePolygonByWorldDelta,
           movePointLabelBy: actions.movePointLabelBy,
           moveAngleLabelTo: actions.moveAngleLabelTo,
           moveObjectLabelTo: actions.moveObjectLabelTo,
           moveTextLabelTo: actions.moveTextLabelTo,
           screenToWorld: (screen) => camMath.screenToWorld(screen, camera, vp),
+          screenDeltaToWorldDelta: (delta) => {
+            const world0 = camMath.screenToWorld({ x: 0, y: 0 }, camera, vp);
+            const world1 = camMath.screenToWorld(delta, camera, vp);
+            return {
+              x: world1.x - world0.x,
+              y: world1.y - world0.y,
+            };
+          },
         }
       );
     };
@@ -236,10 +246,11 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           ...hits,
           scenePoints: scene.points,
         }),
-      onToolClickRelease: (screen, e) =>
+      onToolClickRelease: (screen, e, hits) =>
         runConstructClickAdapter({
           screen,
           pointerEvent: e,
+          preHitTextLabelId: hits.hitTextLabelId ?? null,
           activeTool,
           pendingSelection,
           copyStyleSource,

@@ -7,6 +7,7 @@ export type PointerMode =
   | "idle"
   | "pan"
   | "drag-point"
+  | "drag-polygon"
   | "drag-label"
   | "drag-angle-label"
   | "drag-object-label"
@@ -125,7 +126,12 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
   }
 
   if (hitPolygonId) {
-    return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "polygon", id: hitPolygonId } };
+    return {
+      mode: "drag-polygon",
+      pointId: hitPolygonId,
+      dragObjectType: "polygon",
+      selectedObject: { type: "polygon", id: hitPolygonId },
+    };
   }
 
   return { mode: "pan", pointId: null, dragObjectType: null, selectedObject: null };
@@ -141,6 +147,7 @@ export function computeCanvasCursor(
     if (
       mode === "pan"
       || mode === "drag-point"
+      || mode === "drag-polygon"
       || mode === "drag-label"
       || mode === "drag-angle-label"
       || mode === "drag-object-label"

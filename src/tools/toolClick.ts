@@ -62,8 +62,8 @@ export type ToolClickIO = {
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
   setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string } | null) => void;
-  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
-  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
+  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string }) => void;
+  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string }) => void;
   enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
   regularPolygonTool: { sides: number; direction: "CCW" | "CW" };
@@ -149,13 +149,16 @@ export function handleToolClick(
   }
 
   if (activeTool === "copyStyle") {
-    if (!hits.hitObject) return;
-    io.setSelectedObject(hits.hitObject);
+    const target = hits.hitTextLabelId
+      ? ({ type: "textLabel", id: hits.hitTextLabelId } as const)
+      : hits.hitObject;
+    if (!target) return;
+    io.setSelectedObject(target);
     if (hits.shiftKey || !hits.hasCopyStyleSource) {
-      io.setCopyStyleSource(hits.hitObject);
+      io.setCopyStyleSource(target);
       return;
     }
-    io.applyCopyStyleTo(hits.hitObject);
+    io.applyCopyStyleTo(target);
     return;
   }
 

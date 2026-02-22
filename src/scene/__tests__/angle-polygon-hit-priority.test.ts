@@ -176,4 +176,20 @@ assert(
   "Polygon should still be selectable when no angle is hit."
 );
 
+const polygonDragDecision = decideMovePointerDown({
+  hitLabelId: null,
+  hitAngleLabelId: null,
+  hitPointId: null,
+  hitSegmentId: null,
+  hitPolygonId: "poly1",
+  hitLineId: null,
+  hitCircleId: null,
+  hitAngleId: null,
+  scenePoints: scene.points,
+});
+assert(
+  polygonDragDecision.mode === "drag-polygon" && polygonDragDecision.selectedObject?.type === "polygon",
+  "Polygon should enter drag mode when hit without an overlapping angle."
+);
+
 console.log("angle-polygon-hit-priority: ok");

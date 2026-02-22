@@ -74,10 +74,16 @@ export function hitTestTextLabelFromDom(
 ): string | null {
   if (!labelsLayer) return null;
   const labels = labelsLayer.querySelectorAll<HTMLElement>(".pointLabel[data-text-label-id]");
+  const padPx = 8;
   for (let i = labels.length - 1; i >= 0; i -= 1) {
     const el = labels[i];
     const rect = el.getBoundingClientRect();
-    if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+    if (
+      clientX >= rect.left - padPx
+      && clientX <= rect.right + padPx
+      && clientY >= rect.top - padPx
+      && clientY <= rect.bottom + padPx
+    ) {
       return el.dataset.textLabelId ?? null;
     }
   }

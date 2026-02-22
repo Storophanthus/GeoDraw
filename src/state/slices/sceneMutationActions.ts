@@ -27,6 +27,7 @@ export function createSceneMutationActions({
 }): Pick<
   GeoActions,
   | "movePointTo"
+  | "movePolygonByWorldDelta"
   | "movePointLabelBy"
   | "moveAngleLabelTo"
   | "moveObjectLabelTo"
@@ -55,41 +56,9 @@ export function createSceneMutationActions({
   return {
     movePointTo(id, world) {
       setState((prev) => {
-        const nextPoints = prev.scene.points.map((point) => {
-          if (point.id !== id) return point;
-          if (point.locked) return point;
-          if (point.kind === "free") return { ...point, position: world };
-
-          if (point.kind === "pointOnLine") {
-            const line = prev.scene.lines.find((item) => item.id === point.lineId);
-            if (!line) return point;
-            const anchors = getLineWorldAnchors(line, prev.scene);
-            if (!anchors) return point;
-            const pr = projectPointToLine(world, anchors.a, anchors.b);
-            return { ...point, s: pr.s };
-          }
-
-          if (point.kind === "pointOnSegment") {
-            const seg = prev.scene.segments.find((item) => item.id === point.segId);
-            if (!seg) return point;
-            const a = getPointWorldById(prev.scene, seg.aId);
-            const b = getPointWorldById(prev.scene, seg.bId);
-            if (!a || !b) return point;
-            const pr = projectPointToSegment(world, a, b);
-            return { ...point, u: pr.u };
-          }
-
-          if (point.kind === "pointOnCircle") {
-            const circle = prev.scene.circles.find((item) => item.id === point.circleId);
-            if (!circle) return point;
-            const geom = getCircleWorldGeometry(circle, prev.scene);
-            if (!geom) return point;
-            const pr = projectPointToCircle(world, geom.center, geom.radius);
-            return { ...point, t: pr.t };
-          }
-
-          return point;
-        });
+        const nextPoints = prev.scene.points.map((point) =>
+          point.id === id ? movePointToWorldInScene(point, world, prev.scene) : point
+        );
         return {
           ...prev,
           scene: {
@@ -98,6 +67,56 @@ export function createSceneMutationActions({
           },
         };
       }, { history: "coalesce", actionKey: `movePointTo:${id}` });
+    },
+
+    movePolygonByWorldDelta(id, deltaWorld) {
+      if (!Number.isFinite(deltaWorld.x) || !Number.isFinite(deltaWorld.y)) return;
+      if (Math.abs(deltaWorld.x) <= 1e-12 && Math.abs(deltaWorld.y) <= 1e-12) return;
+      setState((prev) => {
+        const polygon = prev.scene.polygons.find((item) => item.id === id);
+        if (!polygon) return prev;
+
+        const targetByPointId = new Map<string, Vec2>();
+        for (const pointId of new Set(polygon.pointIds)) {
+          const world = getPointWorldById(prev.scene, pointId);
+          if (!world) continue;
+          targetByPointId.set(pointId, {
+            x: world.x + deltaWorld.x,
+            y: world.y + deltaWorld.y,
+          });
+        }
+        if (targetByPointId.size === 0) return prev;
+
+        let movedAnyPoint = false;
+        const nextPoints = prev.scene.points.map((point) => {
+          const target = targetByPointId.get(point.id);
+          if (!target) return point;
+          const nextPoint = movePointToWorldInScene(point, target, prev.scene);
+          if (nextPoint !== point) movedAnyPoint = true;
+          return nextPoint;
+        });
+
+        const nextPolygons = prev.scene.polygons.map((polygonItem) => {
+          if (polygonItem.id !== id || !polygonItem.labelPosWorld) return polygonItem;
+          return {
+            ...polygonItem,
+            labelPosWorld: {
+              x: polygonItem.labelPosWorld.x + deltaWorld.x,
+              y: polygonItem.labelPosWorld.y + deltaWorld.y,
+            },
+          };
+        });
+
+        if (!movedAnyPoint && nextPolygons === prev.scene.polygons) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: nextPoints,
+            polygons: nextPolygons,
+          },
+        };
+      }, { history: "coalesce", actionKey: `movePolygonByWorldDelta:${id}` });
     },
 
     movePointLabelBy(id, deltaPx) {
@@ -685,7 +704,16 @@ export function createSceneMutationActions({
           recentCreatedObject: null,
           copyStyle: isSelectedObjectAlive(nextScene, prev.copyStyle.source)
             ? prev.copyStyle
-            : { source: null, pointStyle: null, lineStyle: null, circleStyle: null, polygonStyle: null, angleStyle: null, showLabel: null },
+            : {
+                source: null,
+                pointStyle: null,
+                lineStyle: null,
+                circleStyle: null,
+                polygonStyle: null,
+                angleStyle: null,
+                textLabelStyle: null,
+                showLabel: null,
+              },
         };
       });
     },
@@ -707,6 +735,7 @@ export function createSceneMutationActions({
               circleStyle: null,
               polygonStyle: null,
               angleStyle: null,
+              textLabelStyle: null,
               showLabel: point.showLabel,
             },
           };
@@ -724,6 +753,7 @@ export function createSceneMutationActions({
               circleStyle: circleStyleFromLineStyle(segment.style),
               polygonStyle: polygonStyleFromLineStyle(segment.style),
               angleStyle: angleStyleFromLineStyle(segment.style),
+              textLabelStyle: null,
               showLabel: null,
             },
           };
@@ -741,6 +771,7 @@ export function createSceneMutationActions({
               circleStyle: { ...circle.style },
               polygonStyle: polygonStyleFromCircleStyle(circle.style),
               angleStyle: angleStyleFromCircleStyle(circle.style),
+              textLabelStyle: null,
               showLabel: null,
             },
           };
@@ -758,6 +789,7 @@ export function createSceneMutationActions({
               circleStyle: circleStyleFromPolygonStyle(polygon.style),
               polygonStyle: { ...polygon.style },
               angleStyle: angleStyleFromCircleStyle(circleStyleFromPolygonStyle(polygon.style)),
+              textLabelStyle: null,
               showLabel: null,
             },
           };
@@ -801,13 +833,28 @@ export function createSceneMutationActions({
                 ...angle.style,
                 labelPosWorld: { ...angle.style.labelPosWorld },
               },
+              textLabelStyle: null,
               showLabel: null,
             },
           };
         }
 
         if (obj.type === "textLabel") {
-          return prev;
+          const textLabel = (prev.scene.textLabels ?? []).find((item) => item.id === obj.id);
+          if (!textLabel) return prev;
+          return {
+            ...prev,
+            copyStyle: {
+              source: obj,
+              pointStyle: null,
+              lineStyle: null,
+              circleStyle: null,
+              polygonStyle: null,
+              angleStyle: null,
+              textLabelStyle: { ...textLabel.style },
+              showLabel: null,
+            },
+          };
         }
 
         const line = prev.scene.lines.find((item) => item.id === obj.id);
@@ -821,6 +868,7 @@ export function createSceneMutationActions({
             circleStyle: circleStyleFromLineStyle(line.style),
             polygonStyle: polygonStyleFromLineStyle(line.style),
             angleStyle: angleStyleFromLineStyle(line.style),
+            textLabelStyle: null,
             showLabel: null,
           },
         };
@@ -830,7 +878,24 @@ export function createSceneMutationActions({
     applyCopyStyleTo(obj) {
       setState((prev) => {
         if (obj.type === "textLabel") {
-          return prev;
+          if (!prev.copyStyle.textLabelStyle) return prev;
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              textLabels: (prev.scene.textLabels ?? []).map((label) =>
+                label.id === obj.id
+                  ? {
+                      ...label,
+                      style: {
+                        ...label.style,
+                        ...prev.copyStyle.textLabelStyle,
+                      },
+                    }
+                  : label
+              ),
+            },
+          };
         }
 
         if (obj.type === "point") {
@@ -969,6 +1034,7 @@ export function createSceneMutationActions({
           circleStyle: null,
           polygonStyle: null,
           angleStyle: null,
+          textLabelStyle: null,
           showLabel: null,
         },
       }));
@@ -1045,6 +1111,45 @@ function getPointWorldById(scene: SceneModel, pointId: string): Vec2 | null {
   const point = scene.points.find((p) => p.id === pointId);
   if (!point) return null;
   return getPointWorldPos(point, scene);
+}
+
+function movePointToWorldInScene(
+  point: SceneModel["points"][number],
+  world: Vec2,
+  scene: SceneModel
+): SceneModel["points"][number] {
+  if (point.locked) return point;
+  if (point.kind === "free") return { ...point, position: world };
+
+  if (point.kind === "pointOnLine") {
+    const line = scene.lines.find((item) => item.id === point.lineId);
+    if (!line) return point;
+    const anchors = getLineWorldAnchors(line, scene);
+    if (!anchors) return point;
+    const pr = projectPointToLine(world, anchors.a, anchors.b);
+    return { ...point, s: pr.s };
+  }
+
+  if (point.kind === "pointOnSegment") {
+    const seg = scene.segments.find((item) => item.id === point.segId);
+    if (!seg) return point;
+    const a = getPointWorldById(scene, seg.aId);
+    const b = getPointWorldById(scene, seg.bId);
+    if (!a || !b) return point;
+    const pr = projectPointToSegment(world, a, b);
+    return { ...point, u: pr.u };
+  }
+
+  if (point.kind === "pointOnCircle") {
+    const circle = scene.circles.find((item) => item.id === point.circleId);
+    if (!circle) return point;
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (!geom) return point;
+    const pr = projectPointToCircle(world, geom.center, geom.radius);
+    return { ...point, t: pr.t };
+  }
+
+  return point;
 }
 
 function circleStyleFromLineStyle(style: LineStyle): CircleStyle {

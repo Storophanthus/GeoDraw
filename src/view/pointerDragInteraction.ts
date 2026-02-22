@@ -24,6 +24,7 @@ export type DragBufferAccess = {
 type DragUpdateOps = {
   panByScreenDelta: (delta: Vec2) => void;
   movePointTo: (pointId: string, world: Vec2) => void;
+  movePolygonByWorldDelta: (polygonId: string, deltaWorld: Vec2) => void;
   movePointLabelBy: (pointId: string, delta: Vec2) => void;
   moveAngleLabelTo: (angleId: string, world: Vec2) => void;
   moveObjectLabelTo: (
@@ -32,6 +33,7 @@ type DragUpdateOps = {
   ) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
   screenToWorld: (screen: Vec2) => Vec2;
+  screenDeltaToWorldDelta: (delta: Vec2) => Vec2;
 };
 
 export function applyBufferedDragUpdate(
@@ -55,6 +57,15 @@ export function applyBufferedDragUpdate(
     if (labelDelta.x !== 0 || labelDelta.y !== 0) {
       ops.movePointLabelBy(st.pointId, labelDelta);
       buffers.setLabelDelta({ x: 0, y: 0 });
+    }
+    return;
+  }
+
+  if (st.mode === "drag-polygon" && st.pointId) {
+    const panDelta = buffers.getPanDelta();
+    if (panDelta.x !== 0 || panDelta.y !== 0) {
+      ops.movePolygonByWorldDelta(st.pointId, ops.screenDeltaToWorldDelta(panDelta));
+      buffers.setPanDelta({ x: 0, y: 0 });
     }
     return;
   }
@@ -119,6 +130,15 @@ export function bufferDragForMode(
   if (st.mode === "drag-point" && st.pointId) {
     buffers.setPointId(st.pointId);
     buffers.setPointScreen(screen);
+    return true;
+  }
+
+  if (st.mode === "drag-polygon" && st.pointId) {
+    const panDelta = buffers.getPanDelta();
+    buffers.setPanDelta({
+      x: panDelta.x + dx,
+      y: panDelta.y + dy,
+    });
     return true;
   }
 

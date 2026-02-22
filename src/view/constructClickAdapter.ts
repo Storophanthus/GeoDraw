@@ -14,6 +14,7 @@ export type ConstructClickIo = Omit<
 type RunConstructClickParams = {
   screen: Vec2;
   pointerEvent: PointerEvent;
+  preHitTextLabelId?: string | null;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
   copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null;
@@ -38,6 +39,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
   const {
     screen,
     pointerEvent,
+    preHitTextLabelId = null,
     activeTool,
     pendingSelection,
     copyStyleSource,
@@ -90,6 +92,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     hits: {
       hitPointId: rawHitPointId ?? snappedHitPointId,
       hitSegmentId: hitTestSegmentId(screen, scene, camera, vp, tolerances.segment),
+      hitTextLabelId: preHitTextLabelId,
       hitObject,
       shiftKey: pointerEvent.shiftKey,
       hasCopyStyleSource: Boolean(copyStyleSource),

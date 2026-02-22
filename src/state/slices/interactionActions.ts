@@ -43,6 +43,7 @@ export function createInteractionActions(
                 circleStyle: null,
                 polygonStyle: null,
                 angleStyle: null,
+                textLabelStyle: null,
                 showLabel: null,
               },
         circleFixedTool: prev.circleFixedTool,

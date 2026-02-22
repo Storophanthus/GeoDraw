@@ -261,6 +261,7 @@ export type GeoState = {
     circleStyle: CircleStyle | null;
     polygonStyle: PolygonStyle | null;
     angleStyle: Partial<AngleStyle> | null;
+    textLabelStyle: SceneTextLabelStyle | null;
     showLabel: ShowLabelMode | null;
   };
   canUndo: boolean;
@@ -345,6 +346,7 @@ export type GeoActions = {
   createTextLabel: (world: Vec2) => string;
 
   movePointTo: (id: string, world: Vec2) => void;
+  movePolygonByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   movePointLabelBy: (id: string, deltaPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
   moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon" | "angle"; id: string }, world: Vec2) => void;
