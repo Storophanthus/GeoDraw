@@ -1,0 +1,962 @@
+{
+  "colorProfileId": "beige_light",
+  "canvasThemeOverrides": {},
+  "gridEnabled": false,
+  "axesEnabled": true,
+  "gridSnapEnabled": true,
+  "activeTool": "move",
+  "scene": {
+    "points": [
+      {
+        "id": "p_1",
+        "kind": "free",
+        "name": "O_1",
+        "captionTex": "O_1",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": -4.681947076356437,
+          "y": 1.293763141324854
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 7.19140625,
+            "y": 3.00390625
+          }
+        }
+      },
+      {
+        "id": "p_2",
+        "kind": "free",
+        "name": "K",
+        "captionTex": "K",
+        "visible": true,
+        "showLabel": "name",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": -3.1403026511391405,
+          "y": 2.8603306221020968
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": -17.0703125,
+            "y": 18.2734375
+          }
+        }
+      },
+      {
+        "id": "p_5",
+        "kind": "free",
+        "name": "A",
+        "captionTex": "A",
+        "visible": true,
+        "showLabel": "name",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": -1.6216796875,
+          "y": 1.5159667968749995
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": -7.734375,
+            "y": -26.80859375
+          }
+        }
+      },
+      {
+        "id": "p_6",
+        "kind": "pointOnLine",
+        "name": "X",
+        "captionTex": "X",
+        "visible": false,
+        "showLabel": "name",
+        "locked": false,
+        "auxiliary": false,
+        "lineId": "l_2",
+        "s": -1.6674426502505546,
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "p_7",
+        "kind": "pointOnLine",
+        "name": "Y",
+        "captionTex": "Y",
+        "visible": false,
+        "showLabel": "name",
+        "locked": false,
+        "auxiliary": false,
+        "lineId": "l_1",
+        "s": -1.714749687384702,
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "p_8",
+        "kind": "lineLikeIntersectionPoint",
+        "name": "O_2",
+        "captionTex": "O_2",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": true,
+        "auxiliary": true,
+        "objA": {
+          "type": "line",
+          "id": "l_3"
+        },
+        "objB": {
+          "type": "line",
+          "id": "l_4"
+        },
+        "preferredWorld": {
+          "x": 3.5637456234428417,
+          "y": 2.234280342883109
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": -1.125,
+            "y": 12.08203125
+          }
+        }
+      },
+      {
+        "id": "p_9",
+        "kind": "lineLikeIntersectionPoint",
+        "name": "Z",
+        "captionTex": "Z",
+        "visible": false,
+        "showLabel": "name",
+        "locked": true,
+        "auxiliary": true,
+        "objA": {
+          "type": "line",
+          "id": "l_1"
+        },
+        "objB": {
+          "type": "line",
+          "id": "l_5"
+        },
+        "preferredWorld": {
+          "x": 2.935288087306823,
+          "y": 0.5552864526135945
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "p_12",
+        "kind": "circleLineIntersectionPoint",
+        "name": "L",
+        "captionTex": "L",
+        "visible": true,
+        "showLabel": "name",
+        "locked": true,
+        "auxiliary": true,
+        "circleId": "c_3",
+        "lineId": "l_2",
+        "branchIndex": 0,
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": -25.8671875,
+            "y": -10.7265625
+          }
+        }
+      },
+      {
+        "id": "p_13",
+        "kind": "lineLikeIntersectionPoint",
+        "name": "B",
+        "captionTex": "B",
+        "visible": true,
+        "showLabel": "name",
+        "locked": true,
+        "auxiliary": true,
+        "objA": {
+          "type": "line",
+          "id": "l_1"
+        },
+        "objB": {
+          "type": "line",
+          "id": "l_11"
+        },
+        "preferredWorld": {
+          "x": -3.89148429530397,
+          "y": 3.176372985183016
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 1.390625,
+            "y": -17.95703125
+          }
+        }
+      },
+      {
+        "id": "p_14",
+        "kind": "lineLikeIntersectionPoint",
+        "name": "C",
+        "captionTex": "C",
+        "visible": true,
+        "showLabel": "name",
+        "locked": true,
+        "auxiliary": true,
+        "objA": {
+          "type": "line",
+          "id": "l_2"
+        },
+        "objB": {
+          "type": "line",
+          "id": "l_11"
+        },
+        "preferredWorld": {
+          "x": -0.2796041663861344,
+          "y": 2.844181642747759
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": -13,
+            "y": -20.8671875
+          }
+        }
+      }
+    ],
+    "vectors": [],
+    "segments": [],
+    "lines": [
+      {
+        "id": "l_1",
+        "kind": "tangent",
+        "throughId": "p_5",
+        "circleId": "c_1",
+        "branchIndex": 0,
+        "visible": true,
+        "showLabel": false,
+        "labelText": "l_1",
+        "labelPosWorld": {
+          "x": -2.2404482912598978,
+          "y": 2.1667697507683292
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "l_2",
+        "kind": "tangent",
+        "throughId": "p_5",
+        "circleId": "c_1",
+        "branchIndex": 1,
+        "visible": true,
+        "showLabel": false,
+        "labelText": "l_2",
+        "labelPosWorld": {
+          "x": -1.7656867155041287,
+          "y": 0.4729921941282056
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "l_3",
+        "kind": "angleBisector",
+        "aId": "p_6",
+        "bId": "p_5",
+        "cId": "p_7",
+        "visible": false,
+        "showLabel": false,
+        "labelText": "l_3",
+        "labelPosWorld": {
+          "x": 0.5028298467462651,
+          "y": 2.1838467132387036
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "l_4",
+        "kind": "angleBisector",
+        "aId": "p_6",
+        "bId": "p_7",
+        "cId": "p_5",
+        "visible": false,
+        "showLabel": false,
+        "labelText": "l_4",
+        "labelPosWorld": {
+          "x": 4.908283560976208,
+          "y": 0.020045830451744018
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "l_5",
+        "kind": "perpendicular",
+        "throughId": "p_8",
+        "base": {
+          "type": "line",
+          "id": "l_1"
+        },
+        "visible": false,
+        "showLabel": false,
+        "labelText": "l_5",
+        "labelPosWorld": {
+          "x": 3.180960247674512,
+          "y": 0.34114650474821107
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "l_8",
+        "kind": "circleCircleTangent",
+        "circleAId": "c_1",
+        "circleBId": "c_3",
+        "family": "inner",
+        "branchIndex": 0,
+        "visible": true,
+        "showLabel": false,
+        "labelText": "l_8",
+        "labelPosWorld": {
+          "x": -0.8005850723122755,
+          "y": 2.1856576255063804
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "l_9",
+        "kind": "circleCircleTangent",
+        "circleAId": "c_1",
+        "circleBId": "c_3",
+        "family": "inner",
+        "branchIndex": 1,
+        "visible": true,
+        "showLabel": false,
+        "labelText": "l_9",
+        "labelPosWorld": {
+          "x": -0.2869083511002149,
+          "y": 2.3866009672283823
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "l_10",
+        "kind": "circleCircleTangent",
+        "circleAId": "c_1",
+        "circleBId": "c_3",
+        "family": "outer",
+        "branchIndex": 0,
+        "visible": false,
+        "showLabel": false,
+        "labelText": "l_10",
+        "labelPosWorld": {
+          "x": -0.6889067118739779,
+          "y": 0.3783364395207086
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "l_11",
+        "kind": "circleCircleTangent",
+        "circleAId": "c_1",
+        "circleBId": "c_3",
+        "family": "outer",
+        "branchIndex": 1,
+        "visible": true,
+        "showLabel": false,
+        "labelText": "l_11",
+        "labelPosWorld": {
+          "x": -0.9322867721675305,
+          "y": 4.013001111535031
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "l_12",
+        "kind": "circleCircleTangent",
+        "circleAId": "c_1",
+        "circleBId": "c_3",
+        "family": "inner",
+        "branchIndex": 0,
+        "visible": true,
+        "showLabel": false,
+        "labelText": "l_12",
+        "labelPosWorld": {
+          "x": -1.0468722752576451,
+          "y": 1.9341440901151297
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "l_13",
+        "kind": "circleCircleTangent",
+        "circleAId": "c_1",
+        "circleBId": "c_3",
+        "family": "inner",
+        "branchIndex": 1,
+        "visible": true,
+        "showLabel": false,
+        "labelText": "l_13",
+        "labelPosWorld": {
+          "x": -0.5528218695947791,
+          "y": 2.1791951079585674
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "dash": "solid",
+          "opacity": 1
+        }
+      }
+    ],
+    "circles": [
+      {
+        "id": "c_1",
+        "kind": "twoPoint",
+        "centerId": "p_1",
+        "throughId": "p_2",
+        "visible": true,
+        "showLabel": false,
+        "labelText": "(AB)",
+        "labelPosWorld": {
+          "x": -3.086053371784129,
+          "y": 2.8114563938408716
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "strokeDash": "solid",
+          "strokeOpacity": 1,
+          "fillOpacity": 0,
+          "pattern": "",
+          "arrowMark": {
+            "enabled": false,
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "color": "#000000"
+          },
+          "arrowMarks": [
+            {
+              "enabled": false,
+              "direction": "->",
+              "tip": "Stealth",
+              "distribution": "single",
+              "pos": 0.5,
+              "startPos": 0.45,
+              "endPos": 0.55,
+              "step": 0.05,
+              "sizeScale": 1,
+              "lineWidthPt": 8,
+              "color": "#000000"
+            }
+          ]
+        }
+      },
+      {
+        "id": "c_3",
+        "kind": "twoPoint",
+        "centerId": "p_8",
+        "throughId": "p_9",
+        "visible": true,
+        "showLabel": false,
+        "labelText": "(O_2E)",
+        "labelPosWorld": {
+          "x": 4.958183686522214,
+          "y": 3.6287184059624815
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "strokeDash": "solid",
+          "strokeOpacity": 1,
+          "fillOpacity": 0,
+          "pattern": "",
+          "arrowMark": {
+            "enabled": false,
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "color": "#000000"
+          },
+          "arrowMarks": [
+            {
+              "enabled": false,
+              "direction": "->",
+              "tip": "Stealth",
+              "distribution": "single",
+              "pos": 0.5,
+              "startPos": 0.45,
+              "endPos": 0.55,
+              "step": 0.05,
+              "sizeScale": 1,
+              "lineWidthPt": 8,
+              "color": "#000000"
+            }
+          ]
+        }
+      }
+    ],
+    "polygons": [],
+    "angles": [],
+    "numbers": [
+      {
+        "id": "n_1",
+        "name": "n_1",
+        "visible": true,
+        "definition": {
+          "kind": "constant",
+          "value": 7.585871616885655
+        }
+      },
+      {
+        "id": "n_2",
+        "name": "n_2",
+        "visible": true,
+        "definition": {
+          "kind": "constant",
+          "value": 3.451607380165516
+        }
+      },
+      {
+        "id": "n_3",
+        "name": "n_3",
+        "visible": true,
+        "definition": {
+          "kind": "constant",
+          "value": 3.1139017796034643
+        }
+      },
+      {
+        "id": "n_7",
+        "name": "n_4",
+        "visible": true,
+        "definition": {
+          "kind": "expression",
+          "expr": "n_1-n_2-n_3"
+        }
+      },
+      {
+        "id": "n_8",
+        "name": "n_5",
+        "visible": true,
+        "definition": {
+          "kind": "expression",
+          "expr": "n_1-n_2-n_3"
+        }
+      }
+    ],
+    "textLabels": [
+      {
+        "id": "txt_1",
+        "name": "o1",
+        "text": "o_1",
+        "visible": true,
+        "positionWorld": {
+          "x": -6.804852223131207,
+          "y": 2.6426482380974963
+        },
+        "style": {
+          "textColor": "#000000",
+          "textSize": 19,
+          "useTex": true
+        }
+      },
+      {
+        "id": "txt_2",
+        "name": "o2",
+        "text": "o_2",
+        "visible": true,
+        "positionWorld": {
+          "x": 0.9928233095047245,
+          "y": 1.679253118058165
+        },
+        "style": {
+          "textColor": "#000000",
+          "textSize": 18,
+          "useTex": true
+        }
+      },
+      {
+        "id": "txt_3",
+        "name": "k",
+        "text": "k",
+        "visible": true,
+        "positionWorld": {
+          "x": -2.1057520640753813,
+          "y": 2.1510130040254465
+        },
+        "style": {
+          "textColor": "#000000",
+          "textSize": 17,
+          "useTex": true
+        }
+      },
+      {
+        "id": "txt_4",
+        "name": "l",
+        "text": "l",
+        "visible": true,
+        "positionWorld": {
+          "x": -1.9604010334910185,
+          "y": 1.0307087505356318
+        },
+        "style": {
+          "textColor": "#000000",
+          "textSize": 15,
+          "useTex": true
+        }
+      },
+      {
+        "id": "txt_5",
+        "name": "m",
+        "text": "m",
+        "visible": true,
+        "positionWorld": {
+          "x": -2.02157580622907,
+          "y": 3.268908124411653
+        },
+        "style": {
+          "textColor": "#000000",
+          "textSize": 16,
+          "useTex": true
+        }
+      }
+    ]
+  },
+  "selectedObject": null,
+  "recentCreatedObject": null,
+  "nextPointId": 15,
+  "nextSegmentId": 1,
+  "nextLineId": 14,
+  "nextCircleId": 4,
+  "nextPolygonId": 1,
+  "nextAngleId": 1,
+  "nextNumberId": 9,
+  "nextVectorId": 1,
+  "nextTextLabelId": 6,
+  "pointDefaults": {
+    "shape": "circle",
+    "sizePx": 6,
+    "strokeColor": "#000000",
+    "strokeWidth": 1.7,
+    "strokeOpacity": 1,
+    "fillColor": "#ffffff",
+    "fillOpacity": 1,
+    "labelFontPx": 18,
+    "labelHaloWidthPx": 3.5,
+    "labelHaloColor": "#f5f1e6",
+    "labelColor": "#000000",
+    "labelOffsetPx": {
+      "x": 8,
+      "y": -8
+    }
+  },
+  "segmentDefaults": {
+    "strokeColor": "#000000",
+    "strokeWidth": 2,
+    "dash": "solid",
+    "opacity": 1,
+    "segmentMark": {
+      "enabled": false,
+      "mark": "none",
+      "pos": 0.5,
+      "sizePt": 4,
+      "color": "#000000"
+    },
+    "segmentArrowMark": {
+      "enabled": false,
+      "mode": "end",
+      "direction": "->",
+      "tip": "Stealth",
+      "distribution": "single",
+      "pos": 0.5,
+      "startPos": 0.45,
+      "endPos": 0.55,
+      "step": 0.05,
+      "sizeScale": 1,
+      "lineWidthPt": 8,
+      "arrowLength": 1,
+      "color": "#000000"
+    }
+  },
+  "lineDefaults": {
+    "strokeColor": "#000000",
+    "strokeWidth": 1.6,
+    "dash": "solid",
+    "opacity": 1
+  },
+  "circleDefaults": {
+    "strokeColor": "#000000",
+    "strokeWidth": 1.6,
+    "strokeDash": "solid",
+    "strokeOpacity": 1,
+    "fillOpacity": 0,
+    "pattern": "",
+    "arrowMark": {
+      "enabled": false,
+      "direction": "->",
+      "tip": "Stealth",
+      "distribution": "single",
+      "pos": 0.5,
+      "startPos": 0.45,
+      "endPos": 0.55,
+      "step": 0.05,
+      "sizeScale": 1,
+      "lineWidthPt": 8,
+      "color": "#000000"
+    }
+  },
+  "polygonDefaults": {
+    "strokeColor": "#000000",
+    "strokeWidth": 1.6,
+    "strokeDash": "solid",
+    "strokeOpacity": 1,
+    "fillColor": "#e7dcc8",
+    "fillOpacity": 0.22,
+    "pattern": ""
+  },
+  "angleDefaults": {
+    "strokeColor": "#000000",
+    "strokeWidth": 1,
+    "strokeDash": "solid",
+    "strokeOpacity": 1,
+    "textColor": "#000000",
+    "textSize": 16,
+    "fillEnabled": false,
+    "fillColor": "#e7dcc8",
+    "fillOpacity": 0.2,
+    "pattern": "",
+    "markStyle": "arc",
+    "markSymbol": "none",
+    "arcMultiplicity": 1,
+    "markPos": 0.5,
+    "markSize": 7.4,
+    "markColor": "#000000",
+    "arcRadius": 1.95,
+    "labelText": "",
+    "labelPosWorld": {
+      "x": 0,
+      "y": 0
+    },
+    "showLabel": true,
+    "showValue": true,
+    "promoteToSolid": false,
+    "arcArrowMark": {
+      "enabled": false,
+      "direction": "->",
+      "tip": "Stealth",
+      "distribution": "single",
+      "pos": 0.5,
+      "startPos": 0.45,
+      "endPos": 0.55,
+      "step": 0.05,
+      "sizeScale": 1,
+      "lineWidthPt": 8,
+      "color": "#000000"
+    }
+  },
+  "angleFixedTool": {
+    "angleExpr": "30",
+    "direction": "CCW"
+  },
+  "circleFixedTool": {
+    "radius": "3"
+  },
+  "transformTool": {
+    "mode": "translate",
+    "angleExpr": "90",
+    "direction": "CCW",
+    "factorExpr": "2"
+  },
+  "exportClipWorld": null,
+  "copyStyle": {
+    "source": null,
+    "pointStyle": null,
+    "lineStyle": null,
+    "circleStyle": null,
+    "polygonStyle": null,
+    "angleStyle": null,
+    "showLabel": null
+  }
+}

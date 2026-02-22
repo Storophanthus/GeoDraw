@@ -390,17 +390,28 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           secondName: tangentBSecondName,
         });
 
+        const tkzOrderedTangentsA = orderTangencyCandidatesLikeTkz(
+          simWorld,
+          geomA.center,
+          tangentCandidatesA,
+          tangentFirstName,
+          tangentSecondName
+        );
         let tangentAName = tangentFirstName;
-        if (tangentCandidatesA.length > 1) {
-          const d0 = distance(tangentCandidatesA[0], anchorsWorld.a);
-          const d1 = distance(tangentCandidatesA[1], anchorsWorld.a);
-          tangentAName = d1 < d0 ? tangentSecondName : tangentFirstName;
+        if (tkzOrderedTangentsA.length > 0) {
+          tangentAName = nearestNamedTangencyPoint(tkzOrderedTangentsA, anchorsWorld.a).name;
         }
+
+        const tkzOrderedTangentsB = orderTangencyCandidatesLikeTkz(
+          simWorld,
+          geomB.center,
+          tangentCandidatesB,
+          tangentBFirstName,
+          tangentBSecondName
+        );
         let tangentBName = tangentBFirstName;
-        if (tangentCandidatesB.length > 1) {
-          const d0 = distance(tangentCandidatesB[0], anchorsWorld.b);
-          const d1 = distance(tangentCandidatesB[1], anchorsWorld.b);
-          tangentBName = d1 < d0 ? tangentBSecondName : tangentBFirstName;
+        if (tkzOrderedTangentsB.length > 0) {
+          tangentBName = nearestNamedTangencyPoint(tkzOrderedTangentsB, anchorsWorld.b).name;
         }
         const anchors = { a: tangentAName, b: tangentBName };
         lineAnchorNames.set(lineId, anchors);
@@ -2079,6 +2090,78 @@ function tangentPointsFromPointToCircle(
       y: center.y + k * vy - h * perp.y,
     },
   ];
+}
+
+type NamedTangencyPoint = {
+  name: string;
+  point: { x: number; y: number };
+};
+
+function orderTangencyCandidatesLikeTkz(
+  through: { x: number; y: number },
+  center: { x: number; y: number },
+  candidates: Array<{ x: number; y: number }>,
+  firstName: string,
+  secondName: string
+): NamedTangencyPoint[] {
+  if (candidates.length === 0) return [];
+  if (candidates.length === 1) {
+    return [{ name: firstName, point: candidates[0] }];
+  }
+
+  const [c0, c1] = candidates;
+  const s0 = tangentChoiceOrientationSign(through, c0, center);
+  const s1 = tangentChoiceOrientationSign(through, c1, center);
+  const eps = 1e-12;
+
+  // tkz-euclide manual: tkzFirstPointResult is the contact point for which
+  // angle (through, contact, center) is counterclockwise.
+  if (s0 > eps && s1 <= eps) {
+    return [
+      { name: firstName, point: c0 },
+      { name: secondName, point: c1 },
+    ];
+  }
+  if (s1 > eps && s0 <= eps) {
+    return [
+      { name: firstName, point: c1 },
+      { name: secondName, point: c0 },
+    ];
+  }
+
+  // Numerical fallback near degeneracy: preserve deterministic helper order.
+  return [
+    { name: firstName, point: c0 },
+    { name: secondName, point: c1 },
+  ];
+}
+
+function tangentChoiceOrientationSign(
+  through: { x: number; y: number },
+  contact: { x: number; y: number },
+  center: { x: number; y: number }
+): number {
+  const ux = through.x - contact.x;
+  const uy = through.y - contact.y;
+  const vx = center.x - contact.x;
+  const vy = center.y - contact.y;
+  return ux * vy - uy * vx;
+}
+
+function nearestNamedTangencyPoint(
+  candidates: NamedTangencyPoint[],
+  target: { x: number; y: number }
+): NamedTangencyPoint {
+  let best = candidates[0];
+  let bestDist = distance(best.point, target);
+  for (let i = 1; i < candidates.length; i += 1) {
+    const d = distance(candidates[i].point, target);
+    if (d < bestDist) {
+      best = candidates[i];
+      bestDist = d;
+    }
+  }
+  return best;
 }
 
 function lineLikeNamesFromRef(

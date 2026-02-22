@@ -484,6 +484,21 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "tangent-circle-circle-branch-pairing.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefExtSimilitudeCenter") || !tikz.includes("\\tkzDefIntSimilitudeCenter")) {
+      throw new Error("Expected branch-pairing tangent fixture to emit similitude-center constructions.");
+    }
+    // Regression: common-tangent branch pairing must respect tkz tangent-from-point point order.
+    // This fixture previously exported the outer tangent as (tkzTanCC_7_1,tkzTanCC_9_1), which mismatched branches.
+    if (tikz.includes("(tkzTanCC_7_1,tkzTanCC_9_1)")) {
+      throw new Error("Regression: exported circle-circle tangent reused mismatched tangent-point branch pair.");
+    }
+    if (!tikz.includes("(tkzTanCC_8_2,tkzTanCC_10_2)")) {
+      throw new Error("Regression: expected corrected outer common-tangent branch pairing in exported TikZ.");
+    }
+  }
+
   if (fileName === "angle-bisector-internal.json") {
     if (exportError) {
       if (!exportError.message.includes("Unsupported construction: AngleBisector")) {
