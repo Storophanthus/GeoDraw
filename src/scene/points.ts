@@ -1134,8 +1134,10 @@ function evaluateNumberExpressionWithCtx(
   ctx: SceneEvalContext,
   excludeNumberId?: string
 ): NumberExpressionEvalResult {
+  const distanceExpanded = substituteDistanceCallsInNumberExpr(exprRaw, scene, ctx);
+  if (!distanceExpanded.ok) return distanceExpanded;
   return evaluateNumberExpressionWithCtxInScene(
-    exprRaw,
+    distanceExpanded.expandedExpr,
     {
       numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
     },
@@ -1144,4 +1146,175 @@ function evaluateNumberExpressionWithCtx(
       excludeNumberId,
     }
   );
+}
+
+function substituteDistanceCallsInNumberExpr(
+  exprRaw: string,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): { ok: true; expandedExpr: string } | { ok: false; error: string } {
+  const expr = exprRaw.trim();
+  if (!expr) return { ok: true, expandedExpr: expr };
+  let out = "";
+  let i = 0;
+  while (i < expr.length) {
+    const ch = expr[i];
+    if (/[A-Za-z_]/.test(ch)) {
+      let j = i + 1;
+      while (j < expr.length && /[A-Za-z0-9_]/.test(expr[j])) j += 1;
+      const ident = expr.slice(i, j);
+      let k = j;
+      while (k < expr.length && /\s/.test(expr[k])) k += 1;
+      if (ident.toLowerCase() === "distance" && expr[k] === "(") {
+        const close = findMatchingParenIndex(expr, k);
+        if (close < 0) return { ok: false, error: "Distance(...) has unmatched '('" };
+        const inner = expr.slice(k + 1, close);
+        const args = splitTopLevelCommaArgs(inner);
+        if (!args || args.length !== 2) return { ok: false, error: "Distance(...) expects 2 arguments" };
+        const dist = evalSceneDistanceArgsRaw(args[0], args[1], scene, ctx);
+        if (!dist.ok) return { ok: false, error: dist.error };
+        out += `(${formatNumberExprLiteral(dist.value)})`;
+        i = close + 1;
+        continue;
+      }
+      out += expr.slice(i, j);
+      i = j;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return { ok: true, expandedExpr: out };
+}
+
+function evalSceneDistanceArgsRaw(
+  leftRaw: string,
+  rightRaw: string,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): { ok: true; value: number } | { ok: false; error: string } {
+  const left = resolveSceneDistanceArg(leftRaw, scene, ctx);
+  if (!left.ok) return left;
+  const right = resolveSceneDistanceArg(rightRaw, scene, ctx);
+  if (!right.ok) return right;
+
+  if (left.arg.kind === "point" && right.arg.kind === "point") {
+    return { ok: true, value: Math.hypot(left.arg.x - right.arg.x, left.arg.y - right.arg.y) };
+  }
+  if (left.arg.kind === "point" && right.arg.kind === "lineLike") {
+    return { ok: true, value: pointToLineLikeDistance(left.arg, right.arg) };
+  }
+  if (left.arg.kind === "lineLike" && right.arg.kind === "point") {
+    return { ok: true, value: pointToLineLikeDistance(right.arg, left.arg) };
+  }
+  return { ok: false, error: "Distance(Line/Segment, Line/Segment) is not supported" };
+}
+
+type SceneDistanceArg =
+  | { kind: "point"; x: number; y: number }
+  | { kind: "lineLike"; a: Vec2; b: Vec2; finite: boolean };
+
+function resolveSceneDistanceArg(
+  raw: string,
+  scene: SceneModel,
+  ctx: SceneEvalContext
+): { ok: true; arg: SceneDistanceArg } | { ok: false; error: string } {
+  const token = stripOuterParens(raw.trim());
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) {
+    return { ok: false, error: "Distance(...) in numeric expressions expects point/line/segment identifiers" };
+  }
+
+  const point =
+    scene.points.find((p) => p.name === token) ??
+    scene.points.find((p) => p.id === token);
+  if (point) {
+    const world = getPointWorldById(point.id, scene, ctx);
+    if (!world) return { ok: false, error: `Unknown point geometry: ${token}` };
+    return { ok: true, arg: { kind: "point", x: world.x, y: world.y } };
+  }
+
+  const line =
+    scene.lines.find((l) => l.id === token) ??
+    scene.lines.find((l) => (l.labelText?.trim() || "") === token);
+  if (line) {
+    const anchors = resolveLineAnchors(line, scene, ctx);
+    if (!anchors) return { ok: false, error: `Unknown line geometry: ${token}` };
+    return { ok: true, arg: { kind: "lineLike", a: anchors.a, b: anchors.b, finite: false } };
+  }
+
+  const seg =
+    scene.segments.find((s) => s.id === token) ??
+    scene.segments.find((s) => (s.labelText?.trim() || "") === token);
+  if (seg) {
+    const a = getPointWorldById(seg.aId, scene, ctx);
+    const b = getPointWorldById(seg.bId, scene, ctx);
+    if (!a || !b) return { ok: false, error: `Unknown segment geometry: ${token}` };
+    return { ok: true, arg: { kind: "lineLike", a, b, finite: true } };
+  }
+
+  return { ok: false, error: `Unknown object in Distance(...): ${token}` };
+}
+
+function pointToLineLikeDistance(
+  p: { x: number; y: number },
+  line: { a: Vec2; b: Vec2; finite: boolean }
+): number {
+  const dx = line.b.x - line.a.x;
+  const dy = line.b.y - line.a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 <= 1e-18) return Math.hypot(p.x - line.a.x, p.y - line.a.y);
+  let t = ((p.x - line.a.x) * dx + (p.y - line.a.y) * dy) / len2;
+  if (line.finite) t = Math.max(0, Math.min(1, t));
+  const qx = line.a.x + t * dx;
+  const qy = line.a.y + t * dy;
+  return Math.hypot(p.x - qx, p.y - qy);
+}
+
+function findMatchingParenIndex(text: string, openIndex: number): number {
+  let depth = 0;
+  for (let i = openIndex; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === "(") depth += 1;
+    else if (ch === ")") {
+      depth -= 1;
+      if (depth === 0) return i;
+      if (depth < 0) return -1;
+    }
+  }
+  return -1;
+}
+
+function splitTopLevelCommaArgs(text: string): string[] | null {
+  const args: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === "(") depth += 1;
+    else if (ch === ")") {
+      depth -= 1;
+      if (depth < 0) return null;
+    } else if (ch === "," && depth === 0) {
+      args.push(text.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  if (depth !== 0) return null;
+  args.push(text.slice(start).trim());
+  if (args.some((a) => a.length === 0)) return null;
+  return args;
+}
+
+function stripOuterParens(text: string): string {
+  let s = text.trim();
+  while (s.startsWith("(") && s.endsWith(")")) {
+    const close = findMatchingParenIndex(s, 0);
+    if (close !== s.length - 1) break;
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}
+
+function formatNumberExprLiteral(value: number): string {
+  return Number(value.toPrecision(15)).toString();
 }
