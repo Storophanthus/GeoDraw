@@ -290,6 +290,19 @@ function arePerpendicularBySceneDefinition(scene: SceneModel, a: LineLikeObjectR
   const lineB = b.type === "line" ? scene.lines.find((line) => line.id === b.id) : null;
   if (lineA?.kind === "perpendicular" && lineLikeRefsEquivalent(scene, lineA.base, b)) return true;
   if (lineB?.kind === "perpendicular" && lineLikeRefsEquivalent(scene, lineB.base, a)) return true;
+  // Allow exact-right recognition when the angle rays are represented by collinear
+  // segments on top of the perpendicular line and/or its base support.
+  for (let i = 0; i < scene.lines.length; i += 1) {
+    const line = scene.lines[i];
+    if (line.kind !== "perpendicular") continue;
+    const perpRef: LineLikeObjectRef = { type: "line", id: line.id };
+    if (
+      (lineLikeLiesOnSupport(scene, a, perpRef) && lineLikeLiesOnSupport(scene, b, line.base)) ||
+      (lineLikeLiesOnSupport(scene, b, perpRef) && lineLikeLiesOnSupport(scene, a, line.base))
+    ) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -310,6 +323,42 @@ function lineLikePointPair(scene: SceneModel, ref: LineLikeObjectRef): { aId: st
   const line = scene.lines.find((item) => item.id === ref.id);
   if (!line || line.kind !== "twoPoint") return null;
   return { aId: line.aId, bId: line.bId };
+}
+
+function lineLikeLiesOnSupport(scene: SceneModel, candidate: LineLikeObjectRef, support: LineLikeObjectRef): boolean {
+  const anchors = lineLikeAnchorWorlds(scene, candidate);
+  if (!anchors) return false;
+  return pointOnLineLikeSupport(scene, anchors.a, support) && pointOnLineLikeSupport(scene, anchors.b, support);
+}
+
+function lineLikeAnchorWorlds(scene: SceneModel, ref: LineLikeObjectRef): { a: { x: number; y: number }; b: { x: number; y: number } } | null {
+  if (ref.type === "segment") {
+    const seg = scene.segments.find((item) => item.id === ref.id);
+    if (!seg) return null;
+    const aPoint = scene.points.find((p) => p.id === seg.aId);
+    const bPoint = scene.points.find((p) => p.id === seg.bId);
+    if (!aPoint || !bPoint) return null;
+    const a = getPointWorldPos(aPoint, scene);
+    const b = getPointWorldPos(bPoint, scene);
+    if (!a || !b) return null;
+    return { a, b };
+  }
+  const line = scene.lines.find((item) => item.id === ref.id);
+  if (!line) return null;
+  const anchors = getLineWorldAnchors(line, scene);
+  if (!anchors) return null;
+  return anchors;
+}
+
+function pointOnLineLikeSupport(scene: SceneModel, p: { x: number; y: number }, ref: LineLikeObjectRef): boolean {
+  const anchors = lineLikeAnchorWorlds(scene, ref);
+  if (!anchors) return false;
+  const dx = anchors.b.x - anchors.a.x;
+  const dy = anchors.b.y - anchors.a.y;
+  const len = Math.hypot(dx, dy);
+  if (len <= 1e-12) return false;
+  const cross = Math.abs((p.x - anchors.a.x) * dy - (p.y - anchors.a.y) * dx);
+  return cross <= 1e-6 * len;
 }
 
 function getCanonicalCircleCenterPointIds(scene: SceneModel, circleId: string): Set<string> {

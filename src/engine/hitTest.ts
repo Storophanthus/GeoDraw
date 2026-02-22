@@ -9,7 +9,7 @@ import {
   type ScenePoint,
 } from "../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
-import { computeRightMarkSizePx } from "../view/angleRender";
+import { computeRightMarkSizePx, nonSectorAngleRadiusPx } from "../view/angleRender";
 import type { Vec2 } from "../geo/vec2";
 const VIS_EPS = 1;
 const HUGE_RADIUS_PICK_PX = 200_000;
@@ -199,17 +199,14 @@ export function hitTestAngleId(
     const r =
       entry.angle.kind === "sector"
         ? Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y))
-        : Math.max(20, entry.angle.style.arcRadius * camera.zoom);
+        : nonSectorAngleRadiusPx(entry.angle.style.arcRadius);
     const right = Boolean(entry.angle.isRightExact) || Boolean(entry.angle.isRightApprox);
     const rawMarkStyle = entry.angle.style.markStyle === "right" ? "rightSquare" : entry.angle.style.markStyle;
     const markStyle = right && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle;
     const arcDistance = distanceToAngleArc(screenPoint, as, bs, entry.theta, r, sectorPickupRatio);
     const d =
       right && markStyle === "rightSquare"
-        ? Math.min(
-          distanceToRightAngleMark(screenPoint, as, bs, cs, computeRightMarkSizePx(r, entry.angle.style.strokeWidth)),
-          arcDistance
-        )
+        ? distanceToRightAngleMark(screenPoint, as, bs, cs, computeRightMarkSizePx(r, entry.angle.style.strokeWidth))
         : arcDistance;
     if (d <= best) {
       best = d;
