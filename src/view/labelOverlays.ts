@@ -55,6 +55,7 @@ export type TextLabelOverlay = {
   html: string;
   textSize: number;
   textColor: string;
+  rotationDeg: number;
 };
 
 const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.5;
@@ -286,6 +287,10 @@ export function createTextLabelOverlays(
       html,
       textSize: Math.max(8, label.style.textSize) * TEXT_LABEL_CANVAS_SIZE_SCALE,
       textColor: label.style.textColor,
+      rotationDeg:
+        typeof label.style.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
+          ? label.style.rotationDeg
+          : 0,
     });
   }
   return overlays;

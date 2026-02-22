@@ -82,6 +82,12 @@ function applyNumericRounding(tex: string): string {
     const simpleKeysRegex = new RegExp(`(${simpleKeys.join("|")})=(${numberToken})pt`, "g");
     tex = tex.replace(simpleKeysRegex, (_, key, val) => `${key}=${fmt(val)}pt`);
 
+    // 4b. Font sizes in nodes: \fontsize{Xpt}{Ypt}\selectfont
+    tex = tex.replace(
+        new RegExp(`(\\\\fontsize\\{)(${numberToken})(pt\\}\\{)(${numberToken})(pt\\})`, "g"),
+        (_m, p1, v1, p2, v2, p3) => `${p1}${fmt(v1)}${p2}${fmt(v2)}${p3}`
+    );
+
     // Dash pattern: "on 2pt off 3pt", etc.
     tex = tex.replace(/(dash pattern=[^\]]+)/g, (match) => {
         const dashPieceRegex = new RegExp(`\\b(on|off)\\s+(${numberToken})pt`, "g");

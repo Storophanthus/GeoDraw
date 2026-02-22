@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import type { Vec2 } from "../geo/vec2";
 import type { PointShape, ScenePoint } from "../scene/points";
+import { formatRoundedDisplay } from "./displayFormat";
 
 const SHAPES: PointShape[] = [
   "circle",
@@ -52,7 +53,7 @@ export function PointPropertiesSection({
       <div className="detailRow">
         <span className="detailLabel">Position</span>
         <span>
-          ({formatNumber(selectedPointWorld?.x ?? 0)}, {formatNumber(selectedPointWorld?.y ?? 0)})
+          ({formatRoundedDisplay(selectedPointWorld?.x ?? 0, 3)}, {formatRoundedDisplay(selectedPointWorld?.y ?? 0, 3)})
         </span>
       </div>
 
@@ -257,8 +258,4 @@ function ShapeGlyph({ shape }: { shape: PointShape }) {
   if (shape === "triUp") return <span className={cls}>▲</span>;
   if (shape === "triDown") return <span className={cls}>▼</span>;
   return <span className={cls} />;
-}
-
-function formatNumber(value: number): string {
-  return value.toFixed(3);
 }

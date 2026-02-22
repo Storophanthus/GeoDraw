@@ -46,7 +46,14 @@ const baseCtx: ParseContext = {
   pointWorldById: new Map([
     ["pA", { x: 0, y: 0 }],
     ["pB", { x: 3, y: 4 }],
+    ["pC", { x: 3, y: 0 }],
     ["pO", { x: 1, y: 1 }],
+  ]),
+  lineWorldAnchorsById: new Map([
+    ["lAB", { a: { x: 0, y: 0 }, b: { x: 3, y: 4 } }],
+  ]),
+  segmentWorldAnchorsById: new Map([
+    ["sAB", { a: { x: 0, y: 0 }, b: { x: 3, y: 4 } }],
   ]),
   scalarsByName: new Map(),
   objectAliases: new Map([
@@ -56,6 +63,7 @@ const baseCtx: ParseContext = {
   ]),
   objectNames: new Set(),
 };
+baseCtx.symbolsByLabel.set("C", [{ kind: "point", id: "pC", label: "C" }]);
 
 mustExpr("5*5", baseCtx, "25");
 mustExpr("1+2*3", baseCtx, "7");
@@ -144,6 +152,15 @@ const circleOR = mustCmd("Circle(O,5)", baseCtx, "CreateCircleCenterRadius");
 if (circleOR.type !== "CreateCircleCenterRadius" || circleOR.centerId !== "pO" || circleOR.r !== 5 || circleOR.rExpr !== "5") {
   throw new Error("Circle(O,5) mismatch");
 }
+const circleODist = mustCmd("Circle(A,Distance(A,B))", baseCtx, "CreateCircleCenterRadius");
+if (
+  circleODist.type !== "CreateCircleCenterRadius" ||
+  circleODist.centerId !== "pA" ||
+  Math.abs(circleODist.r - 5) > 1e-9 ||
+  circleODist.rExpr !== "Distance(A,B)"
+) {
+  throw new Error("Circle(A,Distance(A,B)) mismatch");
+}
 
 const circle3p = mustCmd("Circle3P(A,B,O)", baseCtx, "CreateCircleThreePoint");
 if (circle3p.type !== "CreateCircleThreePoint" || circle3p.aId !== "pA" || circle3p.bId !== "pB" || circle3p.cId !== "pO") {
@@ -192,10 +209,15 @@ if (sector.type !== "CreateSector" || sector.centerId !== "pO" || sector.startId
 }
 
 mustExpr("Distance(A,B)", baseCtx, "5");
+mustExpr("Distance(O,lAB)", baseCtx, "0.2");
+mustExpr("Distance(lAB,O)", baseCtx, "0.2");
+mustExpr("Distance(O,sAB)", baseCtx, "0.2");
+mustExpr("Distance(sAB,O)", baseCtx, "0.2");
 
 mustAssignScalar("n_1 = 2.023242", baseCtx, "n_1", 2.023242);
 mustAssignScalar("r = 5*5", baseCtx, "r", 25);
 mustAssignScalar("r = Distance(A,B)", baseCtx, "r", 5);
+mustAssignScalar("d=Distance(A,B)^2 - Distance(B,C)*Distance(C,A)", baseCtx, "d", 13);
 
 const assignPoint = mustAssignObject("P = Point(1,2)", baseCtx, "P", "CreatePointXY");
 if (assignPoint.type !== "CreatePointXY" || assignPoint.x !== 1 || assignPoint.y !== 2) {

@@ -115,6 +115,7 @@ export function createSceneCoreActions(
                   textColor: prev.pointDefaults.labelColor,
                   textSize: 12,
                   useTex: true,
+                  rotationDeg: 0,
                 },
               },
             ],

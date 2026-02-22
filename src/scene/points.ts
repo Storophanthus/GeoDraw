@@ -844,6 +844,7 @@ export type SceneTextLabelStyle = {
   textColor: string;
   textSize: number;
   useTex: boolean;
+  rotationDeg?: number;
 };
 
 export type SceneTextLabel = {

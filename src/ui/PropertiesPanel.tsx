@@ -14,6 +14,7 @@ import { NumbersSection } from "./NumbersSection";
 import { ObjectStyleSections } from "./ObjectStyleSections";
 import { PointPropertiesSection } from "./PointPropertiesSection";
 import { ToolInfoSection } from "./ToolInfoSection";
+import { formatRoundedDisplay } from "./displayFormat";
 
 
 export function PropertiesPanel({ visible }: { visible: boolean }) {
@@ -275,7 +276,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   <div className="toolInfo">
     <div className="subSectionTitle">Text Label</div>
     <div className="statusText">
-      Position: ({selectedTextLabel.positionWorld.x.toFixed(3)}, {selectedTextLabel.positionWorld.y.toFixed(3)})
+      Position: ({formatRoundedDisplay(selectedTextLabel.positionWorld.x, 3)}, {formatRoundedDisplay(selectedTextLabel.positionWorld.y, 3)})
     </div>
 
     <div className="fieldBlock">
@@ -344,6 +345,28 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
         step={1}
         value={selectedTextLabel.style.textSize}
         onChange={(e) => updateSelectedTextLabelStyle({ textSize: Number(e.target.value) })}
+      />
+    </div>
+
+    <div className="controlRow controlRowWithNumeric">
+      <label className="controlLabel">Rotation</label>
+      <input
+        className="sizeSlider"
+        type="range"
+        min={-180}
+        max={180}
+        step={1}
+        value={selectedTextLabel.style.rotationDeg ?? 0}
+        onChange={(e) => updateSelectedTextLabelStyle({ rotationDeg: Number(e.target.value) })}
+      />
+      <input
+        className="scaleInputCompact"
+        type="number"
+        min={-360}
+        max={360}
+        step={1}
+        value={selectedTextLabel.style.rotationDeg ?? 0}
+        onChange={(e) => updateSelectedTextLabelStyle({ rotationDeg: Number(e.target.value) })}
       />
     </div>
 

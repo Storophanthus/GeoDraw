@@ -20,8 +20,10 @@ export const TIKZ_EXPORT_CALIBRATION = {
   rightAngleSizeScale: 1,
   // Match-canvas auto-fit default size.
   autoScaleToFitCm: {
-    maxWidthCm: 14,
-    maxHeightCm: 9,
+    // Increased 1.6x so typical exports that previously landed near 0.75
+    // now land near 1.2 without manual post-edit scaling.
+    maxWidthCm: 22.4,
+    maxHeightCm: 14.4,
   },
   // Point/canvas conversion constants used inside tikz.ts.
   pointConversion: {

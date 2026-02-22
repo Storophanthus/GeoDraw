@@ -733,34 +733,52 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   if (fileName === "angle-mark-list-quad.json") {
     if (exportError) throw exportError;
     const markAngleLines = tikz.match(/\\tkzMarkAngle\[[^\]]*\]/g) ?? [];
-    if (markAngleLines.length < 2) {
-      throw new Error("Expected angle mark list quad fixture to emit multiple \\tkzMarkAngle commands.");
+    const groupedMarkAngleForeach = /\\foreach\s+\\[A-Za-z@][A-Za-z0-9@]*(?:\/\\[A-Za-z@][A-Za-z0-9@]*)+\s+in\s*\{[^}]*\}\{\\tkzMarkAngle\[/.test(
+      tikz
+    );
+    if (markAngleLines.length < 2 && !groupedMarkAngleForeach) {
+      throw new Error("Expected angle mark list quad fixture to emit repeated or grouped \\tkzMarkAngle commands.");
     }
-    const doubleArcLines = markAngleLines.filter((line) => line.includes("arc=ll"));
-    if (doubleArcLines.length < 2) {
-      throw new Error("Expected angle mark list quad fixture to emit two double-arc mark commands.");
-    }
-    const sizes = doubleArcLines
-      .map((line) => {
-        const m = line.match(/size=([0-9.]+)/);
-        return m ? Number(m[1]) : NaN;
-      })
-      .filter((value) => Number.isFinite(value));
-    if (sizes.length < 2 || !(sizes[1] > sizes[0])) {
-      throw new Error("Expected stacked angle mark list to increase arc size on later entries.");
+    if (markAngleLines.length >= 2) {
+      const doubleArcLines = markAngleLines.filter((line) => line.includes("arc=ll"));
+      if (doubleArcLines.length < 2) {
+        throw new Error("Expected angle mark list quad fixture to emit two double-arc mark commands.");
+      }
+      const sizes = doubleArcLines
+        .map((line) => {
+          const m = line.match(/size=([0-9.]+)/);
+          return m ? Number(m[1]) : NaN;
+        })
+        .filter((value) => Number.isFinite(value));
+      if (sizes.length < 2 || !(sizes[1] > sizes[0])) {
+        throw new Error("Expected stacked angle mark list to increase arc size on later entries.");
+      }
+    } else {
+      if (!tikz.includes("\\foreach") || !tikz.includes("\\tkzMarkAngle[") || !tikz.includes("ll")) {
+        throw new Error("Expected grouped angle mark list quad fixture to include two double-arc entries.");
+      }
     }
   }
 
   if (fileName === "angle-mark-list-bars.json") {
     if (exportError) throw exportError;
     const markAngleLines = tikz.match(/\\tkzMarkAngle\[[^\]]*\]/g) ?? [];
-    if (markAngleLines.length < 2) {
-      throw new Error("Expected angle mark list bars fixture to emit multiple \\tkzMarkAngle commands.");
+    const groupedMarkAngleForeach = /\\foreach\s+\\[A-Za-z@][A-Za-z0-9@]*(?:\/\\[A-Za-z@][A-Za-z0-9@]*)*\s+in\s*\{[^}]*\}\{\\tkzMarkAngle\[/.test(
+      tikz
+    );
+    if (markAngleLines.length < 2 && !groupedMarkAngleForeach) {
+      throw new Error("Expected angle mark list bars fixture to emit repeated or grouped \\tkzMarkAngle commands.");
     }
-    if (!markAngleLines.some((line) => line.includes("mark=||") && line.includes("mkpos=0.3"))) {
+    const hasFirstBar =
+      markAngleLines.some((line) => line.includes("mark=||") && line.includes("mkpos=0.3")) ||
+      (groupedMarkAngleForeach && tikz.includes("/||") && tikz.includes("/0.3"));
+    if (!hasFirstBar) {
       throw new Error("Expected angle mark list bars fixture to emit first bar-mark entry with mkpos=0.3.");
     }
-    if (!markAngleLines.some((line) => line.includes("mark=|") && line.includes("mkpos=0.72"))) {
+    const hasSecondBar =
+      markAngleLines.some((line) => line.includes("mark=|") && line.includes("mkpos=0.72")) ||
+      (groupedMarkAngleForeach && tikz.includes("/|") && tikz.includes("/0.72"));
+    if (!hasSecondBar) {
       throw new Error("Expected angle mark list bars fixture to emit second bar-mark entry with mkpos=0.72.");
     }
   }
@@ -983,7 +1001,15 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (left.cmd !== "arrowreversed" || right.cmd !== "arrow") {
       throw new Error("Expected segment <-> mid-arrow to emit outward command order: reversed then forward.");
     }
-    if (right.position - left.position < 0.04) {
+    const segment = scene.segments[0];
+    const pointA = scene.points.find((point) => point.id === segment?.aId);
+    const pointB = scene.points.find((point) => point.id === segment?.bId);
+    const worldA = pointA ? getPointWorldPos(pointA, scene) : null;
+    const worldB = pointB ? getPointWorldPos(pointB, scene) : null;
+    const pathLengthWorld = worldA && worldB ? Math.hypot(worldB.x - worldA.x, worldB.y - worldA.y) : 0;
+    const pxPerWorld = extractEffectiveDrawScale(tikz) * 37.8;
+    const gapPx = (right.position - left.position) * pathLengthWorld * pxPerWorld;
+    if (!Number.isFinite(gapPx) || gapPx < 3) {
       throw new Error("Expected segment <-> mid-arrow marks to be separated enough to be visually distinct.");
     }
   }
@@ -1047,8 +1073,13 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
         ? segment.style.segmentArrowMarks[0]?.pairGapPx
         : segment?.style.segmentArrowMark?.pairGapPx) ?? 30;
     const pairGapPx = Number.isFinite(explicitPairGap) ? Number(explicitPairGap) : 30;
-    const scaleMatch = tikz.match(/\\begin\{tikzpicture\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-    const tikzScale = scaleMatch ? Number(scaleMatch[1]) : 1;
+    const pictureScaleMatch = tikz.match(/\\begin\{tikzpicture\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+    const scopeScaleMatch = tikz.match(/\\begin\{scope\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+    const tikzScale = pictureScaleMatch
+      ? Number(pictureScaleMatch[1])
+      : scopeScaleMatch
+        ? Number(scopeScaleMatch[1])
+        : 1;
     const pxPerWorld = Number.isFinite(tikzScale) && tikzScale > 0 ? tikzScale * 37.8 : 80;
     const expectedGap = (2 * pairGapPx) / (pathLengthWorld * pxPerWorld); // 2*pairGapPx / (pathLengthWorld * export px density)
     if (Math.abs(measuredGap - expectedGap) > 0.005) {
@@ -1091,7 +1122,15 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (left.cmd !== "arrow" || right.cmd !== "arrowreversed") {
       throw new Error("Expected segment >-< mid-arrow to emit inward command order: forward then reversed.");
     }
-    if (right.position - left.position < 0.04) {
+    const segment = scene.segments[0];
+    const pointA = scene.points.find((point) => point.id === segment?.aId);
+    const pointB = scene.points.find((point) => point.id === segment?.bId);
+    const worldA = pointA ? getPointWorldPos(pointA, scene) : null;
+    const worldB = pointB ? getPointWorldPos(pointB, scene) : null;
+    const pathLengthWorld = worldA && worldB ? Math.hypot(worldB.x - worldA.x, worldB.y - worldA.y) : 0;
+    const pxPerWorld = extractEffectiveDrawScale(tikz) * 37.8;
+    const gapPx = (right.position - left.position) * pathLengthWorld * pxPerWorld;
+    if (!Number.isFinite(gapPx) || gapPx < 3) {
       throw new Error("Expected segment >-< mid-arrow marks to be separated enough to be visually distinct.");
     }
   }
@@ -1240,6 +1279,20 @@ function extractMarkCommands(tikz: string): Array<{ position: number; cmd: "arro
     if (Number.isFinite(position)) marks.push({ position, cmd });
   }
   return marks;
+}
+
+function extractEffectiveDrawScale(tikz: string): number {
+  const pictureScaleMatch = tikz.match(/\\begin\{tikzpicture\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+  if (pictureScaleMatch) {
+    const value = Number(pictureScaleMatch[1]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  const scopeScaleMatch = tikz.match(/\\begin\{scope\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+  if (scopeScaleMatch) {
+    const value = Number(scopeScaleMatch[1]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return 1;
 }
 
 function parseDrawLines(

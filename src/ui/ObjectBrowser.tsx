@@ -10,6 +10,7 @@ import type { SelectedObject } from "../state/slices/storeTypes";
 import { getNumberValue } from "../scene/points";
 import { commandBarApi, useGeoStore } from "../state/geoStore";
 import { IconAngle, IconPoint, IconLine, IconCircleRadius } from "./icons";
+import { formatRoundedDisplay } from "./displayFormat";
 
 type ObjectBrowserProps = {
     scene: SceneModel;
@@ -164,7 +165,11 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         (next) => setObjectVisibility({ type: "point", id: point.id }, next),
                         `Point ${point.name}`,
                         point.kind === "free"
-                            ? withAliasPrefix("point", point.id, `Point(${point.position.x.toFixed(4)},${point.position.y.toFixed(4)})`)
+                            ? withAliasPrefix(
+                                "point",
+                                point.id,
+                                `Point(${formatRoundedDisplay(point.position.x, 4)},${formatRoundedDisplay(point.position.y, 4)})`
+                              )
                             : point.kind === "midpointPoints"
                                 ? withAliasPrefix("point", point.id, `Midpoint(${pointLabel(point.aId)},${pointLabel(point.bId)})`)
                                 : point.kind === "midpointSegment"

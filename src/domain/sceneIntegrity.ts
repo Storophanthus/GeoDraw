@@ -41,6 +41,10 @@ function normalizeTextLabels(
           ? Math.max(8, Math.min(96, label.style.textSize))
           : 12;
       const useTex = Boolean(label.style?.useTex);
+      const rotationDeg =
+        typeof label.style?.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
+          ? Math.max(-3600, Math.min(3600, label.style.rotationDeg))
+          : 0;
       const x = Number.isFinite(label.positionWorld?.x) ? label.positionWorld.x : 0;
       const y = Number.isFinite(label.positionWorld?.y) ? label.positionWorld.y : 0;
       return {
@@ -53,6 +57,7 @@ function normalizeTextLabels(
           textColor,
           textSize,
           useTex,
+          rotationDeg,
         },
       };
     });

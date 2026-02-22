@@ -68,7 +68,7 @@ export function CanvasLabelsLayer({
           className="pointLabel tex"
           data-text-label-id={label.id}
           style={{
-            transform: `translate(${label.x}px, ${label.y}px)`,
+            transform: `translate(${label.x}px, ${label.y}px) rotate(${label.rotationDeg}deg)`,
             fontSize: `${Math.max(8, label.textSize)}px`,
             color: label.textColor,
           }}

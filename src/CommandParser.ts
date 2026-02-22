@@ -1,4 +1,5 @@
 import { all, create, type MathNode } from "mathjs";
+import { projectPointToLine, projectPointToSegment } from "./geo/geometry";
 
 const math = create(all, { number: "number", matrix: "Array", predictable: true });
 const MAX_INPUT_LENGTH = 300;
@@ -26,6 +27,8 @@ export type Symbol =
 export type ParseContext = {
   symbolsByLabel: Map<string, Symbol[]>;
   pointWorldById?: Map<string, { x: number; y: number }>;
+  lineWorldAnchorsById?: Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
+  segmentWorldAnchorsById?: Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
   scalarsByName: Map<string, number>;
   objectAliases: Map<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }>;
   objectNames: Set<string>;
@@ -69,6 +72,9 @@ type ExprValue =
   | { kind: "point"; x: number; y: number };
 
 type EvalResult = { ok: true; value: number } | { ok: false; error: string };
+type DistanceArg =
+  | { kind: "point"; x: number; y: number }
+  | { kind: "lineLike"; finite: boolean; a: { x: number; y: number }; b: { x: number; y: number } };
 
 function formatNumber(value: number): string {
   if (!Number.isFinite(value)) return String(value);
@@ -79,6 +85,15 @@ function formatNumber(value: number): string {
 
 function err(message: string): ParseResult {
   return { kind: "error", message };
+}
+
+function unwrapParenthesisNode(node: MathNode): MathNode {
+  let current = node;
+  for (;;) {
+    const anyNode = current as unknown as { type?: string; content?: MathNode };
+    if (anyNode.type !== "ParenthesisNode" || !anyNode.content) return current;
+    current = anyNode.content;
+  }
 }
 
 function ensureSafeNode(node: MathNode, allowedSymbols: Set<string>): string | null {
@@ -209,6 +224,7 @@ function evalPointExpressionNode(node: MathNode, ctx: ParseContext): { ok: true;
     type?: string;
     value?: number;
     name?: string;
+    fn?: { name?: string };
     op?: string;
     args?: MathNode[];
     content?: MathNode;
@@ -292,6 +308,69 @@ function evalPointExpressionNode(node: MathNode, ctx: ParseContext): { ok: true;
     }
 
     return { ok: false, error: `Unsupported operator: ${op}` };
+  }
+
+  if (anyNode.type === "FunctionNode") {
+    const fnName = anyNode.fn?.name ?? "";
+    const args = anyNode.args ?? [];
+    if (fnName === "Distance") {
+      if (args.length !== 2) return { ok: false, error: "Distance(A, B) expects 2 point arguments" };
+      const left = resolveDistanceArg(args[0], ctx);
+      if (!left.ok) return { ok: false, error: left.error };
+      const right = resolveDistanceArg(args[1], ctx);
+      if (!right.ok) return { ok: false, error: right.error };
+      const value = evalDistanceArgs(left.value, right.value);
+      if (!value.ok) return { ok: false, error: value.error };
+      return { ok: true, value: toScalarExprValue(value.value) };
+    }
+
+    if (!ALLOWED_FUNCTIONS.has(fnName)) {
+      return { ok: false, error: `Unsupported function: ${fnName || "unknown"}` };
+    }
+    const scalarArgs: number[] = [];
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = evalPointExpressionNode(args[i], ctx);
+      if (!arg.ok) return arg;
+      if (arg.value.kind !== "scalar") {
+        return { ok: false, error: `Function ${fnName} only supports scalar arguments` };
+      }
+      scalarArgs.push(arg.value.value);
+    }
+
+    let out: number;
+    switch (fnName) {
+      case "sin":
+      case "Sin":
+        out = Math.sin(scalarArgs[0] ?? 0);
+        break;
+      case "cos":
+      case "Cos":
+        out = Math.cos(scalarArgs[0] ?? 0);
+        break;
+      case "tan":
+      case "Tan":
+        out = Math.tan(scalarArgs[0] ?? 0);
+        break;
+      case "sqrt":
+        out = Math.sqrt(scalarArgs[0] ?? 0);
+        break;
+      case "abs":
+        out = Math.abs(scalarArgs[0] ?? 0);
+        break;
+      case "min":
+        out = Math.min(...scalarArgs);
+        break;
+      case "max":
+        out = Math.max(...scalarArgs);
+        break;
+      case "pow":
+        out = Math.pow(scalarArgs[0] ?? 0, scalarArgs[1] ?? 0);
+        break;
+      default:
+        return { ok: false, error: `Unsupported function: ${fnName}` };
+    }
+    if (!Number.isFinite(out)) return { ok: false, error: `Function ${fnName} result is not finite` };
+    return { ok: true, value: toScalarExprValue(out) };
   }
 
   return { ok: false, error: `Unsupported expression node: ${anyNode.type ?? "unknown"}` };
@@ -387,25 +466,71 @@ function resolveScalarIdentifier(label: string, ctx: ParseContext): { ok: true; 
   return { ok: true, value };
 }
 
+function resolveDistanceArg(node: MathNode, ctx: ParseContext): { ok: true; value: DistanceArg } | { ok: false; error: string } {
+  const unwrapped = unwrapParenthesisNode(node);
+  const anyNode = unwrapped as unknown as { type?: string; name?: string };
+  if (anyNode.type === "SymbolNode" && anyNode.name) {
+    const alias = ctx.objectAliases.get(anyNode.name);
+    if (alias?.type === "line") {
+      const anchors = ctx.lineWorldAnchorsById?.get(alias.id);
+      if (!anchors) return { ok: false, error: `Distance requires line geometry in context: ${anyNode.name}` };
+      return { ok: true, value: { kind: "lineLike", finite: false, a: anchors.a, b: anchors.b } };
+    }
+    if (alias?.type === "segment") {
+      const anchors = ctx.segmentWorldAnchorsById?.get(alias.id);
+      if (!anchors) return { ok: false, error: `Distance requires segment geometry in context: ${anyNode.name}` };
+      return { ok: true, value: { kind: "lineLike", finite: true, a: anchors.a, b: anchors.b } };
+    }
+  }
+
+  const pointOrScalar = evalPointExpressionNode(unwrapped, ctx);
+  if (!pointOrScalar.ok) return { ok: false, error: pointOrScalar.error };
+  if (pointOrScalar.value.kind !== "point") {
+    return { ok: false, error: "Distance expects Point-Point or Point-Line/Segment arguments" };
+  }
+  return { ok: true, value: { kind: "point", x: pointOrScalar.value.x, y: pointOrScalar.value.y } };
+}
+
+function evalDistanceArgs(a: DistanceArg, b: DistanceArg): EvalResult {
+  if (a.kind === "point" && b.kind === "point") {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return { ok: true, value: Math.hypot(dx, dy) };
+  }
+  if (a.kind === "point" && b.kind === "lineLike") {
+    return {
+      ok: true,
+      value: b.finite
+        ? projectPointToSegment(a, b.a, b.b).distance
+        : projectPointToLine(a, b.a, b.b).distance,
+    };
+  }
+  if (a.kind === "lineLike" && b.kind === "point") {
+    return {
+      ok: true,
+      value: a.finite
+        ? projectPointToSegment(b, a.a, a.b).distance
+        : projectPointToLine(b, a.a, a.b).distance,
+    };
+  }
+  return { ok: false, error: "Distance(Line/Segment, Line/Segment) is not supported" };
+}
+
 function parseDistanceNumeric(args: string[], ctx: ParseContext): EvalResult {
-  if (args.length !== 2) return { ok: false, error: "Distance(A, B) expects 2 point labels" };
-  const aLabel = asIdentifier(args[0]);
-  const bLabel = asIdentifier(args[1]);
-  if (!aLabel || !bLabel) return { ok: false, error: "Distance(A, B) expects point labels" };
-  const a = resolvePointIdentifier(aLabel, ctx);
-  if (!a.ok) return { ok: false, error: a.message };
-  const b = resolvePointIdentifier(bLabel, ctx);
-  if (!b.ok) return { ok: false, error: b.message };
-
-  const pMap = ctx.pointWorldById;
-  if (!pMap) return { ok: false, error: "Distance requires point coordinates in context" };
-  const pa = pMap.get(a.id);
-  const pb = pMap.get(b.id);
-  if (!pa || !pb) return { ok: false, error: "Distance point is missing" };
-
-  const dx = pa.x - pb.x;
-  const dy = pa.y - pb.y;
-  return { ok: true, value: Math.sqrt(dx * dx + dy * dy) };
+  if (args.length !== 2) return { ok: false, error: "Distance(...) expects 2 arguments" };
+  let leftNode: MathNode;
+  let rightNode: MathNode;
+  try {
+    leftNode = math.parse(args[0]);
+    rightNode = math.parse(args[1]);
+  } catch {
+    return { ok: false, error: "Distance(...) arguments are invalid" };
+  }
+  const left = resolveDistanceArg(leftNode, ctx);
+  if (!left.ok) return { ok: false, error: left.error };
+  const right = resolveDistanceArg(rightNode, ctx);
+  if (!right.ok) return { ok: false, error: right.error };
+  return evalDistanceArgs(left.value, right.value);
 }
 
 function parseDistanceResult(args: string[], ctx: ParseContext): ParseResult {
@@ -415,8 +540,15 @@ function parseDistanceResult(args: string[], ctx: ParseContext): ParseResult {
 }
 
 function parseCommand(name: string, args: string[], ctx: ParseContext): ParseResult {
+  const evalScalarArg = (raw: string): EvalResult => {
+    const out = evaluatePointOrScalarExpression(raw, ctx);
+    if (!out.ok) return { ok: false, error: out.error };
+    if (out.value.kind !== "scalar") return { ok: false, error: "Expression must evaluate to a finite number" };
+    if (!Number.isFinite(out.value.value)) return { ok: false, error: "Expression must evaluate to a finite number" };
+    return { ok: true, value: out.value.value };
+  };
   const evalArg = (raw: string): number | null => {
-    const out = evaluateExpression(raw, ctx);
+    const out = evalScalarArg(raw);
     return out.ok ? out.value : null;
   };
 
@@ -476,7 +608,7 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     const dirRaw = args.length === 4 ? args[3].trim() : "CCW";
     const direction = dirRaw === "CW" ? "CW" : dirRaw === "CCW" ? "CCW" : null;
     if (!direction) return err("Rotate direction must be CW or CCW");
-    const angleEval = evaluateExpression(args[2], ctx);
+    const angleEval = evalScalarArg(args[2]);
     if (!angleEval.ok) return err("Rotate expression must evaluate to a finite number");
     return {
       kind: "cmd",
@@ -500,7 +632,7 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     if (!point.ok) return err(point.message);
     const center = resolvePointIdentifier(centerLabel, ctx);
     if (!center.ok) return err(center.message);
-    const factorEval = evaluateExpression(args[2], ctx);
+    const factorEval = evalScalarArg(args[2]);
     if (!factorEval.ok) return err("Dilate factor must evaluate to a finite number");
     return {
       kind: "cmd",
@@ -629,7 +761,7 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     const dirRaw = args.length === 4 ? args[3].trim() : "CCW";
     const direction = dirRaw === "CW" ? "CW" : dirRaw === "CCW" ? "CCW" : null;
     if (!direction) return err("AngleFixed direction must be CW or CCW");
-    const angleEval = evaluateExpression(args[2], ctx);
+    const angleEval = evalScalarArg(args[2]);
     if (!angleEval.ok) return err("AngleFixed expression must evaluate to a finite number");
     return {
       kind: "cmd",
@@ -690,7 +822,7 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     if (!a.ok) return err(a.message);
     const b = resolvePointIdentifier(bLabel, ctx);
     if (!b.ok) return err(b.message);
-    const nEval = evaluateExpression(args[2], ctx);
+    const nEval = evalScalarArg(args[2]);
     if (!nEval.ok) return err("RegularPolygon side count must be numeric");
     const sides = Math.round(nEval.value);
     if (Math.abs(sides - nEval.value) > 1e-9) return err("RegularPolygon side count must be an integer");
@@ -734,7 +866,7 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
         };
       }
 
-      const rEval = evaluateExpression(args[1], ctx);
+      const rEval = evalScalarArg(args[1]);
       if (!rEval.ok) return err("Circle radius must be a finite number");
       if (!(rEval.value > 0)) return err("Circle radius must be > 0");
       return {
@@ -771,20 +903,34 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
 function parseCommandLike(input: string, ctx: ParseContext): ParseResult {
   const commandMatch = input.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
   if (!commandMatch) {
-    const evaluated = evaluateExpression(input, ctx);
+    const evaluated = evaluatePointOrScalarExpression(input, ctx);
     if (!evaluated.ok) return err(evaluated.error);
-    return { kind: "expr", value: formatNumber(evaluated.value), numeric: evaluated.value };
+    if (evaluated.value.kind !== "scalar") return err("Expression must evaluate to a scalar value");
+    return { kind: "expr", value: formatNumber(evaluated.value.value), numeric: evaluated.value.value };
   }
   const name = commandMatch[1];
+  let asCommand: ParseResult;
   const args = splitArgs(commandMatch[2]);
-  if (!args) return err("Invalid command arguments");
-  const asCommand = parseCommand(name, args, ctx);
+  if (!args) {
+    asCommand = err("Invalid command arguments");
+  } else {
+    asCommand = parseCommand(name, args, ctx);
+  }
   if (asCommand.kind !== "error" || !asCommand.message.startsWith("Unknown command:")) {
+    if (asCommand.kind !== "error") return asCommand;
+    // Compound expressions can start with a function call and also end with ')',
+    // which matches command-like regex greedily. Fall back to expression parsing.
+    const evaluated = evaluatePointOrScalarExpression(input, ctx);
+    if (evaluated.ok) {
+      if (evaluated.value.kind !== "scalar") return err("Expression must evaluate to a scalar value");
+      return { kind: "expr", value: formatNumber(evaluated.value.value), numeric: evaluated.value.value };
+    }
     return asCommand;
   }
-  const evaluated = evaluateExpression(input, ctx);
+  const evaluated = evaluatePointOrScalarExpression(input, ctx);
   if (!evaluated.ok) return err(evaluated.error);
-  return { kind: "expr", value: formatNumber(evaluated.value), numeric: evaluated.value };
+  if (evaluated.value.kind !== "scalar") return err("Expression must evaluate to a scalar value");
+  return { kind: "expr", value: formatNumber(evaluated.value.value), numeric: evaluated.value.value };
 }
 
 export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseResult {
@@ -801,20 +947,31 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
     const commandMatch = assignment.right.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
     if (commandMatch) {
       const args = splitArgs(commandMatch[2]);
-      if (!args) return err("Invalid command arguments");
-      const rhsCmd = parseCommand(commandMatch[1], args, ctx);
-      if (rhsCmd.kind === "error") return rhsCmd;
-      if (rhsCmd.kind === "cmd") {
-        if (rhsCmd.cmd.type === "CreateTangentLines") return err("Assignment is not supported for Tangent(P,c) because it may create multiple lines");
-        return { kind: "assignObject", name: left, cmd: rhsCmd.cmd };
-      }
-      if (rhsCmd.kind === "expr") {
-        if (typeof rhsCmd.numeric !== "number" || !Number.isFinite(rhsCmd.numeric)) {
-          return err("Assignment right-hand side must evaluate to a finite number");
+      const rhsCmd = args ? parseCommand(commandMatch[1], args, ctx) : err("Invalid command arguments");
+      if (rhsCmd.kind !== "error") {
+        if (rhsCmd.kind === "cmd") {
+          if (rhsCmd.cmd.type === "CreateTangentLines") return err("Assignment is not supported for Tangent(P,c) because it may create multiple lines");
+          return { kind: "assignObject", name: left, cmd: rhsCmd.cmd };
         }
-        return { kind: "assignScalar", name: left, value: rhsCmd.numeric };
+        if (rhsCmd.kind === "expr") {
+          if (typeof rhsCmd.numeric !== "number" || !Number.isFinite(rhsCmd.numeric)) {
+            return err("Assignment right-hand side must evaluate to a finite number");
+          }
+          return { kind: "assignScalar", name: left, value: rhsCmd.numeric };
+        }
+        return err("Unsupported assignment right-hand side");
       }
-      return err("Unsupported assignment right-hand side");
+      // Fall through to expression parsing for compound expressions like:
+      // d = Distance(A,B)^2 - Distance(B,C)*Distance(C,A)
+      // which greedily match command-like regex but are not standalone commands.
+      const rhsExprFallback = evaluatePointOrScalarExpression(assignment.right, ctx);
+      if (rhsExprFallback.ok) {
+        if (rhsExprFallback.value.kind === "point") {
+          return { kind: "assignObject", name: left, cmd: { type: "CreatePointXY", x: rhsExprFallback.value.x, y: rhsExprFallback.value.y } };
+        }
+        return { kind: "assignScalar", name: left, value: rhsExprFallback.value.value };
+      }
+      return rhsCmd;
     }
 
     const rhsExpr = evaluatePointOrScalarExpression(assignment.right, ctx);

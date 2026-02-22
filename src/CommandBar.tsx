@@ -1,6 +1,6 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { parseCommandInput, type ParseContext, type Symbol } from "./CommandParser";
-import { getPointWorldPos } from "./scene/points";
+import { getLineWorldAnchors, getPointWorldPos } from "./scene/points";
 import type { SceneModel } from "./scene/points";
 import { commandBarApi, useGeoStore } from "./state/geoStore";
 
@@ -42,9 +42,26 @@ function buildParseContext(
     if (w) pointWorldById.set(p.id, w);
   }
 
+  const segmentWorldAnchorsById = new Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>();
+  for (let i = 0; i < scene.segments.length; i += 1) {
+    const seg = scene.segments[i];
+    const a = pointWorldById.get(seg.aId);
+    const b = pointWorldById.get(seg.bId);
+    if (a && b) segmentWorldAnchorsById.set(seg.id, { a, b });
+  }
+
+  const lineWorldAnchorsById = new Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>();
+  for (let i = 0; i < scene.lines.length; i += 1) {
+    const line = scene.lines[i];
+    const anchors = getLineWorldAnchors(line, scene);
+    if (anchors) lineWorldAnchorsById.set(line.id, anchors);
+  }
+
   return {
     symbolsByLabel,
     pointWorldById,
+    lineWorldAnchorsById,
+    segmentWorldAnchorsById,
     scalarsByName: new Map(Object.entries(scalarVars)),
     objectAliases: new Map(Object.entries(objectAliases)),
     objectNames: new Set(Object.keys(objectAliases)),

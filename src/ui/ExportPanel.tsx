@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from "../export/constructionSnapshot";
-import { exportTikzWithOptions, makeEfficientTikz } from "../export/tikz";
+import { exportTikzEfficientWithOptions, exportTikzWithOptions } from "../export/tikz";
 import { getPointInnerSepFixedPt, TIKZ_EXPORT_CALIBRATION } from "../export/tikz/calibration";
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
@@ -64,38 +64,34 @@ export function ExportPanel({ visible }: ExportPanelProps) {
         exportUseClipSelection && exportClipWorld?.kind === "rect" ? exportClipWorld : undefined;
       const clipPolygon =
         exportUseClipSelection && exportClipWorld?.kind === "polygon" ? exportClipWorld.points : undefined;
-      setTikzText(
-        exportTikzWithOptions(scene, {
-          viewport,
-          clipRectWorld: clipRect,
-          clipPolygonWorld: clipPolygon,
-          worldToTikzScale: Number.isFinite(globalScale) ? globalScale : 1,
-          pointScale: Number.isFinite(pointScale) ? pointScale : 1,
-          lineScale:
-            (Number.isFinite(lineScale) ? lineScale : 1) *
-            TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter,
-          labelScale: Number.isFinite(labelScale) ? labelScale : 1,
-          screenPxPerWorld: camera.zoom,
-          emitTkzSetup: exportEmitTkzSetup,
-          labelGlow: exportLabelGlow,
-          pointStrokeScale: TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
-          pointInnerSepFixedPt: getPointInnerSepFixedPt(),
-          pointInnerSepScale: TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
-          segmentMarkSizeScale: TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale,
-          segmentMarkLineWidthScale: TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale,
-          angleLabelFontScale: TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
-          angleArcSizeScale: TIKZ_EXPORT_CALIBRATION.angleArcSizeScale,
-          angleMarkSizeScale: TIKZ_EXPORT_CALIBRATION.angleMarkSizeScale,
-          rightAngleSizeScale: TIKZ_EXPORT_CALIBRATION.rightAngleSizeScale,
-          autoScaleToFitCm: {
-            maxWidthCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
-            maxHeightCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,
-          },
-        })
-      );
-      if (exportEfficient) {
-        setTikzText((prev) => makeEfficientTikz(prev));
-      }
+      const tikzOptions = {
+        viewport,
+        clipRectWorld: clipRect,
+        clipPolygonWorld: clipPolygon,
+        worldToTikzScale: Number.isFinite(globalScale) ? globalScale : 1,
+        pointScale: Number.isFinite(pointScale) ? pointScale : 1,
+        lineScale:
+          (Number.isFinite(lineScale) ? lineScale : 1) *
+          TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter,
+        labelScale: Number.isFinite(labelScale) ? labelScale : 1,
+        screenPxPerWorld: camera.zoom,
+        emitTkzSetup: exportEmitTkzSetup,
+        labelGlow: exportLabelGlow,
+        pointStrokeScale: TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
+        pointInnerSepFixedPt: getPointInnerSepFixedPt(),
+        pointInnerSepScale: TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
+        segmentMarkSizeScale: TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale,
+        segmentMarkLineWidthScale: TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale,
+        angleLabelFontScale: TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
+        angleArcSizeScale: TIKZ_EXPORT_CALIBRATION.angleArcSizeScale,
+        angleMarkSizeScale: TIKZ_EXPORT_CALIBRATION.angleMarkSizeScale,
+        rightAngleSizeScale: TIKZ_EXPORT_CALIBRATION.rightAngleSizeScale,
+        autoScaleToFitCm: {
+          maxWidthCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
+          maxHeightCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,
+        },
+      } as const;
+      setTikzText(exportEfficient ? exportTikzEfficientWithOptions(scene, tikzOptions) : exportTikzWithOptions(scene, tikzOptions));
       setLastTikzSceneRef(scene);
       setLastTikzOptionSig(optionSig);
       setLastTikzGeneratedAt(Date.now());

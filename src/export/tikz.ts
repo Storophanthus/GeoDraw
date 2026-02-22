@@ -521,6 +521,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (point.kind === "free") {
       freeItems.push({ name, x: point.position.x, y: point.position.y });
       definedPointIds.add(point.id);
+    } else if (point.kind === "circleCenter") {
+      const world = getPointWorldPosCached(scene, point.id);
+      if (!world) {
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
+      constructions.push({
+        kind: "DefPoint",
+        name,
+        x: world.x,
+        y: world.y,
+      });
+      definedPointIds.add(point.id);
     } else if (point.kind === "midpointPoints") {
       resolvePoint(point.aId);
       resolvePoint(point.bId);
@@ -1563,6 +1577,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     // by tikzpicture scale. Fold final export geometry scale into these labels only.
     const fontPt = Math.max(1, Math.min(72, label.style.textSize * coordScale));
     const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
+    const rotationDeg =
+      typeof label.style.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
+        ? label.style.rotationDeg
+        : 0;
     drawLabelsLayer.push({
       kind: "LabelAt",
       x: label.positionWorld.x,
@@ -1572,6 +1590,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         "anchor=center",
         `text=${rgbColorExpr(label.style.textColor)}`,
         `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
+        ...(Math.abs(rotationDeg) > 1e-9 ? [`rotate=${fmt(rotationDeg)}`] : []),
       ].join(", "),
       useGlow: false,
     });
@@ -1610,7 +1629,133 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   ];
 }
 
-export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions, "emitTkzSetup"> = {}): string {
+type ParsedTikzOptionPart = {
+  key: string | null;
+  value: string;
+  raw: string;
+};
+
+function splitTopLevelCommaParts(input: string): string[] {
+  const out: string[] = [];
+  let token = "";
+  let brace = 0;
+  let bracket = 0;
+  let paren = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (ch === "{") brace += 1;
+    else if (ch === "}") brace = Math.max(0, brace - 1);
+    else if (ch === "[") bracket += 1;
+    else if (ch === "]") bracket = Math.max(0, bracket - 1);
+    else if (ch === "(") paren += 1;
+    else if (ch === ")") paren = Math.max(0, paren - 1);
+    if (ch === "," && brace === 0 && bracket === 0 && paren === 0) {
+      out.push(token);
+      token = "";
+      continue;
+    }
+    token += ch;
+  }
+  out.push(token);
+  return out;
+}
+
+function findTopLevelEquals(input: string): number {
+  let brace = 0;
+  let bracket = 0;
+  let paren = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (ch === "{") brace += 1;
+    else if (ch === "}") brace = Math.max(0, brace - 1);
+    else if (ch === "[") bracket += 1;
+    else if (ch === "]") bracket = Math.max(0, bracket - 1);
+    else if (ch === "(") paren += 1;
+    else if (ch === ")") paren = Math.max(0, paren - 1);
+    if (ch === "=" && brace === 0 && bracket === 0 && paren === 0) return i;
+  }
+  return -1;
+}
+
+function parseTikzOptionList(style: string): ParsedTikzOptionPart[] | null {
+  const tokens = splitTopLevelCommaParts(style);
+  const parts: ParsedTikzOptionPart[] = [];
+  for (const tokenRaw of tokens) {
+    const raw = tokenRaw.trim();
+    if (!raw) return null;
+    const eq = findTopLevelEquals(raw);
+    if (eq < 0) {
+      parts.push({ key: null, value: raw, raw });
+      continue;
+    }
+    const key = raw.slice(0, eq).trim();
+    const value = raw.slice(eq + 1).trim();
+    if (!key || !value) return null;
+    parts.push({ key, value, raw });
+  }
+  return parts;
+}
+
+function buildGroupedMarkAngleTex(
+  run: Array<Extract<TikzCommand, { kind: "MarkAngle" }>>
+): string | null {
+  if (run.length < 2) return null;
+  const first = run[0];
+  const firstStyle = typeof first.style === "string" ? first.style : "";
+  if (!firstStyle) return null;
+  const parsedStyles = run.map((cmd) => {
+    if (cmd.a !== first.a || cmd.b !== first.b || cmd.c !== first.c) return null;
+    if (typeof cmd.style !== "string" || !cmd.style.trim()) return null;
+    return parseTikzOptionList(cmd.style);
+  });
+  if (parsedStyles.some((p) => !p)) return null;
+  const base = parsedStyles[0] as ParsedTikzOptionPart[];
+  for (let i = 1; i < parsedStyles.length; i += 1) {
+    const parts = parsedStyles[i] as ParsedTikzOptionPart[];
+    if (parts.length !== base.length) return null;
+    for (let j = 0; j < base.length; j += 1) {
+      if ((parts[j].key ?? null) !== (base[j].key ?? null)) return null;
+    }
+  }
+
+  const varyingIndices: number[] = [];
+  for (let j = 0; j < base.length; j += 1) {
+    const firstVal = base[j].value;
+    let differs = false;
+    for (let i = 1; i < parsedStyles.length; i += 1) {
+      const parts = parsedStyles[i] as ParsedTikzOptionPart[];
+      if (parts[j].value !== firstVal) {
+        differs = true;
+        break;
+      }
+    }
+    if (differs) varyingIndices.push(j);
+  }
+  if (varyingIndices.length === 0) return null;
+
+  // Keep foreach payload simple and robust for current exporter-generated angle styles.
+  for (const parts of parsedStyles as ParsedTikzOptionPart[][]) {
+    for (const idx of varyingIndices) {
+      const value = parts[idx].value;
+      if (/[{},/]/.test(value)) return null;
+    }
+  }
+
+  // Do not parameterize individual keys (e.g. `arc=\gdAngArc`) because tkz-euclide
+  // compares some option values via `\ifx` internally (`arc=l/ll/lll`), and macro
+  // indirection can change behavior. Also avoid passing a braced option-list macro
+  // into `[...]`, because pgfkeys can treat it as one unknown key. Instead iterate
+  // complete commands as foreach items.
+  const cmdItems = run
+    .map((cmd) => `{\\tkzMarkAngle[${String(cmd.style).trim()}](${cmd.a},${cmd.b},${cmd.c})}`)
+    .join(",");
+  return `\\foreach \\gdAngCmd in {${cmdItems}}{\\gdAngCmd}`;
+}
+
+export function renderTikz(
+  cmds: TikzCommand[],
+  options: Pick<TikzExportOptions, "emitTkzSetup"> & { groupMarkAngles?: boolean } = {}
+): string {
   const setupUnits = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupUnits" }> => c.kind === "SetupUnits");
   const setupLabelScale = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLabelScale" }> => c.kind === "SetupLabelScale");
   const setupViewport = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupViewport" }> => c.kind === "SetupViewport");
@@ -1665,12 +1810,20 @@ export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions,
   const drawAngleLabels = cmds.filter((c): c is Extract<TikzCommand, { kind: "LabelAngle" }> => c.kind === "LabelAngle");
   const drawPoints = cmds.filter((c) => c.kind === "DrawPoints");
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint" || c.kind === "LabelAt");
+  const drawPointLabels = drawLabels.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
+  const drawOtherLabels = drawLabels.filter((c) => c.kind === "LabelAt");
   const hasGlowLabels = drawLabels.some(
     (c) => (c.kind === "LabelPoint" || c.kind === "LabelAt") && Boolean(c.useGlow)
   );
   const emitTkzSetup = options.emitTkzSetup ?? true;
+  const groupMarkAngles = options.groupMarkAngles ?? false;
 
   const out: string[] = [];
+  const pushSectionHeader = (title: string) => {
+    if (out.length > 0 && out[out.length - 1] !== "") out.push("");
+    out.push(title);
+    out.push("");
+  };
   const scale = setupUnits?.scale ?? 1;
   out.push(`\\begin{tikzpicture}[scale=${fmt(scale)},line cap=round,line join=round,>=triangle 45]`);
   if (hasGlowLabels) {
@@ -1709,7 +1862,7 @@ export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions,
     out.push(`\\tikzset{${style.styleName}/.style={${style.styleExpr}}}`);
   }
 
-  out.push("% Points");
+  pushSectionHeader("% Points");
   for (const cmd of pointsDefs) {
     assertTkzMacro("tkzDefPoints");
     const items = cmd.items.map((it) => `${fmt(it.x)}/${fmt(it.y)}/${it.name}`).join(", ");
@@ -1720,7 +1873,7 @@ export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions,
     out.push(`\\tkzDefPoint(${fmt(cmd.x)},${fmt(cmd.y)}){${cmd.name}}`);
   }
 
-  out.push("% Constructions");
+  pushSectionHeader("% Constructions");
   let interLCTmpIdx = 0;
   for (const cmd of constructions) {
     if (cmd.kind === "DefMidPoint") {
@@ -1865,9 +2018,10 @@ export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions,
     }
   }
 
-  out.push("% Draw objects");
+  pushSectionHeader("% Draw objects");
   let drawCircleRadiusTmpIdx = 0;
-  for (const cmd of drawObjects) {
+  for (let drawIdx = 0; drawIdx < drawObjects.length; drawIdx += 1) {
+    const cmd = drawObjects[drawIdx];
     if (cmd.kind === "DrawSegment") {
       assertTkzMacro("tkzDrawSegment");
       const opts = cmd.style ? `[${cmd.style}]` : "";
@@ -1920,6 +2074,22 @@ export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions,
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzFillAngle${opts}(${cmd.a},${cmd.b},${cmd.c})`);
     } else if (cmd.kind === "MarkAngle") {
+      const run: Array<Extract<TikzCommand, { kind: "MarkAngle" }>> = [cmd];
+      let scan = drawIdx + 1;
+      while (scan < drawObjects.length) {
+        const next = drawObjects[scan];
+        if (next.kind !== "MarkAngle") break;
+        if (next.a !== cmd.a || next.b !== cmd.b || next.c !== cmd.c) break;
+        run.push(next);
+        scan += 1;
+      }
+      const groupedTex = groupMarkAngles ? buildGroupedMarkAngleTex(run) : null;
+      if (groupedTex) {
+        assertAngleMacro("tkzMarkAngle", "Angle.mark");
+        out.push(groupedTex);
+        drawIdx = scan - 1;
+        continue;
+      }
       assertAngleMacro("tkzMarkAngle", "Angle.mark");
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzMarkAngle${opts}(${cmd.a},${cmd.b},${cmd.c})`);
@@ -1930,39 +2100,39 @@ export function renderTikz(cmds: TikzCommand[], options: Pick<TikzExportOptions,
     }
   }
 
-  out.push("% Draw points");
+  pushSectionHeader("% Draw points");
   for (const cmd of drawPoints) {
     if (cmd.points.length === 0) continue;
     assertTkzMacro("tkzDrawPoints");
     out.push(`\\tkzDrawPoints[${cmd.style}](${cmd.points.join(",")})`);
   }
 
-  out.push("% Labels");
   const shouldScaleLabels = Boolean(setupLabelScale && Math.abs(setupLabelScale.scale - 1) > 1e-9);
   if (shouldScaleLabels) {
     out.push(`\\begin{scope}[every node/.style={scale=${fmt(setupLabelScale!.scale)}}]`);
   }
-  for (const cmd of drawAngleLabels) {
-    assertAngleMacro("tkzLabelAngle", "Angle.label");
-    const opts = cmd.style ? `[${cmd.style}]` : "";
-    out.push(`\\tkzLabelAngle${opts}(${cmd.a},${cmd.b},${cmd.c}){$${escapeTikzText(cmd.text)}$}`);
-  }
-  for (const cmd of drawLabels) {
+  for (const cmd of drawPointLabels) {
     if (cmd.kind === "LabelPoints") {
       if (cmd.points.length === 0) continue;
       assertTkzMacro("tkzLabelPoints");
       out.push(`\\tkzLabelPoints(${cmd.points.join(",")})`);
       continue;
     }
-    if (cmd.kind === "LabelPoint") {
-      assertTkzMacro("tkzLabelPoint");
-      const opts = cmd.options ? `[${cmd.options}]` : "";
-      const labelText = cmd.useGlow
-        ? `\\gdLabelGlow{$${escapeTikzText(cmd.text)}$}`
-        : `$${escapeTikzText(cmd.text)}$`;
-      out.push(`\\tkzLabelPoint${opts}(${cmd.name}){${labelText}}`);
-      continue;
-    }
+    assertTkzMacro("tkzLabelPoint");
+    const opts = cmd.options ? `[${cmd.options}]` : "";
+    const labelText = cmd.useGlow
+      ? `\\gdLabelGlow{$${escapeTikzText(cmd.text)}$}`
+      : `$${escapeTikzText(cmd.text)}$`;
+    out.push(`\\tkzLabelPoint${opts}(${cmd.name}){${labelText}}`);
+  }
+
+  pushSectionHeader("% Labels");
+  for (const cmd of drawAngleLabels) {
+    assertAngleMacro("tkzLabelAngle", "Angle.label");
+    const opts = cmd.style ? `[${cmd.style}]` : "";
+    out.push(`\\tkzLabelAngle${opts}(${cmd.a},${cmd.b},${cmd.c}){$${escapeTikzText(cmd.text)}$}`);
+  }
+  for (const cmd of drawOtherLabels) {
     const opts = cmd.options ? `[${cmd.options}]` : "";
     const labelText = cmd.useGlow
       ? `\\gdLabelGlow{$${escapeTikzText(cmd.text)}$}`
@@ -1991,7 +2161,23 @@ export function exportTikz(scene: SceneModel): string {
 }
 
 export function exportTikzEfficient(scene: SceneModel): string {
-  const standard = exportTikz(scene);
+  const normalizedScene = normalizeSceneIntegrity(scene);
+  pointByIdCache.delete(normalizedScene);
+  pointWorldCache.delete(normalizedScene);
+  const standard = renderTikz(buildTikzIR(normalizedScene), { groupMarkAngles: true });
+  assertNoUnknownTkzMacro(standard);
+  return makeEfficientTikz(standard);
+}
+
+export function exportTikzEfficientWithOptions(scene: SceneModel, options: TikzExportOptions): string {
+  const normalizedScene = normalizeSceneIntegrity(scene);
+  pointByIdCache.delete(normalizedScene);
+  pointWorldCache.delete(normalizedScene);
+  const standard = renderTikz(buildTikzIR(normalizedScene, options), {
+    emitTkzSetup: options.emitTkzSetup,
+    groupMarkAngles: true,
+  });
+  assertNoUnknownTkzMacro(standard);
   return makeEfficientTikz(standard);
 }
 
