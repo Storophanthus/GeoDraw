@@ -292,6 +292,10 @@ const sceneDistSeg = evaluateNumberExpression(sceneDistanceParity, "Distance(sAB
 if (!sceneDistSeg.ok || Math.abs(sceneDistSeg.value - 0.2) > 1e-9) {
   throw new Error(`Scene Distance(sAB,O) mismatch: ${JSON.stringify(sceneDistSeg)}`);
 }
+const sceneScalarFn = evaluateNumberExpression(sceneDistanceParity, "sin(pi/2)+Distance(A,B)");
+if (!sceneScalarFn.ok || Math.abs(sceneScalarFn.value - 6) > 1e-9) {
+  throw new Error(`Scene scalar function parity mismatch: ${JSON.stringify(sceneScalarFn)}`);
+}
 
 const assignPoint = mustAssignObject("P = Point(1,2)", baseCtx, "P", "CreatePointXY");
 if (assignPoint.type !== "CreatePointXY" || assignPoint.x !== 1 || assignPoint.y !== 2) {

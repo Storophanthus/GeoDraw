@@ -3,6 +3,7 @@ import {
   type ScalarDistanceArg as DistanceArg,
   evaluateScalarDistanceArgs,
 } from "./scene/eval/scalarDistance";
+import { evaluateScalarExpressionWithRuntime } from "./scene/eval/scalarExpressionRuntime";
 
 const math = create(all, { number: "number", matrix: "Array", predictable: true });
 const MAX_INPUT_LENGTH = 300;
@@ -20,7 +21,6 @@ const ALLOWED_FUNCTIONS = new Set([
   "max",
   "pow",
 ]);
-const BASE_ALLOWED_SYMBOLS = new Set(["ans", "pi", "Pi", "PI", "e", "tau"]);
 const IDENT_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 export type Symbol =
@@ -96,109 +96,20 @@ function unwrapParenthesisNode(node: MathNode): MathNode {
   }
 }
 
-function ensureSafeNode(node: MathNode, allowedSymbols: Set<string>): string | null {
-  const queue: MathNode[] = [node];
-  while (queue.length > 0) {
-    const current = queue.pop();
-    if (!current) continue;
-
-    const anyNode = current as unknown as {
-      type?: string;
-      name?: string;
-      fn?: { name?: string };
-      op?: string;
-      args?: MathNode[];
-      content?: MathNode;
-    };
-
-    switch (anyNode.type) {
-      case "ConstantNode":
-      case "ParenthesisNode":
-        break;
-      case "SymbolNode":
-        if (!anyNode.name || !allowedSymbols.has(anyNode.name)) {
-          return `Unsupported symbol: ${anyNode.name ?? "unknown"}`;
-        }
-        break;
-      case "FunctionNode": {
-        const fnName = anyNode.fn?.name;
-        if (!fnName || !ALLOWED_FUNCTIONS.has(fnName)) {
-          return `Unsupported function: ${fnName ?? "unknown"}`;
-        }
-        break;
-      }
-      case "OperatorNode": {
-        const op = anyNode.op;
-        if (!["+", "-", "*", "/", "^"].includes(op ?? "")) {
-          return `Unsupported operator: ${op ?? "unknown"}`;
-        }
-        break;
-      }
-      default:
-        return `Unsupported expression node: ${anyNode.type ?? "unknown"}`;
-    }
-
-    const children = anyNode.args ?? [];
-    for (let i = 0; i < children.length; i += 1) {
-      if (children[i]) queue.push(children[i]);
-    }
-    if (anyNode.content) queue.push(anyNode.content);
-  }
-  return null;
-}
-
 function evaluateExpression(expr: string, ctx: ParseContext): EvalResult {
-  if (expr.length > MAX_INPUT_LENGTH) return { ok: false, error: "Input is too long" };
-  if (DISALLOWED_TOKEN_RE.test(expr)) return { ok: false, error: "Expression uses disallowed token" };
-
-  let node: MathNode;
-  try {
-    node = math.parse(expr);
-  } catch {
-    return { ok: false, error: "Invalid expression syntax" };
-  }
-
-  const allowedSymbols = new Set<string>(BASE_ALLOWED_SYMBOLS);
-  for (const key of ctx.scalarsByName.keys()) allowedSymbols.add(key);
-
-  const safe = ensureSafeNode(node, allowedSymbols);
-  if (safe) return { ok: false, error: safe };
-
-  const scope: Record<string, number | ((...args: number[]) => number)> = {
-    ans: ctx.ans ?? 0,
-    pi: Math.PI,
-    Pi: Math.PI,
-    PI: Math.PI,
-    e: Math.E,
-    tau: Math.PI * 2,
-    sin: Math.sin,
-    cos: Math.cos,
-    tan: Math.tan,
-    Sin: Math.sin,
-    Cos: Math.cos,
-    Tan: Math.tan,
-    sqrt: Math.sqrt,
-    abs: Math.abs,
-    min: Math.min,
-    max: Math.max,
-    pow: Math.pow,
-  };
-
-  for (const [name, value] of ctx.scalarsByName.entries()) {
-    scope[name] = value;
-  }
-
-  let value: unknown;
-  try {
-    value = node.evaluate(scope);
-  } catch {
-    return { ok: false, error: "Expression evaluation failed" };
-  }
-
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return { ok: false, error: "Expression must evaluate to a finite number" };
-  }
-  return { ok: true, value };
+  return evaluateScalarExpressionWithRuntime(expr, {
+    ans: ctx.ans,
+    getScalarValue: (name) => ctx.scalarsByName.get(name),
+    resolveDistanceArg: (argExprRaw) => {
+      let node: MathNode;
+      try {
+        node = math.parse(argExprRaw);
+      } catch {
+        return { ok: false, error: "Distance(...) arguments are invalid" };
+      }
+      return resolveDistanceArg(node, ctx);
+    },
+  });
 }
 
 function toScalarExprValue(value: number): ExprValue {
@@ -377,6 +288,8 @@ function evalPointExpressionNode(node: MathNode, ctx: ParseContext): { ok: true;
 }
 
 function evaluatePointOrScalarExpression(expr: string, ctx: ParseContext): { ok: true; value: ExprValue } | { ok: false; error: string } {
+  const scalar = evaluateExpression(expr, ctx);
+  if (scalar.ok) return { ok: true, value: toScalarExprValue(scalar.value) };
   if (expr.length > MAX_INPUT_LENGTH) return { ok: false, error: "Input is too long" };
   if (DISALLOWED_TOKEN_RE.test(expr)) return { ok: false, error: "Expression uses disallowed token" };
   let node: MathNode;

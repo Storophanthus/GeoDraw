@@ -2,6 +2,7 @@ import type { Vec2 } from "../geo/vec2";
 import type { NumberExpressionEvalResult } from "./eval/numericExpression";
 import {
   type AngleExpressionEvalResult,
+  buildNumberSymbolTable,
 } from "./eval/expressionEval";
 import {
   beginSceneEvalTick as beginSceneEvalTickCore,
@@ -14,12 +15,11 @@ import { objectIntersectionsWithOps } from "./eval/intersectionQueries";
 import { computeOrientedAngleRad } from "./eval/angleMath";
 import {
   evaluateAngleExpressionDegreesWithCtxInScene,
-  evaluateNumberExpressionWithCtxInScene,
 } from "./eval/numberExpressionEvaluators";
 import {
   type ScalarDistanceArg,
-  evaluateScalarDistanceArgs,
 } from "./eval/scalarDistance";
+import { evaluateScalarExpressionWithRuntime } from "./eval/scalarExpressionRuntime";
 import { evalNumberByIdWithCtxInScene } from "./eval/numberEvaluators";
 import {
   asCircleWithCtx,
@@ -1138,70 +1138,19 @@ function evaluateNumberExpressionWithCtx(
   ctx: SceneEvalContext,
   excludeNumberId?: string
 ): NumberExpressionEvalResult {
-  const distanceExpanded = substituteDistanceCallsInNumberExpr(exprRaw, scene, ctx);
-  if (!distanceExpanded.ok) return distanceExpanded;
-  return evaluateNumberExpressionWithCtxInScene(
-    distanceExpanded.expandedExpr,
-    {
-      numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
+  const scalarSymbols = buildNumberSymbolTable({
+    numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
+    getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
+    excludeNumberId,
+  });
+  return evaluateScalarExpressionWithRuntime(exprRaw, {
+    getScalarValue: (name) => scalarSymbols.get(name),
+    resolveDistanceArg: (argExprRaw) => {
+      const resolved = resolveSceneDistanceArg(argExprRaw, scene, ctx);
+      if (!resolved.ok) return resolved;
+      return { ok: true, value: resolved.arg };
     },
-    {
-      getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
-      excludeNumberId,
-    }
-  );
-}
-
-function substituteDistanceCallsInNumberExpr(
-  exprRaw: string,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { ok: true; expandedExpr: string } | { ok: false; error: string } {
-  const expr = exprRaw.trim();
-  if (!expr) return { ok: true, expandedExpr: expr };
-  let out = "";
-  let i = 0;
-  while (i < expr.length) {
-    const ch = expr[i];
-    if (/[A-Za-z_]/.test(ch)) {
-      let j = i + 1;
-      while (j < expr.length && /[A-Za-z0-9_]/.test(expr[j])) j += 1;
-      const ident = expr.slice(i, j);
-      let k = j;
-      while (k < expr.length && /\s/.test(expr[k])) k += 1;
-      if (ident.toLowerCase() === "distance" && expr[k] === "(") {
-        const close = findMatchingParenIndex(expr, k);
-        if (close < 0) return { ok: false, error: "Distance(...) has unmatched '('" };
-        const inner = expr.slice(k + 1, close);
-        const args = splitTopLevelCommaArgs(inner);
-        if (!args || args.length !== 2) return { ok: false, error: "Distance(...) expects 2 arguments" };
-        const dist = evalSceneDistanceArgsRaw(args[0], args[1], scene, ctx);
-        if (!dist.ok) return { ok: false, error: dist.error };
-        out += `(${formatNumberExprLiteral(dist.value)})`;
-        i = close + 1;
-        continue;
-      }
-      out += expr.slice(i, j);
-      i = j;
-      continue;
-    }
-    out += ch;
-    i += 1;
-  }
-  return { ok: true, expandedExpr: out };
-}
-
-function evalSceneDistanceArgsRaw(
-  leftRaw: string,
-  rightRaw: string,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { ok: true; value: number } | { ok: false; error: string } {
-  const left = resolveSceneDistanceArg(leftRaw, scene, ctx);
-  if (!left.ok) return left;
-  const right = resolveSceneDistanceArg(rightRaw, scene, ctx);
-  if (!right.ok) return right;
-  return evaluateScalarDistanceArgs(left.arg, right.arg);
+  });
 }
 
 function resolveSceneDistanceArg(
@@ -1259,27 +1208,6 @@ function findMatchingParenIndex(text: string, openIndex: number): number {
   return -1;
 }
 
-function splitTopLevelCommaArgs(text: string): string[] | null {
-  const args: string[] = [];
-  let depth = 0;
-  let start = 0;
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === "(") depth += 1;
-    else if (ch === ")") {
-      depth -= 1;
-      if (depth < 0) return null;
-    } else if (ch === "," && depth === 0) {
-      args.push(text.slice(start, i).trim());
-      start = i + 1;
-    }
-  }
-  if (depth !== 0) return null;
-  args.push(text.slice(start).trim());
-  if (args.some((a) => a.length === 0)) return null;
-  return args;
-}
-
 function stripOuterParens(text: string): string {
   let s = text.trim();
   while (s.startsWith("(") && s.endsWith(")")) {
@@ -1288,8 +1216,4 @@ function stripOuterParens(text: string): string {
     s = s.slice(1, -1).trim();
   }
   return s;
-}
-
-function formatNumberExprLiteral(value: number): string {
-  return Number(value.toPrecision(15)).toString();
 }
