@@ -1,4 +1,5 @@
 import { parseCommandInput, type ParseContext } from "../../CommandParser";
+import { evaluateNumberExpression, type SceneModel } from "../points";
 
 function mustExpr(input: string, ctx: ParseContext, expected: string) {
   const out = parseCommandInput(input, ctx);
@@ -218,6 +219,79 @@ mustAssignScalar("n_1 = 2.023242", baseCtx, "n_1", 2.023242);
 mustAssignScalar("r = 5*5", baseCtx, "r", 25);
 mustAssignScalar("r = Distance(A,B)", baseCtx, "r", 5);
 mustAssignScalar("d=Distance(A,B)^2 - Distance(B,C)*Distance(C,A)", baseCtx, "d", 13);
+
+const sceneDistanceParity: SceneModel = {
+  points: [
+    {
+      id: "pA",
+      kind: "free",
+      name: "A",
+      captionTex: "A",
+      visible: true,
+      showLabel: "name",
+      position: { x: 0, y: 0 },
+      style: {} as never,
+    },
+    {
+      id: "pB",
+      kind: "free",
+      name: "B",
+      captionTex: "B",
+      visible: true,
+      showLabel: "name",
+      position: { x: 3, y: 4 },
+      style: {} as never,
+    },
+    {
+      id: "pO",
+      kind: "free",
+      name: "O",
+      captionTex: "O",
+      visible: true,
+      showLabel: "name",
+      position: { x: 1, y: 1 },
+      style: {} as never,
+    },
+  ],
+  vectors: [],
+  segments: [
+    {
+      id: "sAB",
+      aId: "pA",
+      bId: "pB",
+      visible: true,
+      showLabel: false,
+      style: {} as never,
+    },
+  ],
+  lines: [
+    {
+      id: "lAB",
+      aId: "pA",
+      bId: "pB",
+      visible: true,
+      style: {} as never,
+    },
+  ],
+  circles: [],
+  polygons: [],
+  angles: [],
+  numbers: [],
+  textLabels: [],
+};
+
+const sceneDistAB = evaluateNumberExpression(sceneDistanceParity, "Distance(A,B)");
+if (!sceneDistAB.ok || Math.abs(sceneDistAB.value - 5) > 1e-9) {
+  throw new Error(`Scene Distance(A,B) mismatch: ${JSON.stringify(sceneDistAB)}`);
+}
+const sceneDistLine = evaluateNumberExpression(sceneDistanceParity, "Distance(O,lAB)");
+if (!sceneDistLine.ok || Math.abs(sceneDistLine.value - 0.2) > 1e-9) {
+  throw new Error(`Scene Distance(O,lAB) mismatch: ${JSON.stringify(sceneDistLine)}`);
+}
+const sceneDistSeg = evaluateNumberExpression(sceneDistanceParity, "Distance(sAB,O)");
+if (!sceneDistSeg.ok || Math.abs(sceneDistSeg.value - 0.2) > 1e-9) {
+  throw new Error(`Scene Distance(sAB,O) mismatch: ${JSON.stringify(sceneDistSeg)}`);
+}
 
 const assignPoint = mustAssignObject("P = Point(1,2)", baseCtx, "P", "CreatePointXY");
 if (assignPoint.type !== "CreatePointXY" || assignPoint.x !== 1 || assignPoint.y !== 2) {

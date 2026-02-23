@@ -1,5 +1,8 @@
 import { all, create, type MathNode } from "mathjs";
-import { projectPointToLine, projectPointToSegment } from "./geo/geometry";
+import {
+  type ScalarDistanceArg as DistanceArg,
+  evaluateScalarDistanceArgs,
+} from "./scene/eval/scalarDistance";
 
 const math = create(all, { number: "number", matrix: "Array", predictable: true });
 const MAX_INPUT_LENGTH = 300;
@@ -72,9 +75,6 @@ type ExprValue =
   | { kind: "point"; x: number; y: number };
 
 type EvalResult = { ok: true; value: number } | { ok: false; error: string };
-type DistanceArg =
-  | { kind: "point"; x: number; y: number }
-  | { kind: "lineLike"; finite: boolean; a: { x: number; y: number }; b: { x: number; y: number } };
 
 function formatNumber(value: number): string {
   if (!Number.isFinite(value)) return String(value);
@@ -319,7 +319,7 @@ function evalPointExpressionNode(node: MathNode, ctx: ParseContext): { ok: true;
       if (!left.ok) return { ok: false, error: left.error };
       const right = resolveDistanceArg(args[1], ctx);
       if (!right.ok) return { ok: false, error: right.error };
-      const value = evalDistanceArgs(left.value, right.value);
+      const value = evaluateScalarDistanceArgs(left.value, right.value);
       if (!value.ok) return { ok: false, error: value.error };
       return { ok: true, value: toScalarExprValue(value.value) };
     }
@@ -491,31 +491,6 @@ function resolveDistanceArg(node: MathNode, ctx: ParseContext): { ok: true; valu
   return { ok: true, value: { kind: "point", x: pointOrScalar.value.x, y: pointOrScalar.value.y } };
 }
 
-function evalDistanceArgs(a: DistanceArg, b: DistanceArg): EvalResult {
-  if (a.kind === "point" && b.kind === "point") {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    return { ok: true, value: Math.hypot(dx, dy) };
-  }
-  if (a.kind === "point" && b.kind === "lineLike") {
-    return {
-      ok: true,
-      value: b.finite
-        ? projectPointToSegment(a, b.a, b.b).distance
-        : projectPointToLine(a, b.a, b.b).distance,
-    };
-  }
-  if (a.kind === "lineLike" && b.kind === "point") {
-    return {
-      ok: true,
-      value: a.finite
-        ? projectPointToSegment(b, a.a, a.b).distance
-        : projectPointToLine(b, a.a, a.b).distance,
-    };
-  }
-  return { ok: false, error: "Distance(Line/Segment, Line/Segment) is not supported" };
-}
-
 function parseDistanceNumeric(args: string[], ctx: ParseContext): EvalResult {
   if (args.length !== 2) return { ok: false, error: "Distance(...) expects 2 arguments" };
   let leftNode: MathNode;
@@ -530,7 +505,7 @@ function parseDistanceNumeric(args: string[], ctx: ParseContext): EvalResult {
   if (!left.ok) return { ok: false, error: left.error };
   const right = resolveDistanceArg(rightNode, ctx);
   if (!right.ok) return { ok: false, error: right.error };
-  return evalDistanceArgs(left.value, right.value);
+  return evaluateScalarDistanceArgs(left.value, right.value);
 }
 
 function parseDistanceResult(args: string[], ctx: ParseContext): ParseResult {

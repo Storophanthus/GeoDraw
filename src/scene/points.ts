@@ -16,6 +16,10 @@ import {
   evaluateAngleExpressionDegreesWithCtxInScene,
   evaluateNumberExpressionWithCtxInScene,
 } from "./eval/numberExpressionEvaluators";
+import {
+  type ScalarDistanceArg,
+  evaluateScalarDistanceArgs,
+} from "./eval/scalarDistance";
 import { evalNumberByIdWithCtxInScene } from "./eval/numberEvaluators";
 import {
   asCircleWithCtx,
@@ -1197,28 +1201,14 @@ function evalSceneDistanceArgsRaw(
   if (!left.ok) return left;
   const right = resolveSceneDistanceArg(rightRaw, scene, ctx);
   if (!right.ok) return right;
-
-  if (left.arg.kind === "point" && right.arg.kind === "point") {
-    return { ok: true, value: Math.hypot(left.arg.x - right.arg.x, left.arg.y - right.arg.y) };
-  }
-  if (left.arg.kind === "point" && right.arg.kind === "lineLike") {
-    return { ok: true, value: pointToLineLikeDistance(left.arg, right.arg) };
-  }
-  if (left.arg.kind === "lineLike" && right.arg.kind === "point") {
-    return { ok: true, value: pointToLineLikeDistance(right.arg, left.arg) };
-  }
-  return { ok: false, error: "Distance(Line/Segment, Line/Segment) is not supported" };
+  return evaluateScalarDistanceArgs(left.arg, right.arg);
 }
-
-type SceneDistanceArg =
-  | { kind: "point"; x: number; y: number }
-  | { kind: "lineLike"; a: Vec2; b: Vec2; finite: boolean };
 
 function resolveSceneDistanceArg(
   raw: string,
   scene: SceneModel,
   ctx: SceneEvalContext
-): { ok: true; arg: SceneDistanceArg } | { ok: false; error: string } {
+): { ok: true; arg: ScalarDistanceArg } | { ok: false; error: string } {
   const token = stripOuterParens(raw.trim());
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) {
     return { ok: false, error: "Distance(...) in numeric expressions expects point/line/segment identifiers" };
@@ -1253,21 +1243,6 @@ function resolveSceneDistanceArg(
   }
 
   return { ok: false, error: `Unknown object in Distance(...): ${token}` };
-}
-
-function pointToLineLikeDistance(
-  p: { x: number; y: number },
-  line: { a: Vec2; b: Vec2; finite: boolean }
-): number {
-  const dx = line.b.x - line.a.x;
-  const dy = line.b.y - line.a.y;
-  const len2 = dx * dx + dy * dy;
-  if (len2 <= 1e-18) return Math.hypot(p.x - line.a.x, p.y - line.a.y);
-  let t = ((p.x - line.a.x) * dx + (p.y - line.a.y) * dy) / len2;
-  if (line.finite) t = Math.max(0, Math.min(1, t));
-  const qx = line.a.x + t * dx;
-  const qy = line.a.y + t * dy;
-  return Math.hypot(p.x - qx, p.y - qy);
 }
 
 function findMatchingParenIndex(text: string, openIndex: number): number {
