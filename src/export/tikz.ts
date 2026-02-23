@@ -94,6 +94,7 @@ export type TikzCommand =
     secondName: string;
   }
   | { kind: "DefAngleBisectorLine"; auxName: string; a: string; b: string; c: string }
+  | { kind: "DefTriangleCenterPoint"; name: string; centerKind: "incenter" | "orthocenter" | "centroid"; a: string; b: string; c: string }
   | { kind: "DefCircleCircumCenter"; centerName: string; a: string; b: string; c: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
   | { kind: "DefMidPoint"; name: string; a: string; b: string }
@@ -533,6 +534,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         name,
         x: world.x,
         y: world.y,
+      });
+      definedPointIds.add(point.id);
+    } else if (point.kind === "triangleCenter") {
+      resolvePoint(point.aId);
+      resolvePoint(point.bId);
+      resolvePoint(point.cId);
+      constructions.push({
+        kind: "DefTriangleCenterPoint",
+        name,
+        centerKind: point.centerKind,
+        a: mustName(pointName, point.aId),
+        b: mustName(pointName, point.bId),
+        c: mustName(pointName, point.cId),
       });
       definedPointIds.add(point.id);
     } else if (point.kind === "midpointPoints") {
@@ -1951,6 +1965,13 @@ export function renderTikz(
       assertAngleBisectorMacro("tkzDefTriangleCenter");
       assertTkzMacro("tkzGetPoint");
       out.push(`\\tkzDefTriangleCenter[in](${cmd.a},${cmd.b},${cmd.c}) \\tkzGetPoint{${cmd.auxName}}`);
+      continue;
+    }
+    if (cmd.kind === "DefTriangleCenterPoint") {
+      assertTkzMacro("tkzDefTriangleCenter");
+      assertTkzMacro("tkzGetPoint");
+      const mode = cmd.centerKind === "incenter" ? "in" : cmd.centerKind === "centroid" ? "centroid" : "ortho";
+      out.push(`\\tkzDefTriangleCenter[${mode}](${cmd.a},${cmd.b},${cmd.c}) \\tkzGetPoint{${cmd.name}}`);
       continue;
     }
     if (cmd.kind === "DefCircleCircumCenter") {
@@ -3872,25 +3893,11 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
       dyPx = dir.y * minClearPx;
     }
 
-    let rawDxPx = point.style.labelOffsetPx.x;
-    let rawDyPx = point.style.labelOffsetPx.y;
-    if (point.showLabel === "caption") {
-      // Caption labels are rendered in canvas as top-left anchored HTML overlays.
-      // Convert stored top-left offset to an approximate label-center shift so
-      // anchor direction matches the visual quadrant.
-      const caption = point.captionTex || point.name || "";
-      const fontPx = Math.max(6, Math.min(48, point.style.labelFontPx));
-      const boxW = Math.max(18, caption.length * (fontPx * 0.58) + 8);
-      const boxH = Math.max(16, fontPx * 1.2);
-      rawDxPx += boxW * 0.5;
-      // KaTeX label overlay is top-left anchored; visual glyph center sits lower
-      // than geometric half-height. Subscripts/fractions lower perceived center
-      // further, so include a conservative TeX-descender bias.
-      const subscriptCount = (caption.match(/_/g) ?? []).length;
-      const hasFraction = /\\frac|\\dfrac|\\tfrac/.test(caption);
-      const texDescenderBiasPx = subscriptCount * fontPx * 0.55 + (hasFraction ? fontPx * 0.35 : 0);
-      rawDyPx += boxH * 0.95 + texDescenderBiasPx;
-    }
+    // Keep caption labels on the same quadrant rule as name labels.
+    // (Canvas captions are top-left anchored, but export point labels are
+    // compass-positioned tkz labels; use the raw stored drag offset directly.)
+    const rawDxPx = point.style.labelOffsetPx.x;
+    const rawDyPx = point.style.labelOffsetPx.y;
 
     result.set(point.id, {
       xShiftPt: dxPx * ptPerPxForShift,

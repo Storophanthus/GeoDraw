@@ -22,7 +22,7 @@ import { CanvasLabelsLayer } from "./CanvasLabelsLayer";
 import { renderCanvasFrame } from "./renderFrame";
 import { useCanvasInteractionController, type PointerState } from "./useCanvasInteractionController";
 import { isValidTarget } from "../tools/toolClick";
-import { applyDilationToObject, applyReflectionToObject, applyTranslationToObject } from "../tools/objectTransforms";
+import { applyDilationToObject, applyReflectionToObject, applyRotationToObject, applyTranslationToObject } from "../tools/objectTransforms";
 import { snapWorldToRectGrid } from "../render/rectGrid";
 import type { PendingPreviewTheme } from "./previews/pendingPreview";
 
@@ -228,6 +228,26 @@ export function CanvasView() {
         applyTranslationToObject(source, fromId, toId, {
           scene,
           createPointByTranslation,
+          createPointByRotation,
+          createPointByDilation,
+          createPointByReflection,
+          createPointOnLine,
+          createSegment,
+          createLine,
+          createAngleBisectorLine,
+          createCircle,
+          createCircleThreePoint,
+          createCircleFixedRadius,
+          createPolygon,
+          createAngle,
+          createSector,
+          setObjectVisibility,
+        }),
+      transformObjectByRotation: (source, centerId, angleExpr, direction) =>
+        applyRotationToObject(source, centerId, angleExpr, direction, {
+          scene,
+          createPointByTranslation,
+          createPointByRotation,
           createPointByDilation,
           createPointByReflection,
           createPointOnLine,
@@ -246,6 +266,7 @@ export function CanvasView() {
         applyDilationToObject(source, centerId, factorExpr, {
           scene,
           createPointByTranslation,
+          createPointByRotation,
           createPointByDilation,
           createPointByReflection,
           createPointOnLine,
@@ -264,6 +285,7 @@ export function CanvasView() {
         applyReflectionToObject(source, axis, {
           scene,
           createPointByTranslation,
+          createPointByRotation,
           createPointByDilation,
           createPointByReflection,
           createPointOnLine,

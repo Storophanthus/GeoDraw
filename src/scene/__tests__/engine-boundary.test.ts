@@ -172,6 +172,9 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     transformObjectByTranslation() {
       return null;
     },
+    transformObjectByRotation() {
+      return null;
+    },
     transformObjectByDilation() {
       return null;
     },

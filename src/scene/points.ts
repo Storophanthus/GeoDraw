@@ -2,7 +2,6 @@ import type { Vec2 } from "../geo/vec2";
 import type { NumberExpressionEvalResult } from "./eval/numericExpression";
 import {
   type AngleExpressionEvalResult,
-  buildNumberSymbolTable,
 } from "./eval/expressionEval";
 import {
   beginSceneEvalTick as beginSceneEvalTickCore,
@@ -16,10 +15,7 @@ import { computeOrientedAngleRad } from "./eval/angleMath";
 import {
   evaluateAngleExpressionDegreesWithCtxInScene,
 } from "./eval/numberExpressionEvaluators";
-import {
-  type ScalarDistanceArg,
-} from "./eval/scalarDistance";
-import { evaluateScalarExpressionWithRuntime } from "./eval/scalarExpressionRuntime";
+import { evaluateSceneScalarNumberExpression } from "./eval/sceneScalarExpressionAdapter";
 import { evalNumberByIdWithCtxInScene } from "./eval/numberEvaluators";
 import {
   asCircleWithCtx,
@@ -490,6 +486,24 @@ export type CircleCenterPoint = {
   style: PointStyle;
 };
 
+export type TriangleCenterKind = "incenter" | "orthocenter" | "centroid";
+
+export type TriangleCenterPoint = {
+  id: string;
+  kind: "triangleCenter";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  centerKind: TriangleCenterKind;
+  aId: string;
+  bId: string;
+  cId: string;
+  style: PointStyle;
+};
+
 export type GeometryObjectRef =
   | { type: "line"; id: string }
   | { type: "segment"; id: string }
@@ -608,6 +622,7 @@ export type ScenePoint =
   | PointByDilation
   | PointByReflection
   | CircleCenterPoint
+  | TriangleCenterPoint
   | IntersectionPoint
   | LineLikeIntersectionPoint
   | CircleLineIntersectionPoint
@@ -790,6 +805,15 @@ export type SceneNumberConstant = {
   value: number;
 };
 
+export type SceneNumberSlider = {
+  kind: "slider";
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  sliderMode?: "real" | "degree" | "radian";
+};
+
 export type SceneNumberDistancePoints = {
   kind: "distancePoints";
   aId: string;
@@ -829,6 +853,7 @@ export type SceneNumberExpression = {
 
 export type SceneNumberDefinition =
   | SceneNumberConstant
+  | SceneNumberSlider
   | SceneNumberDistancePoints
   | SceneNumberSegmentLength
   | SceneNumberCircleRadius
@@ -1138,82 +1163,19 @@ function evaluateNumberExpressionWithCtx(
   ctx: SceneEvalContext,
   excludeNumberId?: string
 ): NumberExpressionEvalResult {
-  const scalarSymbols = buildNumberSymbolTable({
+  return evaluateSceneScalarNumberExpression({
+    exprRaw,
     numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
-    getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
+    points: scene.points.map((p) => ({ id: p.id, name: p.name })),
+    lines: scene.lines.map((l) => ({ id: l.id, labelText: l.labelText })),
+    segments: scene.segments.map((s) => ({ id: s.id, aId: s.aId, bId: s.bId, labelText: s.labelText })),
     excludeNumberId,
-  });
-  return evaluateScalarExpressionWithRuntime(exprRaw, {
-    getScalarValue: (name) => scalarSymbols.get(name),
-    resolveDistanceArg: (argExprRaw) => {
-      const resolved = resolveSceneDistanceArg(argExprRaw, scene, ctx);
-      if (!resolved.ok) return resolved;
-      return { ok: true, value: resolved.arg };
+    getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
+    getPointWorldById: (pointId) => getPointWorldById(pointId, scene, ctx),
+    resolveLineAnchors: (lineId) => {
+      const line = ctx.lineById.get(lineId);
+      if (!line) return null;
+      return resolveLineAnchors(line, scene, ctx);
     },
   });
-}
-
-function resolveSceneDistanceArg(
-  raw: string,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { ok: true; arg: ScalarDistanceArg } | { ok: false; error: string } {
-  const token = stripOuterParens(raw.trim());
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) {
-    return { ok: false, error: "Distance(...) in numeric expressions expects point/line/segment identifiers" };
-  }
-
-  const point =
-    scene.points.find((p) => p.name === token) ??
-    scene.points.find((p) => p.id === token);
-  if (point) {
-    const world = getPointWorldById(point.id, scene, ctx);
-    if (!world) return { ok: false, error: `Unknown point geometry: ${token}` };
-    return { ok: true, arg: { kind: "point", x: world.x, y: world.y } };
-  }
-
-  const line =
-    scene.lines.find((l) => l.id === token) ??
-    scene.lines.find((l) => (l.labelText?.trim() || "") === token);
-  if (line) {
-    const anchors = resolveLineAnchors(line, scene, ctx);
-    if (!anchors) return { ok: false, error: `Unknown line geometry: ${token}` };
-    return { ok: true, arg: { kind: "lineLike", a: anchors.a, b: anchors.b, finite: false } };
-  }
-
-  const seg =
-    scene.segments.find((s) => s.id === token) ??
-    scene.segments.find((s) => (s.labelText?.trim() || "") === token);
-  if (seg) {
-    const a = getPointWorldById(seg.aId, scene, ctx);
-    const b = getPointWorldById(seg.bId, scene, ctx);
-    if (!a || !b) return { ok: false, error: `Unknown segment geometry: ${token}` };
-    return { ok: true, arg: { kind: "lineLike", a, b, finite: true } };
-  }
-
-  return { ok: false, error: `Unknown object in Distance(...): ${token}` };
-}
-
-function findMatchingParenIndex(text: string, openIndex: number): number {
-  let depth = 0;
-  for (let i = openIndex; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === "(") depth += 1;
-    else if (ch === ")") {
-      depth -= 1;
-      if (depth === 0) return i;
-      if (depth < 0) return -1;
-    }
-  }
-  return -1;
-}
-
-function stripOuterParens(text: string): string {
-  let s = text.trim();
-  while (s.startsWith("(") && s.endsWith(")")) {
-    const close = findMatchingParenIndex(s, 0);
-    if (close !== s.length - 1) break;
-    s = s.slice(1, -1).trim();
-  }
-  return s;
 }

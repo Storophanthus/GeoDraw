@@ -1,3 +1,4 @@
+import { distance } from "../../geo/geometry";
 import type { Vec2 } from "../../geo/vec2";
 import type {
   CircleCircleIntersectionPoint,
@@ -16,6 +17,8 @@ import {
 } from "./intersectionAssignments";
 import { circleLinePairAssignmentKey, genericIntersectionPairKey, sameObjectPair } from "./intersectionUtils";
 
+const ROOT_EPS = 1e-6;
+
 export function resolveCircleLinePairAssignmentsInScene(
   scenePoints: ScenePoint[],
   circleId: string,
@@ -25,6 +28,7 @@ export function resolveCircleLinePairAssignmentsInScene(
     getCached: (key: string) => Map<string, Vec2 | null> | undefined;
     setCached: (key: string, value: Map<string, Vec2 | null>) => void;
     getExcludedPointWorld: (pointId: string) => Vec2 | null;
+    getCachedPointWorld: (pointId: string) => Vec2 | null;
     getPreviousStablePoint: (pointId: string) => Vec2 | null;
     rememberStablePoint: (pointId: string, value: Vec2) => void;
   }
@@ -39,10 +43,24 @@ export function resolveCircleLinePairAssignmentsInScene(
     if (item.circleId !== circleId || item.lineId !== lineId) continue;
     pairPoints.push(item as CircleLineIntersectionPoint);
   }
+  let occupiedByOtherPoints: [boolean, boolean] | undefined;
+  if (branches.length === 2 && pairPoints.length > 0) {
+    const pairIds = new Set(pairPoints.map((p) => p.id));
+    occupiedByOtherPoints = [false, false];
+    for (const item of scenePoints) {
+      if (pairIds.has(item.id)) continue;
+      const world = ops.getCachedPointWorld(item.id);
+      if (!world) continue;
+      if (!occupiedByOtherPoints[0] && distance(world, branches[0].point) <= ROOT_EPS) occupiedByOtherPoints[0] = true;
+      if (!occupiedByOtherPoints[1] && distance(world, branches[1].point) <= ROOT_EPS) occupiedByOtherPoints[1] = true;
+      if (occupiedByOtherPoints[0] && occupiedByOtherPoints[1]) break;
+    }
+  }
   const out = assignCircleLinePairPoints(pairPoints, branches, {
     getExcludedPointWorld: ops.getExcludedPointWorld,
     getPreviousStablePoint: ops.getPreviousStablePoint,
     rememberStablePoint: ops.rememberStablePoint,
+    occupiedByOtherPoints,
   });
   ops.setCached(key, out);
   return out;

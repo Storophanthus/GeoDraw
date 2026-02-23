@@ -29,6 +29,7 @@ function makeHarness(activeTool: ActiveTool): {
   getPending: () => PendingSelection;
   logs: {
     translate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; fromId: string; toId: string }>;
+    rotate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; angleExpr: string; direction: "CCW" | "CW" }>;
     dilate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; factorExpr: string }>;
     reflect: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; axis: { type: "line" | "segment"; id: string } }>;
   };
@@ -36,6 +37,7 @@ function makeHarness(activeTool: ActiveTool): {
   let pending: PendingSelection = null;
   const logs = {
     translate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; fromId: string; toId: string }>,
+    rotate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; angleExpr: string; direction: "CCW" | "CW" }>,
     dilate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; factorExpr: string }>,
     reflect: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; axis: { type: "line" | "segment"; id: string } }>,
   };
@@ -128,6 +130,10 @@ function makeHarness(activeTool: ActiveTool): {
     transformObjectByTranslation(source, fromId, toId) {
       logs.translate.push({ source, fromId, toId });
       return "obj_t";
+    },
+    transformObjectByRotation(source, centerId, angleExpr, direction) {
+      logs.rotate.push({ source, centerId, angleExpr, direction });
+      return "obj_rot";
     },
     transformObjectByDilation(source, centerId, factorExpr) {
       logs.dilate.push({ source, centerId, factorExpr });
@@ -231,6 +237,24 @@ function makeHarness(activeTool: ActiveTool): {
       h.logs.translate[0].source.id === "lAB",
     "Translate should preserve line source identity."
   );
+}
+
+{
+  const h = makeHarness("rotate");
+  h.click({ hitObject: { type: "polygon", id: "poly1" } });
+  const step2 = h.getPending();
+  assert(!!step2 && step2.tool === "rotate" && step2.step === 2 && step2.source.id === "poly1", "Rotate step 1 should pick source object.");
+  h.click({ hitObject: { type: "point", id: "pO" }, hitPointId: "pO" });
+  assert(h.logs.rotate.length === 1, "Rotate should invoke object transform once.");
+  assert(
+    h.logs.rotate[0].source.type === "polygon" &&
+      h.logs.rotate[0].source.id === "poly1" &&
+      h.logs.rotate[0].centerId === "pO" &&
+      h.logs.rotate[0].angleExpr === "30+15" &&
+      h.logs.rotate[0].direction === "CW",
+    "Rotate should call transformObjectByRotation(polygon, O, angleExpr, direction)."
+  );
+  assert(h.getPending() === null, "Rotate should clear pending state.");
 }
 
 {

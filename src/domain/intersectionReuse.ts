@@ -81,23 +81,10 @@ export function createStableLineCircleIntersectionPoint(
     branchIndex = d1 < d0 ? 1 : 0;
   }
 
-  let excludePointId: string | undefined;
-  const endpointCandidates: Array<{ id: string; world: Vec2 }> = [];
-  const aOnCircle = Math.abs(distance(a, center) - radius) <= 1e-6;
-  const bOnCircle = Math.abs(distance(b, center) - radius) <= 1e-6;
-  const endpointIds = getLineEndpointPointIds(line);
-  if (aOnCircle && endpointIds[0]) endpointCandidates.push({ id: endpointIds[0], world: a });
-  if (bOnCircle && endpointIds[1]) endpointCandidates.push({ id: endpointIds[1], world: b });
-
-  if (branches.length >= 2 && endpointCandidates.length === 1) {
-    const endpoint = endpointCandidates[0];
-    const chosen = branches[branchIndex].point;
-    const other = branches[branchIndex === 0 ? 1 : 0].point;
-    const ROOT_EPS = 1e-6;
-    if (distance(chosen, endpoint.world) > ROOT_EPS && distance(other, endpoint.world) <= ROOT_EPS) {
-      excludePointId = endpoint.id;
-    }
-  }
+  const excludePointId =
+    branches.length >= 2
+      ? resolveLineCircleExcludePointId(state.scene, line, center, radius, branches, branchIndex)
+      : undefined;
 
   const used = new Set(state.scene.points.map((point) => point.name));
   let idx = 0;
@@ -251,25 +238,53 @@ function resolveLineCircleTarget(
   const d1 = distance(branches[1].point, preferredWorld);
   const branchIndex: 0 | 1 = d1 < d0 ? 1 : 0;
   const chosen = branches[branchIndex].point;
+  const excludePointId = resolveLineCircleExcludePointId(state.scene, line, center, radius, branches, branchIndex);
+
+  return { world: chosen, excludePointId };
+}
+
+function resolveLineCircleExcludePointId(
+  scene: SceneModel,
+  line: SceneModel["lines"][number],
+  center: Vec2,
+  radius: number,
+  branches: Array<{ point: Vec2; t: number }>,
+  branchIndex: 0 | 1
+): string | undefined {
+  if (branches.length < 2) return undefined;
+  const ROOT_EPS = 1e-6;
+  const chosen = branches[branchIndex].point;
   const other = branches[branchIndex === 0 ? 1 : 0].point;
 
+  // First preference: explicit line endpoint that lies on the circle.
   const endpointCandidates: Array<{ id: string; world: Vec2 }> = [];
-  const aOnCircle = Math.abs(distance(a, center) - radius) <= 1e-6;
-  const bOnCircle = Math.abs(distance(b, center) - radius) <= 1e-6;
-  const endpointIds = getLineEndpointPointIds(line);
-  if (aOnCircle && endpointIds[0]) endpointCandidates.push({ id: endpointIds[0], world: a });
-  if (bOnCircle && endpointIds[1]) endpointCandidates.push({ id: endpointIds[1], world: b });
-
-  let excludePointId: string | undefined;
-  if (endpointCandidates.length === 1) {
-    const endpoint = endpointCandidates[0];
-    const ROOT_EPS = 1e-6;
-    if (distance(chosen, endpoint.world) > ROOT_EPS && distance(other, endpoint.world) <= ROOT_EPS) {
-      excludePointId = endpoint.id;
+  const a = branches[0].t <= branches[1].t ? branches[0].point : branches[0].point; // placeholder no-op for local naming clarity
+  void a;
+  const anchors = getLineWorldAnchors(line, scene);
+  const la = anchors?.a ?? null;
+  const lb = anchors?.b ?? null;
+  if (la && lb) {
+    const aOnCircle = Math.abs(distance(la, center) - radius) <= ROOT_EPS;
+    const bOnCircle = Math.abs(distance(lb, center) - radius) <= ROOT_EPS;
+    const endpointIds = getLineEndpointPointIds(line);
+    if (aOnCircle && endpointIds[0]) endpointCandidates.push({ id: endpointIds[0], world: la });
+    if (bOnCircle && endpointIds[1]) endpointCandidates.push({ id: endpointIds[1], world: lb });
+    if (endpointCandidates.length === 1) {
+      const endpoint = endpointCandidates[0];
+      if (distance(chosen, endpoint.world) > ROOT_EPS && distance(other, endpoint.world) <= ROOT_EPS) {
+        return endpoint.id;
+      }
     }
   }
 
-  return { world: chosen, excludePointId };
+  // Fallback: any existing point already occupying the opposite root (e.g. the known first intersection I).
+  for (const point of scene.points) {
+    const world = getPointWorldPos(point, scene);
+    if (!world) continue;
+    if (distance(chosen, world) <= ROOT_EPS) continue;
+    if (distance(other, world) <= ROOT_EPS) return point.id;
+  }
+  return undefined;
 }
 
 function sameObjectPair(

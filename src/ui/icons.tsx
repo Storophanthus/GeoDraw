@@ -77,6 +77,14 @@ export const IconTranslate = createIcon(() => (
     </>
 ), "IconTranslate");
 
+export const IconRotate = createIcon(() => (
+    <>
+        <path d="M7 8a7.5 7.5 0 1 1 -0.2 8.9" strokeWidth={2} />
+        <path d="M7 8 H12 M7 8 V13" strokeWidth={2} />
+        <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" />
+    </>
+), "IconRotate");
+
 export const IconReflect = createIcon(() => (
     <>
         <line x1="3" y1="21" x2="21" y2="3" strokeWidth={2.2} />

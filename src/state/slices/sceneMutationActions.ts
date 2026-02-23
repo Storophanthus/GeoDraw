@@ -14,6 +14,7 @@ import {
   resolveObjectLabelText,
 } from "../../scene/objectLabels";
 import { applyDeletion, collectCascadeDelete, isSelectedObjectAlive } from "../../domain/geometryGraph";
+import { isValidNumberDefinition } from "../../domain/numberDefinitions";
 import { rebuildRightAngleProvenance } from "../../domain/rightAngleProvenance";
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
@@ -45,6 +46,7 @@ export function createSceneMutationActions({
   | "updateSelectedCircleFields"
   | "updateSelectedPolygonFields"
   | "updateSelectedAngleFields"
+  | "updateSelectedNumberDefinition"
   | "updateSelectedTextLabelFields"
   | "updateSelectedTextLabelStyle"
   | "setObjectVisibility"
@@ -546,6 +548,30 @@ export function createSceneMutationActions({
             angles: prev.scene.angles.map((angle) =>
               angle.id === prev.selectedObject!.id ? { ...angle, ...next } : angle
             ),
+          },
+        };
+      });
+    },
+
+    updateSelectedNumberDefinition(nextDefinition) {
+      setState((prev) => {
+        if (prev.selectedObject?.type !== "number") return prev;
+        if (!isValidNumberDefinition(nextDefinition, prev.scene)) return prev;
+        let changed = false;
+        const nextNumbers = prev.scene.numbers.map((num) => {
+          if (num.id !== prev.selectedObject?.id) return num;
+          changed = true;
+          return {
+            ...num,
+            definition: nextDefinition,
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            numbers: nextNumbers,
           },
         };
       });

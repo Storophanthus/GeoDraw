@@ -12,6 +12,7 @@ import type {
   ScenePoint,
   SceneTextLabelStyle,
   ShowLabelMode,
+  TriangleCenterKind,
 } from "../../scene/points";
 import type { Camera, Viewport } from "../../view/camera";
 import type {
@@ -26,6 +27,7 @@ export type ActiveTool =
   | "move"
   | "point"
   | "translate"
+  | "rotate"
   | "reflect"
   | "dilate"
   | "copyStyle"
@@ -119,6 +121,11 @@ export type PendingSelection =
   }
   | {
     tool: "reflect";
+    step: 2;
+    source: TransformableObjectRef;
+  }
+  | {
+    tool: "rotate";
     step: 2;
     source: TransformableObjectRef;
   }
@@ -341,6 +348,7 @@ export type GeoActions = {
   createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
   createPointByReflection: (pointId: string, axis: LineLikeObjectRef) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
+  createTriangleCenterPoint: (centerKind: TriangleCenterKind, aId: string, bId: string, cId: string) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createNumber: (definition: SceneNumberDefinition, preferredName?: string) => string | null;
   createTextLabel: (world: Vec2) => string;
@@ -396,6 +404,7 @@ export type GeoActions = {
     next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
   ) => void;
   updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;
+  updateSelectedNumberDefinition: (next: SceneNumberDefinition) => void;
   updateSelectedTextLabelFields: (
     next: Partial<Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld">>
   ) => void;

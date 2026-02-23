@@ -31,6 +31,7 @@ import {
   IconSidebarPanelRight,
   IconTangent,
   IconTranslate,
+  IconRotate,
   IconReflect,
   IconDilate,
   IconExportClipPolygon,
@@ -53,6 +54,7 @@ const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   move: { icon: IconMove, tooltip: "Move / Select (V)", ariaLabel: "Move tool" },
   point: { icon: IconPoint, tooltip: "Point (P)", ariaLabel: "Point tool" },
   translate: { icon: IconTranslate, tooltip: "Translate Object", ariaLabel: "Translate tool" },
+  rotate: { icon: IconRotate, tooltip: "Rotate Object", ariaLabel: "Rotate tool" },
   reflect: { icon: IconReflect, tooltip: "Reflect Object", ariaLabel: "Reflect tool" },
   dilate: { icon: IconDilate, tooltip: "Dilate Object", ariaLabel: "Dilate tool" },
   copyStyle: { icon: IconCopyStyle, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
@@ -82,7 +84,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "SHAPES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon", "regular_polygon"] },
-  { id: "transform", label: "TRANSFORM", tools: ["translate", "reflect", "dilate"] },
+  { id: "transform", label: "TRANSFORM", tools: ["translate", "rotate", "reflect", "dilate"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle", "label"] },
 ];
 

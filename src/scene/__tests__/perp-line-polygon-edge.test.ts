@@ -195,6 +195,9 @@ const io: ConstructClickIo = {
   transformObjectByTranslation() {
     return null;
   },
+  transformObjectByRotation() {
+    return null;
+  },
   transformObjectByDilation() {
     return null;
   },

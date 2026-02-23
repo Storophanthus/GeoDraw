@@ -18,6 +18,7 @@ import type {
   SceneModel,
   ScenePoint,
   LineLikeIntersectionPoint,
+  TriangleCenterPoint,
 } from "../points";
 import type { SceneEvalContext } from "./sceneContextBuilder";
 import type { AngleExpressionEvalResult } from "./expressionEval";
@@ -40,6 +41,7 @@ import {
   evalPointOnCirclePoint,
   evalPointOnLinePoint,
   evalPointOnSegmentPoint,
+  evalTriangleCenterPointPoint,
 } from "./pointKindEvaluators";
 
 export type PointEvalDispatchOps = {
@@ -108,6 +110,7 @@ export function evalPointUnchecked(
   if (point.kind === "pointByDilation") return evalPointByDilation(point, scene, ctx, ops);
   if (point.kind === "pointByReflection") return evalPointByReflection(point, scene, ctx, ops);
   if (point.kind === "circleCenter") return evalCircleCenterPoint(point, scene, ctx, ops);
+  if (point.kind === "triangleCenter") return evalTriangleCenterPoint(point, scene, ctx, ops);
   if (point.kind === "circleLineIntersectionPoint") return evalCircleLineIntersection(point, scene, ctx, ops);
   if (point.kind === "circleSegmentIntersectionPoint") return evalCircleSegmentIntersection(point, scene, ctx, ops);
   if (point.kind === "circleCircleIntersectionPoint") return evalCircleCircleIntersection(point, scene, ctx, ops);
@@ -219,6 +222,17 @@ function evalCircleCenterPoint(
 ): Vec2 | null {
   return evalCircleCenterPointPoint(point, scene, ctx, {
     getCircleWorldGeometryWithCtx: ops.getCircleWorldGeometryById,
+  });
+}
+
+function evalTriangleCenterPoint(
+  point: TriangleCenterPoint,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalTriangleCenterPointPoint(point, scene, ctx, {
+    getPointWorldById: ops.getPointWorldById,
   });
 }
 

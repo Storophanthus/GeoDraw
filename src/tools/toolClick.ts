@@ -56,6 +56,12 @@ export type ToolClickIO = {
   createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
   createPointByReflection: (pointId: string, axis: LineLikeObjectRef) => string | null;
   transformObjectByTranslation: (source: TransformableObjectRef, fromId: string, toId: string) => string | null;
+  transformObjectByRotation: (
+    source: TransformableObjectRef,
+    centerId: string,
+    angleExpr: string,
+    direction: "CCW" | "CW"
+  ) => string | null;
   transformObjectByDilation: (source: TransformableObjectRef, centerId: string, factorExpr: string) => string | null;
   transformObjectByReflection: (source: TransformableObjectRef, axis: LineLikeObjectRef) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
@@ -174,8 +180,9 @@ export function handleToolClick(
     return;
   }
 
-  if (activeTool === "translate" || activeTool === "dilate" || activeTool === "reflect") {
+  if (activeTool === "translate" || activeTool === "rotate" || activeTool === "dilate" || activeTool === "reflect") {
     const pendingTranslate = pendingSelection && pendingSelection.tool === "translate" ? pendingSelection : null;
+    const pendingRotate = pendingSelection && pendingSelection.tool === "rotate" ? pendingSelection : null;
     const pendingDilate = pendingSelection && pendingSelection.tool === "dilate" ? pendingSelection : null;
     const pendingReflect = pendingSelection && pendingSelection.tool === "reflect" ? pendingSelection : null;
     const resolveTransformSource = (): TransformableObjectRef | null => {
@@ -236,6 +243,29 @@ export function handleToolClick(
       }
       const centerId = resolveOrCreatePointAtCursor();
       const created = io.transformObjectByDilation(pendingDilate.source, centerId, io.transformTool.factorExpr);
+      if (!created) return;
+      io.clearPendingSelection();
+      return;
+    }
+
+    if (activeTool === "rotate") {
+      if (!pendingRotate) {
+        const source = resolveTransformSource();
+        if (!source) return;
+        io.setPendingSelection({
+          tool: "rotate",
+          step: 2,
+          source,
+        });
+        return;
+      }
+      const centerId = resolveOrCreatePointAtCursor();
+      const created = io.transformObjectByRotation(
+        pendingRotate.source,
+        centerId,
+        io.transformTool.angleExpr,
+        io.transformTool.direction
+      );
       if (!created) return;
       io.clearPendingSelection();
       return;
@@ -658,6 +688,10 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     if (!pendingSelection || pendingSelection.tool !== "translate") return false;
     return true;
   }
+  if (activeTool === "rotate") {
+    if (!pendingSelection || pendingSelection.tool !== "rotate") return false;
+    return true;
+  }
   if (activeTool === "dilate") {
     if (!pendingSelection || pendingSelection.tool !== "dilate") return false;
     return true;
@@ -709,6 +743,19 @@ export function isValidTarget(
   if (activeTool === "regular_polygon") return hoveredHit.type === "point";
   if (activeTool === "translate") {
     if (!pendingSelection || pendingSelection.tool !== "translate") {
+      return (
+        hoveredHit.type === "point" ||
+        hoveredHit.type === "segment" ||
+        hoveredHit.type === "line2p" ||
+        hoveredHit.type === "circle" ||
+        hoveredHit.type === "polygon" ||
+        hoveredHit.type === "angle"
+      );
+    }
+    return hoveredHit.type === "point";
+  }
+  if (activeTool === "rotate") {
+    if (!pendingSelection || pendingSelection.tool !== "rotate") {
       return (
         hoveredHit.type === "point" ||
         hoveredHit.type === "segment" ||

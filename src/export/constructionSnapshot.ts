@@ -17,6 +17,7 @@ export type SnapshotPointDefinition =
   | { kind: "pointOnSegment"; segId: string; u: number }
   | { kind: "pointOnCircle"; circleId: string; t: number }
   | { kind: "circleCenter"; circleId: string }
+  | { kind: "triangleCenter"; centerKind: "incenter" | "orthocenter" | "centroid"; aId: string; bId: string; cId: string }
   | { kind: "pointByTranslation"; pointId: string; fromId: string; toId: string; vectorId?: string }
   | { kind: "pointByDilation"; pointId: string; centerId: string; factor?: number; factorExpr?: string }
   | { kind: "pointByReflection"; pointId: string; axis: { type: "line" | "segment"; id: string } }
@@ -423,6 +424,15 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
       },
     };
   }
+  if (point.kind === "triangleCenter") {
+    return {
+      kind: "triangleCenter",
+      centerKind: point.centerKind,
+      aId: point.aId,
+      bId: point.bId,
+      cId: point.cId,
+    };
+  }
   return {
     kind: "intersectionPoint",
     objA: point.objA,
@@ -443,6 +453,7 @@ function pointDependsOn(point: ScenePoint): string[] {
   if (point.kind === "pointOnSegment") return [point.segId];
   if (point.kind === "pointOnCircle") return [point.circleId];
   if (point.kind === "circleCenter") return [point.circleId];
+  if (point.kind === "triangleCenter") return [point.aId, point.bId, point.cId];
   if (point.kind === "pointByTranslation") {
     const refs = [point.pointId, point.fromId, point.toId];
     if (point.vectorId) refs.push(`vector:${point.vectorId}`);

@@ -17,8 +17,11 @@ type ToolInfoSectionProps = {
   regularPolygonDirection: "CCW" | "CW";
   setRegularPolygonTool: (next: { sides?: number; direction?: "CCW" | "CW" }) => void;
   transformFactorExpr: string;
-  setTransformTool: (next: { factorExpr?: string }) => void;
+  transformAngleExpr: string;
+  transformDirection: "CCW" | "CW";
+  setTransformTool: (next: { factorExpr?: string; angleExpr?: string; direction?: "CCW" | "CW" }) => void;
   transformFactorPreview: NumberExpressionEvalResult;
+  transformAnglePreview: AnglePreview;
   pendingSelection: PendingSelection;
   pendingCircleFixedCenterLabel: string | null;
   createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
@@ -39,8 +42,11 @@ export function ToolInfoSection({
   regularPolygonDirection,
   setRegularPolygonTool,
   transformFactorExpr,
+  transformAngleExpr,
+  transformDirection,
   setTransformTool,
   transformFactorPreview,
+  transformAnglePreview,
   pendingSelection,
   pendingCircleFixedCenterLabel,
   createCircleFixedRadius,
@@ -49,6 +55,7 @@ export function ToolInfoSection({
   const isCircleFixedPending = pendingSelection && pendingSelection.tool === "circle_fixed";
   const translatePending = pendingSelection && pendingSelection.tool === "translate" ? pendingSelection : null;
   const reflectPending = pendingSelection && pendingSelection.tool === "reflect" ? pendingSelection : null;
+  const rotatePending = pendingSelection && pendingSelection.tool === "rotate" ? pendingSelection : null;
   const dilatePending = pendingSelection && pendingSelection.tool === "dilate" ? pendingSelection : null;
 
   return (
@@ -196,6 +203,40 @@ export function ToolInfoSection({
             {!reflectPending
               ? "Step 1: click source object."
               : "Step 2: click axis line or segment."}
+          </div>
+        </div>
+      )}
+      {activeTool === "rotate" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Rotate Object</div>
+          <div className="controlRow">
+            <label className="controlLabel">Angle Expr (deg)</label>
+            <input
+              className="renameInput"
+              type="text"
+              value={transformAngleExpr}
+              onChange={(e) => setTransformTool({ angleExpr: e.target.value })}
+              placeholder="e.g. 30, 180, A1"
+            />
+          </div>
+          <div className="controlRow">
+            <label className="controlLabel">Direction</label>
+            <select
+              className="selectInput"
+              value={transformDirection}
+              onChange={(e) => setTransformTool({ direction: e.target.value as "CCW" | "CW" })}
+            >
+              <option value="CCW">CCW</option>
+              <option value="CW">CW</option>
+            </select>
+          </div>
+          <div className="statusText">
+            {transformAnglePreview.ok ? `Resolved: ${transformAnglePreview.valueDeg.toFixed(3)}°` : transformAnglePreview.error}
+          </div>
+          <div className="statusText">
+            {!rotatePending
+              ? "Step 1: click source object."
+              : "Step 2: click center point O."}
           </div>
         </div>
       )}

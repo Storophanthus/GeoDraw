@@ -68,6 +68,7 @@ export function drawInteractionHighlights(
     }
     if (
       pendingSelection.tool === "translate" ||
+      pendingSelection.tool === "rotate" ||
       pendingSelection.tool === "dilate" ||
       pendingSelection.tool === "reflect"
     ) {

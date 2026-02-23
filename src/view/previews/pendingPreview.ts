@@ -2,6 +2,7 @@ import { add, mul, sub } from "../../geo/geometry";
 import type { Vec2 } from "../../geo/vec2";
 import { hitTestLineId, hitTestSegmentId } from "../../engine";
 import {
+  evalPointByRotation,
   evalPointByDilation,
   evalPointByReflection,
   evalPointByTranslation,
@@ -156,6 +157,17 @@ export function drawPendingPreview(
       return point ? getPointWorldPos(point, scene) : null;
     }
     return cursorWorld;
+  };
+  const getHoveredPointOnlyWorld = (): Vec2 | null => {
+    if (hoverSnap?.kind === "point" && hoverSnap.pointId) {
+      const point = scene.points.find((item) => item.id === hoverSnap.pointId);
+      return point ? getPointWorldPos(point, scene) : null;
+    }
+    if (hoveredHit?.type === "point") {
+      const point = scene.points.find((item) => item.id === hoveredHit.id);
+      return point ? getPointWorldPos(point, scene) : null;
+    }
+    return null;
   };
 
   if (pendingSelection.tool === "export_clip" && pendingSelection.step === 2) {
@@ -361,6 +373,7 @@ export function drawPendingPreview(
 
   if (
     pendingSelection.tool === "translate" ||
+    pendingSelection.tool === "rotate" ||
     pendingSelection.tool === "dilate" ||
     pendingSelection.tool === "reflect"
   ) {
@@ -445,6 +458,32 @@ export function drawPendingPreview(
       }
       drawPreviewSegment(fromWorld, toWorld);
       transformPointWorld = (world) => evalPointByTranslation(world, fromWorld, toWorld);
+    } else if (pendingSelection.tool === "rotate") {
+      // Rotate finalizes on a point center. Preview only when hovering a valid
+      // point to avoid the misleading "translation-like" preview drift.
+      const center = getHoveredPointOnlyWorld();
+      if (!center) {
+        ctx.restore();
+        return;
+      }
+      const angle = evaluateAngleExpressionDegrees(scene, transformTool.angleExpr);
+      if (!angle.ok || !Number.isFinite(angle.valueDeg)) {
+        ctx.restore();
+        return;
+      }
+      const anchor = sourceAnchor();
+      transformPointWorld = (world) => {
+        if (Math.hypot(world.x - center.x, world.y - center.y) <= 1e-12) {
+          return { x: center.x, y: center.y };
+        }
+        return evalPointByRotation(center, world, angle.valueDeg, transformTool.direction);
+      };
+      drawPreviewPoint(center);
+      if (anchor) {
+        const rotatedAnchor = evalPointByRotation(center, anchor, angle.valueDeg, transformTool.direction);
+        drawPreviewSegment(center, anchor);
+        if (rotatedAnchor) drawPreviewSegment(center, rotatedAnchor);
+      }
     } else if (pendingSelection.tool === "dilate") {
       const center = getHoveredPointWorld();
       if (!center) {

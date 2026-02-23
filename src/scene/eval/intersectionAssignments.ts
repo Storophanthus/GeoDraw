@@ -41,6 +41,7 @@ export function assignCircleLinePairPoints(
   ops: AssignmentOps & {
     getPreviousStablePoint: (pointId: string) => Vec2 | null;
     rememberStablePoint: (pointId: string, value: Vec2) => void;
+    occupiedByOtherPoints?: [boolean, boolean];
   }
 ): Map<string, Vec2 | null> {
   const out = new Map<string, Vec2 | null>();
@@ -67,6 +68,12 @@ export function assignCircleLinePairPoints(
 
   const root0 = branches[0].point;
   const root1 = branches[1].point;
+  const singletonOccupiedRootPreference =
+    pairPoints.length === 1 && ops.occupiedByOtherPoints
+      ? ops.occupiedByOtherPoints[0] !== ops.occupiedByOtherPoints[1]
+        ? (ops.occupiedByOtherPoints[0] ? 1 : 0)
+        : null
+      : null;
   const requests: AssignmentRequest<CircleLineAssignmentPoint>[] = [];
   for (let i = 0; i < pairPoints.length; i += 1) {
     const item = pairPoints[i];
@@ -89,6 +96,10 @@ export function assignCircleLinePairPoints(
     let primary: RootIndex = item.branchIndex === 1 ? 1 : 0;
     if (forcedCandidate !== null) {
       primary = forcedCandidate;
+    } else if (singletonOccupiedRootPreference !== null) {
+      // If another point already occupies one root (e.g. known anchor/intersection),
+      // keep the singleton circle-line intersection on the unoccupied root.
+      primary = singletonOccupiedRootPreference;
     } else if (prev) {
       const d0 = distance(root0, prev);
       const d1 = distance(root1, prev);

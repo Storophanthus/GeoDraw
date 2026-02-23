@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
     Copy,
     Hash,
@@ -20,9 +20,33 @@ type ObjectBrowserProps = {
 
 type TabId = "all" | "points" | "lines" | "circles" | "angles" | "text" | "numbers";
 
+function tabForSelectedObject(selected: SelectedObject | null): TabId | null {
+    if (!selected) return null;
+    switch (selected.type) {
+        case "point":
+            return "points";
+        case "segment":
+        case "line":
+            return "lines";
+        case "circle":
+        case "polygon":
+            return "circles";
+        case "angle":
+            return "angles";
+        case "textLabel":
+            return "text";
+        case "number":
+            return "numbers";
+        default:
+            return null;
+    }
+}
+
 export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: ObjectBrowserProps) {
     const [activeTab, setActiveTab] = useState<TabId>("all");
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
+    const objectRowRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+    const lastSelectionKeyRef = useRef<string | null>(null);
     const setObjectVisibility = useGeoStore((store) => store.setObjectVisibility);
 
     // Toggles state
@@ -35,6 +59,33 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
     const setAxesEnabled = useGeoStore((store) => store.setAxesEnabled);
     const setGridSnapEnabled = useGeoStore((store) => store.setGridSnapEnabled);
     const setDependencyGlowEnabled = useGeoStore((store) => store.setDependencyGlowEnabled);
+
+    useEffect(() => {
+        const selectionKey = selectedObject ? `${selectedObject.type}:${selectedObject.id}` : null;
+        if (selectionKey === lastSelectionKeyRef.current) return;
+        lastSelectionKeyRef.current = selectionKey;
+        const targetTab = tabForSelectedObject(selectedObject);
+        if (!targetTab) return;
+        setActiveTab((prev) => (prev === targetTab ? prev : targetTab));
+    }, [selectedObject]);
+
+    useEffect(() => {
+        if (!selectedObject) return;
+        const targetTab = tabForSelectedObject(selectedObject);
+        if (!targetTab || activeTab !== targetTab) return;
+        const key = `${selectedObject.type}:${selectedObject.id}`;
+        const row = objectRowRefs.current.get(key);
+        if (!row) return;
+        row.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }, [selectedObject, activeTab]);
+
+    const bindObjectRowRef = useCallback(
+        (key: string) => (el: HTMLButtonElement | null) => {
+            if (el) objectRowRefs.current.set(key, el);
+            else objectRowRefs.current.delete(key);
+        },
+        []
+    );
 
     const pointNameById = useMemo(() => new Map(scene.points.map((p) => [p.id, p.name])), [scene.points]);
     const lineById = useMemo(() => new Map(scene.lines.map((l) => [l.id, l])), [scene.lines]);
@@ -99,7 +150,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         title: string,
         commandText: string
     ) => (
-        <button key={key} className={selected ? "objectItem active" : "objectItem"} onClick={onSelect}>
+        <button key={key} ref={bindObjectRowRef(key)} className={selected ? "objectItem active" : "objectItem"} onClick={onSelect}>
             <div className="objectItemText">
                 <span className="objectItemLabel">{title}</span>
                 <span className="objectItemCommand" title={commandText}>{commandText}</span>

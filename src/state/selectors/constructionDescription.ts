@@ -225,6 +225,15 @@ function describeNumberConstruction(
 ): string {
   const def = num.definition;
   if (def.kind === "constant") return `Number ${num.name} = ${def.value}.`;
+  if (def.kind === "slider") {
+    const mode =
+      def.sliderMode === "radian"
+        ? "radian slider"
+        : def.sliderMode === "degree"
+          ? "degree slider"
+          : "slider";
+    return `Number ${num.name} = ${def.value} (${mode}, range ${def.min} to ${def.max}).`;
+  }
   if (def.kind === "distancePoints") {
     return `Distance ${pointLabel(def.aId, pointNameById)}${pointLabel(def.bId, pointNameById)}.`;
   }
@@ -412,6 +421,14 @@ function describePointConstruction(
     const caText = ca ? describeCircleRef(ca, pointNameById) : `circle ${point.circleAId}`;
     const cbText = cb ? describeCircleRef(cb, pointNameById) : `circle ${point.circleBId}`;
     return `Intersection of ${caText} and ${cbText}.`;
+  }
+  if (point.kind === "triangleCenter") {
+    const a = pointLabel(point.aId, pointNameById);
+    const b = pointLabel(point.bId, pointNameById);
+    const c = pointLabel(point.cId, pointNameById);
+    if (point.centerKind === "incenter") return `Incenter of triangle ${a}${b}${c}.`;
+    if (point.centerKind === "centroid") return `Centroid of triangle ${a}${b}${c}.`;
+    return `Orthocenter of triangle ${a}${b}${c}.`;
   }
   if (point.kind === "lineLikeIntersectionPoint") {
     return `Intersection of ${describeObjectRef(point.objA, pointNameById, lineById, segmentById, circleById)} and ${describeObjectRef(

@@ -71,6 +71,10 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
       addDependency(graph, child, key("circle", p.circleId));
     } else if (p.kind === "circleCenter") {
       addDependency(graph, child, key("circle", p.circleId));
+    } else if (p.kind === "triangleCenter") {
+      addDependency(graph, child, key("point", p.aId));
+      addDependency(graph, child, key("point", p.bId));
+      addDependency(graph, child, key("point", p.cId));
     } else if (p.kind === "pointByRotation") {
       addDependency(graph, child, key("point", p.centerId));
       addDependency(graph, child, key("point", p.pointId));
@@ -178,7 +182,9 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
     const child = key("number", n.id);
     ensureNode(graph, child);
     const def = n.definition;
-    if (def.kind === "distancePoints") {
+    if (def.kind === "slider" || def.kind === "constant") {
+      // No geometry dependencies.
+    } else if (def.kind === "distancePoints") {
       addDependency(graph, child, key("point", def.aId));
       addDependency(graph, child, key("point", def.bId));
     } else if (def.kind === "segmentLength") {

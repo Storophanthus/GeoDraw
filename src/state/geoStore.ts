@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { camera as cameraMath } from "../view/camera";
-import { getNumberValue } from "../scene/points";
+import { getNumberValue, type SceneNumberDefinition } from "../scene/points";
 import {
   type SetStateOptions,
 } from "./slices/historySlice";
@@ -161,23 +161,32 @@ export const commandBarApi = {
     }
     return out;
   },
-  setScalarVar(name: string, value: number): { ok: true; mode: "created" | "updated" } | { ok: false; error: string } {
+  setScalarVar(
+    name: string,
+    value: number,
+    exprRaw?: string
+  ): { ok: true; mode: "created" | "updated" } | { ok: false; error: string } {
     const trimmed = name.trim();
     if (!trimmed) return { ok: false as const, error: "Scalar name is empty" };
     if (!Number.isFinite(value)) return { ok: false as const, error: "Scalar value must be finite" };
     const state = runtime.getState();
     pruneStaleCommandAliases(state.scene);
     const existingNumber = state.scene.numbers.find((n) => n.name === trimmed);
+    const nextDefinition = chooseCommandScalarNumberDefinition({
+      scene: state.scene,
+      targetName: trimmed,
+      fallbackValue: value,
+      exprRaw,
+      existingNumberId: existingNumber?.id,
+    });
+    if (!nextDefinition.ok) return nextDefinition;
     if (existingNumber) {
-      if (existingNumber.definition.kind !== "constant") {
-        return { ok: false as const, error: `Cannot redefine non-constant number: ${trimmed}` };
-      }
       setState((prev) => ({
         ...prev,
         scene: {
           ...prev.scene,
           numbers: prev.scene.numbers.map((n) =>
-            n.id === existingNumber.id ? { ...n, definition: { kind: "constant", value } } : n
+            n.id === existingNumber.id ? { ...n, definition: nextDefinition.definition } : n
           ),
         },
       }));
@@ -187,7 +196,7 @@ export const commandBarApi = {
       return { ok: false as const, error: `Name already used: ${trimmed}` };
     }
     if (commandBarObjectAliases.has(trimmed)) return { ok: false as const, error: `Name already used: ${trimmed}` };
-    const id = actions.createNumber({ kind: "constant", value }, trimmed);
+    const id = actions.createNumber(nextDefinition.definition, trimmed);
     if (!id) return { ok: false as const, error: `Name already used: ${trimmed}` };
     return { ok: true as const, mode: "created" };
   },
@@ -318,6 +327,12 @@ export const commandBarApi = {
       }
       if (cmd.type === "CreateMidpointBySegment") {
         const id = commandBarApi.createMidpointBySegmentWithLabel(cmd.segId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreateTriangleCenterPoint") {
+        const id = commandBarApi.createTriangleCenterPointWithLabel(cmd.centerKind, cmd.aId, cmd.bId, cmd.cId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         applyAssignedPointLabel(id, label);
         return { ok: true as const, mode: "created", objectType: "point", id };
@@ -892,6 +907,34 @@ export const commandBarApi = {
     commandBarObjectAliases.set(name, { type: "point", id: pointId });
     return pointId;
   },
+  createTriangleCenterPointWithLabel(
+    centerKind: "incenter" | "orthocenter" | "centroid",
+    aId: string,
+    bId: string,
+    cId: string,
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const pointId = actions.createTriangleCenterPoint(centerKind, aId, bId, cId);
+    if (!pointId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === pointId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: pointId });
+    return pointId;
+  },
   createPointByTranslationWithLabel(pointId: string, fromId: string, toId: string, label: string): string | null {
     const name = label.trim();
     if (!name) return null;
@@ -1109,6 +1152,30 @@ export const commandBarApi = {
     return angleId;
   },
 };
+
+function chooseCommandScalarNumberDefinition(params: {
+  scene: GeoState["scene"];
+  targetName: string;
+  fallbackValue: number;
+  exprRaw?: string;
+  existingNumberId?: string;
+}): { ok: true; definition: SceneNumberDefinition } | { ok: false; error: string } {
+  const expr = (params.exprRaw ?? "").trim();
+  const fallback: SceneNumberDefinition = { kind: "constant", value: params.fallbackValue };
+  if (!expr) return { ok: true, definition: fallback };
+
+  // Prevent immediate self-reference recursion when reassigning an existing number by name.
+  if (
+    params.existingNumberId &&
+    new RegExp(`\\b${params.targetName.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`).test(expr)
+  ) {
+    return { ok: false, error: `Self-referential scalar assignment is not supported: ${params.targetName}` };
+  }
+
+  const exprDef: SceneNumberDefinition = { kind: "expression", expr };
+  if (isValidNumberDefinition(exprDef, params.scene)) return { ok: true, definition: exprDef };
+  return { ok: true, definition: fallback };
+}
 
 export function getGeoStore(): GeoStore {
   return { ...runtime.getState(), ...actions };

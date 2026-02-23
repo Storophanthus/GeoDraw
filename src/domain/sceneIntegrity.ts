@@ -13,6 +13,111 @@ import {
 } from "../scene/objectLabels";
 import { resolveIntersectionBranchIndexInScene } from "./intersectionReuse";
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function replaceIdentifierToken(expr: string, from: string, to: string): string {
+  if (!expr || from === to) return expr;
+  return expr.replace(new RegExp(`\\b${escapeRegExp(from)}\\b`, "g"), to);
+}
+
+function migrateLegacySliderNumbers(
+  numbers: SceneModel["numbers"],
+  points: SceneModel["points"],
+  circles: SceneModel["circles"]
+): {
+  numbers: SceneModel["numbers"];
+  points: SceneModel["points"];
+  circles: SceneModel["circles"];
+  changed: boolean;
+} {
+  let changed = false;
+  const renameByName = new Map<string, string>();
+  const usedNames = new Set(numbers.map((n) => n.name));
+
+  const modeNormalized = numbers.map((num) => {
+    if (num.definition.kind !== "slider") return num;
+    const def = num.definition;
+    if (def.sliderMode !== "radian") return num;
+    changed = true;
+    const legacy = /^t_(\d+)$/.exec(num.name);
+    let nextName = num.name;
+    if (legacy) {
+      usedNames.delete(num.name);
+      let idx = Number(legacy[1]);
+      if (!Number.isInteger(idx) || idx <= 0) idx = 1;
+      let candidate = `ang_${idx}`;
+      while (usedNames.has(candidate)) {
+        idx += 1;
+        candidate = `ang_${idx}`;
+      }
+      usedNames.add(candidate);
+      nextName = candidate;
+      if (nextName !== num.name) renameByName.set(num.name, nextName);
+    }
+    return {
+      ...num,
+      name: nextName,
+      definition: {
+        ...def,
+        sliderMode: "degree" as const,
+      },
+    };
+  });
+
+  if (!changed && renameByName.size === 0) {
+    return { numbers, points, circles, changed: false };
+  }
+
+  const rewriteExpr = (expr: string | undefined): string | undefined => {
+    if (typeof expr !== "string" || renameByName.size === 0) return expr;
+    let out = expr;
+    for (const [from, to] of renameByName) out = replaceIdentifierToken(out, from, to);
+    return out;
+  };
+
+  const nextNumbers = modeNormalized.map((num) => {
+    if (num.definition.kind !== "expression") return num;
+    const nextExpr = rewriteExpr(num.definition.expr);
+    if (nextExpr === num.definition.expr) return num;
+    changed = true;
+    return {
+      ...num,
+      definition: {
+        ...num.definition,
+        expr: nextExpr ?? num.definition.expr,
+      },
+    };
+  });
+
+  const nextPoints = points.map((point) => {
+    if (point.kind === "pointByRotation") {
+      const nextExpr = rewriteExpr(point.angleExpr);
+      if (nextExpr === point.angleExpr) return point;
+      changed = true;
+      return { ...point, angleExpr: nextExpr };
+    }
+    if (point.kind === "pointByDilation") {
+      const nextExpr = rewriteExpr(point.factorExpr);
+      if (nextExpr === point.factorExpr) return point;
+      changed = true;
+      return { ...point, factorExpr: nextExpr };
+    }
+    return point;
+  });
+
+  const nextCircles = circles.map((circle) => {
+    if (circle.kind !== "fixedRadius") return circle;
+    const nextExpr = rewriteExpr(circle.radiusExpr);
+    if (nextExpr === circle.radiusExpr) return circle;
+    changed = true;
+    return { ...circle, radiusExpr: nextExpr };
+  });
+
+  return { numbers: nextNumbers, points: nextPoints, circles: nextCircles, changed };
+}
+
 function objectRefAlive(
   obj: GeometryObjectRef,
   lines: SceneModel["lines"],
@@ -219,6 +324,9 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         if (point.kind === "pointOnSegment") return nextSegmentIds.has(point.segId);
         if (point.kind === "pointOnCircle") return nextCircleIds.has(point.circleId);
         if (point.kind === "circleCenter") return nextCircleIds.has(point.circleId);
+        if (point.kind === "triangleCenter") {
+          return pointIds.has(point.aId) && pointIds.has(point.bId) && pointIds.has(point.cId);
+        }
         if (point.kind === "pointByRotation") return pointIds.has(point.centerId) && pointIds.has(point.pointId);
         if (point.kind === "pointByTranslation") {
           if (point.vectorId) return pointIds.has(point.pointId) && nextVectorIds.has(point.vectorId);
@@ -262,6 +370,15 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     const numbersPreFiltered = numbers.filter((num) => {
       const def = num.definition;
       if (def.kind === "constant") return Number.isFinite(def.value);
+      if (def.kind === "slider") {
+        return (
+          Number.isFinite(def.value) &&
+          Number.isFinite(def.min) &&
+          Number.isFinite(def.max) &&
+          Number.isFinite(def.step) &&
+          def.step > 0
+        );
+      }
       if (def.kind === "distancePoints") return nextPointIds.has(def.aId) && nextPointIds.has(def.bId);
       if (def.kind === "segmentLength") return nextSegmentIdsAfter.has(def.segId);
       if (def.kind === "circleRadius" || def.kind === "circleArea") return nextCircleIdsAfter.has(def.circleId);
@@ -269,17 +386,21 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       return true;
     });
     const numberIds = new Set(numbersPreFiltered.map((n) => n.id));
-    const nextNumbers = numbersPreFiltered.filter((num) => {
+    const nextNumbersPreMigration = numbersPreFiltered.filter((num) => {
       if (num.definition.kind !== "ratio") return true;
       return numberIds.has(num.definition.numeratorId) && numberIds.has(num.definition.denominatorId);
     });
+    const migrated = migrateLegacySliderNumbers(nextNumbersPreMigration, nextPoints, nextCircles);
+    const nextNumbers = migrated.numbers;
+    const nextPointsMigrated = migrated.points;
+    const nextCirclesMigrated = migrated.circles;
 
     const sceneForLabels: SceneModel = {
-      points: nextPoints,
+      points: nextPointsMigrated,
       vectors: nextVectors,
       segments: nextSegmentsNormalized,
       lines: nextLines,
-      circles: nextCircles,
+      circles: nextCirclesMigrated,
       polygons: nextPolygons,
       angles: nextAngles,
       numbers: nextNumbers,
@@ -345,7 +466,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       lines: nextLinesLabeled,
     };
 
-    const nextCirclesLabeled = nextCircles.map((circle) => {
+    const nextCirclesLabeled = nextCirclesMigrated.map((circle) => {
       const fallbackText = defaultCircleLabelText(circle, sceneForCircleLabels);
       const fallbackPos = defaultCircleLabelPosWorld(circle, sceneForCircleLabels) ?? undefined;
       const showLabel = Boolean(circle.showLabel);
@@ -401,7 +522,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     });
 
     const anyChanged =
-      !sameIds(nextPoints, points) ||
+      !sameIds(nextPointsMigrated, points) ||
       !sameIds(nextVectors, vectors) ||
       !sameIds(nextSegmentsLabeled, segments) ||
       !sameIds(nextLinesLabeled, lines) ||
@@ -410,7 +531,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       !sameIds(nextAngles, angles) ||
       !sameIds(nextTextLabels, textLabels) ||
       !sameIds(nextNumbers, numbers) ||
-      nextPoints.some((point, idx) => point !== points[idx]) ||
+      nextPointsMigrated.some((point, idx) => point !== points[idx]) ||
       nextVectors.some((vector, idx) => vector !== vectors[idx]) ||
       nextSegmentsLabeled.some((segment, idx) => segment !== segments[idx]) ||
       nextLinesLabeled.some((line, idx) => line !== lines[idx]) ||
@@ -418,7 +539,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       nextPolygonsLabeled.some((polygon, idx) => polygon !== polygons[idx]) ||
       nextTextLabels.some((label, idx) => label !== textLabels[idx]);
 
-    points = nextPoints;
+    points = nextPointsMigrated;
     vectors = nextVectors;
     segments = nextSegmentsLabeled;
     lines = nextLinesLabeled;
@@ -427,7 +548,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     angles = nextAngles;
     numbers = nextNumbers;
     textLabels = nextTextLabels;
-    changed = changed || anyChanged;
+    changed = changed || anyChanged || migrated.changed;
     if (!anyChanged) break;
   }
 

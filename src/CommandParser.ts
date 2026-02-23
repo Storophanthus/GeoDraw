@@ -42,6 +42,7 @@ export type Command =
   | { type: "CreatePointXY"; x: number; y: number }
   | { type: "CreateMidpointByPoints"; aId: string; bId: string }
   | { type: "CreateMidpointBySegment"; segId: string }
+  | { type: "CreateTriangleCenterPoint"; centerKind: "incenter" | "orthocenter" | "centroid"; aId: string; bId: string; cId: string }
   | { type: "CreatePointByTranslation"; pointId: string; fromId: string; toId: string }
   | { type: "CreatePointByRotation"; pointId: string; centerId: string; angleDeg: number; angleExpr: string; direction: "CCW" | "CW" }
   | { type: "CreatePointByDilation"; pointId: string; centerId: string; factorExpr: string }
@@ -66,7 +67,7 @@ export type Command =
 export type ParseResult =
   | { kind: "expr"; value: string; numeric?: number }
   | { kind: "cmd"; cmd: Command }
-  | { kind: "assignScalar"; name: string; value: number }
+  | { kind: "assignScalar"; name: string; value: number; expr?: string }
   | { kind: "assignObject"; name: string; cmd: Command }
   | { kind: "error"; message: string };
 
@@ -469,6 +470,26 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return err("Midpoint expects Midpoint(A,B) or Midpoint(s)");
   }
 
+  if (name === "Incenter" || name === "Ortho" || name === "Orthocenter" || name === "Centroid") {
+    if (args.length !== 3) return err(`${name}(A,B,C) expects 3 point labels`);
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    const cLabel = asIdentifier(args[2]);
+    if (!aLabel || !bLabel || !cLabel) return err(`${name}(A,B,C) expects point labels`);
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const c = resolvePointIdentifier(cLabel, ctx);
+    if (!c.ok) return err(c.message);
+    const centerKind =
+      name === "Incenter" ? "incenter" : name === "Centroid" ? "centroid" : "orthocenter";
+    return {
+      kind: "cmd",
+      cmd: { type: "CreateTriangleCenterPoint", centerKind, aId: a.id, bId: b.id, cId: c.id },
+    };
+  }
+
   if (name === "Translate") {
     if (args.length !== 3) return err("Translate(P, A, B) expects 3 point labels");
     const pointLabel = asIdentifier(args[0]);
@@ -845,7 +866,7 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
           if (typeof rhsCmd.numeric !== "number" || !Number.isFinite(rhsCmd.numeric)) {
             return err("Assignment right-hand side must evaluate to a finite number");
           }
-          return { kind: "assignScalar", name: left, value: rhsCmd.numeric };
+          return { kind: "assignScalar", name: left, value: rhsCmd.numeric, expr: assignment.right.trim() };
         }
         return err("Unsupported assignment right-hand side");
       }
@@ -857,7 +878,7 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
         if (rhsExprFallback.value.kind === "point") {
           return { kind: "assignObject", name: left, cmd: { type: "CreatePointXY", x: rhsExprFallback.value.x, y: rhsExprFallback.value.y } };
         }
-        return { kind: "assignScalar", name: left, value: rhsExprFallback.value.value };
+        return { kind: "assignScalar", name: left, value: rhsExprFallback.value.value, expr: assignment.right.trim() };
       }
       return rhsCmd;
     }
@@ -867,7 +888,7 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
     if (rhsExpr.value.kind === "point") {
       return { kind: "assignObject", name: left, cmd: { type: "CreatePointXY", x: rhsExpr.value.x, y: rhsExpr.value.y } };
     }
-    return { kind: "assignScalar", name: left, value: rhsExpr.value.value };
+    return { kind: "assignScalar", name: left, value: rhsExpr.value.value, expr: assignment.right.trim() };
   }
 
   return parseCommandLike(input, ctx);

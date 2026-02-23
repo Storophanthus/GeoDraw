@@ -1,5 +1,5 @@
 import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
-import type { ShowLabelMode } from "../../scene/points";
+import type { ShowLabelMode, TriangleCenterKind } from "../../scene/points";
 import {
   defaultLineLabelPosWorld,
   defaultLineLabelText,
@@ -51,6 +51,7 @@ export function createSceneCoreActions(
   | "createPolygon"
   | "createRegularPolygon"
   | "createCircleCenterPoint"
+  | "createTriangleCenterPoint"
 > {
   const edgeKey = (aId: string, bId: string) => (aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`);
 
@@ -595,6 +596,51 @@ export function createSceneCoreActions(
                 locked: true,
                 auxiliary: true,
                 circleId,
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createTriangleCenterPoint(centerKind, aId, bId, cId) {
+      if (aId === bId || bId === cId || aId === cId) return null;
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const a = prev.scene.points.find((p) => p.id === aId);
+        const b = prev.scene.points.find((p) => p.id === bId);
+        const c = prev.scene.points.find((p) => p.id === cId);
+        if (!a || !b || !c) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "triangleCenter",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: "name" as ShowLabelMode,
+                locked: true,
+                auxiliary: true,
+                centerKind: centerKind as TriangleCenterKind,
+                aId,
+                bId,
+                cId,
                 style: {
                   ...prev.pointDefaults,
                   labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },

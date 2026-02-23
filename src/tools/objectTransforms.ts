@@ -1,4 +1,4 @@
-import { evaluateNumberExpression, type LineLikeObjectRef, type SceneModel } from "../scene/points";
+import { evaluateAngleExpressionDegrees, evaluateNumberExpression, type LineLikeObjectRef, type SceneModel } from "../scene/points";
 
 export type TransformSourceObjectRef = {
   type: "point" | "segment" | "line" | "circle" | "polygon" | "angle";
@@ -8,6 +8,13 @@ export type TransformSourceObjectRef = {
 type TransformCreateOps = {
   scene: SceneModel;
   createPointByTranslation: (pointId: string, fromId: string, toId: string) => string | null;
+  createPointByRotation: (
+    centerId: string,
+    pointId: string,
+    angleDeg: number,
+    direction: "CCW" | "CW",
+    angleExpr?: string
+  ) => string | null;
   createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
   createPointByReflection: (pointId: string, axis: LineLikeObjectRef) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
@@ -188,6 +195,27 @@ export function applyDilationToObject(
   if (!factorEval.ok || !Number.isFinite(factorEval.value)) return null;
   const mapPoint = mapPointWithCache((pointId) => ops.createPointByDilation(pointId, centerId, trimmed));
   return transformSourceObject(source, mapPoint, ops, trimmed);
+}
+
+export function applyRotationToObject(
+  source: TransformSourceObjectRef,
+  centerId: string,
+  angleExpr: string,
+  direction: "CCW" | "CW",
+  ops: TransformCreateOps
+): string | null {
+  const trimmed = angleExpr.trim();
+  if (!trimmed) return null;
+  const angleEval = evaluateAngleExpressionDegrees(ops.scene, trimmed);
+  if (!angleEval.ok || !Number.isFinite(angleEval.valueDeg)) return null;
+  const mapPoint = mapPointWithCache((pointId) => {
+    // Rotating the center point around itself is an identity map. Reuse the
+    // existing point so polygon/angle transforms can rotate about one of their
+    // own vertices without failing the whole transform.
+    if (pointId === centerId) return centerId;
+    return ops.createPointByRotation(centerId, pointId, angleEval.valueDeg, direction, trimmed);
+  });
+  return transformSourceObject(source, mapPoint, ops);
 }
 
 export function applyReflectionToObject(

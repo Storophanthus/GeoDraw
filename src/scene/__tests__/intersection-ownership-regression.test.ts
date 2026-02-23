@@ -175,6 +175,54 @@ function testCircleLinePairOwnership(): void {
   }
 }
 
+function testCircleLineSingletonAvoidsOccupiedRoot(): void {
+  const scene: SceneModel = {
+    points: [
+      freePoint("i", "I", 0, 0),
+      freePoint("k", "K", -1, 0),
+      freePoint("d", "D", 2, 0),
+      {
+        id: "j",
+        kind: "circleLineIntersectionPoint",
+        name: "J",
+        captionTex: "J",
+        visible: true,
+        showLabel: "name",
+        circleId: "c2",
+        lineId: "l1",
+        branchIndex: 1,
+        style: pointStyle,
+      },
+    ],
+    numbers: [],
+    polygons: [],
+    lines: [{ id: "l1", kind: "twoPoint", aId: "i", bId: "k", visible: true, style: lineStyle }],
+    segments: [],
+    circles: [{ id: "c2", kind: "twoPoint", centerId: "d", throughId: "i", visible: true, style: circleStyle }],
+    angles: [],
+  };
+
+  // In this anchor ordering, branchIndex=1 points to the occupied root I unless
+  // ownership logic prefers the other (unoccupied) root.
+  beginSceneEvalTick(scene);
+  const iw = getWorldOrThrow(scene, "i");
+  const jw = getWorldOrThrow(scene, "j");
+  endSceneEvalTick(scene);
+  if (distance(iw, jw) <= 1e-6) {
+    throw new Error("Circle-line singleton ownership regression: J collapsed to occupied root I");
+  }
+
+  // Recompute under reversed line orientation; J must remain the other root.
+  setFreePoint(scene, "k", { x: 1, y: 0 });
+  beginSceneEvalTick(scene);
+  const iw2 = getWorldOrThrow(scene, "i");
+  const jw2 = getWorldOrThrow(scene, "j");
+  endSceneEvalTick(scene);
+  if (distance(iw2, jw2) <= 1e-6) {
+    throw new Error("Circle-line singleton ownership regression after drag: J collapsed to occupied root I");
+  }
+}
+
 function testCircleCirclePairOwnership(): void {
   const scene: SceneModel = {
     points: [
@@ -801,6 +849,7 @@ function testLineSectorArcIntersectionTracksBoundary(): void {
 }
 
 testCircleLinePairOwnership();
+testCircleLineSingletonAvoidsOccupiedRoot();
 testCircleCirclePairOwnership();
 testGenericBranchIndexOverridesPreferredWorld();
 testGenericSegmentCircleBranchIndexOverridesPreferredWorld();

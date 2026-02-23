@@ -81,6 +81,7 @@ export function CommandBar() {
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
+  const createTriangleCenterPoint = useGeoStore((store) => store.createTriangleCenterPoint);
   const createPointByTranslation = useGeoStore((store) => store.createPointByTranslation);
   const createPointByRotation = useGeoStore((store) => store.createPointByRotation);
   const createPointByDilation = useGeoStore((store) => store.createPointByDilation);
@@ -140,7 +141,7 @@ export function CommandBar() {
     }
 
     if (parsed.kind === "assignScalar") {
-      const out = commandBarApi.setScalarVar(parsed.name, parsed.value);
+      const out = commandBarApi.setScalarVar(parsed.name, parsed.value, parsed.expr);
       if (!out.ok) {
         setStatus({ kind: "error", text: out.error });
         return;
@@ -245,6 +246,16 @@ export function CommandBar() {
       const pointId = createMidpointFromSegment(cmd.segId);
       if (!pointId) {
         setStatus({ kind: "error", text: "Cannot construct midpoint" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateTriangleCenterPoint") {
+      const pointId = createTriangleCenterPoint(cmd.centerKind, cmd.aId, cmd.bId, cmd.cId);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct triangle center" });
         return;
       }
       setStatus({ kind: "ok", text: `Created point ${pointId}` });

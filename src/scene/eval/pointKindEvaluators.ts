@@ -9,6 +9,9 @@ import {
   evalPointOnCircle,
   evalPointOnLine,
   evalPointOnSegment,
+  evalTriangleCentroid,
+  evalTriangleIncenter,
+  evalTriangleOrthocenter,
 } from "./pointGeometryEval";
 import type {
   CircleCenterPoint,
@@ -24,6 +27,7 @@ import type {
   SceneVector,
   SceneModel,
   LineLikeObjectRef,
+  TriangleCenterPoint,
 } from "../points";
 import type { SceneEvalContext } from "./sceneContextBuilder";
 import type { AngleExpressionEvalResult } from "./expressionEval";
@@ -266,4 +270,22 @@ export function evalCircleCenterPointPoint(
   const geom = ops.getCircleWorldGeometryWithCtx(point.circleId, scene, ctx);
   if (!geom) return null;
   return geom.center;
+}
+
+export function evalTriangleCenterPointPoint(
+  point: TriangleCenterPoint,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+  }
+): Vec2 | null {
+  const a = ops.getPointWorldById(point.aId, scene, ctx);
+  const b = ops.getPointWorldById(point.bId, scene, ctx);
+  const c = ops.getPointWorldById(point.cId, scene, ctx);
+  if (!a || !b || !c) return null;
+  ctx.stats.allocationsEstimate += 1;
+  if (point.centerKind === "centroid") return evalTriangleCentroid(a, b, c);
+  if (point.centerKind === "incenter") return evalTriangleIncenter(a, b, c);
+  return evalTriangleOrthocenter(a, b, c);
 }

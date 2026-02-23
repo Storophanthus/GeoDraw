@@ -58,6 +58,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
   const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
   const updateSelectedPolygonFields = useGeoStore((store) => store.updateSelectedPolygonFields);
+  const updateSelectedNumberDefinition = useGeoStore((store) => store.updateSelectedNumberDefinition);
   const updateSelectedTextLabelFields = useGeoStore((store) => store.updateSelectedTextLabelFields);
   const updateSelectedTextLabelStyle = useGeoStore((store) => store.updateSelectedTextLabelStyle);
   const createNumber = useGeoStore((store) => store.createNumber);
@@ -119,6 +120,10 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     () => evaluateNumberExpression(scene, transformTool.factorExpr),
     [scene, transformTool.factorExpr]
   );
+  const transformAnglePreview = useMemo(
+    () => evaluateAngleExpressionDegrees(scene, transformTool.angleExpr),
+    [scene, transformTool.angleExpr]
+  );
   const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "polygon" | "angle" | null>(() => {
     if (selectedPoint) return "point";
     if (selectedSegment) return "segment";
@@ -159,9 +164,10 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const [renameError, setRenameError] = useState("");
   const [shapePickerOpen, setShapePickerOpen] = useState(false);
   const [newNumberValue, setNewNumberValue] = useState("1");
-  const [newNumberExpr, setNewNumberExpr] = useState("n_1+n_2^2");
-  const [ratioNumeratorId, setRatioNumeratorId] = useState("");
-  const [ratioDenominatorId, setRatioDenominatorId] = useState("");
+  const [newSliderMin, setNewSliderMin] = useState("0");
+  const [newSliderMax, setNewSliderMax] = useState("10");
+  const [newSliderStep, setNewSliderStep] = useState("0.1");
+  const [newSliderMode, setNewSliderMode] = useState<"real" | "degree">("real");
   const shapePickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -169,20 +175,6 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     setRenameError("");
     setShapePickerOpen(false);
   }, [selectedPoint]);
-
-  useEffect(() => {
-    if (scene.numbers.length === 0) {
-      setRatioNumeratorId("");
-      setRatioDenominatorId("");
-      return;
-    }
-    if (!scene.numbers.some((n) => n.id === ratioNumeratorId)) {
-      setRatioNumeratorId(scene.numbers[0].id);
-    }
-    if (!scene.numbers.some((n) => n.id === ratioDenominatorId)) {
-      setRatioDenominatorId(scene.numbers[Math.min(1, scene.numbers.length - 1)].id);
-    }
-  }, [scene.numbers, ratioNumeratorId, ratioDenominatorId]);
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
@@ -230,8 +222,11 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   regularPolygonDirection={regularPolygonTool.direction}
   setRegularPolygonTool={setRegularPolygonTool}
   transformFactorExpr={transformTool.factorExpr}
+  transformAngleExpr={transformTool.angleExpr}
+  transformDirection={transformTool.direction}
   setTransformTool={setTransformTool}
   transformFactorPreview={transformFactorPreview}
+  transformAnglePreview={transformAnglePreview}
   pendingSelection={pendingSelection}
   pendingCircleFixedCenterLabel={
     pendingSelection && pendingSelection.tool === "circle_fixed"
@@ -245,8 +240,92 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   <div className="toolInfo">
     <div className="subSectionTitle">Number</div>
     <div className="statusText">
-      {selectedNumber.name} = {selectedNumberValue === null ? "undefined" : selectedNumberValue.toFixed(6)}
+      {selectedNumber.name} = {selectedNumberValue === null ? "undefined" : formatRoundedDisplay(selectedNumberValue, 6)}
     </div>
+    {selectedNumber.definition.kind === "slider" && (() => {
+      const def = selectedNumber.definition;
+      const lo = Math.min(def.min, def.max);
+      const hi = Math.max(def.min, def.max);
+      const safeStep = Number.isFinite(def.step) && def.step > 0 ? def.step : 0.1;
+      const safeValue = Math.min(hi, Math.max(lo, def.value));
+      const updateSlider = (patch: Partial<typeof def>) => {
+        const merged = { ...def, ...patch };
+        const nextLo = Math.min(merged.min, merged.max);
+        const nextHi = Math.max(merged.min, merged.max);
+        const nextStep = Number.isFinite(merged.step) && merged.step > 0 ? merged.step : safeStep;
+        const nextValue = Math.min(nextHi, Math.max(nextLo, merged.value));
+        updateSelectedNumberDefinition({
+          ...merged,
+          min: nextLo,
+          max: nextHi,
+          step: nextStep,
+          value: nextValue,
+        });
+      };
+      return (
+        <>
+          <div className="controlRow">
+            <label className="controlLabel">Slider Type</label>
+            <select
+              className="selectInput"
+              value={def.sliderMode === "radian" ? "degree" : (def.sliderMode ?? "real")}
+              onChange={(e) => updateSlider({ sliderMode: e.target.value === "degree" ? "degree" : "real" })}
+            >
+              <option value="real">Real</option>
+              <option value="degree">Degree</option>
+            </select>
+          </div>
+          <div className="controlRow controlRowWithNumeric">
+            <label className="controlLabel">Value</label>
+            <input
+              className="sizeSlider"
+              type="range"
+              min={lo}
+              max={hi}
+              step={safeStep}
+              value={safeValue}
+              onChange={(e) => updateSlider({ value: Number(e.target.value) })}
+            />
+            <input
+              className="scaleInputCompact"
+              type="number"
+              step="any"
+              value={safeValue}
+              onChange={(e) => updateSlider({ value: Number(e.target.value) })}
+            />
+          </div>
+          <div className="controlRow controlRowWithNumeric">
+            <label className="controlLabel">Min</label>
+            <input
+              className="scaleInputCompact"
+              type="number"
+              step="any"
+              value={def.min}
+              onChange={(e) => updateSlider({ min: Number(e.target.value) })}
+            />
+            <label className="controlLabel">Max</label>
+            <input
+              className="scaleInputCompact"
+              type="number"
+              step="any"
+              value={def.max}
+              onChange={(e) => updateSlider({ max: Number(e.target.value) })}
+            />
+          </div>
+          <div className="controlRow">
+            <label className="controlLabel">Step</label>
+            <input
+              className="scaleInputCompact"
+              type="number"
+              min={Number.EPSILON}
+              step="any"
+              value={safeStep}
+              onChange={(e) => updateSlider({ step: Number(e.target.value) })}
+            />
+          </div>
+        </>
+      );
+    })()}
     <button className="deleteButton" onClick={deleteSelectedObject}>
       Delete
     </button>
@@ -441,13 +520,27 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
 <NumbersSection
   newNumberValue={newNumberValue}
   setNewNumberValue={setNewNumberValue}
-  newNumberExpr={newNumberExpr}
-  setNewNumberExpr={setNewNumberExpr}
-  ratioNumeratorId={ratioNumeratorId}
-  setRatioNumeratorId={setRatioNumeratorId}
-  ratioDenominatorId={ratioDenominatorId}
-  setRatioDenominatorId={setRatioDenominatorId}
-  numbers={scene.numbers}
+  newSliderMin={newSliderMin}
+  setNewSliderMin={setNewSliderMin}
+  newSliderMax={newSliderMax}
+  setNewSliderMax={setNewSliderMax}
+  newSliderStep={newSliderStep}
+  setNewSliderStep={setNewSliderStep}
+  newSliderMode={newSliderMode}
+  setNewSliderMode={(next) => {
+    setNewSliderMode(next);
+    if (next === "degree") {
+      setNewSliderMin("0");
+      setNewSliderMax("360");
+      setNewSliderStep("1");
+      setNewNumberValue("0");
+    } else {
+      setNewSliderMin("0");
+      setNewSliderMax("10");
+      setNewSliderStep("0.1");
+      setNewNumberValue("1");
+    }
+  }}
   selectedSegmentId={selectedSegment?.id ?? null}
   selectedCircleId={selectedCircle?.id ?? null}
   selectedAngleId={selectedAngle?.id ?? null}

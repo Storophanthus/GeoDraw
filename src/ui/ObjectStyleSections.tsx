@@ -356,15 +356,54 @@ function ArrowListControl<T extends PathArrowMark>({
               {!isEndpointPlacement && (
                 <div className="controlRow" style={{ gridTemplateColumns: "100px 1fr" }}>
                   <label className="controlLabel">Distribution</label>
-                  <select
-                    className="selectInput"
-                    value={selectedArrow.distribution ?? "single"}
-                    onChange={(e) => updateSelectedArrow({ distribution: e.target.value as "single" | "multi" })}
-                    style={{ height: "32px", borderRadius: "6px" }}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "4px",
+                    }}
                   >
-                    <option value="single">Single</option>
-                    <option value="multi">Multi</option>
-                  </select>
+                    <button
+                      type="button"
+                      className="iconButton"
+                      onClick={() => updateSelectedArrow({ distribution: "single" })}
+                      style={{
+                        height: "32px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--gd-ui-border, #cbd5e1)",
+                        background:
+                          (selectedArrow.distribution ?? "single") === "single"
+                            ? "var(--gd-ui-accent, #2563eb)"
+                            : "var(--gd-ui-surface, #fff)",
+                        color:
+                          (selectedArrow.distribution ?? "single") === "single"
+                            ? "var(--gd-ui-accent-contrast, #fff)"
+                            : "var(--gd-ui-text, #334155)",
+                      }}
+                    >
+                      Single
+                    </button>
+                    <button
+                      type="button"
+                      className="iconButton"
+                      onClick={() => updateSelectedArrow({ distribution: "multi" })}
+                      style={{
+                        height: "32px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--gd-ui-border, #cbd5e1)",
+                        background:
+                          (selectedArrow.distribution ?? "single") === "multi"
+                            ? "var(--gd-ui-accent, #2563eb)"
+                            : "var(--gd-ui-surface, #fff)",
+                        color:
+                          (selectedArrow.distribution ?? "single") === "multi"
+                            ? "var(--gd-ui-accent-contrast, #fff)"
+                            : "var(--gd-ui-text, #334155)",
+                      }}
+                    >
+                      Multi
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -648,10 +687,12 @@ export function ObjectStyleSections({
           : selectedSegment.style.segmentMark
             ? [selectedSegment.style.segmentMark]
             : [];
-      return source.map((mark) => ({
-        ...DEFAULT_SEGMENT_MARK,
-        ...mark,
-      }));
+      return source
+        .map((mark) => ({
+          ...DEFAULT_SEGMENT_MARK,
+          ...mark,
+        }))
+        .filter((mark) => Boolean(mark.enabled) && mark.mark !== "none");
     },
     [selectedSegment]
   );
@@ -912,28 +953,24 @@ export function ObjectStyleSections({
             </div>
             {selectedSegmentMark ? (
               <>
-                <label className="checkboxRow">
-                  <input
-                    type="checkbox"
-                    checked={selectedSegmentMark.enabled}
-                    onChange={(e) => {
-                      const nextMarks = [...resolvedSegmentMarks];
-                      nextMarks[selectedSegmentMarkIndex] = { ...selectedSegmentMark, enabled: e.target.checked };
-                      commitSegmentMarks(nextMarks);
-                    }}
-                  />
-                  Enable selected mark
-                </label>
                 <div className="controlRow">
                   <label className="controlLabel">Mark Type</label>
                   <select
                     className="selectInput"
                     value={selectedSegmentMark.mark}
                     onChange={(e) => {
+                      const nextMark = e.target.value as (typeof SEGMENT_MARK_OPTIONS)[number];
+                      if (nextMark === "none") {
+                        const nextMarks = resolvedSegmentMarks.filter((_, i) => i !== selectedSegmentMarkIndex);
+                        commitSegmentMarks(nextMarks);
+                        setSelectedSegmentMarkIndex((prev) => Math.max(0, Math.min(prev, nextMarks.length - 1)));
+                        return;
+                      }
                       const nextMarks = [...resolvedSegmentMarks];
                       nextMarks[selectedSegmentMarkIndex] = {
                         ...selectedSegmentMark,
-                        mark: e.target.value as (typeof SEGMENT_MARK_OPTIONS)[number],
+                        enabled: true,
+                        mark: nextMark,
                       };
                       commitSegmentMarks(nextMarks);
                     }}
@@ -947,28 +984,58 @@ export function ObjectStyleSections({
                 </div>
                 <div className="controlRow">
                   <label className="controlLabel">Distribution</label>
-                  <select
-                    className="selectInput"
-                    value={selectedSegmentMark.distribution ?? "single"}
-                    onChange={(e) => {
-                      const distribution = e.target.value === "multi" ? "multi" : "single";
-                      const nextMarks = [...resolvedSegmentMarks];
-                      nextMarks[selectedSegmentMarkIndex] = {
-                        ...selectedSegmentMark,
-                        distribution,
-                        startPos: selectedSegmentMark.startPos ?? 0.45,
-                        endPos: selectedSegmentMark.endPos ?? 0.55,
-                        step: selectedSegmentMark.step ?? 0.05,
-                      };
-                      commitSegmentMarks(nextMarks);
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "4px",
                     }}
                   >
-                    <option value="single">Single</option>
-                    <option value="multi">Multi</option>
-                  </select>
+                    {(["single", "multi"] as const).map((distribution) => (
+                      <button
+                        key={distribution}
+                        type="button"
+                        className="iconButton"
+                        onClick={() => {
+                          const nextMarks = [...resolvedSegmentMarks];
+                          nextMarks[selectedSegmentMarkIndex] = {
+                            ...selectedSegmentMark,
+                            distribution,
+                            startPos: selectedSegmentMark.startPos ?? 0.45,
+                            endPos: selectedSegmentMark.endPos ?? 0.55,
+                            step: selectedSegmentMark.step ?? 0.05,
+                          };
+                          commitSegmentMarks(nextMarks);
+                        }}
+                        style={{
+                          height: "32px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--gd-ui-border, #cbd5e1)",
+                          background:
+                            (selectedSegmentMark.distribution ?? "single") === distribution
+                              ? "var(--gd-ui-accent, #2563eb)"
+                              : "var(--gd-ui-surface, #fff)",
+                          color:
+                            (selectedSegmentMark.distribution ?? "single") === distribution
+                              ? "var(--gd-ui-accent-contrast, #fff)"
+                              : "var(--gd-ui-text, #334155)",
+                        }}
+                      >
+                        {distribution === "single" ? "Single" : "Multi"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 {(selectedSegmentMark.distribution ?? "single") === "multi" ? (
-                  <>
+                  <div className="nestedGroup" style={{
+                    background: "var(--gd-ui-surface-soft, #f8fafc)",
+                    border: "1px solid var(--gd-ui-border-soft, #e2e8f0)",
+                    borderRadius: "8px",
+                    padding: "10px 12px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px"
+                  }}>
                     <div className="controlRow controlRowWithNumeric">
                       <label className="controlLabel">Start</label>
                       <input
@@ -1056,7 +1123,7 @@ export function ObjectStyleSections({
                         }}
                       />
                     </div>
-                  </>
+                  </div>
                 ) : (
                   <div className="controlRow">
                     <label className="controlLabel">Mark Pos</label>
