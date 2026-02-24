@@ -1554,9 +1554,9 @@ export function ObjectStyleSections({
           </div>
           {!selectedAngleIsSector && (
             <>
-              <div className="controlRow">
-                <label className="controlLabel">Mark</label>
-                {selectedAngleIsRight ? (
+              {selectedAngleIsRight ? (
+                <div className="controlRow">
+                  <label className="controlLabel">Mark</label>
                   <select
                     className="selectInput"
                     value={
@@ -1578,25 +1578,8 @@ export function ObjectStyleSections({
                     <option value="rightArcDot">RightArcDot</option>
                     <option value="none">None</option>
                   </select>
-                ) : (
-                  <select
-                    className="selectInput"
-                    value={selectedAngle.style.markStyle === "none" ? "none" : "arc"}
-                    onChange={(e) =>
-                      e.target.value === "none"
-                        ? updateSelectedAngleStyle({ markStyle: "none", angleMarks: [] })
-                        : commitAngleMarks(
-                            resolvedAngleMarks.length > 0
-                              ? resolvedAngleMarks
-                              : [{ ...DEFAULT_ANGLE_MARK, markColor: selectedAngle.style.markColor }]
-                          )
-                    }
-                  >
-                    <option value="arc">Arc Marks</option>
-                    <option value="none">None</option>
-                  </select>
-                )}
-              </div>
+                </div>
+              ) : null}
               {selectedAngleIsRight && (
                 <label className="checkboxRow">
                   <input
@@ -1608,10 +1591,13 @@ export function ObjectStyleSections({
                   Promote to solid
                 </label>
               )}
-              {!selectedAngleIsRight && selectedAngle.style.markStyle !== "none" && (
+              {!selectedAngleIsRight && (
                 <>
-                  <div className="arrowListHeader" style={{ display: "grid", gridTemplateColumns: "100px 1fr", alignItems: "center", gap: "10px" }}>
-                    <label className="controlLabel">Mark List</label>
+                  <div
+                    className="arrowListHeader"
+                    style={{ display: "grid", gridTemplateColumns: "100px 1fr", alignItems: "center", gap: "10px", marginTop: "6px" }}
+                  >
+                    <label className="controlLabel">Arc Marks</label>
                     <div className="arrowListButtons" style={{ display: "flex", gap: "6px" }}>
                       <select
                         className="selectInput"
@@ -1829,7 +1815,7 @@ export function ObjectStyleSections({
                     </>
                   ) : (
                     <div className="controlRow">
-                      <label className="controlLabel">Mark List</label>
+                      <label className="controlLabel">Arc Marks</label>
                       <span style={{ color: "var(--gd-ui-muted-text, #64748b)", fontSize: "12px" }}>
                         Add a mark to start.
                       </span>

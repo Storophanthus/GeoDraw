@@ -57,6 +57,7 @@ const PREFERENCES_TAB_OPTIONS: Array<{ id: PreferenceTab; label: string }> = [
 
 export function FileControls() {
   const loadSnapshot = useGeoStore((state) => state.loadSnapshot);
+  const fitViewToScene = useGeoStore((state) => state.fitViewToScene);
   const applyAppPreferences = useGeoStore((state) => state.applyAppPreferences);
   const colorProfileId = useGeoStore((state) => state.colorProfileId);
   const canvasThemeOverrides = useGeoStore((state) => state.canvasThemeOverrides);
@@ -268,6 +269,19 @@ export function FileControls() {
     }
     loadSnapshot(parsed);
     if (fileName) setSavedName(fileName);
+    scheduleFitView();
+  };
+
+  const scheduleFitView = () => {
+    const run = () => {
+      const canvas = document.querySelector<HTMLCanvasElement>(".drawingCanvas");
+      const rect = canvas?.getBoundingClientRect();
+      const widthPx = rect?.width && rect.width > 1 ? rect.width : window.innerWidth;
+      const heightPx = rect?.height && rect.height > 1 ? rect.height : window.innerHeight;
+      fitViewToScene({ widthPx, heightPx });
+    };
+    // Let layout/state settle after snapshot load before measuring the canvas.
+    requestAnimationFrame(() => requestAnimationFrame(run));
   };
 
   const handleOpenClick = async () => {
