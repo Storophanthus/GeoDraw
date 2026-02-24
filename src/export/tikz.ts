@@ -381,6 +381,24 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       }
       const simMode: "outer" | "inner" = line.family === "outer" ? "outer" : "inner";
       const simWorld = resolveCircleSimilitudeCenter(geomA.center, geomA.radius, geomB.center, geomB.radius, simMode);
+      if (
+        line.family === "outer" &&
+        tangentTopology.kind === "disjoint" &&
+        simWorld &&
+        isTkzUnsafePoint(simWorld) &&
+        Math.abs(geomA.radius - geomB.radius) > 1e-12
+      ) {
+        const reducedOuterAnchors = tryResolveOuterTangentByRadiusDifference({
+          line,
+          geomA,
+          geomB,
+          anchorsWorld,
+        });
+        if (reducedOuterAnchors) {
+          lineAnchorNames.set(lineId, reducedOuterAnchors);
+          return reducedOuterAnchors;
+        }
+      }
       const tangentCandidatesA = simWorld ? tangentPointsFromPointToCircle(simWorld, geomA.center, geomA.radius) : [];
       const tangentCandidatesB = simWorld ? tangentPointsFromPointToCircle(simWorld, geomB.center, geomB.radius) : [];
 
@@ -568,6 +586,135 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       return { a: mustName(pointName, seg.aId), b: mustName(pointName, seg.bId) };
     }
     return resolveLineAnchorsById(ref.id);
+  };
+
+  const tryResolveOuterTangentByRadiusDifference = ({
+    line,
+    geomA,
+    geomB,
+    anchorsWorld,
+  }: {
+    line: Extract<SceneModel["lines"][number], { kind: "circleCircleTangent" }>;
+    geomA: { center: { x: number; y: number }; radius: number };
+    geomB: { center: { x: number; y: number }; radius: number };
+    anchorsWorld: { a: { x: number; y: number }; b: { x: number; y: number } };
+  }): { a: string; b: string } | null => {
+    if (!(geomA.radius > 1e-12) || !(geomB.radius > 1e-12)) return null;
+    const useAAsBig = geomA.radius >= geomB.radius;
+    const bigCircleId = useAAsBig ? line.circleAId : line.circleBId;
+    const smallCircleId = useAAsBig ? line.circleBId : line.circleAId;
+    const bigGeom = useAAsBig ? geomA : geomB;
+    const smallGeom = useAAsBig ? geomB : geomA;
+    const diff = bigGeom.radius - smallGeom.radius;
+    if (!(diff > 1e-12)) return null;
+
+    const bigCenterName = ensureCircleCenterName(bigCircleId);
+    const bigThroughName = ensureCircleThroughName(bigCircleId);
+    const smallCenterName = ensureCircleCenterName(smallCircleId);
+
+    derivedAuxIndex += 1;
+    const reducedPointName = `tkzTanCC_R_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPointByDilation",
+      name: reducedPointName,
+      center: bigCenterName,
+      point: bigThroughName,
+      factor: diff / bigGeom.radius,
+    });
+
+    derivedAuxIndex += 1;
+    const redFirstName = `tkzTanCC_${derivedAuxIndex}_1`;
+    derivedAuxIndex += 1;
+    const redSecondName = `tkzTanCC_${derivedAuxIndex}_2`;
+    constructions.push({
+      kind: "DefCircleTangentsFromPoint",
+      from: smallCenterName,
+      circleO: bigCenterName,
+      circleX: reducedPointName,
+      firstName: redFirstName,
+      secondName: redSecondName,
+    });
+
+    const redCandidates = tangentPointsFromPointToCircle(smallGeom.center, bigGeom.center, diff);
+    if (redCandidates.length === 0) return null;
+    const tkzOrderedReduced = orderTangencyCandidatesLikeTkz(
+      smallGeom.center,
+      bigGeom.center,
+      redCandidates,
+      redFirstName,
+      redSecondName
+    );
+    if (tkzOrderedReduced.length === 0) return null;
+
+    const candidateMap = tkzOrderedReduced.map((cand) => {
+      const dx = cand.point.x - bigGeom.center.x;
+      const dy = cand.point.y - bigGeom.center.y;
+      const bigPoint = {
+        x: bigGeom.center.x + (bigGeom.radius / diff) * dx,
+        y: bigGeom.center.y + (bigGeom.radius / diff) * dy,
+      };
+      const smallPoint = {
+        x: smallGeom.center.x + (smallGeom.radius / diff) * dx,
+        y: smallGeom.center.y + (smallGeom.radius / diff) * dy,
+      };
+      const pointOnA = useAAsBig ? bigPoint : smallPoint;
+      const pointOnB = useAAsBig ? smallPoint : bigPoint;
+      return { reducedName: cand.name, pointOnA, pointOnB };
+    });
+
+    let chosen = candidateMap[0];
+    let best = distance(chosen.pointOnA, anchorsWorld.a) + distance(chosen.pointOnB, anchorsWorld.b);
+    for (let i = 1; i < candidateMap.length; i += 1) {
+      const score = distance(candidateMap[i].pointOnA, anchorsWorld.a) + distance(candidateMap[i].pointOnB, anchorsWorld.b);
+      if (score < best) {
+        chosen = candidateMap[i];
+        best = score;
+      }
+    }
+
+    derivedAuxIndex += 1;
+    const bigTangencyName = `tkzTanCC_Big_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPointByDilation",
+      name: bigTangencyName,
+      center: bigCenterName,
+      point: chosen.reducedName,
+      factor: bigGeom.radius / diff,
+    });
+
+    derivedAuxIndex += 1;
+    const scaledForSmallName = `tkzTanCC_SmallScaled_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPointByDilation",
+      name: scaledForSmallName,
+      center: bigCenterName,
+      point: bigTangencyName,
+      factor: smallGeom.radius / bigGeom.radius,
+    });
+
+    derivedAuxIndex += 1;
+    const smallTangencyName = `tkzTanCC_Small_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPointByTranslation",
+      name: smallTangencyName,
+      point: scaledForSmallName,
+      from: bigCenterName,
+      to: smallCenterName,
+    });
+
+    derivedAuxIndex += 1;
+    const tangentAuxName = `tkzTanCC_outerDiff_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPerpendicularLine",
+      auxName: tangentAuxName,
+      through: bigTangencyName,
+      baseA: bigCenterName,
+      baseB: bigTangencyName,
+    });
+
+    const pointAName = useAAsBig ? bigTangencyName : smallTangencyName;
+    const pointBName = useAAsBig ? smallTangencyName : bigTangencyName;
+    return { a: pointAName, b: pointBName === pointAName ? tangentAuxName : pointBName };
   };
 
   const resolvePoint = (pointId: string) => {
@@ -2457,6 +2604,12 @@ function classifyCircleCircleTangentTopology(
   if (d > sum + nearTol) return { kind: "disjoint" };
   if (d < diff - nearTol) return { kind: "contained" };
   return { kind: "intersecting" };
+}
+
+function isTkzUnsafePoint(p: { x: number; y: number }): boolean {
+  // TeX dimensions overflow around 16384pt (~576cm). Keep a conservative margin.
+  const safeAbsCm = 400;
+  return Math.abs(p.x) > safeAbsCm || Math.abs(p.y) > safeAbsCm;
 }
 
 function assertCircleCircleTangentExportable(
