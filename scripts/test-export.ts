@@ -954,13 +954,13 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "undefined-circle-line-points.json") {
-    if (exportError) throw exportError;
-    if (tikz.includes("\\tkzDrawPoints[tkzVertex](E") || tikz.includes(",E,") || tikz.includes(",F,")) {
-      throw new Error("Expected undefined circle-line points to be omitted from point drawing.");
+    if (!exportError) {
+      throw new Error("Visible undefined circle-line points should fail closed in exporter.");
     }
-    if (tikz.includes("\\tkzLabelPoint") && (tikz.includes("(E){") || tikz.includes("(F){"))) {
-      throw new Error("Expected undefined circle-line points to be omitted from label drawing.");
+    if (!exportError.message.includes("Cannot export visible undefined point")) {
+      throw new Error("Expected explicit visible undefined point exporter error.");
     }
+    return;
   }
 
   if (fileName === "segment-mark-basic.json") {

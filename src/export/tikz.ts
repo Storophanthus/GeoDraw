@@ -1471,10 +1471,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   };
 
   for (const point of scene.points) {
-    // Match canvas behavior: undefined points (e.g. intersections on vanished tangents)
-    // should not force export-time construction of impossible parent geometry unless a
-    // visible exported object later depends on them.
-    if (!getPointWorldPosCached(scene, point.id)) continue;
+    const pointWorld = getPointWorldPosCached(scene, point.id);
+    // Hidden undefined points (e.g. intersections on vanished tangents) should not
+    // poison export. Visible undefined points fail closed to avoid silent data loss.
+    if (!pointWorld) {
+      if (point.visible) {
+        throw new Error(`Cannot export visible undefined point ${point.name}: ${point.id}`);
+      }
+      continue;
+    }
     resolvePoint(point.id);
   }
 
