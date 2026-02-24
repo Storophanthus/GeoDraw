@@ -74,6 +74,7 @@ export type TikzCommand =
   | { kind: "DefPointByRotation"; name: string; center: string; point: string; angleDeg: number; direction: "CCW" | "CW" }
   | { kind: "DefPointByTranslation"; name: string; point: string; from: string; to: string }
   | { kind: "DefPointByDilation"; name: string; point: string; center: string; factor: number }
+  | { kind: "DefPointByProjection"; name: string; point: string; axisA: string; axisB: string }
   | { kind: "DefPointByReflection"; name: string; point: string; axisA: string; axisB: string; footName: string }
   | { kind: "DefPerpendicularLine"; auxName: string; through: string; baseA: string; baseB: string }
   | { kind: "DefParallelLine"; auxName: string; through: string; baseA: string; baseB: string }
@@ -339,7 +340,41 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       }
       const geomA = circleGeomById(circleA.id);
       const geomB = circleGeomById(circleB.id);
+      const tangentTopology = classifyCircleCircleTangentTopology(geomA, geomB);
       assertCircleCircleTangentExportable(line, geomA, geomB);
+      if (
+        tangentTopology.kind === "degenerateTangency" &&
+        !tangentTopology.near &&
+        isExactDegenerateCircleCircleTangentFamily(line, tangentTopology)
+      ) {
+        const circleAO = ensureCircleCenterName(line.circleAId);
+        const circleBO = ensureCircleCenterName(line.circleBId);
+        const contactRatio =
+          tangentTopology.mode === "external"
+            ? geomA.radius / (geomA.radius + geomB.radius)
+            : geomA.radius / (geomA.radius - geomB.radius);
+        derivedAuxIndex += 1;
+        const contactName = `tkzTanCC_T_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefPointByDilation",
+          name: contactName,
+          center: circleAO,
+          point: circleBO,
+          factor: contactRatio,
+        });
+        derivedAuxIndex += 1;
+        const tangentAuxName = `tkzTanCC_deg_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefPerpendicularLine",
+          auxName: tangentAuxName,
+          through: contactName,
+          baseA: circleAO,
+          baseB: circleBO,
+        });
+        const anchors = { a: contactName, b: tangentAuxName };
+        lineAnchorNames.set(lineId, anchors);
+        return anchors;
+      }
       const anchorsWorld = getLineWorldAnchors(line, scene);
       if (!anchorsWorld) {
         throw new Error(`Cannot export undefined circle-circle tangent geometry: ${line.id}`);
@@ -495,6 +530,30 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const anchors = { a: mustName(pointName, line.aId), b: mustName(pointName, line.bId) };
     lineAnchorNames.set(lineId, anchors);
     return anchors;
+  };
+
+  const isTopologicallyImpossibleCircleCircleTangent = (
+    line: Extract<SceneModel["lines"][number], { kind: "circleCircleTangent" }>
+  ): boolean => {
+    const circleA = circleById.get(line.circleAId);
+    const circleB = circleById.get(line.circleBId);
+    if (!circleA || !circleB) return false;
+    const geomA = circleGeomById(circleA.id);
+    const geomB = circleGeomById(circleB.id);
+    const topology = classifyCircleCircleTangentTopology(geomA, geomB);
+    switch (topology.kind) {
+      case "intersecting":
+        return line.family === "inner";
+      case "degenerateTangency":
+        if (topology.near) return false;
+        return topology.mode === "internal" && line.family === "inner";
+      case "contained":
+      case "concentricUnequal":
+      case "coincident":
+        return true;
+      case "disjoint":
+        return false;
+    }
   };
 
   const resolveLineLikeNames = (ref: { type: "line" | "segment"; id: string }): { a: string; b: string } => {
@@ -697,15 +756,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         visited.add(pointId);
         return;
       }
-      assertLineCircleInterLCExportable(
-        `line-circle intersection ${point.id}`,
-        lineWorld.a,
-        lineWorld.b,
-        center,
-        geom.radius,
-        roots.length
-      );
       if (!point.excludePointId && point.branchIndex === 1 && roots.length < 2) {
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
+      if (roots.length === 1) {
+        constructions.push({
+          kind: "DefPointByProjection",
+          name,
+          point: circleCenterName,
+          axisA: lineAnchors.a,
+          axisB: lineAnchors.b,
+        });
+        definedPointIds.add(point.id);
         visiting.delete(pointId);
         visited.add(pointId);
         return;
@@ -802,8 +866,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         visited.add(pointId);
         return;
       }
-      assertLineCircleInterLCExportable(`segment-circle intersection ${point.id}`, wa, wb, center, geom.radius, roots.length);
       if (!point.excludePointId && point.branchIndex === 1 && roots.length < 2) {
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
+      if (roots.length === 1) {
+        constructions.push({
+          kind: "DefPointByProjection",
+          name,
+          point: circleCenterName,
+          axisA: segAName,
+          axisB: segBName,
+        });
+        definedPointIds.add(point.id);
         visiting.delete(pointId);
         visited.add(pointId);
         return;
@@ -1089,14 +1165,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             visited.add(pointId);
             return;
           }
-          assertLineCircleInterLCExportable(
-            `mixed line-circle intersection ${point.id}`,
-            mixed.ll.worldA,
-            mixed.ll.worldB,
-            center,
-            geom.radius,
-            roots.length
-          );
+          if (roots.length === 1) {
+            constructions.push({
+              kind: "DefPointByProjection",
+              name,
+              point: mixedCenterName,
+              axisA: mixed.ll.a,
+              axisB: mixed.ll.b,
+            });
+            definedPointIds.add(point.id);
+            visiting.delete(pointId);
+            visited.add(pointId);
+            return;
+          }
           let mixCommonName: string | undefined;
           if (branch === 1) {
             const sibling = scene.points.find(
@@ -1237,6 +1318,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   }
   for (const line of scene.lines) {
     if (!line.visible) continue;
+    if (line.kind === "circleCircleTangent" && isTopologicallyImpossibleCircleCircleTangent(line)) continue;
     const lineNames = resolveLineAnchorsById(line.id);
     const ext = computeLineDrawPlacement(scene, line);
     const circleCircleAnchorId = line.kind === "circleCircleTangent" ? `${line.id}#a` : null;
@@ -1563,6 +1645,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   for (const line of scene.lines) {
     if (!line.visible || !line.showLabel) continue;
+    if (line.kind === "circleCircleTangent" && isTopologicallyImpossibleCircleCircleTangent(line)) continue;
     const fallbackText = defaultObjectLabelText({ type: "line", id: line.id }, scene);
     const text = resolveObjectLabelText(line.labelText, fallbackText);
     const fallbackPos = defaultObjectLabelPosWorld({ type: "line", id: line.id }, scene);
@@ -1956,6 +2039,12 @@ export function renderTikz(
       out.push(`\\tkzDefPointBy[homothety=center ${cmd.center} ratio ${fmt(cmd.factor)}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
       continue;
     }
+    if (cmd.kind === "DefPointByProjection") {
+      assertTkzMacro("tkzDefPointBy");
+      assertTkzMacro("tkzGetPoint");
+      out.push(`\\tkzDefPointBy[projection=onto ${cmd.axisA}--${cmd.axisB}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
+      continue;
+    }
     if (cmd.kind === "DefPointByReflection") {
       assertTkzMacro("tkzDefPointBy");
       assertTkzMacro("tkzGetPoint");
@@ -2338,51 +2427,6 @@ type CircleCircleTangentTopology =
   | { kind: "coincident" }
   | { kind: "degenerateTangency"; mode: "external" | "internal"; near: boolean };
 
-function classifyLineCircleInterLCTopology(
-  lineA: { x: number; y: number },
-  lineB: { x: number; y: number },
-  center: { x: number; y: number },
-  radius: number,
-  rootsLength: number
-): { kind: "secant" } | { kind: "degenerateTangency"; near: boolean } {
-  if (rootsLength === 1) return { kind: "degenerateTangency", near: false };
-  if (rootsLength !== 2) return { kind: "secant" };
-
-  const vx = lineB.x - lineA.x;
-  const vy = lineB.y - lineA.y;
-  const lineLen = Math.hypot(vx, vy);
-  if (!(lineLen > 1e-12)) return { kind: "secant" };
-
-  const wx = center.x - lineA.x;
-  const wy = center.y - lineA.y;
-  const distToLine = Math.abs(vx * wy - vy * wx) / lineLen;
-  const gap = distToLine - radius;
-  const maxScale = Math.max(1, lineLen, radius, distToLine);
-  const exactTol = 1e-9 * maxScale;
-  const nearTol = 1e-6 * maxScale;
-  if (Math.abs(gap) <= nearTol) {
-    return { kind: "degenerateTangency", near: Math.abs(gap) > exactTol };
-  }
-  return { kind: "secant" };
-}
-
-function assertLineCircleInterLCExportable(
-  context: string,
-  lineA: { x: number; y: number },
-  lineB: { x: number; y: number },
-  center: { x: number; y: number },
-  radius: number,
-  rootsLength: number
-): void {
-  const topology = classifyLineCircleInterLCTopology(lineA, lineB, center, radius, rootsLength);
-  if (topology.kind === "secant") return;
-  throw new Error(
-    `Cannot export ${context}: ${
-      topology.near ? "near-tangent" : "tangent"
-    } line-circle intersections are unsupported in tkz export (\\tkzInterLC[near] fragility)`
-  );
-}
-
 function classifyCircleCircleTangentTopology(
   a: { center: { x: number; y: number }; radius: number },
   b: { center: { x: number; y: number }; radius: number }
@@ -2430,6 +2474,15 @@ function assertCircleCircleTangentExportable(
         `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for intersecting circles`
       );
     case "degenerateTangency":
+      if (!topology.near) {
+        if (isExactDegenerateCircleCircleTangentFamily(line, topology)) return;
+        if (topology.mode === "external" && line.family === "outer") return;
+        if (topology.mode === "internal" && line.family === "inner") {
+          throw new Error(
+            `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for internally tangent circles`
+          );
+        }
+      }
       throw new Error(
         `Cannot export circle-circle tangent ${line.id}: ${
           topology.near ? "near-degenerate" : "degenerate"
@@ -2442,6 +2495,15 @@ function assertCircleCircleTangentExportable(
     case "coincident":
       throw new Error(`Cannot export circle-circle tangent ${line.id}: coincident circles have infinitely many common tangents`);
   }
+}
+
+function isExactDegenerateCircleCircleTangentFamily(
+  line: Extract<SceneModel["lines"][number], { kind: "circleCircleTangent" }>,
+  topology: CircleCircleTangentTopology
+): boolean {
+  if (topology.kind !== "degenerateTangency" || topology.near) return false;
+  const collapsedFamily = topology.mode === "external" ? "inner" : "outer";
+  return line.family === collapsedFamily;
 }
 
 type NamedTangencyPoint = {

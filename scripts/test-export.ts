@@ -508,13 +508,13 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "tangent-circle-circle-a-inner-intersecting-visible-fail.json") {
-    if (!exportError) {
-      throw new Error("Expected intersecting-circle inner tangent fixture to fail-closed.");
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDefIntSimilitudeCenter")) {
+      throw new Error("Impossible intersecting inner tangents should be skipped, not exported.");
     }
-    if (!exportError.message.includes("inner tangents are undefined for intersecting circles")) {
-      throw new Error(`Unexpected error for intersecting inner tangent fixture: ${exportError.message}`);
+    if (tikz.includes("tkzTanCC_")) {
+      throw new Error("Impossible intersecting inner tangents should not emit tangent helper points.");
     }
-    return;
   }
 
   if (fileName === "tangent-circle-circle-a-inner-intersecting-hidden-pass.json") {
@@ -524,6 +524,26 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (tikz.includes("inner tangents are undefined for intersecting circles")) {
       throw new Error("Hidden impossible tangents should not poison export.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-exact-external.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefLine[perpendicular=through tkzTanCC_T_")) {
+      throw new Error("Expected exact external tangency fixture to export collapsed inner tangent constructively via perpendicular-through-contact.");
+    }
+    if (!tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Expected exact external tangency fixture to still export non-degenerate outer tangents constructively.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-exact-internal.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefLine[perpendicular=through tkzTanCC_T_")) {
+      throw new Error("Expected exact internal tangency fixture to export collapsed outer tangent constructively via perpendicular-through-contact.");
+    }
+    if (tikz.includes("\\tkzDefIntSimilitudeCenter")) {
+      throw new Error("Impossible inner tangents in exact internal tangency should be skipped, not exported.");
     }
   }
 
