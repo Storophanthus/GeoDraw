@@ -112,8 +112,7 @@ function evaluateExpression(expr: string, ctx: ParseContext): EvalResult {
       }
       return resolveDistanceArg(node, ctx);
     },
-    evaluateAreaArg: (argExprRaw) => evaluateMeasureArg("Area", argExprRaw, ctx),
-    evaluatePerimeterArg: (argExprRaw) => evaluateMeasureArg("Perimeter", argExprRaw, ctx),
+    evaluateMeasureArg: (fnName, argExprRaw) => evaluateMeasureArg(fnName, argExprRaw, ctx),
   });
 }
 

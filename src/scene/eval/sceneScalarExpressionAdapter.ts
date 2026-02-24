@@ -40,15 +40,8 @@ export function evaluateSceneScalarNumberExpression(params: {
         getPointWorldById: params.getPointWorldById,
         resolveLineAnchors: params.resolveLineAnchors,
       }),
-    evaluateAreaArg: (argExprRaw) =>
-      evaluateSceneMeasureArg("Area", argExprRaw, {
-        circles: params.circles,
-        polygons: params.polygons,
-        getCircleWorldGeometry: params.getCircleWorldGeometry,
-        getPointWorldById: params.getPointWorldById,
-      }),
-    evaluatePerimeterArg: (argExprRaw) =>
-      evaluateSceneMeasureArg("Perimeter", argExprRaw, {
+    evaluateMeasureArg: (fnName, argExprRaw) =>
+      evaluateSceneMeasureArg(fnName, argExprRaw, {
         circles: params.circles,
         polygons: params.polygons,
         getCircleWorldGeometry: params.getCircleWorldGeometry,
