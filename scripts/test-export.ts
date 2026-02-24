@@ -575,6 +575,36 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("tkzTanCC_R_")) {
       throw new Error("Near-equal intersecting outer tangent fixture should emit reduced-radius helper point construction.");
     }
+    const efficient = makeEfficientTikz(tikz);
+    const sensitiveRatioMatches = [
+      ...efficient.matchAll(
+        /\\tkzDefPointBy\[homothety=center [^\]]*?\bratio\s+([0-9.]+)\]\([^)]+\)\s+\\tkzGetPoint\{tkzTanCC_(?:R|Big|SmallScaled)_[^}]+\}/g
+      ),
+    ];
+    if (sensitiveRatioMatches.length < 3) {
+      throw new Error("Efficient export must keep the near-equal tangent helper homothety constructions.");
+    }
+    const hasAggressiveRounding = sensitiveRatioMatches.some((m) => {
+      const value = m[1];
+      const decimals = value.includes(".") ? value.split(".")[1].length : 0;
+      return decimals > 0 && decimals <= 2;
+    });
+    if (hasAggressiveRounding) {
+      throw new Error("Efficient export must not aggressively round near-equal tangent helper ratios.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-equal-radius-outer-safe.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Equal-radius outer tangent fixture should avoid external similitude-center construction at infinity.");
+    }
+    if (tikz.includes("tkzTanCC_A_") || tikz.includes("tkzTanCC_B_")) {
+      throw new Error("Equal-radius outer tangent fixture should avoid hard-coded tangent-point fallback.");
+    }
+    if (!tikz.includes("tkzTanCC_eqRot_") || !tikz.includes("\\tkzDefPointBy[rotation=center")) {
+      throw new Error("Equal-radius outer tangent fixture should use constructive rotation-based parallel tangent construction.");
+    }
   }
 
   if (fileName === "angle-bisector-internal.json") {

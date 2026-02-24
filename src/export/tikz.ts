@@ -380,6 +380,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         throw new Error(`Cannot export undefined circle-circle tangent geometry: ${line.id}`);
       }
       const simMode: "outer" | "inner" = line.family === "outer" ? "outer" : "inner";
+      const equalRadiusTol = 1e-9 * Math.max(1, geomA.radius, geomB.radius);
+      if (line.family === "outer" && Math.abs(geomA.radius - geomB.radius) <= equalRadiusTol) {
+        const equalOuterAnchors = tryResolveOuterTangentEqualRadii({
+          line,
+          geomA,
+          geomB,
+          anchorsWorld,
+        });
+        if (equalOuterAnchors) {
+          lineAnchorNames.set(lineId, equalOuterAnchors);
+          return equalOuterAnchors;
+        }
+      }
       const simWorld = resolveCircleSimilitudeCenter(geomA.center, geomA.radius, geomB.center, geomB.radius, simMode);
       if (
         line.family === "outer" &&
@@ -715,6 +728,75 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const pointAName = useAAsBig ? bigTangencyName : smallTangencyName;
     const pointBName = useAAsBig ? smallTangencyName : bigTangencyName;
     return { a: pointAName, b: pointBName === pointAName ? tangentAuxName : pointBName };
+  };
+
+  const tryResolveOuterTangentEqualRadii = ({
+    line,
+    geomA,
+    geomB,
+    anchorsWorld,
+  }: {
+    line: Extract<SceneModel["lines"][number], { kind: "circleCircleTangent" }>;
+    geomA: { center: { x: number; y: number }; radius: number };
+    geomB: { center: { x: number; y: number }; radius: number };
+    anchorsWorld: { a: { x: number; y: number }; b: { x: number; y: number } };
+  }): { a: string; b: string } | null => {
+    if (!(geomA.radius > 1e-12) || !(geomB.radius > 1e-12)) return null;
+    const d = distance(geomA.center, geomB.center);
+    if (!(d > 1e-12)) return null;
+    const r = (geomA.radius + geomB.radius) * 0.5;
+    const dx = geomB.center.x - geomA.center.x;
+    const dy = geomB.center.y - geomA.center.y;
+    const nx = -dy / d;
+    const ny = dx / d;
+
+    const ccwCand = {
+      a: { x: geomA.center.x + r * nx, y: geomA.center.y + r * ny },
+      b: { x: geomB.center.x + r * nx, y: geomB.center.y + r * ny },
+    };
+    const cwCand = {
+      a: { x: geomA.center.x - r * nx, y: geomA.center.y - r * ny },
+      b: { x: geomB.center.x - r * nx, y: geomB.center.y - r * ny },
+    };
+    const ccwScore = distance(ccwCand.a, anchorsWorld.a) + distance(ccwCand.b, anchorsWorld.b);
+    const cwScore = distance(cwCand.a, anchorsWorld.a) + distance(cwCand.b, anchorsWorld.b);
+    const useCcw = ccwScore <= cwScore;
+
+    const circleAO = ensureCircleCenterName(line.circleAId);
+    const circleBO = ensureCircleCenterName(line.circleBId);
+
+    derivedAuxIndex += 1;
+    const rotatedCenterName = `tkzTanCC_eqRot_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPointByRotation",
+      name: rotatedCenterName,
+      center: circleAO,
+      point: circleBO,
+      angleDeg: 90,
+      direction: useCcw ? "CCW" : "CW",
+    });
+
+    derivedAuxIndex += 1;
+    const tangencyAName = `tkzTanCC_eqA_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPointByDilation",
+      name: tangencyAName,
+      center: circleAO,
+      point: rotatedCenterName,
+      factor: geomA.radius / d,
+    });
+
+    derivedAuxIndex += 1;
+    const tangencyBName = `tkzTanCC_eqB_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPointByTranslation",
+      name: tangencyBName,
+      point: tangencyAName,
+      from: circleAO,
+      to: circleBO,
+    });
+
+    return { a: tangencyAName, b: tangencyBName };
   };
 
   const resolvePoint = (pointId: string) => {
