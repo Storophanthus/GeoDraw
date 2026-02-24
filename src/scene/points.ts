@@ -16,15 +16,12 @@ import {
   evaluateAngleExpressionDegreesWithCtxInScene,
 } from "./eval/numberExpressionEvaluators";
 import { evaluateSceneScalarNumberExpression } from "./eval/sceneScalarExpressionAdapter";
-import { evalNumberByIdWithCtxInScene } from "./eval/numberEvaluators";
+import { evalNumberByIdInSceneWithOps, getNumberValueInScene } from "./eval/sceneNumberAccess";
 import {
-  asCircleWithCtx,
-  asLineLikeWithCtx,
-  asSectorArcWithCtx,
-  buildGeometryResolveOpsWithCtx,
-  getCircleWorldGeometryWithCtxInScene,
-  resolveLineAnchorsWithCtx,
-} from "./eval/geometryAdapters";
+  createSceneGeometryFacadeWithCtx,
+  getCircleWorldGeometryInSceneWithImplicitStats,
+  getLineWorldAnchorsInSceneWithImplicitStats,
+} from "./eval/sceneGeometryFacade";
 import {
   rememberStableGenericIntersectionPoint,
   rememberStableCircleLinePoint,
@@ -39,6 +36,7 @@ import {
   buildSceneEvalContextForScene,
   type SceneEvalContext,
 } from "./eval/sceneContextBuilder";
+import { resolveTextLabelDisplayTextWithOps } from "./eval/textLabelDisplay";
 
 export {
   isNameUnique,
@@ -949,12 +947,12 @@ function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEval
     resolveLineAnchorsById: (lineId, s, c) => {
       const line = c.lineById.get(lineId);
       if (!line) return null;
-      return resolveLineAnchors(line, s, c);
+      return getSceneGeometryFacade(s, c).resolveLineAnchors(line);
     },
     getCircleWorldGeometryById: (circleId, s, c) => {
       const circle = c.circleById.get(circleId);
       if (!circle) return null;
-      return getCircleWorldGeometryWithCtx(circle, s, c);
+      return getSceneGeometryFacade(s, c).getCircleWorldGeometry(circle);
     },
     evaluateAngleExpressionDegreesWithCtx,
     evaluateNumberExpressionWithCtx,
@@ -970,16 +968,27 @@ function getPointWorldById(pointId: string, scene: SceneModel, ctx: SceneEvalCon
   return evalPoint(pointId, scene, ctx);
 }
 
+function getSceneGeometryFacade(scene: SceneModel, ctx: SceneEvalContext) {
+  return createSceneGeometryFacadeWithCtx(scene, ctx, {
+    getPointWorldById,
+    evaluateNumberExpressionWithCtx,
+  });
+}
+
 function objectIntersections(
   a: GeometryObjectRef,
   b: GeometryObjectRef,
   scene: SceneModel,
   ctx: SceneEvalContext
 ): Vec2[] {
+  const geometry = createSceneGeometryFacadeWithCtx(scene, ctx, {
+    getPointWorldById,
+    evaluateNumberExpressionWithCtx,
+  });
   return objectIntersectionsWithOps(a, b, {
-    asLineLike: (ref) => asLineLike(ref, scene, ctx),
-    asCircle: (ref) => asCircle(ref, scene, ctx),
-    asSectorArc: (ref) => asSectorArc(ref, scene, ctx),
+    asLineLike: (ref) => geometry.asLineLike(ref),
+    asCircle: (ref) => geometry.asCircle(ref),
+    asSectorArc: (ref) => geometry.asSectorArc(ref),
     onLineLineCall: () => {
       ctx.stats.lineLineCalls += 1;
     },
@@ -995,65 +1004,22 @@ function objectIntersections(
   });
 }
 
-function asLineLike(
-  ref: GeometryObjectRef,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { a: Vec2; b: Vec2; finite: boolean } | null {
-  return asLineLikeWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
-}
-
-function resolveLineAnchors(
-  line: SceneLine,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { a: Vec2; b: Vec2 } | null {
-  return resolveLineAnchorsWithCtx(line, scene, ctx, buildGeometryResolveOps(scene, ctx));
-}
-
 export function getLineWorldAnchors(line: SceneLine, scene: SceneModel): { a: Vec2; b: Vec2 } | null {
-  const ctx = getOrCreateSceneEvalContext(scene);
-  const value = resolveLineAnchors(line, scene, ctx);
-  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
-  return value;
-}
-
-function asCircle(
-  ref: GeometryObjectRef,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { center: Vec2; radius: number } | null {
-  return asCircleWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
-}
-
-function asSectorArc(
-  ref: GeometryObjectRef,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { center: Vec2; radius: number; start: number; sweep: number } | null {
-  return asSectorArcWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
-}
-
-function getCircleWorldGeometryWithCtx(
-  circle: SceneCircle,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { center: Vec2; radius: number } | null {
-  return getCircleWorldGeometryWithCtxInScene(circle, scene, ctx, buildGeometryResolveOps(scene, ctx));
-}
-
-function buildGeometryResolveOps(scene: SceneModel, ctx: SceneEvalContext) {
-  return buildGeometryResolveOpsWithCtx(scene, ctx, {
+  return getLineWorldAnchorsInSceneWithImplicitStats(line, scene, {
+    getOrCreateSceneEvalContext,
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneLastEvalStats),
     getPointWorldById,
     evaluateNumberExpressionWithCtx,
   });
 }
 
 export function getCircleWorldGeometry(circle: SceneCircle, scene: SceneModel): { center: Vec2; radius: number } | null {
-  const ctx = getOrCreateSceneEvalContext(scene);
-  const value = getCircleWorldGeometryWithCtx(circle, scene, ctx);
-  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
-  return value;
+  return getCircleWorldGeometryInSceneWithImplicitStats(circle, scene, {
+    getOrCreateSceneEvalContext,
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneLastEvalStats),
+    getPointWorldById,
+    evaluateNumberExpressionWithCtx,
+  });
 }
 
 function resolveCircleLinePairAssignments(
@@ -1082,43 +1048,27 @@ function resolveGenericIntersectionPairAssignments(
 }
 
 export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel): number | null {
-  const id = typeof numOrId === "string" ? numOrId : numOrId.id;
-  const ctx = getOrCreateSceneEvalContext(scene);
-  const value = evalNumberById(id, scene, ctx);
-  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
-  return value;
-}
-
-function formatTextLabelNumber(value: number): string {
-  if (!Number.isFinite(value)) return "undefined";
-  if (Math.abs(value) < 1e-12) return "0";
-  const rounded = value.toFixed(6).replace(/\.?0+$/, "");
-  return rounded === "-0" ? "0" : rounded;
+  return getNumberValueInScene(numOrId, scene, {
+    getOrCreateSceneEvalContext,
+    evalNumberById,
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneLastEvalStats),
+  });
 }
 
 export function resolveTextLabelDisplayText(label: SceneTextLabel, scene: SceneModel): string {
-  if (label.contentMode === "number" && typeof label.numberId === "string" && label.numberId.trim().length > 0) {
-    const value = getNumberValue(label.numberId, scene);
-    if (value !== null) return formatTextLabelNumber(value);
-  }
-  if (label.contentMode === "expression") {
-    const expr = typeof label.expr === "string" ? label.expr.trim() : "";
-    if (expr) {
-      const evaluated = evaluateNumberExpression(scene, expr);
-      if (evaluated.ok) return formatTextLabelNumber(evaluated.value);
-      return "undefined";
-    }
-  }
-  return label.text;
+  return resolveTextLabelDisplayTextWithOps(label, {
+    getNumberValue: (id) => getNumberValue(id, scene),
+    evaluateNumberExpression: (expr) => evaluateNumberExpression(scene, expr),
+  });
 }
 
 function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): number | null {
-  return evalNumberByIdWithCtxInScene(id, scene, ctx, {
+  return evalNumberByIdInSceneWithOps(id, scene, ctx, {
     getPointWorldById,
     getCircleWorldGeometryById: (circleId, s, c) => {
       const circle = c.circleById.get(circleId);
       if (!circle) return null;
-      return getCircleWorldGeometryWithCtx(circle, s, c);
+      return getSceneGeometryFacade(s, c).getCircleWorldGeometry(circle);
     },
     evaluateNumberExpressionWithCtx,
   });
@@ -1203,12 +1153,12 @@ function evaluateNumberExpressionWithCtx(
     resolveLineAnchors: (lineId) => {
       const line = ctx.lineById.get(lineId);
       if (!line) return null;
-      return resolveLineAnchors(line, scene, ctx);
+      return getSceneGeometryFacade(scene, ctx).resolveLineAnchors(line);
     },
     getCircleWorldGeometry: (circleId) => {
       const circle = ctx.circleById.get(circleId);
       if (!circle) return null;
-      return getCircleWorldGeometryWithCtx(circle, scene, ctx);
+      return getSceneGeometryFacade(scene, ctx).getCircleWorldGeometry(circle);
     },
   });
 }
