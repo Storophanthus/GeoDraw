@@ -1,6 +1,6 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { parseCommandInput, type ParseContext, type Symbol } from "./CommandParser";
-import { getLineWorldAnchors, getPointWorldPos } from "./scene/points";
+import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos } from "./scene/points";
 import type { SceneModel } from "./scene/points";
 import { commandBarApi, useGeoStore } from "./state/geoStore";
 
@@ -57,11 +57,26 @@ function buildParseContext(
     if (anchors) lineWorldAnchorsById.set(line.id, anchors);
   }
 
+  const circleWorldGeometryById = new Map<string, { center: { x: number; y: number }; radius: number }>();
+  for (let i = 0; i < scene.circles.length; i += 1) {
+    const circle = scene.circles[i];
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (geom) circleWorldGeometryById.set(circle.id, geom);
+  }
+
+  const polygonPointIdsById = new Map<string, string[]>();
+  for (let i = 0; i < scene.polygons.length; i += 1) {
+    const polygon = scene.polygons[i];
+    polygonPointIdsById.set(polygon.id, [...polygon.pointIds]);
+  }
+
   return {
     symbolsByLabel,
     pointWorldById,
     lineWorldAnchorsById,
     segmentWorldAnchorsById,
+    circleWorldGeometryById,
+    polygonPointIdsById,
     scalarsByName: new Map(Object.entries(scalarVars)),
     objectAliases: new Map(Object.entries(objectAliases)),
     objectNames: new Set(Object.keys(objectAliases)),

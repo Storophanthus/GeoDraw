@@ -56,11 +56,18 @@ const baseCtx: ParseContext = {
   segmentWorldAnchorsById: new Map([
     ["sAB", { a: { x: 0, y: 0 }, b: { x: 3, y: 4 } }],
   ]),
+  circleWorldGeometryById: new Map([
+    ["c1", { center: { x: 0, y: 0 }, radius: 5 }],
+  ]),
+  polygonPointIdsById: new Map([
+    ["pg1", ["pA", "pB", "pC"]],
+  ]),
   scalarsByName: new Map(),
   objectAliases: new Map([
     ["sAB", { type: "segment", id: "sAB" }],
     ["lAB", { type: "line", id: "lAB" }],
     ["c1", { type: "circle", id: "c1" }],
+    ["pg1", { type: "polygon", id: "pg1" }],
   ]),
   objectNames: new Set(),
 };
@@ -214,6 +221,11 @@ mustExpr("Distance(O,lAB)", baseCtx, "0.2");
 mustExpr("Distance(lAB,O)", baseCtx, "0.2");
 mustExpr("Distance(O,sAB)", baseCtx, "0.2");
 mustExpr("Distance(sAB,O)", baseCtx, "0.2");
+mustAssignScalar("ac = Area(c1)", baseCtx, "ac", Math.PI * 25);
+mustAssignScalar("pc = Perimeter(c1)", baseCtx, "pc", 10 * Math.PI);
+mustAssignScalar("ap = Area(pg1)", baseCtx, "ap", 6);
+mustAssignScalar("pp = Perimeter(pg1)", baseCtx, "pp", 12);
+mustAssignScalar("m = Area(pg1)+Perimeter(c1)", baseCtx, "m", 6 + 10 * Math.PI);
 
 mustAssignScalar("n_1 = 2.023242", baseCtx, "n_1", 2.023242);
 mustAssignScalar("r = 5*5", baseCtx, "r", 25);
@@ -252,6 +264,16 @@ const sceneDistanceParity: SceneModel = {
       position: { x: 1, y: 1 },
       style: {} as never,
     },
+    {
+      id: "pC",
+      kind: "free",
+      name: "C",
+      captionTex: "C",
+      visible: true,
+      showLabel: "name",
+      position: { x: 3, y: 0 },
+      style: {} as never,
+    },
   ],
   vectors: [],
   segments: [
@@ -273,8 +295,24 @@ const sceneDistanceParity: SceneModel = {
       style: {} as never,
     },
   ],
-  circles: [],
-  polygons: [],
+  circles: [
+    {
+      id: "c1",
+      kind: "twoPoint",
+      centerId: "pA",
+      throughId: "pB",
+      visible: true,
+      style: {} as never,
+    },
+  ],
+  polygons: [
+    {
+      id: "pg1",
+      pointIds: ["pA", "pB", "pC"],
+      visible: true,
+      style: {} as never,
+    },
+  ],
   angles: [],
   numbers: [],
   textLabels: [],
@@ -295,6 +333,22 @@ if (!sceneDistSeg.ok || Math.abs(sceneDistSeg.value - 0.2) > 1e-9) {
 const sceneScalarFn = evaluateNumberExpression(sceneDistanceParity, "sin(pi/2)+Distance(A,B)");
 if (!sceneScalarFn.ok || Math.abs(sceneScalarFn.value - 6) > 1e-9) {
   throw new Error(`Scene scalar function parity mismatch: ${JSON.stringify(sceneScalarFn)}`);
+}
+const sceneAreaCircle = evaluateNumberExpression(sceneDistanceParity, "Area(c1)");
+if (!sceneAreaCircle.ok || Math.abs(sceneAreaCircle.value - Math.PI * 25) > 1e-9) {
+  throw new Error(`Scene Area(c1) mismatch: ${JSON.stringify(sceneAreaCircle)}`);
+}
+const scenePerimCircle = evaluateNumberExpression(sceneDistanceParity, "Perimeter(c1)");
+if (!scenePerimCircle.ok || Math.abs(scenePerimCircle.value - 10 * Math.PI) > 1e-9) {
+  throw new Error(`Scene Perimeter(c1) mismatch: ${JSON.stringify(scenePerimCircle)}`);
+}
+const sceneAreaPoly = evaluateNumberExpression(sceneDistanceParity, "Area(pg1)");
+if (!sceneAreaPoly.ok || Math.abs(sceneAreaPoly.value - 6) > 1e-9) {
+  throw new Error(`Scene Area(pg1) mismatch: ${JSON.stringify(sceneAreaPoly)}`);
+}
+const scenePerimPoly = evaluateNumberExpression(sceneDistanceParity, "Perimeter(pg1)");
+if (!scenePerimPoly.ok || Math.abs(scenePerimPoly.value - 12) > 1e-9) {
+  throw new Error(`Scene Perimeter(pg1) mismatch: ${JSON.stringify(scenePerimPoly)}`);
 }
 
 const assignPoint = mustAssignObject("P = Point(1,2)", baseCtx, "P", "CreatePointXY");

@@ -1,6 +1,6 @@
 import katex from "katex";
 import type { Vec2 } from "../geo/vec2";
-import type { SceneModel, ScenePoint } from "../scene/points";
+import { resolveTextLabelDisplayText, type SceneModel, type ScenePoint } from "../scene/points";
 import {
   defaultObjectLabelPosWorld,
   defaultObjectLabelText,
@@ -273,13 +273,14 @@ export function createTextLabelOverlays(
   for (const label of labels) {
     if (!label.visible) continue;
     const screen = camMath.worldToScreen(label.positionWorld, camera, vp);
+    const displayText = resolveTextLabelDisplayText(label, scene);
     const html = label.style.useTex
-      ? katex.renderToString(label.text || "\\text{}", {
+      ? katex.renderToString(displayText || "\\text{}", {
           throwOnError: false,
           displayMode: false,
           strict: "ignore",
         })
-      : `<span>${escapeHtml(label.text).replace(/\n/g, "<br/>")}</span>`;
+      : `<span>${escapeHtml(displayText).replace(/\n/g, "<br/>")}</span>`;
     overlays.push({
       id: label.id,
       x: screen.x,

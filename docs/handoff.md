@@ -3199,3 +3199,40 @@ Acceptance checks:
 2. Toggling `Show Label` on any supported object immediately shows label.
 3. Label position drag persists through save/open and export.
 4. `npm run test:scene` and `npm run build` remain green.
+
+### Homework Update (Current Active Priorities)
+Date updated: February 23, 2026
+
+1. Scalar function extensibility (cross-layer)
+- Goal:
+  - Make adding scalar expression functions (e.g. `Area(...)`, `Perimeter(...)`, future `AngleMeasure(...)`) fast and low-risk.
+- Problem observed:
+  - New scalar functions currently require touching multiple layers (parser, scene runtime, dynamic labels, parse context adapters, tests).
+  - This causes slow implementation and parity drift risk.
+- Next refactor target:
+  - Introduce a shared scalar-function registry with per-context geometry resolvers/adapters.
+  - Keep one function dispatch path and avoid duplicating function semantics in parser/runtime code.
+- Acceptance checks:
+  1. Adding one new scalar function requires changes in one core runtime location + context adapters only.
+  2. Parser and scene runtime parity tests cover the new function automatically.
+  3. Dynamic label expressions use the same semantics as command/scalar expressions.
+
+2. Continue `src/scene/points.ts` de-GOD split (behavior-preserving)
+- Goal:
+  - Reduce maintenance risk in `src/scene/points.ts` by extracting evaluation and geometry adapter responsibilities.
+- Current progress:
+  - Shared scalar runtime is in place.
+  - Scene scalar adapter extraction started (`src/scene/eval/sceneScalarExpressionAdapter.ts`).
+- Next slices:
+  - Extract intersection assignment helpers into dedicated modules while preserving branch/ownership stability behavior.
+  - Keep fixes covered by intersection regression tests and manual checks from `docs/tkz_report_intersections.md`.
+
+3. TikZ exporter architecture refactor (scaling-safe draw pipeline)
+- Goal:
+  - Separate construction semantics from drawing output so export scaling can be controlled without tkz-euclide transform fragility.
+- Direction agreed:
+  - `scene -> export IR -> renderer (tkz / future plain TikZ draw backend) -> optional compactor`
+  - Keep `% Constructions` in tkz-euclide, move draw layer toward plain TikZ where needed.
+- Reason:
+  - Current global `tikzpicture` scaling is pragmatic but can overflow.
+  - Scope scaling is not a real fix for tkz-euclide draw macros.

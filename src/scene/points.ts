@@ -880,6 +880,9 @@ export type SceneTextLabel = {
   id: string;
   name: string;
   text: string;
+  contentMode?: "static" | "number" | "expression";
+  numberId?: string;
+  expr?: string;
   visible: boolean;
   positionWorld: Vec2;
   style: SceneTextLabelStyle;
@@ -1086,6 +1089,29 @@ export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel)
   return value;
 }
 
+function formatTextLabelNumber(value: number): string {
+  if (!Number.isFinite(value)) return "undefined";
+  if (Math.abs(value) < 1e-12) return "0";
+  const rounded = value.toFixed(6).replace(/\.?0+$/, "");
+  return rounded === "-0" ? "0" : rounded;
+}
+
+export function resolveTextLabelDisplayText(label: SceneTextLabel, scene: SceneModel): string {
+  if (label.contentMode === "number" && typeof label.numberId === "string" && label.numberId.trim().length > 0) {
+    const value = getNumberValue(label.numberId, scene);
+    if (value !== null) return formatTextLabelNumber(value);
+  }
+  if (label.contentMode === "expression") {
+    const expr = typeof label.expr === "string" ? label.expr.trim() : "";
+    if (expr) {
+      const evaluated = evaluateNumberExpression(scene, expr);
+      if (evaluated.ok) return formatTextLabelNumber(evaluated.value);
+      return "undefined";
+    }
+  }
+  return label.text;
+}
+
 function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): number | null {
   return evalNumberByIdWithCtxInScene(id, scene, ctx, {
     getPointWorldById,
@@ -1169,6 +1195,8 @@ function evaluateNumberExpressionWithCtx(
     points: scene.points.map((p) => ({ id: p.id, name: p.name })),
     lines: scene.lines.map((l) => ({ id: l.id, labelText: l.labelText })),
     segments: scene.segments.map((s) => ({ id: s.id, aId: s.aId, bId: s.bId, labelText: s.labelText })),
+    circles: scene.circles.map((c) => ({ id: c.id, labelText: c.labelText })),
+    polygons: scene.polygons.map((p) => ({ id: p.id, pointIds: p.pointIds, labelText: p.labelText })),
     excludeNumberId,
     getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
     getPointWorldById: (pointId) => getPointWorldById(pointId, scene, ctx),
@@ -1176,6 +1204,11 @@ function evaluateNumberExpressionWithCtx(
       const line = ctx.lineById.get(lineId);
       if (!line) return null;
       return resolveLineAnchors(line, scene, ctx);
+    },
+    getCircleWorldGeometry: (circleId) => {
+      const circle = ctx.circleById.get(circleId);
+      if (!circle) return null;
+      return getCircleWorldGeometryWithCtx(circle, scene, ctx);
     },
   });
 }

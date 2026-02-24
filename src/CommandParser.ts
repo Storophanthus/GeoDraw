@@ -32,6 +32,8 @@ export type ParseContext = {
   pointWorldById?: Map<string, { x: number; y: number }>;
   lineWorldAnchorsById?: Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
   segmentWorldAnchorsById?: Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
+  circleWorldGeometryById?: Map<string, { center: { x: number; y: number }; radius: number }>;
+  polygonPointIdsById?: Map<string, string[]>;
   scalarsByName: Map<string, number>;
   objectAliases: Map<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }>;
   objectNames: Set<string>;
@@ -110,6 +112,8 @@ function evaluateExpression(expr: string, ctx: ParseContext): EvalResult {
       }
       return resolveDistanceArg(node, ctx);
     },
+    evaluateAreaArg: (argExprRaw) => evaluateMeasureArg("Area", argExprRaw, ctx),
+    evaluatePerimeterArg: (argExprRaw) => evaluateMeasureArg("Perimeter", argExprRaw, ctx),
   });
 }
 
@@ -232,6 +236,12 @@ function evalPointExpressionNode(node: MathNode, ctx: ParseContext): { ok: true;
       const right = resolveDistanceArg(args[1], ctx);
       if (!right.ok) return { ok: false, error: right.error };
       const value = evaluateScalarDistanceArgs(left.value, right.value);
+      if (!value.ok) return { ok: false, error: value.error };
+      return { ok: true, value: toScalarExprValue(value.value) };
+    }
+    if (fnName === "Area" || fnName === "Perimeter") {
+      if (args.length !== 1) return { ok: false, error: `${fnName}(...) expects 1 argument` };
+      const value = evaluateMeasureArg(fnName, args[0].toString(), ctx);
       if (!value.ok) return { ok: false, error: value.error };
       return { ok: true, value: toScalarExprValue(value.value) };
     }
@@ -426,6 +436,76 @@ function parseDistanceResult(args: string[], ctx: ParseContext): ParseResult {
   const d = parseDistanceNumeric(args, ctx);
   if (!d.ok) return err(d.error);
   return { kind: "expr", value: formatNumber(d.value), numeric: d.value };
+}
+
+function evaluateMeasureArg(fnName: "Area" | "Perimeter", raw: string, ctx: ParseContext): EvalResult {
+  let node: MathNode;
+  try {
+    node = math.parse(raw);
+  } catch {
+    return { ok: false, error: `${fnName}(...) arguments are invalid` };
+  }
+  const unwrapped = unwrapParenthesisNode(node);
+  const anyNode = unwrapped as unknown as { type?: string; name?: string };
+  if (anyNode.type !== "SymbolNode" || !anyNode.name) {
+    return { ok: false, error: `${fnName}(...) expects a circle/polygon identifier` };
+  }
+  const token = anyNode.name;
+
+  let circleId: string | null = null;
+  let polygonId: string | null = null;
+  const alias = ctx.objectAliases.get(token);
+  if (alias?.type === "circle") circleId = alias.id;
+  if (alias?.type === "polygon") polygonId = alias.id;
+  if (!alias && ctx.circleWorldGeometryById?.has(token)) circleId = token;
+  if (!alias && ctx.polygonPointIdsById?.has(token)) polygonId = token;
+
+  if (circleId) {
+    const geom = ctx.circleWorldGeometryById?.get(circleId);
+    if (!geom || !Number.isFinite(geom.radius) || !(geom.radius >= 0)) {
+      return { ok: false, error: `Unknown circle geometry: ${token}` };
+    }
+    const value = fnName === "Area" ? Math.PI * geom.radius * geom.radius : 2 * Math.PI * geom.radius;
+    return Number.isFinite(value) ? { ok: true, value } : { ok: false, error: `${fnName} result is not finite` };
+  }
+
+  if (polygonId) {
+    const pointIds = ctx.polygonPointIdsById?.get(polygonId);
+    const pointMap = ctx.pointWorldById;
+    if (!pointIds || pointIds.length < 3 || !pointMap) {
+      return { ok: false, error: `Unknown polygon geometry: ${token}` };
+    }
+    const verts: Array<{ x: number; y: number }> = [];
+    for (const pointId of pointIds) {
+      const w = pointMap.get(pointId);
+      if (!w) return { ok: false, error: `Unknown polygon geometry: ${token}` };
+      verts.push(w);
+    }
+    const value = fnName === "Area" ? polygonAreaAbs(verts) : polygonPerimeter(verts);
+    return Number.isFinite(value) ? { ok: true, value } : { ok: false, error: `${fnName} result is not finite` };
+  }
+
+  return { ok: false, error: `Unknown object in ${fnName}(...): ${token}` };
+}
+
+function polygonAreaAbs(verts: Array<{ x: number; y: number }>): number {
+  let twiceArea = 0;
+  for (let i = 0; i < verts.length; i += 1) {
+    const a = verts[i];
+    const b = verts[(i + 1) % verts.length];
+    twiceArea += a.x * b.y - a.y * b.x;
+  }
+  return Math.abs(twiceArea) * 0.5;
+}
+
+function polygonPerimeter(verts: Array<{ x: number; y: number }>): number {
+  let sum = 0;
+  for (let i = 0; i < verts.length; i += 1) {
+    const a = verts[i];
+    const b = verts[(i + 1) % verts.length];
+    sum += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  return sum;
 }
 
 function parseCommand(name: string, args: string[], ctx: ParseContext): ParseResult {

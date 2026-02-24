@@ -12,6 +12,7 @@ import {
   getCircleWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
+  resolveTextLabelDisplayText,
   type GeometryObjectRef,
   SceneModel,
   ScenePoint,
@@ -1586,7 +1587,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   for (const label of scene.textLabels ?? []) {
     if (!label.visible) continue;
-    const text = label.style.useTex ? label.text : wrapPlainTextForMathMode(label.text);
+    const displayText = resolveTextLabelDisplayText(label, scene);
+    const text = label.style.useTex ? displayText : wrapPlainTextForMathMode(displayText);
     // Free text labels are emitted as raw TikZ nodes (\node), which are not affected
     // by tikzpicture scale. Fold final export geometry scale into these labels only.
     const fontPt = Math.max(1, Math.min(72, label.style.textSize * coordScale));

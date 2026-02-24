@@ -103,6 +103,17 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     if (!selectedNumber) return null;
     return getNumberValue(selectedNumber.id, scene);
   }, [scene, selectedNumber]);
+  const selectedTextLabelBoundNumberValue = useMemo(() => {
+    if (!selectedTextLabel || selectedTextLabel.contentMode !== "number" || !selectedTextLabel.numberId) return null;
+    return getNumberValue(selectedTextLabel.numberId, scene);
+  }, [scene, selectedTextLabel]);
+  const selectedTextLabelExprValue = useMemo(() => {
+    if (!selectedTextLabel || selectedTextLabel.contentMode !== "expression") return null;
+    const expr = selectedTextLabel.expr?.trim() ?? "";
+    if (!expr) return null;
+    const out = evaluateNumberExpression(scene, expr);
+    return out.ok ? out.value : null;
+  }, [scene, selectedTextLabel]);
   const pointNameById = useMemo(() => new Map(scene.points.map((p) => [p.id, p.name])), [scene.points]);
   const selectedConstructionText = useMemo(
     () => selectConstructionDescription(selectedObject, scene),
@@ -373,9 +384,82 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
         className="renameInput"
         value={selectedTextLabel.text}
         rows={3}
+        disabled={selectedTextLabel.contentMode === "number" || selectedTextLabel.contentMode === "expression"}
         onChange={(e) => updateSelectedTextLabelFields({ text: e.target.value })}
       />
     </div>
+
+    <div className="controlRow">
+      <label className="controlLabel">Content</label>
+      <select
+        className="selectInput"
+        value={
+          selectedTextLabel.contentMode === "number"
+            ? "number"
+            : selectedTextLabel.contentMode === "expression"
+              ? "expression"
+              : "static"
+        }
+        onChange={(e) => {
+          const nextMode = e.target.value === "number" ? "number" : e.target.value === "expression" ? "expression" : "static";
+          const firstNumberId = scene.numbers[0]?.id;
+          updateSelectedTextLabelFields({
+            contentMode: nextMode,
+            ...(nextMode === "number" && !selectedTextLabel.numberId && firstNumberId ? { numberId: firstNumberId } : {}),
+            ...(nextMode !== "number" ? { numberId: undefined } : {}),
+            ...(nextMode !== "expression" ? { expr: undefined } : {}),
+          });
+        }}
+      >
+        <option value="static">Static Text</option>
+        <option value="number">Dynamic Number</option>
+        <option value="expression">Dynamic Expression</option>
+      </select>
+    </div>
+
+    {selectedTextLabel.contentMode === "number" && (
+      <>
+        <div className="controlRow">
+          <label className="controlLabel">Number</label>
+          <select
+            className="selectInput"
+            value={selectedTextLabel.numberId ?? ""}
+            onChange={(e) => updateSelectedTextLabelFields({ numberId: e.target.value || undefined })}
+            disabled={scene.numbers.length === 0}
+          >
+            {scene.numbers.length === 0 ? (
+              <option value="">No numbers</option>
+            ) : (
+              scene.numbers.map((num) => (
+                <option key={num.id} value={num.id}>
+                  {num.name}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+        <div className="statusText">
+          Value: {selectedTextLabelBoundNumberValue === null ? "undefined" : formatRoundedDisplay(selectedTextLabelBoundNumberValue, 6)}
+        </div>
+      </>
+    )}
+
+    {selectedTextLabel.contentMode === "expression" && (
+      <>
+        <div className="fieldBlock">
+          <label className="fieldLabel">Expression</label>
+          <input
+            className="renameInput"
+            value={selectedTextLabel.expr ?? ""}
+            onChange={(e) => updateSelectedTextLabelFields({ expr: e.target.value })}
+            placeholder="e.g. Distance(A,B)^2"
+          />
+        </div>
+        <div className="statusText">
+          Value: {selectedTextLabelExprValue === null ? "undefined" : formatRoundedDisplay(selectedTextLabelExprValue, 6)}
+        </div>
+      </>
+    )}
 
     <label className="checkboxRow">
       <input

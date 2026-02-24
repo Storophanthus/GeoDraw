@@ -110,6 +110,7 @@ export function createSceneCoreActions(
                 id,
                 name,
                 text: name,
+                contentMode: "static",
                 visible: true,
                 positionWorld: { x: world.x, y: world.y },
                 style: {

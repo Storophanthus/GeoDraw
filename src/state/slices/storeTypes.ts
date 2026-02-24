@@ -406,7 +406,9 @@ export type GeoActions = {
   updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;
   updateSelectedNumberDefinition: (next: SceneNumberDefinition) => void;
   updateSelectedTextLabelFields: (
-    next: Partial<Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld">>
+    next: Partial<
+      Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld" | "contentMode" | "numberId" | "expr">
+    >
   ) => void;
   updateSelectedTextLabelStyle: (next: Partial<SceneTextLabelStyle>) => void;
   setObjectVisibility: (

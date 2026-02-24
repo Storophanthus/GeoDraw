@@ -152,10 +152,23 @@ function normalizeTextLabels(
           : 0;
       const x = Number.isFinite(label.positionWorld?.x) ? label.positionWorld.x : 0;
       const y = Number.isFinite(label.positionWorld?.y) ? label.positionWorld.y : 0;
+      const contentMode =
+        label.contentMode === "number" ? "number" : label.contentMode === "expression" ? "expression" : "static";
+      const numberId =
+        contentMode === "number" && typeof label.numberId === "string" && label.numberId.trim().length > 0
+          ? label.numberId
+          : undefined;
+      const expr =
+        contentMode === "expression" && typeof label.expr === "string"
+          ? label.expr
+          : undefined;
       return {
         ...label,
         name: typeof label.name === "string" ? label.name : label.id,
         text: typeof label.text === "string" ? label.text : "",
+        contentMode,
+        numberId,
+        expr,
         visible: Boolean(label.visible),
         positionWorld: { x, y },
         style: {

@@ -27,6 +27,8 @@ export function evaluateScalarExpressionWithRuntime(
     ans?: number;
     getScalarValue: (name: string) => number | undefined;
     resolveDistanceArg?: (argExprRaw: string) => { ok: true; value: ScalarDistanceArg } | { ok: false; error: string };
+    evaluateAreaArg?: (argExprRaw: string) => ScalarRuntimeEvalResult;
+    evaluatePerimeterArg?: (argExprRaw: string) => ScalarRuntimeEvalResult;
   }
 ): ScalarRuntimeEvalResult {
   const expr = exprRaw.trim();
@@ -49,6 +51,8 @@ function evalScalarNode(
     ans?: number;
     getScalarValue: (name: string) => number | undefined;
     resolveDistanceArg?: (argExprRaw: string) => { ok: true; value: ScalarDistanceArg } | { ok: false; error: string };
+    evaluateAreaArg?: (argExprRaw: string) => ScalarRuntimeEvalResult;
+    evaluatePerimeterArg?: (argExprRaw: string) => ScalarRuntimeEvalResult;
   }
 ): ScalarRuntimeEvalResult {
   const anyNode = node as unknown as {
@@ -125,6 +129,16 @@ function evalScalarNode(
       if (!right.ok) return right;
       return evaluateScalarDistanceArgs(left.value, right.value);
     }
+    if (fnName === "Area") {
+      if (!runtime.evaluateAreaArg) return { ok: false, error: "Area(...) is not supported in this context" };
+      if (args.length !== 1) return { ok: false, error: "Area(...) expects 1 argument" };
+      return runtime.evaluateAreaArg(args[0].toString());
+    }
+    if (fnName === "Perimeter") {
+      if (!runtime.evaluatePerimeterArg) return { ok: false, error: "Perimeter(...) is not supported in this context" };
+      if (args.length !== 1) return { ok: false, error: "Perimeter(...) expects 1 argument" };
+      return runtime.evaluatePerimeterArg(args[0].toString());
+    }
     if (!ALLOWED_FUNCTIONS.has(fnName)) return { ok: false, error: `Unsupported function: ${fnName || "unknown"}` };
 
     const values: number[] = [];
@@ -171,4 +185,3 @@ function evalScalarNode(
 
   return { ok: false, error: `Unsupported expression node: ${anyNode.type ?? "unknown"}` };
 }
-
