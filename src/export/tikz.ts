@@ -332,10 +332,6 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     }
 
     if (line.kind === "circleCircleTangent") {
-      const anchorsWorld = getLineWorldAnchors(line, scene);
-      if (!anchorsWorld) {
-        throw new Error(`Cannot export undefined circle-circle tangent geometry: ${line.id}`);
-      }
       const circleA = circleById.get(line.circleAId);
       const circleB = circleById.get(line.circleBId);
       if (!circleA || !circleB) {
@@ -343,6 +339,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       }
       const geomA = circleGeomById(circleA.id);
       const geomB = circleGeomById(circleB.id);
+      assertCircleCircleTangentExportable(line, geomA, geomB);
+      const anchorsWorld = getLineWorldAnchors(line, scene);
+      if (!anchorsWorld) {
+        throw new Error(`Cannot export undefined circle-circle tangent geometry: ${line.id}`);
+      }
       const simMode: "outer" | "inner" = line.family === "outer" ? "outer" : "inner";
       const simWorld = resolveCircleSimilitudeCenter(geomA.center, geomA.radius, geomB.center, geomB.radius, simMode);
       const tangentCandidatesA = simWorld ? tangentPointsFromPointToCircle(simWorld, geomA.center, geomA.radius) : [];
@@ -2305,6 +2306,75 @@ function tangentPointsFromPointToCircle(
       y: center.y + k * vy - h * perp.y,
     },
   ];
+}
+
+type CircleCircleTangentTopology =
+  | { kind: "disjoint" }
+  | { kind: "intersecting" }
+  | { kind: "contained" }
+  | { kind: "concentricUnequal" }
+  | { kind: "coincident" }
+  | { kind: "degenerateTangency"; mode: "external" | "internal"; near: boolean };
+
+function classifyCircleCircleTangentTopology(
+  a: { center: { x: number; y: number }; radius: number },
+  b: { center: { x: number; y: number }; radius: number }
+): CircleCircleTangentTopology {
+  const d = distance(a.center, b.center);
+  const r1 = a.radius;
+  const r2 = b.radius;
+  const maxScale = Math.max(1, d, r1, r2);
+  const exactTol = 1e-9 * maxScale;
+  const nearTol = 1e-6 * maxScale;
+  const sum = r1 + r2;
+  const diff = Math.abs(r1 - r2);
+  const extGap = d - sum;
+  const intGap = d - diff;
+
+  if (d <= exactTol) {
+    if (Math.abs(r1 - r2) <= exactTol) return { kind: "coincident" };
+    return { kind: "concentricUnequal" };
+  }
+
+  if (Math.abs(extGap) <= nearTol) {
+    return { kind: "degenerateTangency", mode: "external", near: Math.abs(extGap) > exactTol };
+  }
+  if (Math.abs(intGap) <= nearTol) {
+    return { kind: "degenerateTangency", mode: "internal", near: Math.abs(intGap) > exactTol };
+  }
+
+  if (d > sum + nearTol) return { kind: "disjoint" };
+  if (d < diff - nearTol) return { kind: "contained" };
+  return { kind: "intersecting" };
+}
+
+function assertCircleCircleTangentExportable(
+  line: Extract<SceneModel["lines"][number], { kind: "circleCircleTangent" }>,
+  a: { center: { x: number; y: number }; radius: number },
+  b: { center: { x: number; y: number }; radius: number }
+): void {
+  const topology = classifyCircleCircleTangentTopology(a, b);
+  switch (topology.kind) {
+    case "disjoint":
+      return;
+    case "intersecting":
+      if (line.family === "outer") return;
+      throw new Error(
+        `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for intersecting circles`
+      );
+    case "degenerateTangency":
+      throw new Error(
+        `Cannot export circle-circle tangent ${line.id}: ${
+          topology.near ? "near-degenerate" : "degenerate"
+        } ${topology.mode} tangency is unsupported in tkz export`
+      );
+    case "contained":
+      throw new Error(`Cannot export circle-circle tangent ${line.id}: one circle contains the other (no common tangents)`);
+    case "concentricUnequal":
+      throw new Error(`Cannot export circle-circle tangent ${line.id}: concentric unequal circles have no common tangents`);
+    case "coincident":
+      throw new Error(`Cannot export circle-circle tangent ${line.id}: coincident circles have infinitely many common tangents`);
+  }
 }
 
 type NamedTangencyPoint = {
