@@ -383,7 +383,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const simWorld = resolveCircleSimilitudeCenter(geomA.center, geomA.radius, geomB.center, geomB.radius, simMode);
       if (
         line.family === "outer" &&
-        tangentTopology.kind === "disjoint" &&
+        (tangentTopology.kind === "disjoint" || tangentTopology.kind === "intersecting") &&
         simWorld &&
         isTkzUnsafePoint(simWorld) &&
         Math.abs(geomA.radius - geomB.radius) > 1e-12

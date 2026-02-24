@@ -560,6 +560,23 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "tangent-circle-circle-near-equal-outer-intersecting-safe.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error(
+        "Near-equal intersecting outer tangent fixture should avoid unstable external similitude-center construction."
+      );
+    }
+    if (!tikz.includes("\\tkzDefLine[tangent from =")) {
+      throw new Error(
+        "Near-equal intersecting outer tangent fixture should still use constructive tangent-from-point on reduced-radius helper circle."
+      );
+    }
+    if (!tikz.includes("tkzTanCC_R_")) {
+      throw new Error("Near-equal intersecting outer tangent fixture should emit reduced-radius helper point construction.");
+    }
+  }
+
   if (fileName === "angle-bisector-internal.json") {
     if (exportError) {
       if (!exportError.message.includes("Unsupported construction: AngleBisector")) {

@@ -1,0 +1,23 @@
+{
+  "scene": {
+    "points": [
+      { "id": "p1", "kind": "free", "name": "A", "captionTex": "A", "visible": true, "showLabel": "name", "position": { "x": 0, "y": 0 } },
+      { "id": "p2", "kind": "free", "name": "B", "captionTex": "B", "visible": true, "showLabel": "name", "position": { "x": 4, "y": 0 } },
+      { "id": "p3", "kind": "free", "name": "C", "captionTex": "C", "visible": true, "showLabel": "name", "position": { "x": 7.861767578125, "y": 0 } },
+      { "id": "p4", "kind": "free", "name": "D", "captionTex": "D", "visible": true, "showLabel": "name", "position": { "x": 11.1222170048127, "y": 5.23445850857994 } },
+      { "id": "p5", "kind": "free", "name": "E", "captionTex": "E", "visible": true, "showLabel": "name", "position": { "x": 15, "y": 5 } }
+    ],
+    "lines": [
+      { "id": "l1", "kind": "circleCircleTangent", "circleAId": "c1", "circleBId": "c2", "family": "outer", "branchIndex": 0, "visible": true },
+      { "id": "l2", "kind": "circleCircleTangent", "circleAId": "c1", "circleBId": "c2", "family": "outer", "branchIndex": 1, "visible": true }
+    ],
+    "segments": [],
+    "circles": [
+      { "id": "c1", "kind": "twoPoint", "centerId": "p4", "throughId": "p5", "visible": true },
+      { "id": "c2", "kind": "twoPoint", "centerId": "p3", "throughId": "p2", "visible": true }
+    ],
+    "polygons": [],
+    "angles": [],
+    "numbers": []
+  }
+}
