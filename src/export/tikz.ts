@@ -697,6 +697,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         visited.add(pointId);
         return;
       }
+      assertLineCircleInterLCExportable(
+        `line-circle intersection ${point.id}`,
+        lineWorld.a,
+        lineWorld.b,
+        center,
+        geom.radius,
+        roots.length
+      );
       if (!point.excludePointId && point.branchIndex === 1 && roots.length < 2) {
         visiting.delete(pointId);
         visited.add(pointId);
@@ -794,6 +802,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         visited.add(pointId);
         return;
       }
+      assertLineCircleInterLCExportable(`segment-circle intersection ${point.id}`, wa, wb, center, geom.radius, roots.length);
       if (!point.excludePointId && point.branchIndex === 1 && roots.length < 2) {
         visiting.delete(pointId);
         visited.add(pointId);
@@ -1074,6 +1083,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           const center = geom.center;
           const through = { x: center.x + geom.radius, y: center.y };
           const branch = inferLineCircleBranchFromWorld(point, mixed.ll.worldA, mixed.ll.worldB, center, through);
+          const roots = lineCircleIntersectionBranches(mixed.ll.worldA, mixed.ll.worldB, center, geom.radius);
+          if (roots.length === 0) {
+            visiting.delete(pointId);
+            visited.add(pointId);
+            return;
+          }
+          assertLineCircleInterLCExportable(
+            `mixed line-circle intersection ${point.id}`,
+            mixed.ll.worldA,
+            mixed.ll.worldB,
+            center,
+            geom.radius,
+            roots.length
+          );
           let mixCommonName: string | undefined;
           if (branch === 1) {
             const sibling = scene.points.find(
@@ -1100,7 +1123,6 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           let swap = false;
           const targetWorld = getPointWorldPos(point, scene);
           if (targetWorld && !mixCommonName) {
-            const roots = lineCircleIntersectionBranches(mixed.ll.worldA, mixed.ll.worldB, center, geom.radius);
             if (roots.length === 2) {
               const t = targetWorld;
               const r0 = roots[0].point;
@@ -2315,6 +2337,51 @@ type CircleCircleTangentTopology =
   | { kind: "concentricUnequal" }
   | { kind: "coincident" }
   | { kind: "degenerateTangency"; mode: "external" | "internal"; near: boolean };
+
+function classifyLineCircleInterLCTopology(
+  lineA: { x: number; y: number },
+  lineB: { x: number; y: number },
+  center: { x: number; y: number },
+  radius: number,
+  rootsLength: number
+): { kind: "secant" } | { kind: "degenerateTangency"; near: boolean } {
+  if (rootsLength === 1) return { kind: "degenerateTangency", near: false };
+  if (rootsLength !== 2) return { kind: "secant" };
+
+  const vx = lineB.x - lineA.x;
+  const vy = lineB.y - lineA.y;
+  const lineLen = Math.hypot(vx, vy);
+  if (!(lineLen > 1e-12)) return { kind: "secant" };
+
+  const wx = center.x - lineA.x;
+  const wy = center.y - lineA.y;
+  const distToLine = Math.abs(vx * wy - vy * wx) / lineLen;
+  const gap = distToLine - radius;
+  const maxScale = Math.max(1, lineLen, radius, distToLine);
+  const exactTol = 1e-9 * maxScale;
+  const nearTol = 1e-6 * maxScale;
+  if (Math.abs(gap) <= nearTol) {
+    return { kind: "degenerateTangency", near: Math.abs(gap) > exactTol };
+  }
+  return { kind: "secant" };
+}
+
+function assertLineCircleInterLCExportable(
+  context: string,
+  lineA: { x: number; y: number },
+  lineB: { x: number; y: number },
+  center: { x: number; y: number },
+  radius: number,
+  rootsLength: number
+): void {
+  const topology = classifyLineCircleInterLCTopology(lineA, lineB, center, radius, rootsLength);
+  if (topology.kind === "secant") return;
+  throw new Error(
+    `Cannot export ${context}: ${
+      topology.near ? "near-tangent" : "tangent"
+    } line-circle intersections are unsupported in tkz export (\\tkzInterLC[near] fragility)`
+  );
+}
 
 function classifyCircleCircleTangentTopology(
   a: { center: { x: number; y: number }; radius: number },
