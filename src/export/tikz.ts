@@ -1138,6 +1138,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   };
 
   for (const point of scene.points) {
+    // Match canvas behavior: undefined points (e.g. intersections on vanished tangents)
+    // should not force export-time construction of impossible parent geometry unless a
+    // visible exported object later depends on them.
+    if (!getPointWorldPosCached(scene, point.id)) continue;
     resolvePoint(point.id);
   }
 
