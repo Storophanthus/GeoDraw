@@ -499,6 +499,26 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "tangent-circle-circle-a-inner-intersecting-visible-fail.json") {
+    if (!exportError) {
+      throw new Error("Expected intersecting-circle inner tangent fixture to fail-closed.");
+    }
+    if (!exportError.message.includes("inner tangents are undefined for intersecting circles")) {
+      throw new Error(`Unexpected error for intersecting inner tangent fixture: ${exportError.message}`);
+    }
+    return;
+  }
+
+  if (fileName === "tangent-circle-circle-a-inner-intersecting-hidden-pass.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Expected hidden-inner-tangent fixture to still export visible outer tangent constructively.");
+    }
+    if (tikz.includes("inner tangents are undefined for intersecting circles")) {
+      throw new Error("Hidden impossible tangents should not poison export.");
+    }
+  }
+
   if (fileName === "angle-bisector-internal.json") {
     if (exportError) {
       if (!exportError.message.includes("Unsupported construction: AngleBisector")) {

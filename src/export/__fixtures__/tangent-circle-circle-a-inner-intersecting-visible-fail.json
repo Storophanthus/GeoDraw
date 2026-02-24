@@ -1,0 +1,21 @@
+{
+  "scene": {
+    "points": [
+      { "id": "p1", "kind": "free", "name": "O1", "captionTex": "O1", "visible": true, "showLabel": "name", "position": { "x": 0, "y": 0 } },
+      { "id": "p2", "kind": "free", "name": "A1", "captionTex": "A1", "visible": true, "showLabel": "name", "position": { "x": 2, "y": 0 } },
+      { "id": "p3", "kind": "free", "name": "O2", "captionTex": "O2", "visible": true, "showLabel": "name", "position": { "x": 3, "y": 0 } },
+      { "id": "p4", "kind": "free", "name": "A2", "captionTex": "A2", "visible": true, "showLabel": "name", "position": { "x": 5, "y": 0 } }
+    ],
+    "lines": [
+      { "id": "l1", "kind": "circleCircleTangent", "circleAId": "c1", "circleBId": "c2", "family": "inner", "branchIndex": 0, "visible": true }
+    ],
+    "segments": [],
+    "circles": [
+      { "id": "c1", "kind": "twoPoint", "centerId": "p1", "throughId": "p2", "visible": true },
+      { "id": "c2", "kind": "twoPoint", "centerId": "p3", "throughId": "p4", "visible": true }
+    ],
+    "polygons": [],
+    "angles": [],
+    "numbers": []
+  }
+}
