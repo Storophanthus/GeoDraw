@@ -2700,13 +2700,14 @@ function assertCircleCircleTangentExportable(
   b: { center: { x: number; y: number }; radius: number }
 ): void {
   const topology = classifyCircleCircleTangentTopology(a, b);
+  const diag = circleCircleTangentDiagnosticsSuffix(a, b);
   switch (topology.kind) {
     case "disjoint":
       return;
     case "intersecting":
       if (line.family === "outer") return;
       throw new Error(
-        `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for intersecting circles`
+        `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for intersecting circles${diag}`
       );
     case "degenerateTangency":
       if (!topology.near) {
@@ -2714,22 +2715,36 @@ function assertCircleCircleTangentExportable(
         if (topology.mode === "external" && line.family === "outer") return;
         if (topology.mode === "internal" && line.family === "inner") {
           throw new Error(
-            `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for internally tangent circles`
+            `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for internally tangent circles${diag}`
           );
         }
       }
       throw new Error(
         `Cannot export circle-circle tangent ${line.id}: ${
           topology.near ? "near-degenerate" : "degenerate"
-        } ${topology.mode} tangency is unsupported in tkz export`
+        } ${topology.mode} tangency is unsupported in tkz export${diag}`
       );
     case "contained":
-      throw new Error(`Cannot export circle-circle tangent ${line.id}: one circle contains the other (no common tangents)`);
+      throw new Error(`Cannot export circle-circle tangent ${line.id}: one circle contains the other (no common tangents)${diag}`);
     case "concentricUnequal":
-      throw new Error(`Cannot export circle-circle tangent ${line.id}: concentric unequal circles have no common tangents`);
+      throw new Error(`Cannot export circle-circle tangent ${line.id}: concentric unequal circles have no common tangents${diag}`);
     case "coincident":
-      throw new Error(`Cannot export circle-circle tangent ${line.id}: coincident circles have infinitely many common tangents`);
+      throw new Error(`Cannot export circle-circle tangent ${line.id}: coincident circles have infinitely many common tangents${diag}`);
   }
+}
+
+function circleCircleTangentDiagnosticsSuffix(
+  a: { center: { x: number; y: number }; radius: number },
+  b: { center: { x: number; y: number }; radius: number }
+): string {
+  const d = distance(a.center, b.center);
+  const r1 = a.radius;
+  const r2 = b.radius;
+  const sum = r1 + r2;
+  const diff = Math.abs(r1 - r2);
+  const extGap = d - sum;
+  const intGap = d - diff;
+  return ` (d=${fmt(d)}, r1=${fmt(r1)}, r2=${fmt(r2)}, extGap=${fmt(extGap)}, intGap=${fmt(intGap)})`;
 }
 
 function isExactDegenerateCircleCircleTangentFamily(

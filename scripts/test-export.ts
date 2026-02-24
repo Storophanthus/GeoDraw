@@ -607,6 +607,45 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "tangent-circle-circle-equal-radius-outer-intersecting-safe.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Equal-radius intersecting outer tangent fixture should avoid external similitude-center construction at infinity.");
+    }
+    if (tikz.includes("tkzTanCC_A_") || tikz.includes("tkzTanCC_B_")) {
+      throw new Error("Equal-radius intersecting outer tangent fixture should avoid hard-coded tangent-point fallback.");
+    }
+    if (!tikz.includes("tkzTanCC_eqRot_") || !tikz.includes("\\tkzDefPointBy[rotation=center")) {
+      throw new Error("Equal-radius intersecting outer tangent fixture should use constructive rotation-based parallel tangent construction.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-near-degenerate-external-fail.json") {
+    if (!exportError) {
+      throw new Error("Near-degenerate external tangency fixture should fail closed in exporter.");
+    }
+    if (!exportError.message.includes("near-degenerate external tangency")) {
+      throw new Error("Near-degenerate external tangency fixture should report explicit topology in the error message.");
+    }
+    if (!exportError.message.includes("d=") || !exportError.message.includes("r1=") || !exportError.message.includes("extGap=")) {
+      throw new Error("Near-degenerate external tangency fixture should include numeric diagnostics in the error message.");
+    }
+    return;
+  }
+
+  if (fileName === "tangent-circle-circle-near-degenerate-internal-fail.json") {
+    if (!exportError) {
+      throw new Error("Near-degenerate internal tangency fixture should fail closed in exporter.");
+    }
+    if (!exportError.message.includes("near-degenerate internal tangency")) {
+      throw new Error("Near-degenerate internal tangency fixture should report explicit topology in the error message.");
+    }
+    if (!exportError.message.includes("d=") || !exportError.message.includes("r1=") || !exportError.message.includes("intGap=")) {
+      throw new Error("Near-degenerate internal tangency fixture should include numeric diagnostics in the error message.");
+    }
+    return;
+  }
+
   if (fileName === "angle-bisector-internal.json") {
     if (exportError) {
       if (!exportError.message.includes("Unsupported construction: AngleBisector")) {
