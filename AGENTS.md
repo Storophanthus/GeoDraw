@@ -24,6 +24,16 @@
 5. Constrained points must stay constrained.
 - A point created on a circle/line/segment must remain on that parent object when dependencies move.
 
+6. Intersection extensibility contract (future curves/conics)
+- Root generation is shape-specific; root assignment/stability policy is shared.
+- New shapes (ellipse/conic/etc.) must reuse the generic intersection assignment policy for:
+  - `excludePointId`
+  - branch preference
+  - previous-stable continuity
+  - occupied-root avoidance (singleton "other root" behavior)
+- Do not re-implement ownership/branch-stability heuristics inside each new shape solver.
+- If a new intersection type needs extra metadata (parameters/tangency classification), extend the generic assignment inputs rather than bypassing the shared policy.
+
 ## Required Manual Checks Before Finishing Geometry Changes
 
 1. Create circle `Γ` from center + through point, create a line/segment with one endpoint on `Γ`, and create the other intersection point. Move dependencies; verify the second intersection never collapses to the endpoint except true tangency.

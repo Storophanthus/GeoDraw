@@ -3226,6 +3226,10 @@ Date updated: February 23, 2026
 - Next slices:
   - Extract intersection assignment helpers into dedicated modules while preserving branch/ownership stability behavior.
   - Keep fixes covered by intersection regression tests and manual checks from `docs/tkz_report_intersections.md`.
+  - Preserve the new intersection extensibility rule:
+    - shape-specific solvers generate roots
+    - shared assignment/stability policy owns branch continuity, exclude semantics, and singleton occupied-root avoidance
+    - future curve tools must extend shared assignment inputs instead of duplicating root-ownership logic
 
 3. TikZ exporter architecture refactor (scaling-safe draw pipeline)
 - Goal:

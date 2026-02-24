@@ -1,6 +1,7 @@
 import type { Vec2 } from "../../geo/vec2";
 import { buildNumberSymbolTable } from "./expressionEval";
 import type { NumberExpressionEvalResult } from "./numericExpression";
+import { evaluateScalarObjectMeasureArg } from "./scalarObjectMeasure";
 import { evaluateScalarExpressionWithRuntime } from "./scalarExpressionRuntime";
 import type { ScalarDistanceArg } from "./scalarDistance";
 
@@ -102,56 +103,20 @@ function evaluateSceneMeasureArg(
     getPointWorldById: (pointId: string) => Vec2 | null;
   }
 ): NumberExpressionEvalResult {
-  const token = stripOuterParens(raw.trim());
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) {
-    return { ok: false, error: `${fnName}(...) expects a circle/polygon identifier` };
-  }
-
-  const circle = deps.circles.find((c) => c.id === token) ?? deps.circles.find((c) => (c.labelText?.trim() || "") === token);
-  if (circle) {
-    const geom = deps.getCircleWorldGeometry(circle.id);
-    if (!geom || !Number.isFinite(geom.radius) || !(geom.radius >= 0)) {
-      return { ok: false, error: `Unknown circle geometry: ${token}` };
-    }
-    const value = fnName === "Area" ? Math.PI * geom.radius * geom.radius : 2 * Math.PI * geom.radius;
-    return Number.isFinite(value) ? { ok: true, value } : { ok: false, error: `${fnName} result is not finite` };
-  }
-
-  const polygon =
-    deps.polygons.find((p) => p.id === token) ?? deps.polygons.find((p) => (p.labelText?.trim() || "") === token);
-  if (polygon) {
-    if (polygon.pointIds.length < 3) return { ok: false, error: `Invalid polygon: ${token}` };
-    const verts: Vec2[] = [];
-    for (const pointId of polygon.pointIds) {
-      const w = deps.getPointWorldById(pointId);
-      if (!w) return { ok: false, error: `Unknown polygon geometry: ${token}` };
-      verts.push(w);
-    }
-    const value = fnName === "Area" ? polygonAreaAbs(verts) : polygonPerimeter(verts);
-    return Number.isFinite(value) ? { ok: true, value } : { ok: false, error: `${fnName} result is not finite` };
-  }
-
-  return { ok: false, error: `Unknown object in ${fnName}(...): ${token}` };
-}
-
-function polygonAreaAbs(verts: Vec2[]): number {
-  let twiceArea = 0;
-  for (let i = 0; i < verts.length; i += 1) {
-    const a = verts[i];
-    const b = verts[(i + 1) % verts.length];
-    twiceArea += a.x * b.y - a.y * b.x;
-  }
-  return Math.abs(twiceArea) * 0.5;
-}
-
-function polygonPerimeter(verts: Vec2[]): number {
-  let sum = 0;
-  for (let i = 0; i < verts.length; i += 1) {
-    const a = verts[i];
-    const b = verts[(i + 1) % verts.length];
-    sum += Math.hypot(b.x - a.x, b.y - a.y);
-  }
-  return sum;
+  return evaluateScalarObjectMeasureArg(fnName, raw, {
+    circles: deps.circles,
+    polygons: deps.polygons,
+    getCircleRadius: (circleId) => deps.getCircleWorldGeometry(circleId)?.radius ?? null,
+    getPolygonVertices: (_polygonId, pointIds) => {
+      const verts: Vec2[] = [];
+      for (const pointId of pointIds) {
+        const w = deps.getPointWorldById(pointId);
+        if (!w) return null;
+        verts.push(w);
+      }
+      return verts;
+    },
+  });
 }
 
 function findMatchingParenIndex(text: string, openIndex: number): number {
