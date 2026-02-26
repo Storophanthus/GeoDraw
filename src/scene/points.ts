@@ -4,33 +4,29 @@ import {
   type AngleExpressionEvalResult,
 } from "./eval/expressionEval";
 import {
-  beginSceneEvalTick as beginSceneEvalTickCore,
-  endSceneEvalTick as endSceneEvalTickCore,
-  getOrCreateSceneEvalContext as getOrCreateSceneEvalContextCore,
   type SceneEvalStats,
   updateImplicitEvalStats,
 } from "./eval/evalContext";
-import { computeOrientedAngleRad } from "./eval/angleMath";
 import {
-  evaluateAngleExpressionDegreesWithCtxInScene,
-} from "./eval/numberExpressionEvaluators";
-import { evaluateSceneScalarNumberExpression } from "./eval/sceneScalarExpressionAdapter";
-import { evalNumberByIdInSceneWithOps, getNumberValueInScene } from "./eval/sceneNumberAccess";
+  beginSceneEvalTickInScenePublic,
+  endSceneEvalTickInScenePublic,
+  evaluateAngleExpressionDegreesInScenePublic,
+  evaluateNumberExpressionInScenePublic,
+  getLastSceneEvalStatsInScenePublic,
+} from "./eval/sceneEvalApiFacade";
+import { evaluateAngleExpressionDegreesWithCtxInSceneModel } from "./eval/sceneExpressionFacade";
+import { evalNumberByIdWithSceneFacades, evaluateNumberExpressionWithCtxUsingFacades } from "./eval/sceneNumberExpressionFacade";
+import { createSceneEvalStateStore } from "./eval/sceneEvalStateStore";
 import {
-  getCircleWorldGeometryInSceneWithImplicitStats,
-  getLineWorldAnchorsInSceneWithImplicitStats,
-} from "./eval/sceneGeometryFacade";
-import { rememberStableGenericIntersectionPoint, rememberStableCircleLinePoint } from "./eval/intersectionStabilityAdapters";
-import { createSceneIntersectionFacadeWithCtx } from "./eval/sceneIntersectionFacade";
-import {
-  evalPointUnchecked as evalPointUncheckedCore,
-} from "./eval/pointEvalDispatch";
+  getCircleWorldGeometryInScenePublic,
+  getLineWorldAnchorsInScenePublic,
+  getNumberValueInScenePublic,
+  getPointWorldPosInSceneWithImplicitStats,
+  resolveTextLabelDisplayTextInScene,
+} from "./eval/scenePublicEvalFacade";
+import { evalPointUncheckedInSceneWithFacades } from "./eval/scenePointEvalFacade";
 import { evalPointWithCtxInScene } from "./eval/pointRuntime";
-import {
-  buildSceneEvalContextForScene,
-  type SceneEvalContext,
-} from "./eval/sceneContextBuilder";
-import { resolveTextLabelDisplayTextWithOps } from "./eval/textLabelDisplay";
+import { type SceneEvalContext } from "./eval/sceneContextBuilder";
 
 export {
   isNameUnique,
@@ -42,6 +38,12 @@ export {
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
+export {
+  collectSegmentMarkPositions,
+  resolveAngleMarks,
+  resolveSegmentMarkAnchorPos,
+  resolveSegmentMarks,
+} from "./sceneMarkStyleUtils";
 
 export type PointShape =
   | "circle"
@@ -192,130 +194,6 @@ export type AngleStyle = {
   arcArrowMark?: PathArrowMark;
   arcArrowMarks?: PathArrowMark[];
 };
-
-function clampUnit(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  if (value <= 0) return 0;
-  if (value >= 1) return 1;
-  return value;
-}
-
-function roundDecimal(value: number, decimals: number): number {
-  const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
-}
-
-function normalizeArcMultiplicity(value: unknown): 1 | 2 | 3 {
-  const n = Number(value);
-  if (n >= 3) return 3;
-  if (n >= 2) return 2;
-  return 1;
-}
-
-function normalizeSegmentMark(mark: SegmentMark): SegmentMark {
-  return {
-    ...mark,
-    enabled: Boolean(mark.enabled),
-    mark: mark.mark,
-    pos: Number.isFinite(mark.pos) ? clampUnit(mark.pos) : 0.5,
-    sizePt: Number.isFinite(mark.sizePt) ? Math.max(0.1, mark.sizePt) : 4,
-    lineWidthPt:
-      typeof mark.lineWidthPt === "number" && Number.isFinite(mark.lineWidthPt) && mark.lineWidthPt > 0
-        ? mark.lineWidthPt
-        : undefined,
-    distribution: mark.distribution === "multi" ? "multi" : "single",
-    startPos: Number.isFinite(mark.startPos) ? clampUnit(mark.startPos as number) : undefined,
-    endPos: Number.isFinite(mark.endPos) ? clampUnit(mark.endPos as number) : undefined,
-    step: Number.isFinite(mark.step) ? Math.max(0.001, Math.min(1, mark.step as number)) : undefined,
-  };
-}
-
-export function resolveSegmentMarks(style: Pick<LineStyle, "segmentMark" | "segmentMarks">): SegmentMark[] {
-  const source =
-    Array.isArray(style.segmentMarks) && style.segmentMarks.length > 0
-      ? style.segmentMarks
-      : style.segmentMark
-        ? [style.segmentMark]
-        : [];
-  const out: SegmentMark[] = [];
-  for (const raw of source) {
-    if (!raw) continue;
-    const normalized = normalizeSegmentMark(raw);
-    if (!normalized.enabled || normalized.mark === "none") continue;
-    out.push(normalized);
-  }
-  return out;
-}
-
-export function collectSegmentMarkPositions(
-  mark: Pick<SegmentMark, "distribution" | "pos" | "startPos" | "endPos" | "step">,
-  fallbackPos = 0.5
-): number[] {
-  const distribution = mark.distribution ?? "single";
-  if (distribution !== "multi") {
-    const pos = Number.isFinite(mark.pos) ? (mark.pos as number) : fallbackPos;
-    return [clampUnit(pos)];
-  }
-  let start = Number.isFinite(mark.startPos) ? clampUnit(mark.startPos as number) : 0.45;
-  let end = Number.isFinite(mark.endPos) ? clampUnit(mark.endPos as number) : 0.55;
-  if (end < start) {
-    const t = start;
-    start = end;
-    end = t;
-  }
-  const step = Number.isFinite(mark.step) ? Math.max(0.001, Math.min(1, mark.step as number)) : 0.05;
-  const out: number[] = [];
-  // Compute each sample from start + i*step to avoid cumulative float drift.
-  for (let i = 0; i < 500; i += 1) {
-    const t = start + i * step;
-    if (t > end + 1e-9) break;
-    out.push(clampUnit(roundDecimal(t, 12)));
-  }
-  if (out.length === 0) out.push(clampUnit(Number.isFinite(mark.pos) ? (mark.pos as number) : fallbackPos));
-  return out;
-}
-
-export function resolveSegmentMarkAnchorPos(style: Pick<LineStyle, "segmentMark" | "segmentMarks">, fallbackPos = 0.5): number {
-  const marks = resolveSegmentMarks(style);
-  if (marks.length === 0) return clampUnit(fallbackPos);
-  return clampUnit(marks[0].pos);
-}
-
-function normalizeAngleMark(mark: AngleMark): AngleMark {
-  return {
-    enabled: Boolean(mark.enabled),
-    arcMultiplicity: normalizeArcMultiplicity(mark.arcMultiplicity),
-    markSymbol: mark.markSymbol ?? "none",
-    markPos: Number.isFinite(mark.markPos) ? clampUnit(mark.markPos) : 0.5,
-    markSize: Number.isFinite(mark.markSize) ? Math.max(0.1, mark.markSize) : 4,
-    markColor: mark.markColor,
-  };
-}
-
-export function resolveAngleMarks(style: AngleStyle): AngleMark[] {
-  if (style.markStyle === "none") return [];
-  const source =
-    Array.isArray(style.angleMarks) && style.angleMarks.length > 0
-      ? style.angleMarks
-      : [
-          {
-            enabled: true,
-            arcMultiplicity: normalizeArcMultiplicity(style.arcMultiplicity),
-            markSymbol: style.markSymbol ?? "none",
-            markPos: Number.isFinite(style.markPos) ? style.markPos : 0.5,
-            markSize: Number.isFinite(style.markSize) ? style.markSize : 4,
-            markColor: style.markColor,
-          },
-        ];
-  const out: AngleMark[] = [];
-  for (const raw of source) {
-    if (!raw) continue;
-    const normalized = normalizeAngleMark(raw);
-    if (!normalized.enabled) continue;
-    out.push(normalized);
-  }
-  return out;
-}
 
 export type ShowLabelMode = "none" | "name" | "caption";
 
@@ -892,29 +770,24 @@ export type SceneModel = {
   textLabels?: SceneTextLabel[];
 };
 
-const sceneEvalContexts = new WeakMap<SceneModel, SceneEvalContext>();
-const sceneLastEvalStats = new WeakMap<SceneModel, SceneEvalStats>();
-let sceneEvalTick = 0;
-
-function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalContext {
-  const tick = ++sceneEvalTick;
-  return buildSceneEvalContextForScene(scene, explicit, tick, performance.now());
-}
-
-function getOrCreateSceneEvalContext(scene: SceneModel): SceneEvalContext {
-  return getOrCreateSceneEvalContextCore(scene, sceneEvalContexts, () => buildSceneEvalContext(scene, false));
-}
+const sceneEvalState = createSceneEvalStateStore();
 
 export function beginSceneEvalTick(scene: SceneModel): void {
-  beginSceneEvalTickCore(scene, sceneEvalContexts, () => buildSceneEvalContext(scene, true));
+  beginSceneEvalTickInScenePublic(scene, {
+    sceneEvalContexts: sceneEvalState.sceneEvalContexts,
+    buildSceneEvalContext: sceneEvalState.buildSceneEvalContext,
+  });
 }
 
 export function endSceneEvalTick(scene: SceneModel): SceneEvalStats | null {
-  return endSceneEvalTickCore(scene, sceneEvalContexts, sceneLastEvalStats);
+  return endSceneEvalTickInScenePublic(scene, {
+    sceneEvalContexts: sceneEvalState.sceneEvalContexts,
+    sceneLastEvalStats: sceneEvalState.sceneLastEvalStats,
+  });
 }
 
 export function getLastSceneEvalStats(scene: SceneModel): SceneEvalStats | null {
-  return sceneLastEvalStats.get(scene) ?? null;
+  return getLastSceneEvalStatsInScenePublic(scene, sceneEvalState.sceneLastEvalStats);
 }
 
 export function getPointWorldPos(
@@ -923,10 +796,11 @@ export function getPointWorldPos(
   visited: Set<string> = new Set()
 ): Vec2 | null {
   void visited;
-  const ctx = getOrCreateSceneEvalContext(scene);
-  const value = evalPoint(point.id, scene, ctx);
-  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
-  return value;
+  return getPointWorldPosInSceneWithImplicitStats(point, scene, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneEvalState.sceneLastEvalStats),
+    evalPointById: evalPoint,
+  });
 }
 
 function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
@@ -936,27 +810,10 @@ function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): V
 }
 
 function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  return evalPointUncheckedCore(point, scene, ctx, {
+  return evalPointUncheckedInSceneWithFacades(point, scene, ctx, {
     getPointWorldById,
-    resolveLineAnchorsById: (lineId, s, c) => {
-      const line = c.lineById.get(lineId);
-      if (!line) return null;
-      return getSceneIntersectionFacade(s, c).getSceneGeometryFacade().resolveLineAnchors(line);
-    },
-    getCircleWorldGeometryById: (circleId, s, c) => {
-      const circle = c.circleById.get(circleId);
-      if (!circle) return null;
-      return getSceneIntersectionFacade(s, c).getSceneGeometryFacade().getCircleWorldGeometry(circle);
-    },
     evaluateAngleExpressionDegreesWithCtx,
     evaluateNumberExpressionWithCtx,
-    resolveCircleLinePairAssignments: (s, c, circleId, lineId, branches, stabilitySignature) =>
-      getSceneIntersectionFacade(s, c).resolveCircleLinePairAssignments(circleId, lineId, branches, stabilitySignature),
-    rememberStableCircleLinePoint,
-    objectIntersections: (a, b, s, c) => getSceneIntersectionFacade(s, c).objectIntersections(a, b),
-    resolveGenericIntersectionPairAssignments: (s, c, objA, objB, intersections) =>
-      getSceneIntersectionFacade(s, c).resolveGenericIntersectionPairAssignments(objA, objB, intersections),
-    rememberStableGenericIntersectionPoint,
   });
 }
 
@@ -964,72 +821,59 @@ function getPointWorldById(pointId: string, scene: SceneModel, ctx: SceneEvalCon
   return evalPoint(pointId, scene, ctx);
 }
 
-function getSceneIntersectionFacade(scene: SceneModel, ctx: SceneEvalContext) {
-  return createSceneIntersectionFacadeWithCtx(scene, ctx, {
-    getPointWorldById,
-    evaluateNumberExpressionWithCtx,
-  });
-}
-
 export function getLineWorldAnchors(line: SceneLine, scene: SceneModel): { a: Vec2; b: Vec2 } | null {
-  return getLineWorldAnchorsInSceneWithImplicitStats(line, scene, {
-    getOrCreateSceneEvalContext,
-    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneLastEvalStats),
+  return getLineWorldAnchorsInScenePublic(line, scene, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneEvalState.sceneLastEvalStats),
     getPointWorldById,
     evaluateNumberExpressionWithCtx,
   });
 }
 
 export function getCircleWorldGeometry(circle: SceneCircle, scene: SceneModel): { center: Vec2; radius: number } | null {
-  return getCircleWorldGeometryInSceneWithImplicitStats(circle, scene, {
-    getOrCreateSceneEvalContext,
-    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneLastEvalStats),
+  return getCircleWorldGeometryInScenePublic(circle, scene, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneEvalState.sceneLastEvalStats),
     getPointWorldById,
     evaluateNumberExpressionWithCtx,
   });
 }
 
 export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel): number | null {
-  return getNumberValueInScene(numOrId, scene, {
-    getOrCreateSceneEvalContext,
+  return getNumberValueInScenePublic(numOrId, scene, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
     evalNumberById,
-    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneLastEvalStats),
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneEvalState.sceneLastEvalStats),
   });
 }
 
 export function resolveTextLabelDisplayText(label: SceneTextLabel, scene: SceneModel): string {
-  return resolveTextLabelDisplayTextWithOps(label, {
-    getNumberValue: (id) => getNumberValue(id, scene),
-    evaluateNumberExpression: (expr) => evaluateNumberExpression(scene, expr),
+  return resolveTextLabelDisplayTextInScene(label, scene, {
+    getNumberValue,
+    evaluateNumberExpression,
   });
 }
 
 function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): number | null {
-  return evalNumberByIdInSceneWithOps(id, scene, ctx, {
+  return evalNumberByIdWithSceneFacades(id, scene, ctx, {
     getPointWorldById,
-    getCircleWorldGeometryById: (circleId, s, c) => {
-      const circle = c.circleById.get(circleId);
-      if (!circle) return null;
-      return getSceneIntersectionFacade(s, c).getSceneGeometryFacade().getCircleWorldGeometry(circle);
-    },
-    evaluateNumberExpressionWithCtx,
   });
 }
 
 export { computeConvexAngleRad, computeOrientedAngleRad, isRightAngle, RIGHT_ANGLE_EPS } from "./eval/angleMath";
 
 export function evaluateAngleExpressionDegrees(scene: SceneModel, exprRaw: string): AngleExpressionEvalResult {
-  const expr = exprRaw.trim();
-  if (!expr) return { ok: false, error: "Empty angle expression." };
-  const ctx = getOrCreateSceneEvalContext(scene);
-  return evaluateAngleExpressionDegreesWithCtx(scene, expr, ctx);
+  return evaluateAngleExpressionDegreesInScenePublic(scene, exprRaw, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    evaluateAngleExpressionDegreesWithCtx,
+  });
 }
 
 export function evaluateNumberExpression(scene: SceneModel, exprRaw: string): NumberExpressionEvalResult {
-  const expr = exprRaw.trim();
-  if (!expr) return { ok: false, error: "Empty number expression." };
-  const ctx = getOrCreateSceneEvalContext(scene);
-  return evaluateNumberExpressionWithCtx(scene, expr, ctx);
+  return evaluateNumberExpressionInScenePublic(scene, exprRaw, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    evaluateNumberExpressionWithCtx: (s, expr, c) => evaluateNumberExpressionWithCtx(s, expr, c),
+  });
 }
 
 function evaluateAngleExpressionDegreesWithCtx(
@@ -1037,42 +881,10 @@ function evaluateAngleExpressionDegreesWithCtx(
   exprRaw: string,
   ctx: SceneEvalContext
 ): AngleExpressionEvalResult {
-  return evaluateAngleExpressionDegreesWithCtxInScene(
-    exprRaw,
-    {
-      angles: scene.angles.map((angle) => ({
-        id: angle.id,
-        aId: angle.aId,
-        bId: angle.bId,
-        cId: angle.cId,
-        labelText: angle.style.labelText,
-      })),
-      numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
-    },
-    {
-      getAngleValueDeg: (angleId) => {
-        const angle = ctx.angleById.get(angleId);
-        if (!angle) return null;
-        const a = getPointWorldById(angle.aId, scene, ctx);
-        const b = getPointWorldById(angle.bId, scene, ctx);
-        const c = getPointWorldById(angle.cId, scene, ctx);
-        if (!a || !b || !c) return null;
-        const theta = computeOrientedAngleRad(a, b, c);
-        if (theta === null) return null;
-        return (theta * 180) / Math.PI;
-      },
-      getAnglePointNames: (angleId) => {
-        const angle = ctx.angleById.get(angleId);
-        if (!angle) return null;
-        const pa = ctx.pointById.get(angle.aId);
-        const pb = ctx.pointById.get(angle.bId);
-        const pc = ctx.pointById.get(angle.cId);
-        if (!pa || !pb || !pc) return null;
-        return { aName: pa.name, bName: pb.name, cName: pc.name };
-      },
-      getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
-    }
-  );
+  return evaluateAngleExpressionDegreesWithCtxInSceneModel(scene, exprRaw, ctx, {
+    getPointWorldById,
+    evalNumberById,
+  });
 }
 
 function evaluateNumberExpressionWithCtx(
@@ -1081,26 +893,5 @@ function evaluateNumberExpressionWithCtx(
   ctx: SceneEvalContext,
   excludeNumberId?: string
 ): NumberExpressionEvalResult {
-  return evaluateSceneScalarNumberExpression({
-    exprRaw,
-    numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
-    points: scene.points.map((p) => ({ id: p.id, name: p.name })),
-    lines: scene.lines.map((l) => ({ id: l.id, labelText: l.labelText })),
-    segments: scene.segments.map((s) => ({ id: s.id, aId: s.aId, bId: s.bId, labelText: s.labelText })),
-    circles: scene.circles.map((c) => ({ id: c.id, labelText: c.labelText })),
-    polygons: scene.polygons.map((p) => ({ id: p.id, pointIds: p.pointIds, labelText: p.labelText })),
-    excludeNumberId,
-    getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
-    getPointWorldById: (pointId) => getPointWorldById(pointId, scene, ctx),
-    resolveLineAnchors: (lineId) => {
-      const line = ctx.lineById.get(lineId);
-      if (!line) return null;
-      return getSceneIntersectionFacade(scene, ctx).getSceneGeometryFacade().resolveLineAnchors(line);
-    },
-    getCircleWorldGeometry: (circleId) => {
-      const circle = ctx.circleById.get(circleId);
-      if (!circle) return null;
-      return getSceneIntersectionFacade(scene, ctx).getSceneGeometryFacade().getCircleWorldGeometry(circle);
-    },
-  });
+  return evaluateNumberExpressionWithCtxUsingFacades(scene, exprRaw, ctx, { getPointWorldById }, excludeNumberId);
 }

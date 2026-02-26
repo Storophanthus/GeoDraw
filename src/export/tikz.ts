@@ -27,7 +27,9 @@ import {
 } from "../scene/objectLabels";
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
+import { appendRenderedConstructions } from "./tikz/renderConstructions";
 import { makeEfficientTikz } from "./tikz/efficient/makeEfficientTikz";
+import { appendRenderedDrawLayers } from "./tikz/renderDrawLayers";
 import { TIKZ_EXPORT_CALIBRATION } from "./tikz/calibration";
 
 export { makeEfficientTikz };
@@ -69,6 +71,7 @@ export type TikzCommand =
   | { kind: "ClipPolygon"; points: { x: number; y: number }[] }
   | { kind: "SetupLine"; addLeft: number; addRight: number }
   | { kind: "DefPoints"; items: { name: string; x: number; y: number }[] }
+  | { kind: "ConstructionComment"; text: string }
   | { kind: "DefPoint"; name: string; x: number; y: number }
   | { kind: "DefPointOnLine"; name: string; a: string; b: string }
   | { kind: "DefPointByRotation"; name: string; center: string; point: string; angleDeg: number; direction: "CCW" | "CW" }
@@ -401,6 +404,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         isTkzUnsafePoint(simWorld) &&
         Math.abs(geomA.radius - geomB.radius) > 1e-12
       ) {
+        // Reduced-radius tkz construction avoids unsafe similitude-center coordinates,
+        // but for near-equal radii it can lose tangency due tkz numeric precision.
+        // In this unsafe region, prefer exact scene-computed tangency points.
+        const explicitOuterAnchors = tryResolveOuterTangentByExplicitAnchors({ lineId, anchorsWorld });
+        if (explicitOuterAnchors) {
+          lineAnchorNames.set(lineId, explicitOuterAnchors);
+          return explicitOuterAnchors;
+        }
         const reducedOuterAnchors = tryResolveOuterTangentByRadiusDifference({
           line,
           geomA,
@@ -728,6 +739,48 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const pointAName = useAAsBig ? bigTangencyName : smallTangencyName;
     const pointBName = useAAsBig ? smallTangencyName : bigTangencyName;
     return { a: pointAName, b: pointBName === pointAName ? tangentAuxName : pointBName };
+  };
+
+  const tryResolveOuterTangentByExplicitAnchors = ({
+    lineId,
+    anchorsWorld,
+  }: {
+    lineId: string;
+    anchorsWorld: { a: { x: number; y: number }; b: { x: number; y: number } };
+  }): { a: string; b: string } | null => {
+    if (
+      !Number.isFinite(anchorsWorld.a.x) ||
+      !Number.isFinite(anchorsWorld.a.y) ||
+      !Number.isFinite(anchorsWorld.b.x) ||
+      !Number.isFinite(anchorsWorld.b.y)
+    ) {
+      return null;
+    }
+
+    constructions.push({
+      kind: "ConstructionComment",
+      text: `gd fallback: unsafe near-equal outer tangent (${lineId}) -> explicit tangent anchors`,
+    });
+
+    derivedAuxIndex += 1;
+    const anchorAName = `tkzTanCC_expA_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPoint",
+      name: anchorAName,
+      x: anchorsWorld.a.x,
+      y: anchorsWorld.a.y,
+    });
+
+    derivedAuxIndex += 1;
+    const anchorBName = `tkzTanCC_expB_${derivedAuxIndex}`;
+    constructions.push({
+      kind: "DefPoint",
+      name: anchorBName,
+      x: anchorsWorld.b.x,
+      y: anchorsWorld.b.y,
+    });
+
+    return { a: anchorAName, b: anchorBName };
   };
 
   const tryResolveOuterTangentEqualRadii = ({
@@ -2233,288 +2286,35 @@ export function renderTikz(
     out.push(`\\tkzDefPoint(${fmt(cmd.x)},${fmt(cmd.y)}){${cmd.name}}`);
   }
 
-  pushSectionHeader("% Constructions");
-  let interLCTmpIdx = 0;
-  for (const cmd of constructions) {
-    if (cmd.kind === "DefMidPoint") {
-      assertTkzMacro("tkzDefMidPoint");
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\tkzDefMidPoint(${cmd.a},${cmd.b}) \\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "DefPointOnLine") {
-      assertTkzMacro("tkzDefPointBy");
-      assertTkzMacro("tkzGetPoint");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tRaw = (cmd as any).t;
-      const t = typeof tRaw === "number" && Number.isFinite(tRaw) ? tRaw : 0.5;
-      out.push(`\\tkzDefPointBy[homothety=center ${cmd.a} ratio ${fmt(t)}](${cmd.b}) \\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "DefPointByRotation") {
-      assertAngleFixedMacro("tkzDefPointBy");
-      assertTkzMacro("tkzGetPoint");
-      if (cmd.direction !== "CCW" && cmd.direction !== "CW") {
-        throw new Error("Unsupported AngleFixed option: direction=CW (no tkz mapping)");
-      }
-      const signedAngle = cmd.direction === "CW" ? -Math.abs(cmd.angleDeg) : Math.abs(cmd.angleDeg);
-      out.push(`\\tkzDefPointBy[rotation=center ${cmd.center} angle ${fmt(signedAngle)}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "DefPointByTranslation") {
-      assertTkzMacro("tkzDefPointBy");
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\tkzDefPointBy[translation= from ${cmd.from} to ${cmd.to}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "DefPointByDilation") {
-      assertTkzMacro("tkzDefPointBy");
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\tkzDefPointBy[homothety=center ${cmd.center} ratio ${fmt(cmd.factor)}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "DefPointByProjection") {
-      assertTkzMacro("tkzDefPointBy");
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\tkzDefPointBy[projection=onto ${cmd.axisA}--${cmd.axisB}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "DefPointByReflection") {
-      assertTkzMacro("tkzDefPointBy");
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\tkzDefPointBy[projection=onto ${cmd.axisA}--${cmd.axisB}](${cmd.point}) \\tkzGetPoint{${cmd.footName}}`);
-      out.push(`\\tkzDefPointBy[homothety=center ${cmd.footName} ratio -1](${cmd.point}) \\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "DefPerpendicularLine") {
-      assertPerpendicularMacro("tkzDefLine");
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\tkzDefLine[perpendicular=through ${cmd.through}](${cmd.baseA},${cmd.baseB}) \\tkzGetPoint{${cmd.auxName}}`);
-      continue;
-    }
-    if (cmd.kind === "DefParallelLine") {
-      assertParallelMacro("tkzDefLine");
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\tkzDefLine[parallel=through ${cmd.through}](${cmd.baseA},${cmd.baseB}) \\tkzGetPoint{${cmd.auxName}}`);
-      continue;
-    }
-    if (cmd.kind === "DefCircleSimilitudeCenter") {
-      const macro = cmd.mode === "outer" ? "tkzDefExtSimilitudeCenter" : "tkzDefIntSimilitudeCenter";
-      assertTkzMacro(macro);
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\${macro}(${cmd.circleAO},${cmd.circleAX})(${cmd.circleBO},${cmd.circleBX}) \\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "DefCircleTangentsFromPoint") {
-      assertTkzMacro("tkzDefLine");
-      assertTkzMacro("tkzGetPoints");
-      out.push(
-        `\\tkzDefLine[tangent from = ${cmd.from}](${cmd.circleO},${cmd.circleX}) \\tkzGetPoints{${cmd.firstName}}{${cmd.secondName}}`
-      );
-      continue;
-    }
-    if (cmd.kind === "DefAngleBisectorLine") {
-      assertAngleBisectorMacro("tkzDefTriangleCenter");
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\tkzDefTriangleCenter[in](${cmd.a},${cmd.b},${cmd.c}) \\tkzGetPoint{${cmd.auxName}}`);
-      continue;
-    }
-    if (cmd.kind === "DefTriangleCenterPoint") {
-      assertTkzMacro("tkzDefTriangleCenter");
-      assertTkzMacro("tkzGetPoint");
-      const mode = cmd.centerKind === "incenter" ? "in" : cmd.centerKind === "centroid" ? "centroid" : "ortho";
-      out.push(`\\tkzDefTriangleCenter[${mode}](${cmd.a},${cmd.b},${cmd.c}) \\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "DefCircleCircumCenter") {
-      assertTkzMacro("tkzDefCircle");
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\tkzDefCircle[circum](${cmd.a},${cmd.b},${cmd.c}) \\tkzGetPoint{${cmd.centerName}}`);
-      continue;
-    }
-    if (cmd.kind === "DefPointOnCircle") {
-      assertTkzMacro("tkzDefPointOnCircle");
-      assertTkzMacro("tkzGetPoint");
-      const deg = (cmd.theta * 180) / Math.PI;
-      out.push(`\\tkzDefPointOnCircle[through = center ${cmd.center} angle ${fmt(deg)} point ${cmd.through}]`);
-      out.push(`\\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "InterLL") {
-      assertTkzMacro("tkzInterLL");
-      assertTkzMacro("tkzGetPoint");
-      out.push(`\\tkzInterLL(${cmd.a1},${cmd.a2})(${cmd.b1},${cmd.b2}) \\tkzGetPoint{${cmd.name}}`);
-      continue;
-    }
-    if (cmd.kind === "InterLC") {
-      interLCTmpIdx += 1;
-      const otherName = `tkzInterLC_${interLCTmpIdx}_other`;
+  appendRenderedConstructions(out, constructions, {
+    pushSectionHeader,
+    fmt,
+    assertTkzMacro,
+    assertPerpendicularMacro,
+    assertParallelMacro,
+    assertAngleBisectorMacro,
+    assertAngleFixedMacro,
+  });
 
-      let opt = "";
-      let p1, p2;
-      if (cmd.common) {
-        opt = `[common=${cmd.common}]`;
-        // common is the 2nd result point in tkz-euclide
-        p1 = cmd.name;
-        p2 = cmd.common;
-      } else {
-        opt = "[near]";
-        p1 = cmd.swap ? otherName : cmd.name;
-        p2 = cmd.swap ? cmd.name : otherName;
-      }
-
-      assertTkzMacro("tkzInterLC");
-      assertTkzMacro("tkzGetPoints");
-      out.push(`\\tkzInterLC${opt}(${cmd.lineA},${cmd.lineB})(${cmd.circleO},${cmd.circleX}) \\tkzGetPoints{${p1}}{${p2}}`);
-      continue;
-    }
-    if (cmd.kind === "InterCC") {
-      interLCTmpIdx += 1;
-      const otherName = `tkzInterCC_${interLCTmpIdx}_other`;
-
-      let opt = "";
-      let p1, p2;
-      if (cmd.common) {
-        opt = `[common=${cmd.common}]`;
-        // common is the 2nd result point
-        p1 = cmd.name;
-        p2 = cmd.common;
-      } else {
-        p1 = cmd.swap ? otherName : cmd.name;
-        p2 = cmd.swap ? cmd.name : otherName;
-      }
-
-      assertTkzMacro("tkzInterCC");
-      assertTkzMacro("tkzGetPoints");
-      out.push(`\\tkzInterCC${opt}(${cmd.circleAO},${cmd.circleAX})(${cmd.circleBO},${cmd.circleBX}) \\tkzGetPoints{${p1}}{${p2}}`);
-      continue;
-    }
-  }
-
-  pushSectionHeader("% Draw objects");
-  let drawCircleRadiusTmpIdx = 0;
-  for (let drawIdx = 0; drawIdx < drawObjects.length; drawIdx += 1) {
-    const cmd = drawObjects[drawIdx];
-    if (cmd.kind === "DrawSegment") {
-      assertTkzMacro("tkzDrawSegment");
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzDrawSegment${opts}(${cmd.a},${cmd.b})`);
-    } else if (cmd.kind === "MarkSegment") {
-      assertTkzMacro("tkzMarkSegment");
-      out.push(`\\tkzMarkSegment[${cmd.style}](${cmd.a},${cmd.b})`);
-    } else if (cmd.kind === "DrawRaw") {
-      out.push(cmd.tex);
-    } else if (cmd.kind === "DrawLine") {
-      assertTkzMacro("tkzDrawLine");
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzDrawLine${opts}(${cmd.a},${cmd.b})`);
-    } else if (cmd.kind === "FillCircle") {
-      assertTkzMacro("tkzFillCircle");
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzFillCircle${opts}(${cmd.o},${cmd.x})`);
-    } else if (cmd.kind === "DrawCircle") {
-      assertTkzMacro("tkzDrawCircle");
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzDrawCircle${opts}(${cmd.o},${cmd.x})`);
-    } else if (cmd.kind === "DrawSector") {
-      assertTkzMacro("tkzDrawSector");
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzDrawSector${opts}(${cmd.o},${cmd.a})(${cmd.b})`);
-    } else if (cmd.kind === "FillSector") {
-      assertTkzMacro("tkzFillSector");
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzFillSector${opts}(${cmd.o},${cmd.a})(${cmd.b})`);
-    } else if (cmd.kind === "DrawCircleRadius") {
-      assertCircleFixedMacro("tkzDefCircle");
-      assertCircleFixedMacro("tkzGetPoint");
-      assertCircleFixedMacro("tkzDrawCircle");
-      drawCircleRadiusTmpIdx += 1;
-      const tmpThrough = `tkzCircleRDraw_${drawCircleRadiusTmpIdx}`;
-      out.push(`\\tkzDefCircle[R](${cmd.o},${fmt(cmd.radius)}) \\tkzGetPoint{${tmpThrough}}`);
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzDrawCircle${opts}(${cmd.o},${tmpThrough})`);
-    } else if (cmd.kind === "FillCircleRadius") {
-      assertCircleFixedMacro("tkzDefCircle");
-      assertCircleFixedMacro("tkzGetPoint");
-      assertCircleFixedMacro("tkzFillCircle");
-      drawCircleRadiusTmpIdx += 1;
-      const tmpThrough = `tkzCircleRFill_${drawCircleRadiusTmpIdx}`;
-      out.push(`\\tkzDefCircle[R](${cmd.o},${fmt(cmd.radius)}) \\tkzGetPoint{${tmpThrough}}`);
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzFillCircle${opts}(${cmd.o},${tmpThrough})`);
-    } else if (cmd.kind === "FillAngle") {
-      assertAngleMacro("tkzFillAngle", "Angle.fill");
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzFillAngle${opts}(${cmd.a},${cmd.b},${cmd.c})`);
-    } else if (cmd.kind === "MarkAngle") {
-      const run: Array<Extract<TikzCommand, { kind: "MarkAngle" }>> = [cmd];
-      let scan = drawIdx + 1;
-      while (scan < drawObjects.length) {
-        const next = drawObjects[scan];
-        if (next.kind !== "MarkAngle") break;
-        if (next.a !== cmd.a || next.b !== cmd.b || next.c !== cmd.c) break;
-        run.push(next);
-        scan += 1;
-      }
-      const groupedTex = groupMarkAngles ? buildGroupedMarkAngleTex(run) : null;
-      if (groupedTex) {
-        assertAngleMacro("tkzMarkAngle", "Angle.mark");
-        out.push(groupedTex);
-        drawIdx = scan - 1;
-        continue;
-      }
-      assertAngleMacro("tkzMarkAngle", "Angle.mark");
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzMarkAngle${opts}(${cmd.a},${cmd.b},${cmd.c})`);
-    } else if (cmd.kind === "MarkRightAngle") {
-      assertAngleMacro("tkzMarkRightAngles", "Angle.markRight");
-      const opts = cmd.style ? `[${cmd.style}]` : "";
-      out.push(`\\tkzMarkRightAngles${opts}(${cmd.a},${cmd.b},${cmd.c})`);
-    }
-  }
-
-  pushSectionHeader("% Draw points");
-  for (const cmd of drawPoints) {
-    if (cmd.points.length === 0) continue;
-    assertTkzMacro("tkzDrawPoints");
-    out.push(`\\tkzDrawPoints[${cmd.style}](${cmd.points.join(",")})`);
-  }
-
-  const shouldScaleLabels = Boolean(setupLabelScale && Math.abs(setupLabelScale.scale - 1) > 1e-9);
-  if (shouldScaleLabels) {
-    out.push(`\\begin{scope}[every node/.style={scale=${fmt(setupLabelScale!.scale)}}]`);
-  }
-  for (const cmd of drawPointLabels) {
-    if (cmd.kind === "LabelPoints") {
-      if (cmd.points.length === 0) continue;
-      assertTkzMacro("tkzLabelPoints");
-      out.push(`\\tkzLabelPoints(${cmd.points.join(",")})`);
-      continue;
-    }
-    assertTkzMacro("tkzLabelPoint");
-    const opts = cmd.options ? `[${cmd.options}]` : "";
-    const labelText = cmd.useGlow
-      ? `\\gdLabelGlow{$${escapeTikzText(cmd.text)}$}`
-      : `$${escapeTikzText(cmd.text)}$`;
-    out.push(`\\tkzLabelPoint${opts}(${cmd.name}){${labelText}}`);
-  }
-
-  pushSectionHeader("% Labels");
-  for (const cmd of drawAngleLabels) {
-    assertAngleMacro("tkzLabelAngle", "Angle.label");
-    const opts = cmd.style ? `[${cmd.style}]` : "";
-    out.push(`\\tkzLabelAngle${opts}(${cmd.a},${cmd.b},${cmd.c}){$${escapeTikzText(cmd.text)}$}`);
-  }
-  for (const cmd of drawOtherLabels) {
-    const opts = cmd.options ? `[${cmd.options}]` : "";
-    const labelText = cmd.useGlow
-      ? `\\gdLabelGlow{$${escapeTikzText(cmd.text)}$}`
-      : `$${escapeTikzText(cmd.text)}$`;
-    out.push(`\\node${opts} at (${fmt(cmd.x)},${fmt(cmd.y)}){${labelText}};`);
-  }
-  if (shouldScaleLabels) {
-    out.push("\\end{scope}");
-  }
+  appendRenderedDrawLayers({
+    out,
+    drawObjects,
+    drawPoints,
+    drawPointLabels,
+    drawAngleLabels,
+    drawOtherLabels,
+    labelScale: setupLabelScale?.scale ?? null,
+    groupMarkAngles,
+    deps: {
+      pushSectionHeader,
+      fmt,
+      escapeTikzText,
+      buildGroupedMarkAngleTex,
+      assertTkzMacro,
+      assertCircleFixedMacro,
+      assertAngleMacro,
+    },
+  });
 
   out.push("\\end{tikzpicture}");
   const withNamedColors = hoistNamedColors(out);

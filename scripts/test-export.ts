@@ -552,11 +552,14 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (tikz.includes("\\tkzDefExtSimilitudeCenter")) {
       throw new Error("Near-equal outer tangent fixture should avoid unstable external similitude-center construction.");
     }
-    if (!tikz.includes("\\tkzDefLine[tangent from =")) {
-      throw new Error("Near-equal outer tangent fixture should still use constructive tangent-from-point on reduced-radius helper circle.");
+    if (!tikz.includes("tkzTanCC_expA_") || !tikz.includes("tkzTanCC_expB_")) {
+      throw new Error("Near-equal outer tangent fixture should use explicit tangent-point fallback in unsafe tkz region.");
     }
-    if (!tikz.includes("\\tkzDefPointBy[homothety=center") || !tikz.includes("tkzTanCC_R_")) {
-      throw new Error("Near-equal outer tangent fixture should emit reduced-radius helper point construction.");
+    if (tikz.includes("tkzTanCC_R_")) {
+      throw new Error("Near-equal outer tangent fixture should avoid reduced-radius helper tangent construction in unsafe region.");
+    }
+    if (!tikz.includes("% gd fallback: unsafe near-equal outer tangent")) {
+      throw new Error("Near-equal outer tangent fixture should emit an explicit fallback comment marker in constructions.");
     }
   }
 
@@ -567,30 +570,24 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
         "Near-equal intersecting outer tangent fixture should avoid unstable external similitude-center construction."
       );
     }
-    if (!tikz.includes("\\tkzDefLine[tangent from =")) {
+    if (!tikz.includes("tkzTanCC_expA_") || !tikz.includes("tkzTanCC_expB_")) {
       throw new Error(
-        "Near-equal intersecting outer tangent fixture should still use constructive tangent-from-point on reduced-radius helper circle."
+        "Near-equal intersecting outer tangent fixture should use explicit tangent-point fallback in unsafe tkz region."
       );
     }
-    if (!tikz.includes("tkzTanCC_R_")) {
-      throw new Error("Near-equal intersecting outer tangent fixture should emit reduced-radius helper point construction.");
+    if (tikz.includes("tkzTanCC_R_")) {
+      throw new Error(
+        "Near-equal intersecting outer tangent fixture should avoid reduced-radius helper tangent construction in unsafe region."
+      );
+    }
+    if (!tikz.includes("% gd fallback: unsafe near-equal outer tangent")) {
+      throw new Error(
+        "Near-equal intersecting outer tangent fixture should emit an explicit fallback comment marker in constructions."
+      );
     }
     const efficient = makeEfficientTikz(tikz);
-    const sensitiveRatioMatches = [
-      ...efficient.matchAll(
-        /\\tkzDefPointBy\[homothety=center [^\]]*?\bratio\s+([0-9.]+)\]\([^)]+\)\s+\\tkzGetPoint\{tkzTanCC_(?:R|Big|SmallScaled)_[^}]+\}/g
-      ),
-    ];
-    if (sensitiveRatioMatches.length < 3) {
-      throw new Error("Efficient export must keep the near-equal tangent helper homothety constructions.");
-    }
-    const hasAggressiveRounding = sensitiveRatioMatches.some((m) => {
-      const value = m[1];
-      const decimals = value.includes(".") ? value.split(".")[1].length : 0;
-      return decimals > 0 && decimals <= 2;
-    });
-    if (hasAggressiveRounding) {
-      throw new Error("Efficient export must not aggressively round near-equal tangent helper ratios.");
+    if (!efficient.includes("tkzTanCC_expA_") || !efficient.includes("tkzTanCC_expB_")) {
+      throw new Error("Efficient export must preserve explicit tangent-point fallback for unsafe near-equal outer tangents.");
     }
   }
 

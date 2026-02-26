@@ -25,6 +25,119 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-02-26 TikZ exporter fix (unsafe near-equal outer circle-circle tangents):
+  - Fixed visually incorrect outer tangent exports in tkz for `simWorld`-unsafe / near-equal-radius cases (user-observed case: tangent line drifting and one line passing through non-tangent point `E`).
+  - Root cause:
+    - reduced-radius tkz construction path (`tkzTanCC_R_*` + `tkzDefLine[tangent from = ...]` + large homothety rescale) can lose tangency under tkz numeric precision when the reduced helper circle radius is very small and rescaling is large.
+  - Exporter change in `src/export/tikz.ts`:
+    - for unsafe outer tangent cases (where external similitude center is TeX-unsafe), exporter now prefers exact scene-computed tangency anchors as explicit `DefPoint` constructions (`tkzTanCC_expA_*`, `tkzTanCC_expB_*`) instead of the reduced-radius helper tangent construction.
+    - preserves branch selection from scene geometry (no change to scene tangent semantics).
+  - Updated export regression expectations in `scripts/test-export.ts` for near-equal unsafe fixtures to require the explicit-point fallback and forbid `tkzTanCC_R_*` in those cases.
+  - Validation:
+    - `npm run test:export` (76 fixtures)
+    - `npm run test:command`
+    - `npm run test:scene`
+    - `npm run build`
+- 2026-02-26 TikZ exporter architecture refactor (behavior-preserving slice: draw-layer renderer extraction):
+  - Added `src/export/tikz/renderDrawLayers.ts` to host IR draw-layer serialization previously inline in `src/export/tikz.ts`.
+    - Extracted `% Draw objects`, `% Draw points`, and `% Labels` emission blocks (including grouped angle-mark rendering and label-scale scope handling).
+  - `src/export/tikz.ts` `renderTikz(...)` now delegates draw-layer rendering to `appendRenderedDrawLayers(...)` while keeping:
+    - setup/clip emission,
+    - `% Points` definitions,
+    - `% Constructions` (tkz-euclide semantics / branch mapping),
+    - final color/library post-processing
+    inline.
+  - Follow-up slice (same day): extracted `% Constructions` IR serialization into:
+    - `src/export/tikz/renderConstructions.ts`
+    - centralizes tkz-euclide construction command emission for:
+      - point constructions / transformations
+      - line helpers (parallel/perpendicular/bisector)
+      - circle helper constructions
+      - `InterLL` / `InterLC` / `InterCC`
+    - preserves the shared `interLCTmpIdx` temporary-name sequencing used by both `InterLC` and `InterCC` branches (important for output parity / fixture stability)
+    - preserves existing `near` / `common` option emission and branch/common point ordering behavior unchanged
+  - `src/export/tikz.ts` `renderTikz(...)` now delegates both:
+    - `% Constructions` to `appendRenderedConstructions(...)`
+    - draw-layer serialization to `appendRenderedDrawLayers(...)`
+    while retaining setup/clip/points serialization and final post-processing.
+  - This advances the agreed exporter architecture split (`IR -> renderer`) without touching intersection branch selection/export semantics.
+  - Validation:
+    - `npm run test:export` (76 fixtures)
+    - `npm run test:command`
+    - `npm run test:scene`
+    - `npm run build`
+- 2026-02-25 `src/scene/points.ts` de-GOD split (behavior-preserving slice: scene expression adapter extraction):
+  - Added `src/scene/eval/sceneExpressionFacade.ts` to host scene-specific expression adapter wiring previously in `points.ts`:
+    - angle expression scene adapter (`evaluateAngleExpressionDegreesWithCtxInSceneModel(...)`)
+    - scalar/number expression scene adapter (`evaluateNumberExpressionWithCtxInSceneModel(...)`)
+  - `src/scene/points.ts` now delegates both context-aware expression wrapper bodies to the new eval module and keeps public API behavior unchanged.
+  - Follow-up slice (same day): extracted point-eval intersection orchestration/wiring from `points.ts` into:
+    - `src/scene/eval/scenePointEvalFacade.ts`
+    - centralizes `PointEvalDispatchOps` scene wiring and `sceneIntersectionFacade` bridging callbacks for point evaluation
+    - `points.ts` now delegates `evalPointUnchecked(...)` and uses the extracted intersection-facade constructor helper
+  - Follow-up slice (same day): extracted number-expression / number-definition scene runtime wiring (including intersection-facade geometry bridging) from `points.ts` into:
+    - `src/scene/eval/sceneNumberExpressionFacade.ts`
+    - centralizes recursive `evalNumberById(...)` + `evaluateNumberExpressionWithCtx(...)` wiring against `sceneIntersectionFacade`
+    - removes `getSceneIntersectionFacade(...)` helper from `points.ts` (intersection facade construction no longer owned there for number-expression paths)
+  - Follow-up slice (same day): extracted public scene-eval access wrappers from `points.ts` into:
+    - `src/scene/eval/scenePublicEvalFacade.ts`
+    - centralizes implicit-stats wrapper orchestration for:
+      - `getPointWorldPos(...)`
+      - `getLineWorldAnchors(...)`
+      - `getCircleWorldGeometry(...)`
+      - `getNumberValue(...)`
+      - `resolveTextLabelDisplayText(...)`
+    - `points.ts` now delegates public runtime-read wrappers instead of composing these access flows inline
+  - Follow-up slice (same day): extracted remaining public scene-eval API wrappers (lifecycle + public expression entry wrappers) from `points.ts` into:
+    - `src/scene/eval/sceneEvalApiFacade.ts`
+    - centralizes wrapper orchestration for:
+      - `beginSceneEvalTick(...)`
+      - `endSceneEvalTick(...)`
+      - `getLastSceneEvalStats(...)`
+      - `evaluateAngleExpressionDegrees(...)`
+      - `evaluateNumberExpression(...)`
+    - `points.ts` now retains scene eval state holders (`WeakMap`s / tick builder) while delegating the public wrapper bodies
+  - Follow-up slice (same day): extracted segment/angle mark normalization + resolver utilities from `points.ts` into:
+    - `src/scene/sceneMarkStyleUtils.ts`
+    - centralizes:
+      - `resolveSegmentMarks(...)`
+      - `collectSegmentMarkPositions(...)`
+      - `resolveSegmentMarkAnchorPos(...)`
+      - `resolveAngleMarks(...)`
+    - `points.ts` now re-exports these helpers to preserve existing imports/API while removing another utility block from the monolith
+  - Follow-up slice (same day): extracted remaining scene eval state-holder glue from `points.ts` into:
+    - `src/scene/eval/sceneEvalStateStore.ts`
+    - centralizes scene-local eval state ownership:
+      - `sceneEvalContexts` `WeakMap`
+      - `sceneLastEvalStats` `WeakMap`
+      - `sceneEvalTick` counter
+      - `buildSceneEvalContext(...)`
+      - `getOrCreateSceneEvalContext(...)`
+    - `points.ts` now uses a single store instance (`createSceneEvalStateStore()`) and delegates the state-holder lifecycle plumbing while preserving all public eval APIs
+  - Clarification: the older handoff note about extracting intersection assignment helpers is already reflected in current code (`intersectionAssignments.ts` + `intersectionPairResolution.ts`); this change continues the same de-GOD track with the next remaining eval-wrapper slice.
+  - Validation:
+    - `npm run test:command`
+    - `npm run test:scene`
+    - `npm run build`
+- 2026-02-25 Scalar function extensibility (phase: shared registry + parser/runtime parity wiring):
+  - Extracted shared scalar function registry/dispatch into:
+    - `src/scene/eval/scalarFunctionRegistry.ts`
+  - `src/scene/eval/scalarExpressionRuntime.ts` now delegates function-call dispatch to the shared registry (single dispatch path for scalar runtime).
+  - `src/CommandParser.ts` mixed point/scalar expression evaluator now reuses the same shared scalar registry for scalar functions instead of a duplicated local allowlist/switch.
+    - Future standard trig additions (e.g. additional numeric scalar functions) now propagate to both runtime and parser mixed-expression handling by extending the shared registry.
+  - Added standard inverse trig functions (radians):
+    - `asin`, `acos`, `atan`, `atan2`
+    - aliases: `Asin`, `Acos`, `Atan`, `Atan2`
+  - Added degree trig helpers and inverse degree trig helpers:
+    - `sind`, `cosd`, `tand`, `asind`, `acosd`, `atand`, `atan2d`
+    - aliases: `Sind`, `Cosd`, `Tand`, `Asind`, `Acosd`, `Atand`, `Atan2d`
+  - Updated command bar reference with new trig functions and `atan2(y,x)` argument-order note.
+    - documented `*d` degree suffix helpers and `atan2d(y,x)` behavior.
+  - Added parser regression coverage for trig function use inside mixed point/scalar expressions (`A + cos(0)*B`) in `src/scene/__tests__/command-parser.test.ts`.
+  - Added parser + scene parity coverage for inverse trig, `atan2`, and degree trig helpers, including mixed point/scalar expression usage.
+  - Validation:
+    - `npm run test:command`
+    - `npm run build`
 - 2026-02-20 Deprecate Double Arrow Styles for Circles and Angles:
   - **Refactor**: Replaced legacy inline arrow controls with `ArrowListControl` for Circles and Angles.
     - Enables multiple arrows per object (previously limited to 1 for Circles/Angles).
@@ -3223,8 +3336,17 @@ Date updated: February 23, 2026
 - Current progress:
   - Shared scalar runtime is in place.
   - Scene scalar adapter extraction started (`src/scene/eval/sceneScalarExpressionAdapter.ts`).
+  - Scene expression wrapper extraction continued (`src/scene/eval/sceneExpressionFacade.ts`); `points.ts` now delegates angle/scalar scene expression adapter wiring.
+  - Point-eval intersection wiring extraction continued (`src/scene/eval/scenePointEvalFacade.ts`); `points.ts` now delegates `PointEvalDispatchOps` scene wiring / intersection-facade bridging.
+  - Number-expression runtime wiring extraction continued (`src/scene/eval/sceneNumberExpressionFacade.ts`); `points.ts` now delegates recursive number-eval / scene-expression geometry bridging.
+  - Public scene-eval access wrapper extraction continued (`src/scene/eval/scenePublicEvalFacade.ts`); `points.ts` now delegates implicit-stats public runtime-read wrappers.
+  - Public scene-eval API wrapper extraction continued (`src/scene/eval/sceneEvalApiFacade.ts`); `points.ts` now delegates lifecycle wrappers (`begin/end/getLastSceneEvalStats`) and public expression entry wrappers (`evaluateAngleExpressionDegrees`, `evaluateNumberExpression`).
+  - Mark-style utility extraction continued (`src/scene/sceneMarkStyleUtils.ts`); `points.ts` now re-exports segment/angle mark normalization/resolver helpers instead of owning that logic inline.
+  - Scene eval state-store extraction continued (`src/scene/eval/sceneEvalStateStore.ts`); `points.ts` no longer owns eval state `WeakMap`s / tick counter / builder/get-or-create wrapper inline.
 - Next slices:
   - Extract intersection assignment helpers into dedicated modules while preserving branch/ownership stability behavior.
+    - Note: pair-assignment modules already exist in current tree (`src/scene/eval/intersectionAssignments.ts`, `src/scene/eval/intersectionPairResolution.ts`); verify remaining in-`points.ts` intersection orchestration before repeating this slice.
+  - Optional cleanup slice (low-risk): extract remaining style/type utility clusters from `points.ts` only if churn is justified (diminishing returns compared with exporter refactor).
   - Keep fixes covered by intersection regression tests and manual checks from `docs/tkz_report_intersections.md`.
   - Preserve the new intersection extensibility rule:
     - shape-specific solvers generate roots
@@ -3237,6 +3359,18 @@ Date updated: February 23, 2026
 - Direction agreed:
   - `scene -> export IR -> renderer (tkz / future plain TikZ draw backend) -> optional compactor`
   - Keep `% Constructions` in tkz-euclide, move draw layer toward plain TikZ where needed.
+- Current progress:
+  - Draw-layer IR serialization extraction started:
+    - `src/export/tikz/renderDrawLayers.ts` now owns `% Draw objects`, `% Draw points`, `% Labels` rendering from `TikzCommand[]`.
+  - Construction IR serialization extraction continued:
+    - `src/export/tikz/renderConstructions.ts` now owns `% Constructions` rendering (including `InterLL` / `InterLC` / `InterCC` and temporary-name sequencing).
+    - `src/export/tikz.ts` now retains setup/clip/points serialization and final post-processing, and delegates constructions + draw-layer emission.
+  - Construction/intersection export semantics (including `near` / `common` / branch mapping) remain in `src/export/tikz.ts` and are unchanged in this slice.
+  - Note (2026-02-26): unsafe near-equal outer circle-circle tangents now intentionally use explicit tangent-point fallback (`tkzTanCC_exp*`) instead of reduced-radius helper tangents due tkz numeric instability in the reduced path.
+- Next slices:
+  - Extract setup/clip/points-definition serialization into a dedicated renderer helper so `renderTikz(...)` becomes a thin orchestration pipeline over renderer modules.
+  - Consider introducing explicit renderer context/state objects (temp counters, options, output) so future plain-TikZ draw backend can share IR traversal without reusing tkz-specific asserts.
+  - Optional follow-up: move `near/common`/intersection temp-name emission rules into a dedicated intersection-construction serializer helper under `src/export/tikz/` once the construction renderer is further decomposed.
 - Reason:
   - Current global `tikzpicture` scaling is pragmatic but can overflow.
   - Scope scaling is not a real fix for tkz-euclide draw macros.

@@ -78,6 +78,19 @@ mustExpr("1+2*3", baseCtx, "7");
 mustExpr("Pi", baseCtx, "3.14159265359");
 mustExpr("sin(pi/2)", baseCtx, "1");
 mustExpr("Sin(Pi/2)", baseCtx, "1");
+mustExpr("asin(1)", baseCtx, "1.57079632679");
+mustExpr("acos(1)", baseCtx, "0");
+mustExpr("atan(1)", baseCtx, "0.785398163397");
+mustExpr("atan2(1,0)", baseCtx, "1.57079632679");
+mustExpr("Atan2(1,1)", baseCtx, "0.785398163397");
+mustExpr("sind(30)", baseCtx, "0.5");
+mustExpr("cosd(60)", baseCtx, "0.5");
+mustExpr("tand(45)", baseCtx, "1");
+mustExpr("asind(1)", baseCtx, "90");
+mustExpr("acosd(0)", baseCtx, "90");
+mustExpr("atand(1)", baseCtx, "45");
+mustExpr("atan2d(1,0)", baseCtx, "90");
+mustExpr("Atan2d(1,1)", baseCtx, "45");
 
 mustCmd("Point(1,2)", baseCtx, "CreatePointXY");
 mustCmd("Line(0,0,3,4)", baseCtx, "CreateLineXY");
@@ -334,6 +347,14 @@ const sceneScalarFn = evaluateNumberExpression(sceneDistanceParity, "sin(pi/2)+D
 if (!sceneScalarFn.ok || Math.abs(sceneScalarFn.value - 6) > 1e-9) {
   throw new Error(`Scene scalar function parity mismatch: ${JSON.stringify(sceneScalarFn)}`);
 }
+const sceneInvTrigFn = evaluateNumberExpression(sceneDistanceParity, "atan2(4,3)+asin(1)-acos(0)");
+if (!sceneInvTrigFn.ok || Math.abs(sceneInvTrigFn.value - Math.atan2(4, 3)) > 1e-9) {
+  throw new Error(`Scene inverse trig parity mismatch: ${JSON.stringify(sceneInvTrigFn)}`);
+}
+const sceneDegTrigFn = evaluateNumberExpression(sceneDistanceParity, "atan2d(4,3)+asind(1)-acosd(0)");
+if (!sceneDegTrigFn.ok || Math.abs(sceneDegTrigFn.value - Math.atan2(4, 3) * (180 / Math.PI)) > 1e-9) {
+  throw new Error(`Scene degree trig parity mismatch: ${JSON.stringify(sceneDegTrigFn)}`);
+}
 const sceneAreaCircle = evaluateNumberExpression(sceneDistanceParity, "Area(c1)");
 if (!sceneAreaCircle.ok || Math.abs(sceneAreaCircle.value - Math.PI * 25) > 1e-9) {
   throw new Error(`Scene Area(c1) mismatch: ${JSON.stringify(sceneAreaCircle)}`);
@@ -364,6 +385,21 @@ if (assignPointVec.type !== "CreatePointXY" || assignPointVec.x !== 3 || assignP
 const assignPointAffine = mustAssignObject("Y = A + B/2", baseCtx, "Y", "CreatePointXY");
 if (assignPointAffine.type !== "CreatePointXY" || Math.abs(assignPointAffine.x - 1.5) > 1e-9 || Math.abs(assignPointAffine.y - 2) > 1e-9) {
   throw new Error("Y = A + B/2 mismatch");
+}
+
+const assignPointTrig = mustAssignObject("W = A + cos(0)*B", baseCtx, "W", "CreatePointXY");
+if (assignPointTrig.type !== "CreatePointXY" || Math.abs(assignPointTrig.x - 3) > 1e-9 || Math.abs(assignPointTrig.y - 4) > 1e-9) {
+  throw new Error("W = A + cos(0)*B mismatch");
+}
+
+const assignPointTrigAtan2 = mustAssignObject("W2 = A + atan2(0,1)*B", baseCtx, "W2", "CreatePointXY");
+if (assignPointTrigAtan2.type !== "CreatePointXY" || Math.abs(assignPointTrigAtan2.x) > 1e-9 || Math.abs(assignPointTrigAtan2.y) > 1e-9) {
+  throw new Error("W2 = A + atan2(0,1)*B mismatch");
+}
+
+const assignPointTrigDeg = mustAssignObject("W3 = A + sind(90)*B", baseCtx, "W3", "CreatePointXY");
+if (assignPointTrigDeg.type !== "CreatePointXY" || Math.abs(assignPointTrigDeg.x - 3) > 1e-9 || Math.abs(assignPointTrigDeg.y - 4) > 1e-9) {
+  throw new Error("W3 = A + sind(90)*B mismatch");
 }
 
 const assignLine = mustAssignObject("l = Line(A,B)", baseCtx, "l", "CreateLineByPoints");

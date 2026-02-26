@@ -6,15 +6,28 @@
   - `Pi`
   - `sin(pi/6)`
   - `Sin(Pi/6)`
+  - `atan2(4,3)`
+  - `asin(1)`
+  - `sind(30)`
+  - `atan2d(4,3)`
 - Supported constants:
   - `pi`, `Pi`, `PI`, `e`, `tau`, `ans`
 - Supported functions:
   - `sin`, `cos`, `tan`
   - `Sin`, `Cos`, `Tan`
+  - `sind`, `cosd`, `tand`
+  - `Sind`, `Cosd`, `Tand`
+  - `asin`, `acos`, `atan`, `atan2`
+  - `Asin`, `Acos`, `Atan`, `Atan2`
+  - `asind`, `acosd`, `atand`, `atan2d`
+  - `Asind`, `Acosd`, `Atand`, `Atan2d`
   - `sqrt`, `abs`, `min`, `max`, `pow`
 
 Notes:
 - Trigonometric functions use radians.
+- Degree helpers are available via `*d` suffix (e.g. `sind`, `atan2d`).
+- `atan2(y,x)` uses the standard `(y, x)` argument order.
+- `atan2d(y,x)` uses the same `(y, x)` argument order and returns degrees.
 - `ans` is the last numeric expression result.
 
 ## Constructors

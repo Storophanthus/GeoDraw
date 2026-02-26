@@ -3,25 +3,16 @@ import {
   type ScalarDistanceArg as DistanceArg,
   evaluateScalarDistanceArgs,
 } from "./scene/eval/scalarDistance";
+import {
+  evaluateRegisteredScalarFunctionCall,
+  type ScalarFunctionRuntimeAdapters,
+} from "./scene/eval/scalarFunctionRegistry";
 import { evaluateScalarObjectMeasureArg } from "./scene/eval/scalarObjectMeasure";
 import { evaluateScalarExpressionWithRuntime } from "./scene/eval/scalarExpressionRuntime";
 
 const math = create(all, { number: "number", matrix: "Array", predictable: true });
 const MAX_INPUT_LENGTH = 300;
 const DISALLOWED_TOKEN_RE = /\b(import|createUnit|unit|range|ones|zeros|matrix)\b/i;
-const ALLOWED_FUNCTIONS = new Set([
-  "sin",
-  "cos",
-  "tan",
-  "Sin",
-  "Cos",
-  "Tan",
-  "sqrt",
-  "abs",
-  "min",
-  "max",
-  "pow",
-]);
 const IDENT_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 export type Symbol =
@@ -100,10 +91,8 @@ function unwrapParenthesisNode(node: MathNode): MathNode {
   }
 }
 
-function evaluateExpression(expr: string, ctx: ParseContext): EvalResult {
-  return evaluateScalarExpressionWithRuntime(expr, {
-    ans: ctx.ans,
-    getScalarValue: (name) => ctx.scalarsByName.get(name),
+function buildParserScalarFunctionAdapters(ctx: ParseContext): ScalarFunctionRuntimeAdapters {
+  return {
     resolveDistanceArg: (argExprRaw) => {
       let node: MathNode;
       try {
@@ -114,6 +103,15 @@ function evaluateExpression(expr: string, ctx: ParseContext): EvalResult {
       return resolveDistanceArg(node, ctx);
     },
     evaluateMeasureArg: (fnName, argExprRaw) => evaluateMeasureArg(fnName, argExprRaw, ctx),
+  };
+}
+
+function evaluateExpression(expr: string, ctx: ParseContext): EvalResult {
+  const scalarFunctionAdapters = buildParserScalarFunctionAdapters(ctx);
+  return evaluateScalarExpressionWithRuntime(expr, {
+    ans: ctx.ans,
+    getScalarValue: (name) => ctx.scalarsByName.get(name),
+    ...scalarFunctionAdapters,
   });
 }
 
@@ -229,70 +227,21 @@ function evalPointExpressionNode(node: MathNode, ctx: ParseContext): { ok: true;
   if (anyNode.type === "FunctionNode") {
     const fnName = anyNode.fn?.name ?? "";
     const args = anyNode.args ?? [];
-    if (fnName === "Distance") {
-      if (args.length !== 2) return { ok: false, error: "Distance(A, B) expects 2 point arguments" };
-      const left = resolveDistanceArg(args[0], ctx);
-      if (!left.ok) return { ok: false, error: left.error };
-      const right = resolveDistanceArg(args[1], ctx);
-      if (!right.ok) return { ok: false, error: right.error };
-      const value = evaluateScalarDistanceArgs(left.value, right.value);
-      if (!value.ok) return { ok: false, error: value.error };
-      return { ok: true, value: toScalarExprValue(value.value) };
-    }
-    if (fnName === "Area" || fnName === "Perimeter") {
-      if (args.length !== 1) return { ok: false, error: `${fnName}(...) expects 1 argument` };
-      const value = evaluateMeasureArg(fnName, args[0].toString(), ctx);
-      if (!value.ok) return { ok: false, error: value.error };
-      return { ok: true, value: toScalarExprValue(value.value) };
-    }
-
-    if (!ALLOWED_FUNCTIONS.has(fnName)) {
-      return { ok: false, error: `Unsupported function: ${fnName || "unknown"}` };
-    }
-    const scalarArgs: number[] = [];
-    for (let i = 0; i < args.length; i += 1) {
-      const arg = evalPointExpressionNode(args[i], ctx);
-      if (!arg.ok) return arg;
-      if (arg.value.kind !== "scalar") {
-        return { ok: false, error: `Function ${fnName} only supports scalar arguments` };
-      }
-      scalarArgs.push(arg.value.value);
-    }
-
-    let out: number;
-    switch (fnName) {
-      case "sin":
-      case "Sin":
-        out = Math.sin(scalarArgs[0] ?? 0);
-        break;
-      case "cos":
-      case "Cos":
-        out = Math.cos(scalarArgs[0] ?? 0);
-        break;
-      case "tan":
-      case "Tan":
-        out = Math.tan(scalarArgs[0] ?? 0);
-        break;
-      case "sqrt":
-        out = Math.sqrt(scalarArgs[0] ?? 0);
-        break;
-      case "abs":
-        out = Math.abs(scalarArgs[0] ?? 0);
-        break;
-      case "min":
-        out = Math.min(...scalarArgs);
-        break;
-      case "max":
-        out = Math.max(...scalarArgs);
-        break;
-      case "pow":
-        out = Math.pow(scalarArgs[0] ?? 0, scalarArgs[1] ?? 0);
-        break;
-      default:
-        return { ok: false, error: `Unsupported function: ${fnName}` };
-    }
-    if (!Number.isFinite(out)) return { ok: false, error: `Function ${fnName} result is not finite` };
-    return { ok: true, value: toScalarExprValue(out) };
+    const scalarCall = evaluateRegisteredScalarFunctionCall({
+      fnName,
+      args,
+      adapters: buildParserScalarFunctionAdapters(ctx),
+      evalNumericArg: (argNode) => {
+        const arg = evalPointExpressionNode(argNode, ctx);
+        if (!arg.ok) return { ok: false, error: arg.error };
+        if (arg.value.kind !== "scalar") {
+          return { ok: false, error: `Function ${fnName || "unknown"} only supports scalar arguments` };
+        }
+        return { ok: true, value: arg.value.value };
+      },
+    });
+    if (!scalarCall.ok) return { ok: false, error: scalarCall.error };
+    return { ok: true, value: toScalarExprValue(scalarCall.value) };
   }
 
   return { ok: false, error: `Unsupported expression node: ${anyNode.type ?? "unknown"}` };
