@@ -25,6 +25,103 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-02-26 TikZ exporter architecture refactor (behavior-preserving slice: draw-layer backend emitter + plain-TikZ PoC):
+  - Added draw-layer backend emitter module:
+    - `src/export/tikz/renderDrawBackend.ts`
+  - Introduced a backend emitter interface for draw-layer traversal with minimal backend hooks:
+    - line/segment emission
+    - circle fill/stroke emission
+    - point/absolute label emission
+    - raw draw passthrough
+  - Added backend selection option:
+    - `TikzExportOptions.drawLayerBackend?: "tkz" | "plain"`
+    - default remains `"tkz"` (no output behavior change for existing exports)
+  - `src/export/tikz/renderDrawLayers.ts` now reuses the same IR traversal and delegates supported commands to backend emitter implementations.
+  - Implemented backend variants:
+    - `tkz` backend: emits existing tkz-euclide draw/label macros (parity path)
+    - `plain` backend (proof-of-concept): emits plain `\draw`/`\fill`/`\node` for supported draw-layer commands while preserving section ordering and label scaling scope
+  - Added targeted regression test:
+    - `src/export/__tests__/draw-layer-backend-plain.test.ts`
+    - validates plain backend emission and tkz backend parity macros.
+  - Validation:
+    - `npm run test:export` (76 fixtures)
+    - `node --import tsx src/export/__tests__/draw-layer-backend-plain.test.ts`
+    - `npm run build`
+- 2026-02-26 TikZ exporter architecture refactor (behavior-preserving slice: capability wiring separation):
+  - Added `src/export/tikz/renderCapabilities.ts` to define the renderer capability contract used by traversal modules:
+    - numeric/text utilities (`fmt`, `escapeTikzText`, `buildGroupedMarkAngleTex`)
+    - tkz macro capability checks (`assertTkzMacro`, specialized assertion variants)
+  - Extended `src/export/tikz/renderContext.ts` so renderer context now carries a single `capabilities` object.
+  - `src/export/tikz.ts` `renderTikz(...)` now wires tkz-specific assertion/utility functions in one place via a single `TikzRendererCapabilities` object and passes it through context.
+  - Renderer traversal modules now consume `ctx.capabilities` directly and no longer receive per-call dependency bundles:
+    - `src/export/tikz/renderSetupAndPoints.ts`
+    - `src/export/tikz/renderConstructions.ts`
+    - `src/export/tikz/renderConstructionPoints.ts`
+    - `src/export/tikz/renderConstructionGeometryHelpers.ts`
+    - `src/export/tikz/renderConstructionIntersections.ts`
+    - `src/export/tikz/renderDrawLayers.ts`
+  - Result:
+    - tkz-specific macro assertion wiring is now isolated to `renderTikz(...)`
+    - renderer traversal modules are cleaner and easier to reuse for future non-tkz backends.
+  - Validation:
+    - `npm run test:export` (76 fixtures)
+    - `npm run build`
+- 2026-02-26 TikZ exporter architecture refactor (behavior-preserving slice: construction helper cluster decomposition):
+  - Added:
+    - `src/export/tikz/renderConstructionPoints.ts`
+    - `src/export/tikz/renderConstructionGeometryHelpers.ts`
+  - `src/export/tikz/renderConstructions.ts` now acts as orchestration over dedicated serializers:
+    - construction comments
+    - point-construction serializer (`appendRenderedPointConstruction(...)`)
+    - geometry-helper serializer (`appendRenderedGeometryHelperConstruction(...)`)
+    - intersection serializer (`appendRenderedIntersectionConstruction(...)`)
+  - Extracted non-intersection construction helper clusters from the monolithic construction renderer:
+    - point transforms/definitions (`DefPoint*`, `DefMidPoint`, `DefPointOnCircle`, triangle/circum center point construction)
+    - line/circle helper constructions (`DefPerpendicularLine`, `DefParallelLine`, `DefAngleBisectorLine`, `DefCircleSimilitudeCenter`, `DefCircleTangentsFromPoint`, `InterLL`)
+  - Behavior preserved:
+    - construction command iteration order is unchanged
+    - `InterLC`/`InterCC` temp-name sequencing still uses shared renderer context state
+    - `near/common` branch/common ordering semantics unchanged
+  - Validation:
+    - `npm run test:export` (76 fixtures)
+    - `npm run build`
+- 2026-02-26 TikZ exporter architecture refactor (behavior-preserving slice: shared renderer context + intersection serializer extraction):
+  - Added `src/export/tikz/renderContext.ts`:
+    - introduces an explicit shared renderer context/state object for the tkz renderer pipeline
+    - centralizes:
+      - shared output buffer (`out`)
+      - renderer options (`scale`, `emitTkzSetup`, `labelScale`, `groupMarkAngles`, `hasGlowLabels`)
+      - temp counters/state (`interLCTmpIdx`, `drawCircleRadiusTmpIdx`)
+      - section-header writer (`pushSectionHeader(...)`)
+  - `src/export/tikz.ts` `renderTikz(...)` now constructs one renderer context (`createTikzRendererContext(...)`) and passes it through:
+    - `renderSetupAndPoints`
+    - `renderConstructions`
+    - `renderDrawLayers`
+    instead of passing duplicated output/options/counter-local args to each helper.
+  - Added `src/export/tikz/renderConstructionIntersections.ts`:
+    - extracts `InterLC` / `InterCC` construction serialization (including `near/common` option emission, temp-name sequencing, and branch/common ordering)
+    - shares the same `interLCTmpIdx` counter via renderer context state to preserve fixture output parity
+  - `src/export/tikz/renderConstructions.ts` now delegates intersection-construction emission to the new helper while keeping other construction macros inline.
+  - Validation:
+    - `npm run test:export`
+    - `npm run build`
+- 2026-02-26 TikZ exporter architecture refactor (behavior-preserving slice: setup/clip/points renderer extraction):
+  - Added `src/export/tikz/renderSetupAndPoints.ts` to host pre-construction renderer serialization previously inline in `src/export/tikz.ts`.
+    - Centralizes:
+      - `tikzpicture` header emission (including global scale)
+      - optional `\gdLabelGlow` macro emission
+      - tkz setup/clip emission (`tkzInit`, `tkzClip`, `tkzSetUpLine`)
+      - explicit clip shapes (`\clip rectangle`, polygon clip path)
+      - point style `\tikzset{...}` definitions used by `tkzDrawPoints`
+      - `% Points` section (`\tkzDefPoints`, `\tkzDefPoint`)
+  - `src/export/tikz.ts` `renderTikz(...)` now delegates setup/clip/point-definition serialization to `appendRenderedSetupAndPoints(...)` while retaining:
+    - command partitioning / IR categorization
+    - `% Constructions` and draw-layer renderer delegation
+    - final post-processing (`hoistNamedColors`, optional library injection)
+  - This continues the exporter `IR -> renderer` decomposition without changing construction/intersection branch semantics or draw-layer output grouping.
+  - Validation:
+    - `npm run test:export`
+    - `npm run build`
 - 2026-02-26 TikZ exporter fix (unsafe near-equal outer circle-circle tangents):
   - Fixed visually incorrect outer tangent exports in tkz for `simWorld`-unsafe / near-equal-radius cases (user-observed case: tangent line drifting and one line passing through non-tangent point `E`).
   - Root cause:
@@ -3363,14 +3460,28 @@ Date updated: February 23, 2026
   - Draw-layer IR serialization extraction started:
     - `src/export/tikz/renderDrawLayers.ts` now owns `% Draw objects`, `% Draw points`, `% Labels` rendering from `TikzCommand[]`.
   - Construction IR serialization extraction continued:
-    - `src/export/tikz/renderConstructions.ts` now owns `% Constructions` rendering (including `InterLL` / `InterLC` / `InterCC` and temporary-name sequencing).
-    - `src/export/tikz.ts` now retains setup/clip/points serialization and final post-processing, and delegates constructions + draw-layer emission.
+    - `src/export/tikz/renderConstructions.ts` now orchestrates `% Constructions` rendering and delegates to construction serializers.
+    - `src/export/tikz/renderConstructionPoints.ts` now owns point construction transform/definition emission.
+    - `src/export/tikz/renderConstructionGeometryHelpers.ts` now owns line/circle helper construction emission (including `InterLL`).
+    - `src/export/tikz/renderConstructionIntersections.ts` now owns `InterLC` / `InterCC` `near/common` option + temp-name emission rules and shares temp sequencing via renderer context state.
+  - Setup/clip/point-definition serialization extraction continued:
+    - `src/export/tikz/renderSetupAndPoints.ts` now owns `tikzpicture` preamble/setup/clip + point-style definitions + `% Points` rendering.
+  - Shared renderer context/state extraction continued:
+    - `src/export/tikz/renderContext.ts` now provides a shared renderer context/state object (output buffer, options, temp counters, section writer) used by setup/points + constructions + draw-layer renderers.
+    - `src/export/tikz.ts` now primarily partitions IR commands, constructs renderer context, delegates setup/points + constructions + draw-layer serialization, then performs final post-processing.
+  - Capability wiring separation continued:
+    - `src/export/tikz/renderCapabilities.ts` now defines renderer capability interfaces for traversal modules.
+    - `src/export/tikz.ts` now provides tkz-specific assertion/text/format wiring through one capability object at renderer-context creation.
+    - renderer modules now consume capabilities via context instead of per-call dependency bundles.
+  - Draw-layer backend abstraction continued:
+    - `src/export/tikz/renderDrawBackend.ts` now hosts draw-layer backend emitter implementations (`tkz` and `plain` PoC).
+    - `src/export/tikz/renderDrawLayers.ts` now traverses draw-layer IR once and delegates supported emission to selected backend.
+    - `TikzExportOptions.drawLayerBackend` now controls draw-layer emitter selection (`"tkz"` default).
   - Construction/intersection export semantics (including `near` / `common` / branch mapping) remain in `src/export/tikz.ts` and are unchanged in this slice.
   - Note (2026-02-26): unsafe near-equal outer circle-circle tangents now intentionally use explicit tangent-point fallback (`tkzTanCC_exp*`) instead of reduced-radius helper tangents due tkz numeric instability in the reduced path.
 - Next slices:
-  - Extract setup/clip/points-definition serialization into a dedicated renderer helper so `renderTikz(...)` becomes a thin orchestration pipeline over renderer modules.
-  - Consider introducing explicit renderer context/state objects (temp counters, options, output) so future plain-TikZ draw backend can share IR traversal without reusing tkz-specific asserts.
-  - Optional follow-up: move `near/common`/intersection temp-name emission rules into a dedicated intersection-construction serializer helper under `src/export/tikz/` once the construction renderer is further decomposed.
+  - Expand plain backend coverage for currently tkz-only draw-layer commands (`MarkSegment`, sector/angle marks/labels, circle-radius helpers) as additional emitter methods.
+  - Add opt-in UI control (or debug flag) for backend selection only after plain backend command coverage is sufficient for user-facing export.
 - Reason:
   - Current global `tikzpicture` scaling is pragmatic but can overflow.
   - Scope scaling is not a real fix for tkz-euclide draw macros.

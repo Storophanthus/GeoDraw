@@ -27,9 +27,13 @@ import {
 } from "../scene/objectLabels";
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
+import type { TikzRendererCapabilities } from "./tikz/renderCapabilities";
 import { appendRenderedConstructions } from "./tikz/renderConstructions";
 import { makeEfficientTikz } from "./tikz/efficient/makeEfficientTikz";
+import { createTikzRendererContext } from "./tikz/renderContext";
+import type { DrawLayerBackendKind } from "./tikz/renderContext";
 import { appendRenderedDrawLayers } from "./tikz/renderDrawLayers";
+import { appendRenderedSetupAndPoints } from "./tikz/renderSetupAndPoints";
 import { TIKZ_EXPORT_CALIBRATION } from "./tikz/calibration";
 
 export { makeEfficientTikz };
@@ -48,6 +52,7 @@ export type TikzExportOptions = {
   worldToTikzScale?: number;
   screenPxPerWorld?: number;
   labelGlow?: boolean;
+  drawLayerBackend?: DrawLayerBackendKind;
   segmentStrokeScale?: number;
   pointStrokeScale?: number;
   pointInnerSepFixedPt?: number;
@@ -2167,7 +2172,7 @@ function buildGroupedMarkAngleTex(
 
 export function renderTikz(
   cmds: TikzCommand[],
-  options: Pick<TikzExportOptions, "emitTkzSetup"> & { groupMarkAngles?: boolean } = {}
+  options: Pick<TikzExportOptions, "emitTkzSetup" | "drawLayerBackend"> & { groupMarkAngles?: boolean } = {}
 ): string {
   const setupUnits = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupUnits" }> => c.kind === "SetupUnits");
   const setupLabelScale = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLabelScale" }> => c.kind === "SetupLabelScale");
@@ -2175,8 +2180,8 @@ export function renderTikz(
   const setupLine = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLine" }> => c.kind === "SetupLine");
   const clipRect = cmds.find((c): c is Extract<TikzCommand, { kind: "ClipRect" }> => c.kind === "ClipRect");
   const clipPolygon = cmds.find((c): c is Extract<TikzCommand, { kind: "ClipPolygon" }> => c.kind === "ClipPolygon");
-  const pointsDefs = cmds.filter((c) => c.kind === "DefPoints");
-  const pointDefs = cmds.filter((c) => c.kind === "DefPoint");
+  const pointsDefs = cmds.filter((c): c is Extract<TikzCommand, { kind: "DefPoints" }> => c.kind === "DefPoints");
+  const pointDefs = cmds.filter((c): c is Extract<TikzCommand, { kind: "DefPoint" }> => c.kind === "DefPoint");
   const constructions = cmds.filter(
     (c) =>
       c.kind !== "DefPoints" &&
@@ -2230,6 +2235,7 @@ export function renderTikz(
   );
   const emitTkzSetup = options.emitTkzSetup ?? true;
   const groupMarkAngles = options.groupMarkAngles ?? false;
+  const drawLayerBackend = options.drawLayerBackend ?? "tkz";
 
   const out: string[] = [];
   const pushSectionHeader = (title: string) => {
@@ -2238,82 +2244,47 @@ export function renderTikz(
     out.push("");
   };
   const scale = setupUnits?.scale ?? 1;
-  out.push(`\\begin{tikzpicture}[scale=${fmt(scale)},line cap=round,line join=round,>=triangle 45]`);
-  if (hasGlowLabels) {
-    // Reusable text halo macro using contour stroke (page-color aware).
-    out.push(
-      "\\newcommand{\\gdLabelGlow}[1]{\\begingroup\\ifcsname contour\\endcsname\\contourlength{0.42pt}\\ifcsname thepagecolor\\endcsname\\contour{\\thepagecolor}{#1}\\else\\contour{white}{#1}\\fi\\else#1\\fi\\endgroup}"
-    );
-  }
-  // When explicit export clip rectangle is present, avoid tkz viewport clip to
-  // prevent extra outer whitespace from a larger bounding box.
-  if (emitTkzSetup && setupViewport && !clipRect && !clipPolygon) {
-    assertTkzMacro("tkzInit");
-    assertTkzMacro("tkzClip");
-    out.push(
-      `\\tkzInit[xmin=${fmt(setupViewport.xmin)},xmax=${fmt(setupViewport.xmax)},ymin=${fmt(
-        setupViewport.ymin
-      )},ymax=${fmt(setupViewport.ymax)}]`
-    );
-    out.push(`\\tkzClip[space=${fmt(setupViewport.space)}]`);
-  }
-  if (emitTkzSetup && setupLine) {
-    assertTkzMacro("tkzSetUpLine");
-    out.push(`\\tkzSetUpLine[add=${fmt(setupLine.addLeft)} and ${fmt(setupLine.addRight)}]`);
-  }
-  if (clipRect) {
-    out.push(`\\clip (${fmt(clipRect.xmin)},${fmt(clipRect.ymin)}) rectangle (${fmt(clipRect.xmax)},${fmt(clipRect.ymax)});`);
-  }
-  if (clipPolygon && clipPolygon.points.length >= 3) {
-    const path = clipPolygon.points.map((p) => `(${fmt(p.x)},${fmt(p.y)})`).join(" -- ");
-    out.push(`\\clip ${path} -- cycle;`);
-  }
-
-  // Emit predefined styles used by tkzDrawPoints[...] commands.
-  const pointStyles = extractPointStyles(cmds);
-  for (const style of pointStyles) {
-    out.push(`\\tikzset{${style.styleName}/.style={${style.styleExpr}}}`);
-  }
-
-  pushSectionHeader("% Points");
-  for (const cmd of pointsDefs) {
-    assertTkzMacro("tkzDefPoints");
-    const items = cmd.items.map((it) => `${fmt(it.x)}/${fmt(it.y)}/${it.name}`).join(", ");
-    out.push(`\\tkzDefPoints{${items}}`);
-  }
-  for (const cmd of pointDefs) {
-    assertTkzMacro("tkzDefPoint");
-    out.push(`\\tkzDefPoint(${fmt(cmd.x)},${fmt(cmd.y)}){${cmd.name}}`);
-  }
-
-  appendRenderedConstructions(out, constructions, {
-    pushSectionHeader,
+  const capabilities: TikzRendererCapabilities = {
     fmt,
+    escapeTikzText,
+    buildGroupedMarkAngleTex,
     assertTkzMacro,
     assertPerpendicularMacro,
     assertParallelMacro,
     assertAngleBisectorMacro,
     assertAngleFixedMacro,
+    assertCircleFixedMacro,
+    assertAngleMacro,
+  };
+  const renderCtx = createTikzRendererContext(out, pushSectionHeader, {
+    scale,
+    hasGlowLabels,
+    emitTkzSetup,
+    labelScale: setupLabelScale?.scale ?? null,
+    groupMarkAngles,
+    drawLayerBackend,
+  }, capabilities);
+
+  appendRenderedSetupAndPoints({
+    ctx: renderCtx,
+    setupViewport,
+    setupLine,
+    clipRect,
+    clipPolygon,
+    pointStyles: extractPointStyles(cmds),
+    pointsDefs,
+    pointDefs,
   });
 
+  appendRenderedConstructions(renderCtx, constructions);
+
   appendRenderedDrawLayers({
-    out,
+    ctx: renderCtx,
     drawObjects,
     drawPoints,
     drawPointLabels,
     drawAngleLabels,
     drawOtherLabels,
-    labelScale: setupLabelScale?.scale ?? null,
-    groupMarkAngles,
-    deps: {
-      pushSectionHeader,
-      fmt,
-      escapeTikzText,
-      buildGroupedMarkAngleTex,
-      assertTkzMacro,
-      assertCircleFixedMacro,
-      assertAngleMacro,
-    },
   });
 
   out.push("\\end{tikzpicture}");
@@ -2348,6 +2319,7 @@ export function exportTikzEfficientWithOptions(scene: SceneModel, options: TikzE
   pointWorldCache.delete(normalizedScene);
   const standard = renderTikz(buildTikzIR(normalizedScene, options), {
     emitTkzSetup: options.emitTkzSetup,
+    drawLayerBackend: options.drawLayerBackend,
     groupMarkAngles: true,
   });
   assertNoUnknownTkzMacro(standard);
@@ -2361,6 +2333,7 @@ export function exportTikzWithOptions(scene: SceneModel, options: TikzExportOpti
   pointWorldCache.delete(normalizedScene);
   const tex = renderTikz(buildTikzIR(normalizedScene, options), {
     emitTkzSetup: options.emitTkzSetup,
+    drawLayerBackend: options.drawLayerBackend,
   });
   assertNoUnknownTkzMacro(tex);
   return tex;
