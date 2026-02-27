@@ -187,7 +187,6 @@ export function hitTestAngleId(
   vp: Viewport,
   tolerancePx: number
 ): string | null {
-  const sectorPickupRatio = 0.45;
   let bestId: string | null = null;
   let best = tolerancePx;
   for (let i = resolvedAngles.length - 1; i >= 0; i -= 1) {
@@ -203,7 +202,8 @@ export function hitTestAngleId(
     const right = Boolean(entry.angle.isRightExact) || Boolean(entry.angle.isRightApprox);
     const rawMarkStyle = entry.angle.style.markStyle === "right" ? "rightSquare" : entry.angle.style.markStyle;
     const markStyle = right && rawMarkStyle === "arc" ? "rightSquare" : rawMarkStyle;
-    const arcDistance = distanceToAngleArc(screenPoint, as, bs, entry.theta, r, sectorPickupRatio);
+    const interiorPickupRatio = angleInteriorPickupRatio(entry.theta);
+    const arcDistance = distanceToAngleArc(screenPoint, as, bs, entry.theta, r, interiorPickupRatio);
     const d =
       right && markStyle === "rightSquare"
         ? distanceToRightAngleMark(screenPoint, as, bs, cs, computeRightMarkSizePx(r, entry.angle.style.strokeWidth))
@@ -270,10 +270,10 @@ export function hitTestTopObject(
 
   const pointId = hitTestPointId(screenPoint, resolvedPoints, camera, vp, pointTolPx);
   if (pointId) return { type: "point", id: pointId };
-  const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx);
-  if (segmentId) return { type: "segment", id: segmentId };
   const angleId = hitTestAngleId(screenPoint, resolveVisibleAngles(scene), camera, vp, angleTolPx);
   if (angleId) return { type: "angle", id: angleId };
+  const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx);
+  if (segmentId) return { type: "segment", id: segmentId };
   const lineId = hitTestLineId(screenPoint, scene, camera, vp, lineTolPx);
   if (lineId) return { type: "line", id: lineId };
   const circleId = hitTestCircleId(screenPoint, scene, camera, vp, circleTolPx);
@@ -316,19 +316,37 @@ function distanceToAngleArc(
   const dy = p.y - bScreen.y;
   const dist = Math.hypot(dx, dy);
   const theta = Math.atan2(dy, dx);
+  const pStart = { x: bScreen.x + Math.cos(sweep.start) * radiusPx, y: bScreen.y + Math.sin(sweep.start) * radiusPx };
+  const pEnd = {
+    x: bScreen.x + Math.cos(sweep.start - sweep.sweep) * radiusPx,
+    y: bScreen.y + Math.sin(sweep.start - sweep.sweep) * radiusPx,
+  };
+  const edgeDistance = Math.min(
+    projectPointToSegment(p, bScreen, pStart).distance,
+    projectPointToSegment(p, bScreen, pEnd).distance
+  );
   const isWithin = isAngleOnArc(theta, sweep.start, sweep.sweep);
   if (isWithin && dist <= radiusPx * Math.max(0, Math.min(1, sectorPickupRatio))) {
     return 0;
   }
   if (!isWithin) {
-    const pStart = { x: bScreen.x + Math.cos(sweep.start) * radiusPx, y: bScreen.y + Math.sin(sweep.start) * radiusPx };
-    const pEnd = {
-      x: bScreen.x + Math.cos(sweep.start - sweep.sweep) * radiusPx,
-      y: bScreen.y + Math.sin(sweep.start - sweep.sweep) * radiusPx,
-    };
-    return Math.min(Math.hypot(p.x - pStart.x, p.y - pStart.y), Math.hypot(p.x - pEnd.x, p.y - pEnd.y));
+    return Math.min(
+      edgeDistance,
+      Math.hypot(p.x - pStart.x, p.y - pStart.y),
+      Math.hypot(p.x - pEnd.x, p.y - pEnd.y)
+    );
   }
-  return Math.abs(dist - radiusPx);
+  return Math.min(edgeDistance, Math.abs(dist - radiusPx));
+}
+
+function angleInteriorPickupRatio(thetaRad: number): number {
+  const tiny = (25 * Math.PI) / 180;
+  const medium = (60 * Math.PI) / 180;
+  if (!Number.isFinite(thetaRad)) return 0.45;
+  if (thetaRad <= tiny) return 1;
+  if (thetaRad >= medium) return 0.45;
+  const t = (thetaRad - tiny) / (medium - tiny);
+  return 1 - t * (1 - 0.45);
 }
 
 function distanceToRightAngleMark(p: Vec2, aScreen: Vec2, bScreen: Vec2, cScreen: Vec2, sizePx: number): number {

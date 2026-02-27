@@ -109,12 +109,12 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     };
   }
 
-  if (hitSegmentId) {
-    return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "segment", id: hitSegmentId } };
-  }
-
   if (hitAngleId) {
     return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "angle", id: hitAngleId } };
+  }
+
+  if (hitSegmentId) {
+    return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "segment", id: hitSegmentId } };
   }
 
   if (hitLineId) {
