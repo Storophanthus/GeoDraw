@@ -4,6 +4,7 @@ import { ExportPanel } from "./ExportPanel";
 import { IconSidebarPanelLeft, IconSidebarPanelRight } from "./icons";
 import { ObjectBrowser } from "./ObjectBrowser";
 import { PropertiesPanel } from "./PropertiesPanel";
+import type { SelectedObject } from "../state/slices/storeTypes";
 
 type RightTab = "algebra" | "export";
 
@@ -21,9 +22,26 @@ export function RightSidebar({
   collapsedWidth,
 }: RightSidebarProps) {
   const scene = useGeoStore((store) => store.scene);
+  const activeTool = useGeoStore((store) => store.activeTool);
+  const copyStyle = useGeoStore((store) => store.copyStyle);
   const selectedObject = useGeoStore((store) => store.selectedObject);
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
+  const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
+  const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
   const [rightTab, setRightTab] = useState<RightTab>("algebra");
+
+  const handleBrowserSelect = (obj: SelectedObject) => {
+    setSelectedObject(obj);
+    if (!obj) return;
+    if (activeTool !== "copyStyle") return;
+    // Number objects do not carry drawable style payloads for copy-style.
+    if (obj.type === "number") return;
+    if (!copyStyle.source) {
+      setCopyStyleSource(obj);
+      return;
+    }
+    applyCopyStyleTo(obj);
+  };
 
   return (
     <aside
@@ -67,7 +85,7 @@ export function RightSidebar({
 
           {rightTab === "algebra" && (
             <section className="sidebarSection">
-              <ObjectBrowser scene={scene} selectedObject={selectedObject} setSelectedObject={setSelectedObject} />
+              <ObjectBrowser scene={scene} selectedObject={selectedObject} setSelectedObject={handleBrowserSelect} />
             </section>
           )}
 

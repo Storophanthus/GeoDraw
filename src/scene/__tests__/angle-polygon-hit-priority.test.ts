@@ -1,4 +1,4 @@
-import { hitTestTopObject } from "../../engine";
+import { hitTestAngleId, hitTestSegmentId, hitTestTopObject, resolveVisibleAngles } from "../../engine";
 import type { Camera, Viewport } from "../../view/camera";
 import { camera as camMath } from "../../view/camera";
 import { decideMovePointerDown } from "../../view/pointerInteraction";
@@ -193,3 +193,124 @@ assert(
 );
 
 console.log("angle-polygon-hit-priority: ok");
+
+const tinyAngleScene: SceneModel = {
+  points: [
+    {
+      id: "p_1",
+      kind: "free",
+      name: "A",
+      captionTex: "A",
+      visible: true,
+      showLabel: "name",
+      position: { x: -3, y: -2 },
+      style: { ...defaultPointStyle, labelOffsetPx: { ...defaultPointStyle.labelOffsetPx } },
+    },
+    {
+      id: "p_2",
+      kind: "free",
+      name: "B",
+      captionTex: "B",
+      visible: true,
+      showLabel: "name",
+      position: { x: -0.5, y: 4 },
+      style: { ...defaultPointStyle, labelOffsetPx: { ...defaultPointStyle.labelOffsetPx } },
+    },
+    {
+      id: "p_3",
+      kind: "free",
+      name: "C",
+      captionTex: "C",
+      visible: true,
+      showLabel: "name",
+      position: { x: -2, y: -2.5 },
+      style: { ...defaultPointStyle, labelOffsetPx: { ...defaultPointStyle.labelOffsetPx } },
+    },
+    {
+      id: "p_4",
+      kind: "free",
+      name: "D",
+      captionTex: "D",
+      visible: true,
+      showLabel: "name",
+      position: { x: 6, y: -1.5 },
+      style: { ...defaultPointStyle, labelOffsetPx: { ...defaultPointStyle.labelOffsetPx } },
+    },
+  ],
+  vectors: [],
+  numbers: [],
+  lines: [],
+  segments: [
+    { id: "s_1", aId: "p_1", bId: "p_2", visible: true, showLabel: false, style: { ...defaultSegmentStyle } },
+    { id: "s_2", aId: "p_2", bId: "p_3", visible: true, showLabel: false, style: { ...defaultSegmentStyle } },
+    { id: "s_3", aId: "p_3", bId: "p_4", visible: true, showLabel: false, style: { ...defaultSegmentStyle } },
+  ],
+  circles: [],
+  polygons: [],
+  angles: [
+    { id: "a_1", kind: "angle", aId: "p_1", bId: "p_2", cId: "p_3", visible: true, style: { ...defaultAngleStyle, labelPosWorld: { ...defaultAngleStyle.labelPosWorld } } },
+    { id: "a_2", kind: "angle", aId: "p_4", bId: "p_3", cId: "p_2", visible: true, style: { ...defaultAngleStyle, labelPosWorld: { ...defaultAngleStyle.labelPosWorld } } },
+  ],
+};
+
+const tinyABCScreen = camMath.worldToScreen({ x: -0.5, y: 4 }, camera, vp);
+const tinyAngleClick = { x: tinyABCScreen.x - 4, y: tinyABCScreen.y + 17 };
+const tinyBoundaryClickBA = { x: tinyABCScreen.x - 24, y: tinyABCScreen.y + 32 };
+const tinyBoundaryClickBC = { x: tinyABCScreen.x - 12, y: tinyABCScreen.y + 50 };
+const tinyTopHit = hitTestTopObject(tinyAngleScene, camera, vp, tinyAngleClick, {
+  pointTolPx: 12,
+  angleTolPx: 20,
+  segmentTolPx: 10,
+  lineTolPx: 10,
+  circleTolPx: 10,
+});
+assert(
+  tinyTopHit?.type === "angle" && tinyTopHit.id === "a_1",
+  "Tiny angle ABC should win top-hit over overlapping segments near the vertex."
+);
+
+const tinyBoundaryTopHitBA = hitTestTopObject(tinyAngleScene, camera, vp, tinyBoundaryClickBA, {
+  pointTolPx: 12,
+  angleTolPx: 20,
+  segmentTolPx: 10,
+  lineTolPx: 10,
+  circleTolPx: 10,
+});
+assert(
+  tinyBoundaryTopHitBA?.type === "angle" && tinyBoundaryTopHitBA.id === "a_1",
+  "Tiny angle ABC should still win when clicking near BA boundary inside angle radius."
+);
+
+const tinyBoundaryTopHitBC = hitTestTopObject(tinyAngleScene, camera, vp, tinyBoundaryClickBC, {
+  pointTolPx: 12,
+  angleTolPx: 20,
+  segmentTolPx: 10,
+  lineTolPx: 10,
+  circleTolPx: 10,
+});
+assert(
+  tinyBoundaryTopHitBC?.type === "angle" && tinyBoundaryTopHitBC.id === "a_1",
+  "Tiny angle ABC should still win when clicking near BC boundary inside angle radius."
+);
+
+const tinyAngleHitId = hitTestAngleId(tinyAngleClick, resolveVisibleAngles(tinyAngleScene), camera, vp, 20);
+const tinySegmentHitId = hitTestSegmentId(tinyAngleClick, tinyAngleScene, camera, vp, 10);
+assert(tinyAngleHitId === "a_1", "Tiny-angle click should resolve a_1 as angle hit.");
+assert(Boolean(tinySegmentHitId), "Tiny-angle click should also be near a segment for priority tie-break coverage.");
+const tinyMoveDecision = decideMovePointerDown({
+  hitLabelId: null,
+  hitAngleLabelId: null,
+  hitPointId: null,
+  hitSegmentId: tinySegmentHitId,
+  hitPolygonId: null,
+  hitLineId: null,
+  hitCircleId: null,
+  hitAngleId: tinyAngleHitId,
+  scenePoints: tinyAngleScene.points,
+});
+assert(
+  tinyMoveDecision.selectedObject?.type === "angle" && tinyMoveDecision.selectedObject.id === "a_1",
+  "Move selection should prioritize tiny angle over segment when both are hit."
+);
+
+console.log("angle-segment tiny-angle hit-priority: ok");
