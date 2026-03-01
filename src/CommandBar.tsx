@@ -464,98 +464,43 @@ export function CommandBar() {
   };
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: 10,
-        right: 10,
-        bottom: 10,
-        zIndex: 60,
-        pointerEvents: "auto",
-      }}
-    >
+    <div className="commandBarWrap">
       {collapsed ? (
-        <div style={{ display: "flex", justifyContent: "center" }}>
+        <div className="commandBarCollapsed">
           <button
             type="button"
             onClick={() => setCollapsed(false)}
-            style={{
-              border: "1px solid var(--gd-ui-border, #cbd5e1)",
-              borderRadius: 999,
-              background: "var(--gd-ui-glass-bg-strong, rgba(255,255,255,0.96))",
-              color: "var(--gd-ui-text-strong, #0f172a)",
-              padding: "6px 12px",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-              boxShadow: "0 2px 8px var(--gd-ui-shadow, rgba(15,23,42,0.08))",
-            }}
+            className="commandBarCollapseButton"
             title="Show command bar"
           >
             ▴ Command
           </button>
         </div>
       ) : (
-        <div
-          style={{
-            background: "var(--gd-ui-glass-bg, rgba(255,255,255,0.95))",
-            border: "1px solid var(--gd-ui-border, #cbd5e1)",
-            borderRadius: 10,
-            boxShadow: "0 2px 10px var(--gd-ui-shadow, rgba(15,23,42,0.08))",
-            padding: "8px 10px",
-            display: "grid",
-            gridTemplateColumns: "1fr auto auto",
-            gap: 10,
-            alignItems: "center",
-          }}
-        >
+        <div className="commandBarExpanded">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
+            className="commandBarInput"
             placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Translate(P,A,B), Rotate(P,O,30), Dilate(P,O,2), Reflect(P,l)"
-            style={{
-              width: "100%",
-              minWidth: 0,
-              border: "1px solid var(--gd-ui-border, #cbd5e1)",
-              borderRadius: 8,
-              padding: "8px 10px",
-              fontSize: 13,
-              background: "var(--gd-ui-surface, #fff)",
-            }}
           />
           <button
             type="button"
             onClick={runCommand}
-            style={{
-              border: "1px solid var(--gd-ui-border, #cbd5e1)",
-              borderRadius: 8,
-              background: "var(--gd-ui-surface-soft, #f8fafc)",
-              color: "var(--gd-ui-text-strong, #0f172a)",
-              padding: "8px 12px",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
+            className="commandBarRunButton"
           >
             Run
           </button>
           <button
             type="button"
             onClick={() => setCollapsed(true)}
-            style={{
-              border: "1px solid var(--gd-ui-border, #cbd5e1)",
-              borderRadius: 8,
-              background: "var(--gd-ui-surface, #fff)",
-              color: "var(--gd-ui-text, #334155)",
-              padding: "8px 10px",
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
+            className="commandBarHideButton"
             title="Hide command bar"
           >
             ▾
           </button>
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: statusColor, minHeight: 16 }}>{status.text}</div>
+          <div className="commandBarStatus" style={{ color: statusColor }}>{status.text}</div>
         </div>
       )}
     </div>

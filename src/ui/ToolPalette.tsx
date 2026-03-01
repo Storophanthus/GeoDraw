@@ -6,7 +6,10 @@ import {
   type ComponentType,
 } from "react";
 import { useGeoStore, type ActiveTool } from "../state/geoStore";
-import { COLOR_PROFILE_OPTIONS, getColorProfile, type ColorProfileId } from "../state/colorProfiles";
+import { COLOR_PROFILE_OPTIONS, getColorProfile } from "../state/colorProfiles";
+import { ConstructionProfileSwatch } from "./ConstructionProfileSwatch";
+import { ToolGroupButton } from "./ToolGroupButton";
+import { toRgba } from "./colorUtils";
 import {
   IconAngle,
   IconAngleFixed,
@@ -42,15 +45,15 @@ type IconProps = {
   strokeWidth?: number;
 };
 
-type ToolDef = {
+export type ToolDef = {
   icon: ComponentType<IconProps>;
   tooltip: string;
   ariaLabel: string;
 };
 
-type ToolGroupId = "move" | "points" | "transform" | "lines" | "angle" | "circles" | "styles";
+export type ToolGroupId = "move" | "points" | "transform" | "lines" | "angle" | "circles" | "styles";
 
-const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
+export const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   move: { icon: IconMove, tooltip: "Move / Select (V)", ariaLabel: "Move tool" },
   point: { icon: IconPoint, tooltip: "Point (P)", ariaLabel: "Point tool" },
   translate: { icon: IconTranslate, tooltip: "Translate Object", ariaLabel: "Translate tool" },
@@ -270,51 +273,6 @@ export function ToolPalette({
   );
 }
 
-function ConstructionProfileSwatch({ profileId }: { profileId: ColorProfileId }) {
-  const palette = getColorProfile(profileId).palette;
-  return (
-    <span
-      className="constructionProfileSwatchVisual"
-      style={{
-        background: palette.backgroundColor,
-        borderColor: palette.lineStroke,
-      }}
-      aria-hidden
-    >
-      <span className="constructionProfileSwatchGridMinor" style={{ background: toRgba(palette.gridMinorColor, 0.5) }} />
-      <span className="constructionProfileSwatchGridMajor" style={{ background: toRgba(palette.gridMajorColor, 0.8) }} />
-      <span className="constructionProfileSwatchAxis" style={{ background: palette.axisColor }} />
-      <span className="constructionProfileSwatchFill" style={{ background: palette.polygonFill }} />
-      <span className="constructionProfileSwatchLine" style={{ background: palette.segmentStroke }} />
-      <span
-        className="constructionProfileSwatchDot"
-        style={{
-          background: palette.pointFill,
-          borderColor: palette.pointStroke,
-        }}
-      />
-    </span>
-  );
-}
-
-function toRgba(color: string, alpha: number): string {
-  const hex = color.trim();
-  const match3 = /^#([0-9a-fA-F]{3})$/.exec(hex);
-  if (match3) {
-    const [r, g, b] = match3[1].split("").map((d) => parseInt(d + d, 16));
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  const match6 = /^#([0-9a-fA-F]{6})$/.exec(hex);
-  if (match6) {
-    const raw = match6[1];
-    const r = parseInt(raw.slice(0, 2), 16);
-    const g = parseInt(raw.slice(2, 4), 16);
-    const b = parseInt(raw.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  return color;
-}
-
 function getGroupIdForTool(tool: ActiveTool): ToolGroupId | null {
   for (const group of TOOL_GROUPS) {
     if (group.tools.includes(tool)) return group.id;
@@ -322,89 +280,3 @@ function getGroupIdForTool(tool: ActiveTool): ToolGroupId | null {
   return null;
 }
 
-type ToolGroupButtonProps = {
-  groupId: ToolGroupId;
-  mainTool: ActiveTool;
-  tools: ActiveTool[];
-  activeTool: ActiveTool;
-  flyoutOpen: boolean;
-  onOpenFlyout: () => void;
-  onCloseFlyout: () => void;
-  onSelectTool: (tool: ActiveTool) => void;
-};
-
-function ToolGroupButton({
-  groupId,
-  mainTool,
-  tools,
-  activeTool,
-  flyoutOpen,
-  onOpenFlyout,
-  onCloseFlyout,
-  onSelectTool,
-}: ToolGroupButtonProps) {
-  const mainDef = TOOL_REGISTRY[mainTool];
-  const MainIcon = mainDef.icon;
-
-  const flyoutTools = tools.filter((tool) => tool !== mainTool);
-  const hasFlyout = flyoutTools.length > 0;
-
-  return (
-    <div
-      className="toolGroupWrap"
-      data-group-id={groupId}
-      onMouseEnter={() => {
-        if (hasFlyout) onOpenFlyout();
-      }}
-      onMouseLeave={() => onCloseFlyout()}
-    >
-      <div className={flyoutOpen ? "toolButtonWrap suppressTooltip" : "toolButtonWrap"}>
-        <button
-          type="button"
-          className={activeTool === mainTool ? "toolIconButton active" : "toolIconButton"}
-          onClick={() => {
-            onCloseFlyout();
-            onSelectTool(mainTool);
-          }}
-          onFocus={() => {
-            if (hasFlyout) onOpenFlyout();
-          }}
-          aria-label={mainDef.ariaLabel}
-        >
-          <MainIcon size={18} strokeWidth={2} />
-        </button>
-        <span className="toolTooltip" role="tooltip">
-          {mainDef.tooltip}
-        </span>
-      </div>
-
-      {flyoutOpen && flyoutTools.length > 0 && (
-        <div className="toolFlyout" role="menu" aria-label={`${groupId} tools`}>
-          {flyoutTools.map((tool) => {
-            const def = TOOL_REGISTRY[tool];
-            const Icon = def.icon;
-            return (
-              <div key={tool} className="toolButtonWrap">
-                <button
-                  type="button"
-                  className={activeTool === tool ? "toolIconButton active" : "toolIconButton"}
-                  onClick={() => {
-                    onSelectTool(tool);
-                    onCloseFlyout();
-                  }}
-                  aria-label={def.ariaLabel}
-                  role="menuitem"
-                >
-                  <Icon size={18} strokeWidth={2} />
-                </button>
-                <span className="toolTooltip" role="tooltip">
-                  {def.tooltip}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
