@@ -4,6 +4,7 @@ import type {
   CircleStyle,
   GeometryObjectRef,
   LineLikeObjectRef,
+  ReflectionObjectRef,
   LineStyle,
   PointStyle,
   PolygonStyle,
@@ -346,7 +347,7 @@ export type GeoActions = {
   ) => string | null;
   createPointByTranslation: (pointId: string, fromId: string, toId: string) => string | null;
   createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
-  createPointByReflection: (pointId: string, axis: LineLikeObjectRef) => string | null;
+  createPointByReflection: (pointId: string, axis: ReflectionObjectRef) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   createTriangleCenterPoint: (centerKind: TriangleCenterKind, aId: string, bId: string, cId: string) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;

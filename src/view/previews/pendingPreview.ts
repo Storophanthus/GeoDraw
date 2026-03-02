@@ -422,11 +422,15 @@ export function drawPendingPreview(
       return geoPointWorld(scene, angle.bId);
     };
 
-    const resolveAxisRef =
-      hoverSnap?.kind === "onLine" && hoverSnap.lineId
+    const resolveReflectionRef =
+      hoverSnap?.kind === "point" && hoverSnap.pointId
+        ? ({ type: "point", id: hoverSnap.pointId } as const)
+        : hoverSnap?.kind === "onLine" && hoverSnap.lineId
         ? ({ type: "line", id: hoverSnap.lineId } as const)
         : hoverSnap?.kind === "onSegment" && hoverSnap.segId
           ? ({ type: "segment", id: hoverSnap.segId } as const)
+          : hoveredHit?.type === "point"
+            ? ({ type: "point", id: hoveredHit.id } as const)
           : hoveredHit?.type === "line2p"
             ? ({ type: "line", id: hoveredHit.id } as const)
             : hoveredHit?.type === "segment"
@@ -497,31 +501,41 @@ export function drawPendingPreview(
       }
       transformPointWorld = (world) => evalPointByDilation(world, center, factor.value);
     } else {
-      if (!resolveAxisRef) {
+      if (!resolveReflectionRef) {
         ctx.restore();
         return;
       }
-      const axisAnchors =
-        resolveAxisRef.type === "line"
+      if (resolveReflectionRef.type === "point") {
+        const center = geoPointWorld(scene, resolveReflectionRef.id);
+        if (!center) {
+          ctx.restore();
+          return;
+        }
+        drawPreviewPoint(center);
+        transformPointWorld = (world) => evalPointByDilation(world, center, -1);
+      } else {
+        const axisAnchors =
+          resolveReflectionRef.type === "line"
           ? (() => {
-              const line = scene.lines.find((item) => item.id === resolveAxisRef.id);
+              const line = scene.lines.find((item) => item.id === resolveReflectionRef.id);
               if (!line) return null;
               return getLineWorldAnchors(line, scene);
             })()
           : (() => {
-              const seg = scene.segments.find((item) => item.id === resolveAxisRef.id);
+              const seg = scene.segments.find((item) => item.id === resolveReflectionRef.id);
               if (!seg) return null;
               const a = geoPointWorld(scene, seg.aId);
               const b = geoPointWorld(scene, seg.bId);
               if (!a || !b) return null;
               return { a, b };
             })();
-      if (!axisAnchors) {
-        ctx.restore();
-        return;
+        if (!axisAnchors) {
+          ctx.restore();
+          return;
+        }
+        drawInfinitePreviewLine(axisAnchors.a, sub(axisAnchors.b, axisAnchors.a));
+        transformPointWorld = (world) => evalPointByReflection(world, axisAnchors.a, axisAnchors.b);
       }
-      drawInfinitePreviewLine(axisAnchors.a, sub(axisAnchors.b, axisAnchors.a));
-      transformPointWorld = (world) => evalPointByReflection(world, axisAnchors.a, axisAnchors.b);
     }
 
     if (!transformPointWorld) {

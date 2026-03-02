@@ -1009,17 +1009,28 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       definedPointIds.add(point.id);
     } else if (point.kind === "pointByReflection") {
       resolvePoint(point.pointId);
-      const axis = resolveLineLikeNames(point.axis);
-      derivedAuxIndex += 1;
-      const footName = `tkzRefProj_${derivedAuxIndex}`;
-      constructions.push({
-        kind: "DefPointByReflection",
-        name,
-        point: mustName(pointName, point.pointId),
-        axisA: axis.a,
-        axisB: axis.b,
-        footName,
-      });
+      if (point.axis.type === "point") {
+        resolvePoint(point.axis.id);
+        constructions.push({
+          kind: "DefPointByDilation",
+          name,
+          point: mustName(pointName, point.pointId),
+          center: mustName(pointName, point.axis.id),
+          factor: -1,
+        });
+      } else {
+        const axis = resolveLineLikeNames(point.axis);
+        derivedAuxIndex += 1;
+        const footName = `tkzRefProj_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefPointByReflection",
+          name,
+          point: mustName(pointName, point.pointId),
+          axisA: axis.a,
+          axisB: axis.b,
+          footName,
+        });
+      }
       definedPointIds.add(point.id);
     } else if (point.kind === "circleLineIntersectionPoint") {
       const circle = circleById.get(point.circleId);
@@ -3095,8 +3106,37 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
     ? Math.max(0.4, fixedInnerSep * pointScale)
     : Math.max(0.4, s.sizePx * pointScale * pointConv.matchCanvasPxToPt);
   const innerSepPt = Math.max(0.4, baseInnerSepPt * pointInnerSepScale);
+  if (shape.kind === "dot") {
+    // Canvas "dot" is a small filled marker with no stroke.
+    const dotInnerSepPt = Math.max(0.35, innerSepPt * 0.4);
+    const opts = [
+      "shape=circle",
+      "draw=none",
+      `fill=${fill}`,
+      "line width=0pt",
+      `inner sep=${fmt(dotInnerSepPt)}pt`,
+    ];
+    if (s.fillOpacity < 0.999) opts.push(`fill opacity=${fmt(clamp01(s.fillOpacity))}`);
+    return opts.join(", ");
+  }
+
+  if (shape.kind === "lineGlyph") {
+    const glyphSizePt = Math.max(0.8, innerSepPt * 2);
+    const opts = [
+      `shape=${shape.shapeName}`,
+      `draw=${draw}`,
+      "fill=none",
+      `line width=${fmt(lineWidthPt)}pt`,
+      "inner sep=0pt",
+      `minimum size=${fmt(glyphSizePt)}pt`,
+    ];
+    if (s.strokeOpacity < 0.999) opts.push(`draw opacity=${fmt(clamp01(s.strokeOpacity))}`);
+    if (shape.overlayPlus) opts.push(crossPlusOverlayPathPicture(draw, lineWidthPt, s.strokeOpacity));
+    return opts.join(", ");
+  }
+
   const opts = [
-    shape,
+    `shape=${shape.shapeName}`,
     `draw=${draw}`,
     `fill=${fill}`,
     `line width=${fmt(lineWidthPt)}pt`,
@@ -4066,24 +4106,47 @@ function strokeWidthToTikzPt(strokeWidth: number, options: TikzExportOptions): n
   return Math.max(0.1, strokeWidth * lineScale * pxToPt);
 }
 
-function mapPointShape(shape: ScenePoint["style"]["shape"]): string {
+function crossPlusOverlayPathPicture(draw: string, lineWidthPt: number, strokeOpacity: number): string {
+  const drawOpts = [
+    `draw=${draw}`,
+    `line width=${fmt(lineWidthPt)}pt`,
+  ];
+  if (strokeOpacity < 0.999) drawOpts.push(`draw opacity=${fmt(clamp01(strokeOpacity))}`);
+  return [
+    "path picture={",
+    `\\draw[${drawOpts.join(", ")}]`,
+    "(path picture bounding box.west)--(path picture bounding box.east)",
+    "(path picture bounding box.south)--(path picture bounding box.north);",
+    "}",
+  ].join("");
+}
+
+function mapPointShape(shape: ScenePoint["style"]["shape"]):
+  | { kind: "dot" }
+  | { kind: "lineGlyph"; shapeName: "cross" | "cross out"; overlayPlus: boolean }
+  | { kind: "filled"; shapeName: string } {
   switch (shape) {
     case "square":
-      return "rectangle";
+      return { kind: "filled", shapeName: "rectangle" };
     case "diamond":
-      return "diamond";
+      return { kind: "filled", shapeName: "diamond" };
     case "triUp":
-      return "regular polygon, regular polygon sides=3";
+      return { kind: "filled", shapeName: "regular polygon, regular polygon sides=3" };
     case "triDown":
-      return "regular polygon, regular polygon sides=3, shape border rotate=180";
-    case "dot":
-      return "circle";
-    case "circle":
+      return { kind: "filled", shapeName: "regular polygon, regular polygon sides=3, shape border rotate=180" };
     case "plus":
+      // tkz-euclide declares shape=cross (plus marker).
+      return { kind: "lineGlyph", shapeName: "cross", overlayPlus: false };
     case "x":
+      // TikZ shapes.misc provides shape=cross out (diagonal X marker).
+      return { kind: "lineGlyph", shapeName: "cross out", overlayPlus: false };
     case "cross":
-    default:
-      return "circle";
+      // App "cross" is plus + X.
+      return { kind: "lineGlyph", shapeName: "cross out", overlayPlus: true };
+    case "dot":
+      return { kind: "dot" };
+    case "circle":
+      return { kind: "filled", shapeName: "circle" };
   }
 }
 
@@ -4251,11 +4314,13 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
   let needsPatternsMeta = false;
   let needsDecorationsMarkings = false;
   let needsArrowsMeta = false;
+  let needsShapesGeometric = false;
   const patternRegex = /pattern\s*=|pattern color\s*=/;
   const patternMetaRegex = /pattern\s*=\s*\{/;
   const decorationRegex = /postaction\s*=\s*decorate|decoration\s*=\s*\{markings/i;
   const arrowTipRegex =
     /-\{(?:Stealth|Latex|Triangle)\[[^\]]*\]|\\arrow(?:reversed)?\[[^\]]*\]\{(?:Stealth|Latex|Triangle)(?:\[[^\]]*\])?\}/;
+  const geometricShapeRegex = /shape\s*=\s*diamond|regular polygon(?:\s|,|$)/;
   for (const line of lines) {
     if (patternMetaRegex.test(line)) {
       needsPatternsMeta = true;
@@ -4265,9 +4330,13 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
     }
     if (decorationRegex.test(line)) needsDecorationsMarkings = true;
     if (arrowTipRegex.test(line)) needsArrowsMeta = true;
+    if (geometricShapeRegex.test(line)) needsShapesGeometric = true;
   }
 
   const libraryLines: string[] = [];
+  if (needsShapesGeometric) {
+    libraryLines.push("\\usetikzlibrary{shapes.geometric}");
+  }
   if (needsPatterns) {
     libraryLines.push(needsPatternsMeta ? "\\usetikzlibrary{patterns,patterns.meta}" : "\\usetikzlibrary{patterns}");
   }

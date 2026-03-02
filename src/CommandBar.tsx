@@ -483,7 +483,7 @@ export function CommandBar() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             className="commandBarInput"
-            placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Translate(P,A,B), Rotate(P,O,30), Dilate(P,O,2), Reflect(P,l)"
+            placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Translate(P,A,B), Rotate(P,O,30), Dilate(P,O,2), Reflect(P,l|O)"
           />
           <button
             type="button"

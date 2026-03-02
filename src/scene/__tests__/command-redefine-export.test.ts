@@ -59,6 +59,10 @@ mustOk(
   commandBarApi.applyObjectAssignment("refX", { type: "CreatePointByReflection", pointId: c, axis: { type: "line", id: lineXAlias.id } }),
   "create refX"
 );
+mustOk(
+  commandBarApi.applyObjectAssignment("refXO", { type: "CreatePointByReflection", pointId: b, axis: { type: "point", id: a } }),
+  "create refXO"
+);
 
 const tikz = exportTikz(getGeoStore().scene);
 
@@ -79,5 +83,6 @@ assert(/\\tkzDefPointBy\[rotation=center X_A angle 45\]\(X_B\)\s*\\tkzGetPoint\{
 assert(/\\tkzDefPointBy\[homothety=center X_A ratio 2\]\(X_D\)\s*\\tkzGetPoint\{dilX\}/.test(tikz), "Expected dilated point construction in export");
 assert(/\\tkzDefPointBy\[projection=onto X_B--X_D\]\(X_C\)\s*\\tkzGetPoint\{tkzRefProj_\d+\}/.test(tikz), "Expected reflection projection step in export");
 assert(/\\tkzDefPointBy\[homothety=center tkzRefProj_\d+ ratio -1\]\(X_C\)\s*\\tkzGetPoint\{refX\}/.test(tikz), "Expected reflection output point construction in export");
+assert(/\\tkzDefPointBy\[homothety=center X_A ratio -1\]\(X_B\)\s*\\tkzGetPoint\{refXO\}/.test(tikz), "Expected point-centered reflection to export as homothety ratio -1");
 
 console.log("command-redefine-export tests: OK");

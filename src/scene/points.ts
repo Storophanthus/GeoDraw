@@ -339,7 +339,9 @@ export type PointByReflection = {
   locked?: boolean;
   auxiliary?: boolean;
   pointId: string;
-  axis: LineLikeObjectRef;
+  // Kept as "axis" for backward compatibility with persisted scenes.
+  // Supports reflection across a line/segment or central reflection about a point.
+  axis: ReflectionObjectRef;
   style: PointStyle;
 };
 
@@ -381,6 +383,7 @@ export type GeometryObjectRef =
   | { type: "angle"; id: string };
 
 export type LineLikeObjectRef = { type: "line"; id: string } | { type: "segment"; id: string };
+export type ReflectionObjectRef = LineLikeObjectRef | { type: "point"; id: string };
 
 export type SceneVectorFromPoints = {
   id: string;

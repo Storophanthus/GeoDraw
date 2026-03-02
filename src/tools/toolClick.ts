@@ -1,5 +1,5 @@
 import type { Vec2 } from "../geo/vec2";
-import type { GeometryObjectRef, LineLikeObjectRef } from "../scene/points";
+import type { GeometryObjectRef, LineLikeObjectRef, ReflectionObjectRef } from "../scene/points";
 import type { ActiveTool, PendingSelection, TransformableObjectRef } from "../state/geoStore";
 import type { ExportClipWorld } from "../state/slices/storeTypes";
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
@@ -54,7 +54,7 @@ export type ToolClickIO = {
   ) => string | null;
   createPointByTranslation: (pointId: string, fromId: string, toId: string) => string | null;
   createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
-  createPointByReflection: (pointId: string, axis: LineLikeObjectRef) => string | null;
+  createPointByReflection: (pointId: string, axis: ReflectionObjectRef) => string | null;
   transformObjectByTranslation: (source: TransformableObjectRef, fromId: string, toId: string) => string | null;
   transformObjectByRotation: (
     source: TransformableObjectRef,
@@ -63,7 +63,7 @@ export type ToolClickIO = {
     direction: "CCW" | "CW"
   ) => string | null;
   transformObjectByDilation: (source: TransformableObjectRef, centerId: string, factorExpr: string) => string | null;
-  transformObjectByReflection: (source: TransformableObjectRef, axis: LineLikeObjectRef) => string | null;
+  transformObjectByReflection: (source: TransformableObjectRef, axis: ReflectionObjectRef) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
@@ -202,6 +202,11 @@ export function handleToolClick(
       if (hits.hitObject?.type === "segment") return { type: "segment", id: hits.hitObject.id };
       return null;
     };
+    const resolveReflectionTarget = (): ReflectionObjectRef | null => {
+      if (hits.hitPointId) return { type: "point", id: hits.hitPointId };
+      if (hits.hitObject?.type === "point") return { type: "point", id: hits.hitObject.id };
+      return resolveLineLikeTarget();
+    };
 
     if (activeTool === "translate") {
       if (!pendingTranslate) {
@@ -282,7 +287,7 @@ export function handleToolClick(
       return;
     }
     if (pendingReflect.step === 2) {
-      const axis = resolveLineLikeTarget();
+      const axis = resolveReflectionTarget();
       if (!axis) return;
       const created = io.transformObjectByReflection(pendingReflect.source, axis);
       if (!created) return;
@@ -791,7 +796,7 @@ export function isValidTarget(
         hoveredHit.type === "angle"
       );
     }
-    return hoveredHit.type === "line2p" || hoveredHit.type === "segment";
+    return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
   }
   if (activeTool === "angle_bisector") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";

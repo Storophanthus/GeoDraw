@@ -1,4 +1,4 @@
-import { evaluateAngleExpressionDegrees, evaluateNumberExpression, type LineLikeObjectRef, type SceneModel } from "../scene/points";
+import { evaluateAngleExpressionDegrees, evaluateNumberExpression, type ReflectionObjectRef, type SceneModel } from "../scene/points";
 
 export type TransformSourceObjectRef = {
   type: "point" | "segment" | "line" | "circle" | "polygon" | "angle";
@@ -16,7 +16,7 @@ type TransformCreateOps = {
     angleExpr?: string
   ) => string | null;
   createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
-  createPointByReflection: (pointId: string, axis: LineLikeObjectRef) => string | null;
+  createPointByReflection: (pointId: string, axis: ReflectionObjectRef) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
@@ -220,7 +220,7 @@ export function applyRotationToObject(
 
 export function applyReflectionToObject(
   source: TransformSourceObjectRef,
-  axis: LineLikeObjectRef,
+  axis: ReflectionObjectRef,
   ops: TransformCreateOps
 ): string | null {
   const mapPoint = mapPointWithCache((pointId) => ops.createPointByReflection(pointId, axis));

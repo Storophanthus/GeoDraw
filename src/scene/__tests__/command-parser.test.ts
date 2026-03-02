@@ -163,6 +163,10 @@ const reflected = mustCmd("Reflect(B,lAB)", baseCtx, "CreatePointByReflection");
 if (reflected.type !== "CreatePointByReflection" || reflected.pointId !== "pB" || reflected.axis.type !== "line" || reflected.axis.id !== "lAB") {
   throw new Error("Reflect(B,lAB) mismatch");
 }
+const reflectedCenter = mustCmd("Reflect(B,O)", baseCtx, "CreatePointByReflection");
+if (reflectedCenter.type !== "CreatePointByReflection" || reflectedCenter.pointId !== "pB" || reflectedCenter.axis.type !== "point" || reflectedCenter.axis.id !== "pO") {
+  throw new Error("Reflect(B,O) mismatch");
+}
 
 const circleOA = mustCmd("Circle(O,A)", baseCtx, "CreateCircleCenterThrough");
 if (circleOA.type !== "CreateCircleCenterThrough" || circleOA.centerId !== "pO" || circleOA.throughId !== "pA") {
@@ -440,6 +444,15 @@ if (assignDilated.type !== "CreatePointByDilation" || assignDilated.pointId !== 
 const assignReflected = mustAssignObject("Q = Reflect(B,sAB)", baseCtx, "Q", "CreatePointByReflection");
 if (assignReflected.type !== "CreatePointByReflection" || assignReflected.pointId !== "pB" || assignReflected.axis.type !== "segment" || assignReflected.axis.id !== "sAB") {
   throw new Error("Q = Reflect(B,sAB) mismatch");
+}
+const assignReflectedCenter = mustAssignObject("Q2 = Reflect(B,O)", baseCtx, "Q2", "CreatePointByReflection");
+if (
+  assignReflectedCenter.type !== "CreatePointByReflection" ||
+  assignReflectedCenter.pointId !== "pB" ||
+  assignReflectedCenter.axis.type !== "point" ||
+  assignReflectedCenter.axis.id !== "pO"
+) {
+  throw new Error("Q2 = Reflect(B,O) mismatch");
 }
 
 const withScalarR: ParseContext = {

@@ -322,6 +322,18 @@ mustOk(commandBarApi.applyObjectAssignment("TT2", { type: "CreatePointByTranslat
   const point = getGeoStore().scene.points.find((p) => p.id === id);
   assert(!!point && point.kind === "pointByReflection", "reflect assignment did not create constrained reflection point");
 }
+{
+  const parsed = parseCommandInput("TF2 = Reflect(TA,TB)", buildParseContext());
+  if (parsed.kind !== "assignObject") fail(`unexpected parse kind for point-reflect: ${parsed.kind}`);
+  mustOk(commandBarApi.applyObjectAssignment(parsed.name, parsed.cmd), "apply point reflect assignment");
+}
+{
+  const id = aliasId("TF2");
+  assertPointLabel(id, "TF2", "point reflect assignment label");
+  const point = getGeoStore().scene.points.find((p) => p.id === id);
+  assert(!!point && point.kind === "pointByReflection", "point reflect assignment did not create constrained reflection point");
+  assert(point.axis.type === "point" && point.axis.id === tb, "point reflect assignment target mismatch");
+}
 
 // constrained regression: transformed points must move with dependencies
 {
@@ -334,6 +346,16 @@ mustOk(commandBarApi.applyObjectAssignment("TT2", { type: "CreatePointByTranslat
   const wOut = pointWorld(tId);
   const expected = { x: wBase.x + (wTo.x - wFrom.x), y: wBase.y + (wTo.y - wFrom.y) };
   assert(approxEqual(wOut.x, expected.x) && approxEqual(wOut.y, expected.y), "translated point did not stay constrained");
+}
+{
+  const store = getGeoStore();
+  store.movePointTo(tb, { x: 5, y: -2 });
+  const reflectedId = aliasId("TF2");
+  const base = pointWorld(ta);
+  const center = pointWorld(tb);
+  const reflected = pointWorld(reflectedId);
+  const expected = { x: 2 * center.x - base.x, y: 2 * center.y - base.y };
+  assert(approxEqual(reflected.x, expected.x) && approxEqual(reflected.y, expected.y), "point-centered reflected point did not stay constrained");
 }
 
 // stale alias safety: deleting aliased object then reassigning same alias should recreate, not fail.

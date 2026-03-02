@@ -1,5 +1,5 @@
 import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
-import type { GeometryObjectRef, LineLikeObjectRef, SceneModel, SceneNumberDefinition, ScenePoint, ShowLabelMode } from "../../scene/points";
+import type { GeometryObjectRef, ReflectionObjectRef, SceneModel, SceneNumberDefinition, ScenePoint, ShowLabelMode } from "../../scene/points";
 import { evaluateNumberExpression } from "../../scene/points";
 import {
   defaultCircleLabelPosWorld,
@@ -542,14 +542,16 @@ export function createSceneCreationActions(
       return createdId;
     },
 
-    createPointByReflection(pointId, axis: LineLikeObjectRef) {
+    createPointByReflection(pointId, axis: ReflectionObjectRef) {
       let createdId: string | null = null;
       ctx.setState((prev) => {
         const point = prev.scene.points.find((item) => item.id === pointId);
         if (!point) return prev;
         const axisExists = axis.type === "line"
           ? prev.scene.lines.some((line) => line.id === axis.id)
-          : prev.scene.segments.some((seg) => seg.id === axis.id);
+          : axis.type === "segment"
+            ? prev.scene.segments.some((seg) => seg.id === axis.id)
+            : prev.scene.points.some((p) => p.id === axis.id);
         if (!axisExists) return prev;
         const pointWorld = getPointWorldPos(point, prev.scene);
         if (!pointWorld) return prev;
