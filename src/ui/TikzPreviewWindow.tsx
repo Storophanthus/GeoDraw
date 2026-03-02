@@ -360,10 +360,13 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
 
   useEffect(() => {
     if (!session) return;
-    void updatePdf();
-    // The initial compile should only run when session payload changes.
+
+    const timeoutId = window.setTimeout(() => {
+      void updatePdf();
+    }, 50);
+    return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.createdAt]);
+  }, [session?.createdAt, optionalPreamble]);
 
   const updatePdf = async () => {
     if (!isTauriRuntime) {

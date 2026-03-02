@@ -1203,7 +1203,7 @@ body.sidebar-resizing .rightSidebar {
 }
 
 .actionsRowWrap {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .actionButton.primary {
