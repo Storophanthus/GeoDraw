@@ -1417,6 +1417,7 @@ body.sidebar-resizing .rightSidebar {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   background: var(--gd-ui-surface, #fff);
+  box-shadow: 0 4px 12px var(--gd-ui-shadow-strong, rgba(15, 23, 42, 0.12));
 }
 
 .shapeCell {

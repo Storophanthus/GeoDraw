@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Copy, Plus, Trash2 } from "lucide-react";
+import { useClickAway } from "react-use";
 import { type SegmentMark } from "../../scene/points";
 
 export const SEGMENT_MARK_OPTIONS = ["none", "|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"] as const;
@@ -31,6 +32,10 @@ export function SegmentMarkControl({
     selectedSegmentId,
 }: SegmentMarkControlProps) {
     const [selectedSegmentMarkIndex, setSelectedSegmentMarkIndex] = React.useState(0);
+    const [isMarkPickerOpen, setIsMarkPickerOpen] = React.useState(false);
+    const markPickerRef = React.useRef<HTMLDivElement>(null);
+
+    useClickAway(markPickerRef, () => setIsMarkPickerOpen(false));
 
     React.useEffect(() => {
         setSelectedSegmentMarkIndex((prev) => Math.max(0, Math.min(prev, Math.max(0, resolvedSegmentMarks.length - 1))));
@@ -151,34 +156,44 @@ export function SegmentMarkControl({
 
             {selectedSegmentMark ? (
                 <>
-                    <div className="controlRow">
+                    <div className="controlRow" ref={markPickerRef}>
                         <label className="controlLabel">Mark Type</label>
-                        <select
-                            className="selectInput"
-                            value={selectedSegmentMark.mark}
-                            onChange={(e) => {
-                                const nextMark = e.target.value as (typeof SEGMENT_MARK_OPTIONS)[number];
-                                if (nextMark === "none") {
-                                    const nextMarks = resolvedSegmentMarks.filter((_, i) => i !== selectedSegmentMarkIndex);
-                                    commitSegmentMarks(nextMarks);
-                                    setSelectedSegmentMarkIndex((prev) => Math.max(0, Math.min(prev, nextMarks.length - 1)));
-                                    return;
-                                }
-                                const nextMarks = [...resolvedSegmentMarks];
-                                nextMarks[selectedSegmentMarkIndex] = {
-                                    ...selectedSegmentMark,
-                                    enabled: true,
-                                    mark: nextMark,
-                                };
-                                commitSegmentMarks(nextMarks);
-                            }}
-                        >
-                            {SEGMENT_MARK_OPTIONS.map((mark: string) => (
-                                <option key={mark} value={mark}>
-                                    {mark}
-                                </option>
-                            ))}
-                        </select>
+                        <div style={{ position: "relative", width: "100%" }}>
+                            <button
+                                className="shapeButton"
+                                onClick={() => setIsMarkPickerOpen((v) => !v)}
+                                type="button"
+                            >
+                                <MarkGlyph mark={selectedSegmentMark.mark} />
+                            </button>
+                            {isMarkPickerOpen && (
+                                <div className="shapePopover" style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, marginTop: "4px" }}>
+                                    {[...SEGMENT_MARK_OPTIONS].filter(m => m !== "none").map((mark) => {
+                                        const isActive = mark === selectedSegmentMark.mark;
+                                        return (
+                                            <button
+                                                key={mark}
+                                                className={`shapeCell ${isActive ? "active" : ""}`}
+                                                onClick={() => {
+                                                    const nextMarks = [...resolvedSegmentMarks];
+                                                    nextMarks[selectedSegmentMarkIndex] = {
+                                                        ...selectedSegmentMark,
+                                                        enabled: true,
+                                                        mark: mark as any,
+                                                    };
+                                                    commitSegmentMarks(nextMarks);
+                                                    setIsMarkPickerOpen(false);
+                                                }}
+                                                type="button"
+                                                title={mark}
+                                            >
+                                                <MarkGlyph mark={mark} />
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
                     </div>
                     <div className="controlRow">
                         <label className="controlLabel">Distribution</label>
@@ -422,4 +437,19 @@ export function SegmentMarkControl({
             )}
         </div>
     );
+}
+
+function MarkGlyph({ mark }: { mark: string }) {
+    if (mark === "none") return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>Ø</span>;
+    if (mark === "|") return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>|</span>;
+    if (mark === "||") return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>||</span>;
+    if (mark === "|||") return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>|||</span>;
+    if (mark === "s") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>~</span>;
+    if (mark === "s|") return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>~|</span>;
+    if (mark === "s||") return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>~||</span>;
+    if (mark === "x") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>×</span>;
+    if (mark === "o") return <span style={{ fontSize: "12px", fontWeight: "bold", fontFamily: "monospace" }}>o</span>;
+    if (mark === "oo") return <span style={{ fontSize: "12px", fontWeight: "bold", fontFamily: "monospace" }}>oo</span>;
+    if (mark === "z") return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>z</span>;
+    return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>{mark}</span>;
 }

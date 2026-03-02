@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Plus, Copy, Trash2 } from "lucide-react";
+import { useClickAway } from "react-use";
 import { type PathArrowMark, type SegmentArrowMark, type ArrowDirection, type ArrowTipStyle } from "../../scene/points";
 
 const ARROW_DIRECTION_OPTIONS: Array<{ value: ArrowDirection; label: string }> = [
@@ -72,6 +73,10 @@ export function ArrowListControl<T extends PathArrowMark>({
         return { ...DEFAULT_PATH_ARROW_MARK } as T;
     }, [createArrow]);
     const [selectedByIndex, setSelectedByIndex] = React.useState<number>(0);
+    const [isTipPickerOpen, setIsTipPickerOpen] = React.useState(false);
+    const tipPickerRef = React.useRef<HTMLDivElement>(null);
+    useClickAway(tipPickerRef, () => setIsTipPickerOpen(false));
+
     const safeArrows = arrows ?? [];
 
     const actualIndex = Math.max(0, Math.min(selectedByIndex, safeArrows.length - 1));
@@ -244,20 +249,39 @@ export function ArrowListControl<T extends PathArrowMark>({
                                 </div>
                             </div>
 
-                            <div className="controlRow" style={{ gridTemplateColumns: "100px 1fr" }}>
+                            <div className="controlRow" style={{ gridTemplateColumns: "100px 1fr" }} ref={tipPickerRef}>
                                 <label className="controlLabel">Tip Style</label>
-                                <select
-                                    className="selectInput arrowIconSelect"
-                                    value={selectedArrow.tip ?? "Stealth"}
-                                    onChange={(e) => updateSelectedArrow({ tip: e.target.value as ArrowTipStyle })}
-                                    style={{ height: "32px", borderRadius: "6px" }}
-                                >
-                                    {ARROW_TIP_OPTIONS.map((tip) => (
-                                        <option key={tip.value} value={tip.value}>
-                                            {tip.label}
-                                        </option>
-                                    ))}
-                                </select>
+                                <div style={{ position: "relative", width: "100%" }}>
+                                    <button
+                                        className="shapeButton"
+                                        onClick={() => setIsTipPickerOpen((v) => !v)}
+                                        type="button"
+                                        style={{ height: "32px", justifyContent: "center" }}
+                                    >
+                                        <ArrowTipGlyph tip={selectedArrow.tip ?? "Stealth"} />
+                                    </button>
+                                    {isTipPickerOpen && (
+                                        <div className="shapePopover" style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, marginTop: "4px" }}>
+                                            {ARROW_TIP_OPTIONS.map((tip) => {
+                                                const isActive = tip.value === (selectedArrow.tip ?? "Stealth");
+                                                return (
+                                                    <button
+                                                        key={tip.value}
+                                                        className={`shapeCell ${isActive ? "active" : ""}`}
+                                                        onClick={() => {
+                                                            updateSelectedArrow({ tip: tip.value });
+                                                            setIsTipPickerOpen(false);
+                                                        }}
+                                                        type="button"
+                                                        title={tip.label}
+                                                    >
+                                                        <ArrowTipGlyph tip={tip.value} />
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {renderPlacementControl?.({ selectedArrow, updateSelectedArrow })}
@@ -528,4 +552,11 @@ export function ArrowListControl<T extends PathArrowMark>({
             }
         </div >
     );
+}
+
+function ArrowTipGlyph({ tip }: { tip: ArrowTipStyle }) {
+    if (tip === "Stealth") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─➤</span>;
+    if (tip === "Latex") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─❯</span>;
+    if (tip === "Triangle") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─▶</span>;
+    return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─➤</span>;
 }
