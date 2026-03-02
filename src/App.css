@@ -938,6 +938,12 @@ body.sidebar-resizing .rightSidebar {
   transition: none !important;
 }
 
+body.sidebar-resizing,
+body.sidebar-resizing * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 .sidebarSection {
   border: 1px solid var(--gd-ui-border-panel, #d9e1ec);
   border-radius: 16px;

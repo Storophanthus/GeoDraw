@@ -18,6 +18,8 @@ const SHAPES: PointShape[] = [
 type PointPropertiesSectionProps = {
   selectedPoint: ScenePoint;
   selectedPointWorld: Vec2 | null;
+  selectedStyleAsDefault: boolean;
+  onMakeStyleDefaultChange: (checked: boolean) => void;
   nameInput: string;
   setNameInput: (value: string) => void;
   renameError: string;
@@ -36,6 +38,8 @@ type PointPropertiesSectionProps = {
 export function PointPropertiesSection({
   selectedPoint,
   selectedPointWorld,
+  selectedStyleAsDefault,
+  onMakeStyleDefaultChange,
   nameInput,
   setNameInput,
   renameError,
@@ -50,11 +54,14 @@ export function PointPropertiesSection({
 }: PointPropertiesSectionProps) {
   return (
     <>
-      <div className="detailRow">
-        <span className="detailLabel">Position</span>
-        <span>
-          ({formatRoundedDisplay(selectedPointWorld?.x ?? 0, 3)}, {formatRoundedDisplay(selectedPointWorld?.y ?? 0, 3)})
-        </span>
+      <div className="toolInfo">
+        <div className="subSectionTitle">Point</div>
+        <div className="detailRow">
+          <span className="detailLabel">Position</span>
+          <span>
+            ({formatRoundedDisplay(selectedPointWorld?.x ?? 0, 3)}, {formatRoundedDisplay(selectedPointWorld?.y ?? 0, 3)})
+          </span>
+        </div>
       </div>
 
       <div className="fieldBlock">
@@ -122,11 +129,15 @@ export function PointPropertiesSection({
 
       {renameError && <div className="errorText">{renameError}</div>}
 
-      <button className="deleteButton" onClick={deleteSelectedObject}>
-        Delete
-      </button>
-
       <div className="cosmeticsBlock">
+        <label className="checkboxRow" style={{ marginTop: 0 }}>
+          <input
+            type="checkbox"
+            checked={selectedStyleAsDefault}
+            onChange={(e) => onMakeStyleDefaultChange(e.target.checked)}
+          />
+          Make this default for this object
+        </label>
         <div className="subSectionTitle">Point Style</div>
 
         <div className="fieldBlock" ref={shapePickerRef}>
@@ -243,6 +254,10 @@ export function PointPropertiesSection({
           />
         </div>
       </div>
+
+      <button className="deleteButton" onClick={deleteSelectedObject}>
+        Delete
+      </button>
     </>
   );
 }
