@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import {
+  computeOrientedAngleRad,
   evaluateAngleExpressionDegrees,
   evaluateNumberExpression,
+  getCircleWorldGeometry,
+  getLineWorldAnchors,
   getNumberValue,
   getPointWorldPos,
   type PointStyle,
@@ -99,6 +102,32 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     if (!selectedPoint) return null;
     return getPointWorldPos(selectedPoint, scene);
   }, [scene, selectedPoint]);
+  const selectedLineEquation = useMemo(() => {
+    if (!selectedLine) return null;
+    const anchors = getLineWorldAnchors(selectedLine, scene);
+    if (!anchors) return null;
+    return formatLineEquation(anchors.a, anchors.b);
+  }, [scene, selectedLine]);
+  const selectedCircleEquation = useMemo(() => {
+    if (!selectedCircle) return null;
+    const geometry = getCircleWorldGeometry(selectedCircle, scene);
+    if (!geometry || !Number.isFinite(geometry.radius) || geometry.radius < 0) return null;
+    return formatCircleEquation(geometry.center.x, geometry.center.y, geometry.radius);
+  }, [scene, selectedCircle]);
+  const selectedAngleDegrees = useMemo(() => {
+    if (!selectedAngle) return null;
+    const aPoint = scene.points.find((point) => point.id === selectedAngle.aId);
+    const bPoint = scene.points.find((point) => point.id === selectedAngle.bId);
+    const cPoint = scene.points.find((point) => point.id === selectedAngle.cId);
+    if (!aPoint || !bPoint || !cPoint) return null;
+    const a = getPointWorldPos(aPoint, scene);
+    const b = getPointWorldPos(bPoint, scene);
+    const c = getPointWorldPos(cPoint, scene);
+    if (!a || !b || !c) return null;
+    const theta = computeOrientedAngleRad(a, b, c);
+    if (theta === null) return null;
+    return formatRoundedDisplay((theta * 180) / Math.PI, 2);
+  }, [scene, selectedAngle]);
   const selectedNumberValue = useMemo(() => {
     if (!selectedNumber) return null;
     return getNumberValue(selectedNumber.id, scene);
@@ -170,6 +199,38 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     selectedPolygon,
     selectedSegment,
   ]);
+  const handleMakeStyleDefaultChange = (checked: boolean) => {
+    if (!checked || !selectedStyleKind) return;
+    if (selectedStyleKind === "point" && selectedPoint) {
+      setPointDefaults({
+        ...selectedPoint.style,
+        labelOffsetPx: { ...selectedPoint.style.labelOffsetPx },
+      });
+      return;
+    }
+    if (selectedStyleKind === "segment" && selectedSegment) {
+      setSegmentDefaults({ ...selectedSegment.style });
+      return;
+    }
+    if (selectedStyleKind === "line" && selectedLine) {
+      setLineDefaults({ ...selectedLine.style });
+      return;
+    }
+    if (selectedStyleKind === "circle" && selectedCircle) {
+      setCircleDefaults({ ...selectedCircle.style });
+      return;
+    }
+    if (selectedStyleKind === "polygon" && selectedPolygon) {
+      setPolygonDefaults({ ...selectedPolygon.style });
+      return;
+    }
+    if (selectedStyleKind === "angle" && selectedAngle) {
+      setAngleDefaults({
+        ...selectedAngle.style,
+        labelPosWorld: { ...angleDefaults.labelPosWorld },
+      });
+    }
+  };
 
   const [nameInput, setNameInput] = useState("");
   const [renameError, setRenameError] = useState("");
@@ -349,6 +410,8 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   <PointPropertiesSection
     selectedPoint={selectedPoint}
     selectedPointWorld={selectedPointWorld}
+    selectedStyleAsDefault={selectedStyleAsDefault}
+    onMakeStyleDefaultChange={handleMakeStyleDefaultChange}
     nameInput={nameInput}
     setNameInput={setNameInput}
     renameError={renameError}
@@ -361,6 +424,33 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     updateSelectedPointStyle={updateSelectedPointStyle}
     deleteSelectedObject={deleteSelectedObject}
   />
+)}
+{selectedLine && (
+  <div className="toolInfo">
+    <div className="subSectionTitle">Line</div>
+    <div className="detailRow">
+      <span className="detailLabel">Equation</span>
+      <span>{selectedLineEquation ?? "undefined"}</span>
+    </div>
+  </div>
+)}
+{selectedCircle && (
+  <div className="toolInfo">
+    <div className="subSectionTitle">Circle</div>
+    <div className="detailRow">
+      <span className="detailLabel">Equation</span>
+      <span>{selectedCircleEquation ?? "undefined"}</span>
+    </div>
+  </div>
+)}
+{selectedAngle && (
+  <div className="toolInfo">
+    <div className="subSectionTitle">Angle</div>
+    <div className="detailRow">
+      <span className="detailLabel">Value</span>
+      <span>{selectedAngleDegrees === null ? "undefined" : `${selectedAngleDegrees}°`}</span>
+    </div>
+  </div>
 )}
 {selectedTextLabel && (
   <div className="toolInfo">
@@ -538,6 +628,18 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     </button>
   </div>
 )}
+{!selectedPoint && selectedStyleKind && (
+  <div className="cosmeticsBlock">
+    <label className="checkboxRow">
+      <input
+        type="checkbox"
+        checked={selectedStyleAsDefault}
+        onChange={(e) => handleMakeStyleDefaultChange(e.target.checked)}
+      />
+      Make this default for this object
+    </label>
+  </div>
+)}
 <ObjectStyleSections
   selectedPointPresent={Boolean(selectedPoint)}
   selectedSegment={selectedSegment}
@@ -557,49 +659,6 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   updateSelectedPolygonFields={updateSelectedPolygonFields}
   deleteSelectedObject={deleteSelectedObject}
 />
-
-<div className="cosmeticsBlock">
-  <label className="checkboxRow">
-    <input
-      type="checkbox"
-      checked={selectedStyleAsDefault}
-      disabled={!selectedStyleKind}
-      onChange={(e) => {
-        if (!e.target.checked || !selectedStyleKind) return;
-        if (selectedStyleKind === "point" && selectedPoint) {
-          setPointDefaults({
-            ...selectedPoint.style,
-            labelOffsetPx: { ...selectedPoint.style.labelOffsetPx },
-          });
-          return;
-        }
-        if (selectedStyleKind === "segment" && selectedSegment) {
-          setSegmentDefaults({ ...selectedSegment.style });
-          return;
-        }
-        if (selectedStyleKind === "line" && selectedLine) {
-          setLineDefaults({ ...selectedLine.style });
-          return;
-        }
-        if (selectedStyleKind === "circle" && selectedCircle) {
-          setCircleDefaults({ ...selectedCircle.style });
-          return;
-        }
-        if (selectedStyleKind === "polygon" && selectedPolygon) {
-          setPolygonDefaults({ ...selectedPolygon.style });
-          return;
-        }
-        if (selectedStyleKind === "angle" && selectedAngle) {
-          setAngleDefaults({
-            ...selectedAngle.style,
-            labelPosWorld: { ...angleDefaults.labelPosWorld },
-          });
-        }
-      }}
-    />
-    Make this default for this object
-  </label>
-</div>
 
 <NumbersSection
   newNumberValue={newNumberValue}
@@ -636,6 +695,58 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
 
 function pointLabel(pointId: string, pointNameById: Map<string, string>): string {
   return pointNameById.get(pointId) ?? pointId;
+}
+
+function formatLineEquation(ax: { x: number; y: number }, bx: { x: number; y: number }): string {
+  const aCoeffRaw = bx.y - ax.y;
+  const bCoeffRaw = ax.x - bx.x;
+  const cCoeffRaw = aCoeffRaw * ax.x + bCoeffRaw * ax.y;
+  let aCoeff = snapNearZero(aCoeffRaw);
+  let bCoeff = snapNearZero(bCoeffRaw);
+  let cCoeff = snapNearZero(cCoeffRaw);
+  if (Math.abs(aCoeff) <= 1e-12 && Math.abs(bCoeff) <= 1e-12) return "undefined";
+  if (aCoeff < -1e-12 || (Math.abs(aCoeff) <= 1e-12 && bCoeff < -1e-12)) {
+    aCoeff = -aCoeff;
+    bCoeff = -bCoeff;
+    cCoeff = -cCoeff;
+  }
+  const parts: string[] = [];
+  appendSignedTerm(parts, aCoeff, "x");
+  appendSignedTerm(parts, bCoeff, "y");
+  appendSignedTerm(parts, -cCoeff, "");
+  const lhs = parts.length > 0 ? parts.join("") : "0";
+  return `${lhs}=0`;
+}
+
+function formatCircleEquation(cx: number, cy: number, r: number): string {
+  const xTerm = formatShiftTerm("x", cx);
+  const yTerm = formatShiftTerm("y", cy);
+  const radiusText = formatRoundedDisplay(Math.abs(snapNearZero(r)), 2);
+  return `(${xTerm})^2+(${yTerm})^2=${radiusText}^2`;
+}
+
+function formatShiftTerm(variable: "x" | "y", center: number): string {
+  const snapped = snapNearZero(center);
+  if (Math.abs(snapped) <= 1e-12) return variable;
+  const mag = formatRoundedDisplay(Math.abs(snapped), 2);
+  return snapped >= 0 ? `${variable}-${mag}` : `${variable}+${mag}`;
+}
+
+function appendSignedTerm(parts: string[], coeff: number, symbol: string): void {
+  const snapped = snapNearZero(coeff);
+  if (Math.abs(snapped) <= 1e-12) return;
+  const sign = snapped < 0 ? "-" : "+";
+  const magnitude = formatRoundedDisplay(Math.abs(snapped), 2);
+  const body = `${magnitude}${symbol}`;
+  if (parts.length === 0) {
+    parts.push(snapped < 0 ? `-${body}` : body);
+    return;
+  }
+  parts.push(`${sign}${body}`);
+}
+
+function snapNearZero(value: number): number {
+  return Math.abs(value) <= 1e-12 ? 0 : value;
 }
 
 function pointStyleEqual(a: PointStyle, b: PointStyle): boolean {
