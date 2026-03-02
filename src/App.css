@@ -1535,6 +1535,12 @@ body.sidebar-resizing .rightSidebar {
   /* Centers the icon */
 }
 
+.scaleGridLabel {
+  font-size: 11px;
+  color: var(--gd-ui-text-muted, #475569);
+  flex-shrink: 0;
+}
+
 .scaleGridInput {
   width: 100%;
   min-width: 0;

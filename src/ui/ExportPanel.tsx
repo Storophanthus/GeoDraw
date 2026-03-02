@@ -264,6 +264,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             <div className="scaleGridIcon">
               <IconGlobe size={14} />
             </div>
+            <span className="scaleGridLabel">Global</span>
             <input
               className="scaleGridInput"
               type="number"
@@ -279,6 +280,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             <div className="scaleGridIcon">
               <IconPoint size={14} />
             </div>
+            <span className="scaleGridLabel">Point</span>
             <input
               className="scaleGridInput"
               type="number"
@@ -294,6 +296,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             <div className="scaleGridIcon">
               <IconLine size={14} />
             </div>
+            <span className="scaleGridLabel">Line</span>
             <input
               className="scaleGridInput"
               type="number"
@@ -309,6 +312,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             <div className="scaleGridIcon">
               <IconType size={14} />
             </div>
+            <span className="scaleGridLabel">Label</span>
             <input
               className="scaleGridInput"
               type="number"
