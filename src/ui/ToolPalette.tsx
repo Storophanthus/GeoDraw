@@ -10,6 +10,7 @@ import { COLOR_PROFILE_OPTIONS, getColorProfile } from "../state/colorProfiles";
 import { ConstructionProfileSwatch } from "./ConstructionProfileSwatch";
 import { ToolGroupButton } from "./ToolGroupButton";
 import { toRgba } from "./colorUtils";
+import { MousePointer2, Paintbrush, Type, Crop, Scissors } from "lucide-react";
 import {
   IconAngle,
   IconAngleFixed,
@@ -17,12 +18,8 @@ import {
   IconCircle3Point,
   IconCircleCenterPoint,
   IconCircleRadius,
-  IconCopyStyle,
-  IconLabel,
-  IconExportClip,
   IconLine,
   IconMidpoint,
-  IconMove,
   IconParallel,
   IconPerpendicular,
   IconPoint,
@@ -37,7 +34,6 @@ import {
   IconRotate,
   IconReflect,
   IconDilate,
-  IconExportClipPolygon,
 } from "./icons";
 
 type IconProps = {
@@ -54,16 +50,16 @@ export type ToolDef = {
 export type ToolGroupId = "move" | "points" | "transform" | "lines" | "angle" | "circles" | "styles";
 
 export const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
-  move: { icon: IconMove, tooltip: "Move / Select (V)", ariaLabel: "Move tool" },
+  move: { icon: MousePointer2, tooltip: "Move / Select (V)", ariaLabel: "Move tool" },
   point: { icon: IconPoint, tooltip: "Point (P)", ariaLabel: "Point tool" },
   translate: { icon: IconTranslate, tooltip: "Translate Object", ariaLabel: "Translate tool" },
   rotate: { icon: IconRotate, tooltip: "Rotate Object", ariaLabel: "Rotate tool" },
   reflect: { icon: IconReflect, tooltip: "Reflect Object", ariaLabel: "Reflect tool" },
   dilate: { icon: IconDilate, tooltip: "Dilate Object", ariaLabel: "Dilate tool" },
-  copyStyle: { icon: IconCopyStyle, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
-  label: { icon: IconLabel, tooltip: "Label Tool", ariaLabel: "Label tool" },
-  export_clip_rect: { icon: IconExportClip, tooltip: "Export Clip Rectangle", ariaLabel: "Export clip rectangle tool" },
-  export_clip: { icon: IconExportClipPolygon, tooltip: "Export Clip Polygon", ariaLabel: "Export clip polygon tool" },
+  copyStyle: { icon: Paintbrush, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
+  label: { icon: Type, tooltip: "Label Tool", ariaLabel: "Label tool" },
+  export_clip_rect: { icon: Crop, tooltip: "Export Clip Rectangle", ariaLabel: "Export clip rectangle tool" },
+  export_clip: { icon: Scissors, tooltip: "Export Clip Polygon", ariaLabel: "Export clip polygon tool" },
   midpoint: { icon: IconMidpoint, tooltip: "Midpoint (M)", ariaLabel: "Midpoint tool" },
   segment: { icon: IconSegment, tooltip: "Segment (S)", ariaLabel: "Segment tool" },
   line2p: { icon: IconLine, tooltip: "Line Through 2 Points (L)", ariaLabel: "Line tool" },
