@@ -249,7 +249,8 @@ export function PointPropertiesSection({
 
 function ShapeGlyph({ shape }: { shape: PointShape }) {
   const cls = `shapeGlyph ${shape}`;
-  if (shape === "circle" || shape === "dot") return <span className={cls} />;
+  if (shape === "circle") return <span className={cls} style={{ display: "inline-block", width: "12px", height: "12px", borderRadius: "50%", border: "2px solid currentColor", boxSizing: "border-box" }} />;
+  if (shape === "dot") return <span className={cls} style={{ display: "inline-block", width: "12px", height: "12px", borderRadius: "50%", backgroundColor: "currentColor" }} />;
   if (shape === "x") return <span className={cls}>×</span>;
   if (shape === "plus") return <span className={cls}>+</span>;
   if (shape === "cross") return <span className={cls}>✚</span>;
