@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from "../export/constructionSnapshot";
 import { exportTikzEfficientWithOptions, exportTikzWithOptions } from "../export/tikz";
 import { getPointInnerSepFixedPt, TIKZ_EXPORT_CALIBRATION } from "../export/tikz/calibration";
+import { getUiCssVariables } from "../state/colorProfiles";
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
 import type { Camera } from "../view/camera";
+import { createTikzPreviewSession } from "./tikzPreviewSession";
 import { IconGlobe, IconPoint, IconLine, IconType } from "./icons";
 
 type ExportPanelProps = {
@@ -16,10 +19,12 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const camera = useGeoStore((store) => store.camera);
   const exportClipWorld = useGeoStore((store) => store.exportClipWorld);
   const clearExportClipWorld = useGeoStore((store) => store.clearExportClipWorld);
+  const uiColorProfileId = useGeoStore((store) => store.uiColorProfileId);
+  const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
 
   const [tikzText, setTikzText] = useState("");
-  const [jsonText, setJsonText] = useState("");
   const [tikzCopied, setTikzCopied] = useState(false);
+  const [jsonText, setJsonText] = useState("");
   const [jsonCopied, setJsonCopied] = useState(false);
   const [includeWorldInJson, setIncludeWorldInJson] = useState(false);
   const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
@@ -34,6 +39,14 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [lastTikzSceneRef, setLastTikzSceneRef] = useState<SceneModel | null>(null);
   const [lastTikzOptionSig, setLastTikzOptionSig] = useState("");
   const [lastTikzGeneratedAt, setLastTikzGeneratedAt] = useState<number | null>(null);
+  const isTauriRuntime = useMemo(
+    () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as object),
+    []
+  );
+  const uiCssVariables = useMemo(
+    () => getUiCssVariables(uiColorProfileId, uiCssOverrides),
+    [uiColorProfileId, uiCssOverrides]
+  );
 
   const clipSig = exportClipWorld
     ? exportClipWorld.kind === "rect"
@@ -52,50 +65,107 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     [lastTikzGeneratedAt, tikzOutdated, tikzText]
   );
 
-  const generateTikz = () => {
+  const buildTikzExport = (): { text: string; optionSig: string } => {
+    const pointScale = Number(exportPointScale);
+    const lineScale = Number(exportLineScale);
+    const labelScale = Number(exportLabelScale);
+    const globalScale = Number(exportGlobalScale);
+    const optionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
+    const viewport = exportUseCurrentView ? getViewportFromCanvas(camera) : undefined;
+    const clipRect =
+      exportUseClipSelection && exportClipWorld?.kind === "rect" ? exportClipWorld : undefined;
+    const clipPolygon =
+      exportUseClipSelection && exportClipWorld?.kind === "polygon" ? exportClipWorld.points : undefined;
+    const tikzOptions = {
+      viewport,
+      clipRectWorld: clipRect,
+      clipPolygonWorld: clipPolygon,
+      worldToTikzScale: Number.isFinite(globalScale) ? globalScale : 1,
+      pointScale: Number.isFinite(pointScale) ? pointScale : 1,
+      lineScale:
+        (Number.isFinite(lineScale) ? lineScale : 1) *
+        TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter,
+      labelScale: Number.isFinite(labelScale) ? labelScale : 1,
+      screenPxPerWorld: camera.zoom,
+      emitTkzSetup: exportEmitTkzSetup,
+      labelGlow: exportLabelGlow,
+      pointStrokeScale: TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
+      pointInnerSepFixedPt: getPointInnerSepFixedPt(),
+      pointInnerSepScale: TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
+      segmentMarkSizeScale: TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale,
+      segmentMarkLineWidthScale: TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale,
+      angleLabelFontScale: TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
+      angleArcSizeScale: TIKZ_EXPORT_CALIBRATION.angleArcSizeScale,
+      angleMarkSizeScale: TIKZ_EXPORT_CALIBRATION.angleMarkSizeScale,
+      rightAngleSizeScale: TIKZ_EXPORT_CALIBRATION.rightAngleSizeScale,
+      autoScaleToFitCm: {
+        maxWidthCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
+        maxHeightCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,
+      },
+    } as const;
+    const text = exportEfficient ? exportTikzEfficientWithOptions(scene, tikzOptions) : exportTikzWithOptions(scene, tikzOptions);
+    return { text, optionSig };
+  };
+
+  const generateTikz = (): string | null => {
     try {
-      const pointScale = Number(exportPointScale);
-      const lineScale = Number(exportLineScale);
-      const labelScale = Number(exportLabelScale);
-      const globalScale = Number(exportGlobalScale);
-      const optionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
-      const viewport = exportUseCurrentView ? getViewportFromCanvas(camera) : undefined;
-      const clipRect =
-        exportUseClipSelection && exportClipWorld?.kind === "rect" ? exportClipWorld : undefined;
-      const clipPolygon =
-        exportUseClipSelection && exportClipWorld?.kind === "polygon" ? exportClipWorld.points : undefined;
-      const tikzOptions = {
-        viewport,
-        clipRectWorld: clipRect,
-        clipPolygonWorld: clipPolygon,
-        worldToTikzScale: Number.isFinite(globalScale) ? globalScale : 1,
-        pointScale: Number.isFinite(pointScale) ? pointScale : 1,
-        lineScale:
-          (Number.isFinite(lineScale) ? lineScale : 1) *
-          TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter,
-        labelScale: Number.isFinite(labelScale) ? labelScale : 1,
-        screenPxPerWorld: camera.zoom,
-        emitTkzSetup: exportEmitTkzSetup,
-        labelGlow: exportLabelGlow,
-        pointStrokeScale: TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
-        pointInnerSepFixedPt: getPointInnerSepFixedPt(),
-        pointInnerSepScale: TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
-        segmentMarkSizeScale: TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale,
-        segmentMarkLineWidthScale: TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale,
-        angleLabelFontScale: TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
-        angleArcSizeScale: TIKZ_EXPORT_CALIBRATION.angleArcSizeScale,
-        angleMarkSizeScale: TIKZ_EXPORT_CALIBRATION.angleMarkSizeScale,
-        rightAngleSizeScale: TIKZ_EXPORT_CALIBRATION.rightAngleSizeScale,
-        autoScaleToFitCm: {
-          maxWidthCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
-          maxHeightCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,
-        },
-      } as const;
-      setTikzText(exportEfficient ? exportTikzEfficientWithOptions(scene, tikzOptions) : exportTikzWithOptions(scene, tikzOptions));
+      const { text, optionSig } = buildTikzExport();
+      setTikzText(text);
       setLastTikzSceneRef(scene);
       setLastTikzOptionSig(optionSig);
       setLastTikzGeneratedAt(Date.now());
       setTikzCopied(false);
+      return text;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown exporter error";
+      setTikzText(`% Export failed: ${message}`);
+      setTikzCopied(false);
+      return null;
+    }
+  };
+
+  const copyTikz = async () => {
+    if (!tikzText) return;
+    try {
+      await navigator.clipboard.writeText(tikzText);
+      setTikzCopied(true);
+      window.setTimeout(() => setTikzCopied(false), 1200);
+    } catch {
+      setTikzCopied(false);
+    }
+  };
+
+  const openPreviewWindow = () => {
+    try {
+      const text = !tikzText || tikzOutdated ? generateTikz() : tikzText;
+      if (!text) return;
+
+      const token = createTikzPreviewSession(text, uiCssVariables);
+      if (typeof window === "undefined") return;
+      const url = new URL(window.location.href);
+      url.searchParams.set("tikzPreview", token);
+      if (isTauriRuntime) {
+        const label = `tikz-preview-${token}`;
+        const previewWindow = new WebviewWindow(label, {
+          url: url.toString(),
+          title: "TikZ Preview",
+          width: 1500,
+          height: 920,
+          minWidth: 980,
+          minHeight: 640,
+          resizable: true,
+          center: true,
+        });
+        previewWindow.once("tauri://error", (event) => {
+          const payload = String(event.payload ?? "Unknown error");
+          alert(`Failed to open preview window: ${payload}`);
+        });
+        return;
+      }
+      const popup = window.open(url.toString(), "_blank", "noopener,noreferrer");
+      if (!popup) {
+        alert("Failed to open preview window.");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown exporter error";
       setTikzText(`% Export failed: ${message}`);
@@ -109,19 +179,8 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       setJsonCopied(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown snapshot exporter error";
-      setJsonText(`{ \"error\": ${JSON.stringify(message)} }`);
+      setJsonText(`{ "error": ${JSON.stringify(message)} }`);
       setJsonCopied(false);
-    }
-  };
-
-  const copyTikz = async () => {
-    if (!tikzText) return;
-    try {
-      await navigator.clipboard.writeText(tikzText);
-      setTikzCopied(true);
-      window.setTimeout(() => setTikzCopied(false), 1200);
-    } catch {
-      setTikzCopied(false);
     }
   };
 
@@ -256,22 +315,26 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             />
           </div>
         </div>
-        <div className="actionsRow">
-          <button className="actionButton primary" onClick={generateTikz}>
-            {tikzOutdated ? "Regenerate TikZ" : "Generate TikZ"}
+        <div className="actionsRow actionsRowWrap">
+          <button className="actionButton primary" onClick={() => void generateTikz()}>
+            {tikzText ? "Regenerate TikZ" : "Generate TikZ"}
           </button>
-          <button className="actionButton secondary" onClick={copyTikz} disabled={!tikzText}>
+          <button className="actionButton secondary" onClick={() => void copyTikz()} disabled={!tikzText}>
             {tikzCopied ? "Copied" : "Copy"}
+          </button>
+          <button className="actionButton secondary" onClick={openPreviewWindow}>
+            Preview
           </button>
         </div>
         <div className="statusText">{tikzStatusText}</div>
         <textarea
           className="exportTextarea"
           value={tikzText}
-          onChange={(e) => setTikzText(e.target.value)}
-          placeholder="Click Generate TikZ to export"
+          readOnly
+          placeholder="Click Preview to generate TikZ and open editor window"
           spellCheck={false}
         />
+        {!isTauriRuntime ? <div className="statusText">New-window PDF preview works in desktop app mode.</div> : null}
       </section>
 
       <section className="sidebarSection">
