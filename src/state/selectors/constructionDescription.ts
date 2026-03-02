@@ -1,6 +1,7 @@
 import {
   type GeometryObjectRef,
   type LineLikeObjectRef,
+  type ReflectionObjectRef,
   type SceneModel,
   type ScenePoint,
 } from "../../scene/points";
@@ -360,7 +361,8 @@ function describePointConstruction(
     )} with factor ${factorText}.`;
   }
   if (point.kind === "pointByReflection") {
-    return `Point from reflection of ${pointLabel(point.pointId, pointNameById)} across ${describeObjectRef(
+    const relation = point.axis.type === "point" ? "about" : "across";
+    return `Point from reflection of ${pointLabel(point.pointId, pointNameById)} ${relation} ${describeReflectionRef(
       point.axis,
       pointNameById,
       lineById,
@@ -448,6 +450,17 @@ function describePointConstruction(
   )}.`;
 }
 
+function describeReflectionRef(
+  ref: ReflectionObjectRef,
+  pointNameById: Map<string, string>,
+  lineById: Map<string, SceneModel["lines"][number]>,
+  segmentById: Map<string, SceneModel["segments"][number]>,
+  circleById: Map<string, SceneModel["circles"][number]>
+): string {
+  if (ref.type === "point") return `point ${pointLabel(ref.id, pointNameById)}`;
+  return describeObjectRef(ref, pointNameById, lineById, segmentById, circleById);
+}
+
 function describeObjectRef(
   ref: GeometryObjectRef,
   pointNameById: Map<string, string>,
@@ -520,7 +533,7 @@ type PointTransformMeta =
   | {
       kind: "reflection";
       basePointId: string;
-      axis: LineLikeObjectRef;
+      axis: ReflectionObjectRef;
     };
 
 function getPointTransformMeta(pointId: string, pointById: Map<string, ScenePoint>): PointTransformMeta | null {
@@ -593,6 +606,9 @@ function describeTransformAction(
   }
   if (meta.kind === "dilation") {
     return `dilated about ${pointLabel(meta.centerId, pointNameById)} with factor ${meta.factorText}`;
+  }
+  if (meta.axis.type === "point") {
+    return `reflected about point ${pointLabel(meta.axis.id, pointNameById)}`;
   }
   return `reflected over ${describeLineLikeCompact(meta.axis, pointNameById, lineById, segmentById, circleById)}`;
 }

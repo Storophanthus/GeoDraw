@@ -40,7 +40,7 @@ export type Command =
   | { type: "CreatePointByTranslation"; pointId: string; fromId: string; toId: string }
   | { type: "CreatePointByRotation"; pointId: string; centerId: string; angleDeg: number; angleExpr: string; direction: "CCW" | "CW" }
   | { type: "CreatePointByDilation"; pointId: string; centerId: string; factorExpr: string }
-  | { type: "CreatePointByReflection"; pointId: string; axis: { type: "line" | "segment"; id: string } }
+  | { type: "CreatePointByReflection"; pointId: string; axis: { type: "line" | "segment" | "point"; id: string } }
   | { type: "CreateLineXY"; x1: number; y1: number; x2: number; y2: number }
   | { type: "CreateLineByPoints"; aId: string; bId: string }
   | { type: "CreatePerpendicularLine"; throughId: string; base: { type: "line" | "segment"; id: string } }
@@ -546,14 +546,18 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
   }
 
   if (name === "Reflect") {
-    if (args.length !== 2) return err("Reflect(P, l) expects 2 arguments");
+    if (args.length !== 2) return err("Reflect(P, l|O) expects 2 arguments");
     const pointLabel = asIdentifier(args[0]);
     const axisLabel = asIdentifier(args[1]);
-    if (!pointLabel || !axisLabel) return err("Reflect(P, l) expects point and line/segment aliases");
+    if (!pointLabel || !axisLabel) return err("Reflect(P, l|O) expects point and line/segment/point target");
     const point = resolvePointIdentifier(pointLabel, ctx);
     if (!point.ok) return err(point.message);
+    const axisPoint = resolvePointIdentifier(axisLabel, ctx);
+    if (axisPoint.ok) {
+      return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: { type: "point", id: axisPoint.id } } };
+    }
     const axisAlias = ctx.objectAliases.get(axisLabel);
-    if (!axisAlias) return err(`Unknown line/segment: ${axisLabel}`);
+    if (!axisAlias) return err(`Unknown reflection target: ${axisLabel}`);
     if (axisAlias.type !== "line" && axisAlias.type !== "segment") return err(`Not a line/segment: ${axisLabel}`);
     return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: { type: axisAlias.type, id: axisAlias.id } } };
   }

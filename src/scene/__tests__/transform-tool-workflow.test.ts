@@ -31,7 +31,10 @@ function makeHarness(activeTool: ActiveTool): {
     translate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; fromId: string; toId: string }>;
     rotate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; angleExpr: string; direction: "CCW" | "CW" }>;
     dilate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; factorExpr: string }>;
-    reflect: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; axis: { type: "line" | "segment"; id: string } }>;
+    reflect: Array<{
+      source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string };
+      axis: { type: "line" | "segment" | "point"; id: string };
+    }>;
   };
 } {
   let pending: PendingSelection = null;
@@ -39,7 +42,10 @@ function makeHarness(activeTool: ActiveTool): {
     translate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; fromId: string; toId: string }>,
     rotate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; angleExpr: string; direction: "CCW" | "CW" }>,
     dilate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; factorExpr: string }>,
-    reflect: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; axis: { type: "line" | "segment"; id: string } }>,
+    reflect: [] as Array<{
+      source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string };
+      axis: { type: "line" | "segment" | "point"; id: string };
+    }>,
   };
 
   const io: TestIO = {
@@ -287,6 +293,23 @@ function makeHarness(activeTool: ActiveTool): {
       h.logs.reflect[0].axis.type === "line" &&
       h.logs.reflect[0].axis.id === "l_axis",
     "Reflect should call transformObjectByReflection(polygon, axis)."
+  );
+  assert(h.getPending() === null, "Reflect should clear pending state.");
+}
+
+{
+  const h = makeHarness("reflect");
+  h.click({ hitObject: { type: "polygon", id: "poly1" } });
+  const step2 = h.getPending();
+  assert(!!step2 && step2.tool === "reflect" && step2.step === 2 && step2.source.id === "poly1", "Reflect step 1 should pick source object.");
+  h.click({ hitObject: { type: "point", id: "pO" }, hitPointId: "pO" });
+  assert(h.logs.reflect.length === 1, "Point-centered reflect should invoke object transform once.");
+  assert(
+    h.logs.reflect[0].source.type === "polygon" &&
+      h.logs.reflect[0].source.id === "poly1" &&
+      h.logs.reflect[0].axis.type === "point" &&
+      h.logs.reflect[0].axis.id === "pO",
+    "Reflect should call transformObjectByReflection(polygon, point-center)."
   );
   assert(h.getPending() === null, "Reflect should clear pending state.");
 }

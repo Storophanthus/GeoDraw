@@ -15,6 +15,7 @@ import {
 } from "./pointGeometryEval";
 import type {
   CircleCenterPoint,
+  ReflectionObjectRef,
   MidpointFromPoints,
   MidpointFromSegment,
   PointByDilation,
@@ -26,7 +27,6 @@ import type {
   PointOnSegment,
   SceneVector,
   SceneModel,
-  LineLikeObjectRef,
   TriangleCenterPoint,
 } from "../points";
 import type { SceneEvalContext } from "./sceneContextBuilder";
@@ -218,24 +218,31 @@ export function evalPointByDilationPoint(
   return evalPointByDilation(base, center, factorEval.value);
 }
 
-function resolveLineLikeAxis(
-  axis: LineLikeObjectRef,
+function resolveReflectionTarget(
+  axis: ReflectionObjectRef,
   scene: SceneModel,
   ctx: SceneEvalContext,
   ops: {
     getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
     resolveLineAnchorsById: (lineId: string, scene: SceneModel, ctx: SceneEvalContext) => { a: Vec2; b: Vec2 } | null;
   }
-): { a: Vec2; b: Vec2 } | null {
+): { kind: "axis"; a: Vec2; b: Vec2 } | { kind: "center"; center: Vec2 } | null {
+  if (axis.type === "point") {
+    const center = ops.getPointWorldById(axis.id, scene, ctx);
+    if (!center) return null;
+    return { kind: "center", center };
+  }
   if (axis.type === "line") {
-    return ops.resolveLineAnchorsById(axis.id, scene, ctx);
+    const anchors = ops.resolveLineAnchorsById(axis.id, scene, ctx);
+    if (!anchors) return null;
+    return { kind: "axis", a: anchors.a, b: anchors.b };
   }
   const seg = ctx.segmentById.get(axis.id);
   if (!seg) return null;
   const a = ops.getPointWorldById(seg.aId, scene, ctx);
   const b = ops.getPointWorldById(seg.bId, scene, ctx);
   if (!a || !b) return null;
-  return { a, b };
+  return { kind: "axis", a, b };
 }
 
 export function evalPointByReflectionPoint(
@@ -249,9 +256,12 @@ export function evalPointByReflectionPoint(
 ): Vec2 | null {
   const base = ops.getPointWorldById(point.pointId, scene, ctx);
   if (!base) return null;
-  const axis = resolveLineLikeAxis(point.axis, scene, ctx, ops);
+  const axis = resolveReflectionTarget(point.axis, scene, ctx, ops);
   if (!axis) return null;
   ctx.stats.allocationsEstimate += 1;
+  if (axis.kind === "center") {
+    return evalPointByDilation(base, axis.center, -1);
+  }
   return evalPointByReflection(base, axis.a, axis.b);
 }
 

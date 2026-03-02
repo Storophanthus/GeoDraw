@@ -20,7 +20,7 @@ export type SnapshotPointDefinition =
   | { kind: "triangleCenter"; centerKind: "incenter" | "orthocenter" | "centroid"; aId: string; bId: string; cId: string }
   | { kind: "pointByTranslation"; pointId: string; fromId: string; toId: string; vectorId?: string }
   | { kind: "pointByDilation"; pointId: string; centerId: string; factor?: number; factorExpr?: string }
-  | { kind: "pointByReflection"; pointId: string; axis: { type: "line" | "segment"; id: string } }
+  | { kind: "pointByReflection"; pointId: string; axis: { type: "line" | "segment" | "point"; id: string } }
   | {
       kind: "pointByRotation";
       centerId: string;
@@ -460,7 +460,10 @@ function pointDependsOn(point: ScenePoint): string[] {
     return refs;
   }
   if (point.kind === "pointByDilation") return [point.pointId, point.centerId];
-  if (point.kind === "pointByReflection") return [point.pointId, objectRefKey(point.axis)];
+  if (point.kind === "pointByReflection") {
+    if (point.axis.type === "point") return [point.pointId, point.axis.id];
+    return [point.pointId, objectRefKey(point.axis)];
+  }
   if (point.kind === "pointByRotation") return [point.centerId, point.pointId];
   if (point.kind === "circleLineIntersectionPoint") {
     const refs = [point.circleId, point.lineId];

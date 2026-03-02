@@ -350,7 +350,9 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         }
         if (point.kind === "pointByReflection") {
           if (!pointIds.has(point.pointId)) return false;
-          return point.axis.type === "line" ? nextLineIdsAfter.has(point.axis.id) : nextSegmentIds.has(point.axis.id);
+          if (point.axis.type === "line") return nextLineIdsAfter.has(point.axis.id);
+          if (point.axis.type === "segment") return nextSegmentIds.has(point.axis.id);
+          return pointIds.has(point.axis.id);
         }
         if (point.kind === "circleLineIntersectionPoint") {
           return nextCircleIds.has(point.circleId) && nextLineIdsAfter.has(point.lineId);

@@ -513,7 +513,7 @@ export function CommandBar() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Translate(P,A,B), Rotate(P,O,30), Dilate(P,O,2), Reflect(P,l)"
+            placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Translate(P,A,B), Rotate(P,O,30), Dilate(P,O,2), Reflect(P,l|O)"
             style={{
               width: "100%",
               minWidth: 0,

@@ -1010,7 +1010,7 @@ export const commandBarApi = {
   },
   createPointByReflectionWithLabel(
     pointId: string,
-    axis: { type: "line" | "segment"; id: string },
+    axis: { type: "line" | "segment" | "point"; id: string },
     label: string
   ): string | null {
     const name = label.trim();

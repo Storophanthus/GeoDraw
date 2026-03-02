@@ -126,6 +126,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         return `Line(${ref.id})`;
     };
 
+    const reflectionTargetText = (ref: { type: "line" | "segment" | "point"; id: string }): string =>
+        ref.type === "point" ? pointLabel(ref.id) : lineLikeText(ref as { type: "line" | "segment"; id: string });
+
     const copyCommand = async (value: string, key: string) => {
         try {
             await navigator.clipboard.writeText(value);
@@ -247,7 +250,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                                                     ? withAliasPrefix(
                                                         "point",
                                                         point.id,
-                                                        `Reflect(${pointLabel(point.pointId)},${lineLikeText(point.axis)})`
+                                                        `Reflect(${pointLabel(point.pointId)},${reflectionTargetText(point.axis)})`
                                                     )
                                         : point.kind === "pointOnCircle"
                                             ? withAliasPrefix("point", point.id, `PointOn(${circleRefText(point.circleId)})`)

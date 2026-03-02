@@ -56,6 +56,28 @@ const scene: SceneModel = {
       style: { ...defaultPointStyle, labelOffsetPx: { ...defaultPointStyle.labelOffsetPx } },
     },
     {
+      id: "pApr",
+      kind: "pointByReflection",
+      name: "K",
+      captionTex: "K",
+      visible: true,
+      showLabel: "name",
+      pointId: "pA",
+      axis: { type: "point", id: "pO" },
+      style: { ...defaultPointStyle, labelOffsetPx: { ...defaultPointStyle.labelOffsetPx } },
+    },
+    {
+      id: "pBpr",
+      kind: "pointByReflection",
+      name: "L",
+      captionTex: "L",
+      visible: true,
+      showLabel: "name",
+      pointId: "pB",
+      axis: { type: "point", id: "pO" },
+      style: { ...defaultPointStyle, labelOffsetPx: { ...defaultPointStyle.labelOffsetPx } },
+    },
+    {
       id: "pAt",
       kind: "pointByTranslation",
       name: "F",
@@ -149,6 +171,14 @@ const scene: SceneModel = {
       showLabel: false,
       style: { ...defaultSegmentStyle },
     },
+    {
+      id: "sRefPt",
+      aId: "pApr",
+      bId: "pBpr",
+      visible: true,
+      showLabel: false,
+      style: { ...defaultSegmentStyle },
+    },
   ],
   circles: [
     {
@@ -180,6 +210,11 @@ const scene: SceneModel = {
 {
   const text = selectConstructionDescription({ type: "line", id: "lRef" }, scene);
   assert(text === "Line AB reflected over line BC.", `unexpected line transform description: ${text}`);
+}
+
+{
+  const text = selectConstructionDescription({ type: "segment", id: "sRefPt" }, scene);
+  assert(text === "Segment AB reflected about point O.", `unexpected point-reflection transform description: ${text}`);
 }
 
 {
