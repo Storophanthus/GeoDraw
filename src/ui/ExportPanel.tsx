@@ -9,6 +9,7 @@ import { useGeoStore } from "../state/geoStore";
 import type { Camera } from "../view/camera";
 import { createTikzPreviewSession } from "./tikzPreviewSession";
 import { IconGlobe, IconPoint, IconLine, IconType } from "./icons";
+import "./ExportPanel.css";
 
 type ExportPanelProps = {
   visible: boolean;
@@ -259,70 +260,73 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             Label glow
           </label>
         </div>
-        <div className="compactScaleGrid">
-          <div className="scaleGridItem">
-            <div className="scaleGridIcon">
-              <IconGlobe size={14} />
+        <div className="scaleBlock">
+          <div className="subSectionTitle">Scale Modifiers</div>
+          <div className="compactScaleGrid">
+            <div className="scaleGridItem">
+              <div className="scaleGridIcon">
+                <IconGlobe size={14} />
+              </div>
+              <span className="scaleGridLabel">Global</span>
+              <input
+                className="scaleGridInput"
+                type="number"
+                min={0.1}
+                max={6}
+                step={0.05}
+                value={exportGlobalScale}
+                onChange={(e) => setExportGlobalScale(e.target.value)}
+                title="Global Scale"
+              />
             </div>
-            <span className="scaleGridLabel">Global</span>
-            <input
-              className="scaleGridInput"
-              type="number"
-              min={0.1}
-              max={6}
-              step={0.05}
-              value={exportGlobalScale}
-              onChange={(e) => setExportGlobalScale(e.target.value)}
-              title="Global Scale"
-            />
-          </div>
-          <div className="scaleGridItem">
-            <div className="scaleGridIcon">
-              <IconPoint size={14} />
+            <div className="scaleGridItem">
+              <div className="scaleGridIcon">
+                <IconPoint size={14} />
+              </div>
+              <span className="scaleGridLabel">Point</span>
+              <input
+                className="scaleGridInput"
+                type="number"
+                min={0.1}
+                max={4}
+                step={0.05}
+                value={exportPointScale}
+                onChange={(e) => setExportPointScale(e.target.value)}
+                title="Point Scale"
+              />
             </div>
-            <span className="scaleGridLabel">Point</span>
-            <input
-              className="scaleGridInput"
-              type="number"
-              min={0.1}
-              max={4}
-              step={0.05}
-              value={exportPointScale}
-              onChange={(e) => setExportPointScale(e.target.value)}
-              title="Point Scale"
-            />
-          </div>
-          <div className="scaleGridItem">
-            <div className="scaleGridIcon">
-              <IconLine size={14} />
+            <div className="scaleGridItem">
+              <div className="scaleGridIcon">
+                <IconLine size={14} />
+              </div>
+              <span className="scaleGridLabel">Line</span>
+              <input
+                className="scaleGridInput"
+                type="number"
+                min={0.1}
+                max={4}
+                step={0.05}
+                value={exportLineScale}
+                onChange={(e) => setExportLineScale(e.target.value)}
+                title="Line Scale"
+              />
             </div>
-            <span className="scaleGridLabel">Line</span>
-            <input
-              className="scaleGridInput"
-              type="number"
-              min={0.1}
-              max={4}
-              step={0.05}
-              value={exportLineScale}
-              onChange={(e) => setExportLineScale(e.target.value)}
-              title="Line Scale"
-            />
-          </div>
-          <div className="scaleGridItem">
-            <div className="scaleGridIcon">
-              <IconType size={14} />
+            <div className="scaleGridItem">
+              <div className="scaleGridIcon">
+                <IconType size={14} />
+              </div>
+              <span className="scaleGridLabel">Label</span>
+              <input
+                className="scaleGridInput"
+                type="number"
+                min={0.1}
+                max={4}
+                step={0.05}
+                value={exportLabelScale}
+                onChange={(e) => setExportLabelScale(e.target.value)}
+                title="Label Scale"
+              />
             </div>
-            <span className="scaleGridLabel">Label</span>
-            <input
-              className="scaleGridInput"
-              type="number"
-              min={0.1}
-              max={4}
-              step={0.05}
-              value={exportLabelScale}
-              onChange={(e) => setExportLabelScale(e.target.value)}
-              title="Label Scale"
-            />
           </div>
         </div>
         <div className="actionsRow actionsRowWrap">
