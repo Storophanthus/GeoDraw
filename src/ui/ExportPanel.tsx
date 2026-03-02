@@ -3,7 +3,7 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from "../export/constructionSnapshot";
 import { exportTikzEfficientWithOptions, exportTikzWithOptions } from "../export/tikz";
 import { getPointInnerSepFixedPt, TIKZ_EXPORT_CALIBRATION } from "../export/tikz/calibration";
-import { getUiCssVariables } from "../state/colorProfiles";
+import { getCanvasColorTheme, getUiCssVariables } from "../state/colorProfiles";
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
 import type { Camera } from "../view/camera";
@@ -20,7 +20,9 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const exportClipWorld = useGeoStore((store) => store.exportClipWorld);
   const clearExportClipWorld = useGeoStore((store) => store.clearExportClipWorld);
   const uiColorProfileId = useGeoStore((store) => store.uiColorProfileId);
+  const colorProfileId = useGeoStore((store) => store.colorProfileId);
   const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
+  const canvasThemeOverrides = useGeoStore((store) => store.canvasThemeOverrides);
 
   const [tikzText, setTikzText] = useState("");
   const [tikzCopied, setTikzCopied] = useState(false);
@@ -43,10 +45,14 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as object),
     []
   );
-  const uiCssVariables = useMemo(
-    () => getUiCssVariables(uiColorProfileId, uiCssOverrides),
-    [uiColorProfileId, uiCssOverrides]
-  );
+  const uiCssVariables = useMemo(() => {
+    const uiVars = getUiCssVariables(uiColorProfileId, uiCssOverrides);
+    const canvasTheme = getCanvasColorTheme(colorProfileId, canvasThemeOverrides);
+    return {
+      ...uiVars,
+      "--gd-scene-bg": canvasTheme.backgroundColor,
+    };
+  }, [uiColorProfileId, uiCssOverrides, colorProfileId, canvasThemeOverrides]);
 
   const clipSig = exportClipWorld
     ? exportClipWorld.kind === "rect"

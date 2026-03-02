@@ -167,8 +167,18 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       trackHistory: false,
       resetHistory: true,
     });
-    setOptionalPreamble("");
-    setOptionalPreambleOpen(false);
+
+    let defaultPreamble = "";
+    const bg = session?.uiCssVariables?.["--gd-scene-bg"];
+    if (bg && bg.startsWith("#")) {
+      const hex = bg.slice(1).toUpperCase();
+      if (hex !== "FFF" && hex !== "FFFFFF") {
+        defaultPreamble = `\\pagecolor[HTML]{${hex}}`;
+      }
+    }
+
+    setOptionalPreamble(defaultPreamble);
+    setOptionalPreambleOpen(Boolean(defaultPreamble));
   }, [session, updateTikzCode]);
 
   useEffect(() => {
