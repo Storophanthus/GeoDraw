@@ -38,7 +38,7 @@ export function NumbersSection({
   createNumber,
 }: NumbersSectionProps) {
   return (
-    <div className="toolInfo">
+    <div className="toolInfo" style={{ marginTop: 16 }}>
       <div className="subSectionTitle">Numbers</div>
       <div className="controlRow">
         <label className="controlLabel">Slider Value</label>

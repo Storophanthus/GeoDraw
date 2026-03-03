@@ -1,0 +1,153 @@
+.pdfPreviewFrame {
+    width: 100%;
+    min-height: 340px;
+    margin-top: 10px;
+    border: 1px solid var(--gd-ui-border-panel, #d6dee9);
+    border-radius: 12px;
+    background: var(--gd-ui-surface, #ffffff);
+}
+
+.exportPreviewEmpty {
+    margin-top: 10px;
+    min-height: 120px;
+    border: 1px dashed var(--gd-ui-border, #cbd5e1);
+    border-radius: 12px;
+    background: var(--gd-ui-surface-soft, #f8fafc);
+    color: var(--gd-ui-text-subtle, #64748b);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.exportLogDetails {
+    margin-top: 10px;
+    border: 1px solid var(--gd-ui-border-soft, #dbe4ef);
+    border-radius: 12px;
+    background: var(--gd-ui-surface-soft, #f8fafc);
+    padding: 8px 10px;
+}
+
+.exportLogDetailsExpanded[open] {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.previewPdfPane .exportLogDetailsExpanded[open]>summary {
+    margin-bottom: 8px;
+}
+
+.exportLogDetails summary {
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gd-ui-text-muted, #475569);
+}
+
+.exportLogDetails>.exportLogText {
+    margin-top: 8px;
+}
+
+.exportLogDetailsExpanded[open]>.exportLogText {
+    margin-top: 0;
+}
+
+.exportLogText {
+    margin: 0;
+    width: 100%;
+    max-height: 190px;
+    min-height: 150px;
+    resize: none;
+    overflow: auto;
+    white-space: pre;
+    word-break: normal;
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--gd-ui-text, #334155);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    border: 1px solid var(--gd-ui-border-soft, #dbe4ef);
+    border-radius: 10px;
+    background: var(--gd-ui-surface, #ffffff);
+    padding: 8px 10px;
+}
+
+.exportLogText:focus-visible {
+    outline: 2px solid var(--gd-ui-focus-outline, rgba(37, 99, 235, 0.2));
+    border-color: var(--gd-ui-accent, #3b82f6);
+}
+
+.exportLogTextError {
+    min-height: 220px;
+    max-height: min(42vh, 340px);
+}
+
+.exportLogTextExpanded {
+    height: 100%;
+    min-height: 0 !important;
+    max-height: none !important;
+}
+
+.scaleBlock {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--gd-ui-surface-soft, #f8fafc);
+    border: 1px solid var(--gd-ui-border-soft, #e2e8f0);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+}
+
+.scaleBlock .subSectionTitle {
+    margin-bottom: 4px;
+}
+
+.compactScaleBlock {
+    margin-top: 8px;
+    padding-top: 6px;
+}
+
+.compactScaleGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.scaleGridItem {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--gd-ui-surface, #ffffff);
+    border: 1px solid var(--gd-ui-border, #cbd5e1);
+    border-radius: 8px;
+    padding: 4px 6px;
+}
+
+.scaleGridIcon {
+    color: var(--gd-ui-text-subtle, #64748b);
+    display: flex;
+}
+
+.scaleGridLabel {
+    font-size: 11px;
+    color: var(--gd-ui-text-muted, #475569);
+    flex-shrink: 0;
+}
+
+.scaleGridInput {
+    width: 100%;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: var(--gd-ui-text, #334155);
+    font-size: 12px;
+    text-align: right;
+    padding: 0;
+    height: 20px;
+}
+
+.scaleGridInput:focus {
+    outline: none;
+}

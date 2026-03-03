@@ -6,7 +6,7 @@ import type { WorkspaceShellProps } from "./WorkspaceShell";
 
 const LEFT_MIN = 86;
 const LEFT_MAX = 240;
-const RIGHT_MIN = 240;
+const RIGHT_MIN = 300;
 const RIGHT_MAX = 560;
 const COLLAPSED_W = 40;
 

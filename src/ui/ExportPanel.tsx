@@ -3,12 +3,13 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from "../export/constructionSnapshot";
 import { exportTikzEfficientWithOptions, exportTikzWithOptions } from "../export/tikz";
 import { getPointInnerSepFixedPt, TIKZ_EXPORT_CALIBRATION } from "../export/tikz/calibration";
-import { getUiCssVariables } from "../state/colorProfiles";
+import { getCanvasColorTheme, getUiCssVariables } from "../state/colorProfiles";
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
 import type { Camera } from "../view/camera";
 import { createTikzPreviewSession } from "./tikzPreviewSession";
 import { IconGlobe, IconPoint, IconLine, IconType } from "./icons";
+import "./ExportPanel.css";
 
 type ExportPanelProps = {
   visible: boolean;
@@ -20,7 +21,9 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const exportClipWorld = useGeoStore((store) => store.exportClipWorld);
   const clearExportClipWorld = useGeoStore((store) => store.clearExportClipWorld);
   const uiColorProfileId = useGeoStore((store) => store.uiColorProfileId);
+  const colorProfileId = useGeoStore((store) => store.colorProfileId);
   const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
+  const canvasThemeOverrides = useGeoStore((store) => store.canvasThemeOverrides);
 
   const [tikzText, setTikzText] = useState("");
   const [tikzCopied, setTikzCopied] = useState(false);
@@ -43,10 +46,14 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as object),
     []
   );
-  const uiCssVariables = useMemo(
-    () => getUiCssVariables(uiColorProfileId, uiCssOverrides),
-    [uiColorProfileId, uiCssOverrides]
-  );
+  const uiCssVariables = useMemo(() => {
+    const uiVars = getUiCssVariables(uiColorProfileId, uiCssOverrides);
+    const canvasTheme = getCanvasColorTheme(colorProfileId, canvasThemeOverrides);
+    return {
+      ...uiVars,
+      "--gd-scene-bg": canvasTheme.backgroundColor,
+    };
+  }, [uiColorProfileId, uiCssOverrides, colorProfileId, canvasThemeOverrides]);
 
   const clipSig = exportClipWorld
     ? exportClipWorld.kind === "rect"
@@ -253,66 +260,73 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             Label glow
           </label>
         </div>
-        <div className="compactScaleGrid">
-          <div className="scaleGridItem">
-            <div className="scaleGridIcon">
-              <IconGlobe size={14} />
+        <div className="scaleBlock">
+          <div className="subSectionTitle">Scale Modifiers</div>
+          <div className="compactScaleGrid">
+            <div className="scaleGridItem">
+              <div className="scaleGridIcon">
+                <IconGlobe size={14} />
+              </div>
+              <span className="scaleGridLabel">Global</span>
+              <input
+                className="scaleGridInput"
+                type="number"
+                min={0.1}
+                max={6}
+                step={0.05}
+                value={exportGlobalScale}
+                onChange={(e) => setExportGlobalScale(e.target.value)}
+                title="Global Scale"
+              />
             </div>
-            <input
-              className="scaleGridInput"
-              type="number"
-              min={0.1}
-              max={6}
-              step={0.05}
-              value={exportGlobalScale}
-              onChange={(e) => setExportGlobalScale(e.target.value)}
-              title="Global Scale"
-            />
-          </div>
-          <div className="scaleGridItem">
-            <div className="scaleGridIcon">
-              <IconPoint size={14} />
+            <div className="scaleGridItem">
+              <div className="scaleGridIcon">
+                <IconPoint size={14} />
+              </div>
+              <span className="scaleGridLabel">Point</span>
+              <input
+                className="scaleGridInput"
+                type="number"
+                min={0.1}
+                max={4}
+                step={0.05}
+                value={exportPointScale}
+                onChange={(e) => setExportPointScale(e.target.value)}
+                title="Point Scale"
+              />
             </div>
-            <input
-              className="scaleGridInput"
-              type="number"
-              min={0.1}
-              max={4}
-              step={0.05}
-              value={exportPointScale}
-              onChange={(e) => setExportPointScale(e.target.value)}
-              title="Point Scale"
-            />
-          </div>
-          <div className="scaleGridItem">
-            <div className="scaleGridIcon">
-              <IconLine size={14} />
+            <div className="scaleGridItem">
+              <div className="scaleGridIcon">
+                <IconLine size={14} />
+              </div>
+              <span className="scaleGridLabel">Line</span>
+              <input
+                className="scaleGridInput"
+                type="number"
+                min={0.1}
+                max={4}
+                step={0.05}
+                value={exportLineScale}
+                onChange={(e) => setExportLineScale(e.target.value)}
+                title="Line Scale"
+              />
             </div>
-            <input
-              className="scaleGridInput"
-              type="number"
-              min={0.1}
-              max={4}
-              step={0.05}
-              value={exportLineScale}
-              onChange={(e) => setExportLineScale(e.target.value)}
-              title="Line Scale"
-            />
-          </div>
-          <div className="scaleGridItem">
-            <div className="scaleGridIcon">
-              <IconType size={14} />
+            <div className="scaleGridItem">
+              <div className="scaleGridIcon">
+                <IconType size={14} />
+              </div>
+              <span className="scaleGridLabel">Label</span>
+              <input
+                className="scaleGridInput"
+                type="number"
+                min={0.1}
+                max={4}
+                step={0.05}
+                value={exportLabelScale}
+                onChange={(e) => setExportLabelScale(e.target.value)}
+                title="Label Scale"
+              />
             </div>
-            <input
-              className="scaleGridInput"
-              type="number"
-              min={0.1}
-              max={4}
-              step={0.05}
-              value={exportLabelScale}
-              onChange={(e) => setExportLabelScale(e.target.value)}
-              title="Label Scale"
-            />
           </div>
         </div>
         <div className="actionsRow actionsRowWrap">
