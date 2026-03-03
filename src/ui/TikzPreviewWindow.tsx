@@ -162,14 +162,53 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     });
   }, []);
 
+  const compilePdf = useCallback(
+    async (sourceTikz: string, preambleText: string) => {
+      if (!isTauriRuntime) {
+        setError("PDF rendering in preview window is available only in the desktop app.");
+        return;
+      }
+      if (!sourceTikz.trim()) {
+        setError("TikZ code is empty.");
+        return;
+      }
+      setBusy(true);
+      setError("");
+
+      try {
+        const source = buildStandaloneSource(sourceTikz, preambleText);
+        const result = await invoke<CompileTikzPreviewResult>("compile_tikz_preview", { source });
+        const bytes = decodeBase64ToBytes(result.pdf_base64);
+        setPdfData(bytes);
+        setLog(result.log || `Compiled using ${result.engine}.`);
+      } catch (err) {
+        setPdfData(null);
+        const rawMessage = extractErrorMessage(err);
+        const normalized = normalizePreviewError(rawMessage);
+        setError(normalized.display);
+        if (normalized.log) {
+          setLog(normalized.log);
+        }
+      } finally {
+        setBusy(false);
+      }
+    },
+    [isTauriRuntime]
+  );
+
   useEffect(() => {
-    updateTikzCode(session?.tikzPicture ?? "\\begin{tikzpicture}\n\\end{tikzpicture}", {
+    const nextTikz = session?.tikzPicture ?? "\\begin{tikzpicture}\n\\end{tikzpicture}";
+    updateTikzCode(nextTikz, {
       trackHistory: false,
       resetHistory: true,
     });
-    setOptionalPreamble("");
-    setOptionalPreambleOpen(false);
-  }, [session, updateTikzCode]);
+    const defaultPreamble = deriveDefaultOptionalPreamble(session?.uiCssVariables);
+    setOptionalPreamble(defaultPreamble);
+    setOptionalPreambleOpen(Boolean(defaultPreamble));
+    if (session) {
+      void compilePdf(nextTikz, defaultPreamble);
+    }
+  }, [session, updateTikzCode, compilePdf]);
 
   useEffect(() => {
     return () => {
@@ -348,43 +387,9 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     void renderPdfPage(pdfZoom);
   }, [pdfZoom, renderPdfPage]);
 
-  useEffect(() => {
-    if (!session) return;
-    void updatePdf();
-    // The initial compile should only run when session payload changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.createdAt]);
-
-  const updatePdf = async () => {
-    if (!isTauriRuntime) {
-      setError("PDF rendering in preview window is available only in the desktop app.");
-      return;
-    }
-    if (!tikzCode.trim()) {
-      setError("TikZ code is empty.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-
-    try {
-      const source = buildStandaloneSource(tikzCode, optionalPreamble);
-      const result = await invoke<CompileTikzPreviewResult>("compile_tikz_preview", { source });
-      const bytes = decodeBase64ToBytes(result.pdf_base64);
-      setPdfData(bytes);
-      setLog(result.log || `Compiled using ${result.engine}.`);
-    } catch (err) {
-      setPdfData(null);
-      const rawMessage = extractErrorMessage(err);
-      const normalized = normalizePreviewError(rawMessage);
-      setError(normalized.display);
-      if (normalized.log) {
-        setLog(normalized.log);
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
+  const updatePdf = useCallback(async () => {
+    await compilePdf(tikzCode, optionalPreamble);
+  }, [compilePdf, tikzCode, optionalPreamble]);
 
   const copyEditedTikz = async () => {
     try {
@@ -795,6 +800,32 @@ function buildStandaloneSource(tikzCode: string, optionalPreamble: string): stri
   const extra = optionalPreamble.trim();
   const preamble = extra ? `${REQUIRED_PREAMBLE}\n${extra}` : REQUIRED_PREAMBLE;
   return `${preamble}\n\\begin{document}\n${tikzCode}\n\\end{document}\n`;
+}
+
+function deriveDefaultOptionalPreamble(uiCssVariables: Record<string, string> | undefined): string {
+  const normalizedHex = normalizeSceneBgHex(uiCssVariables?.["--gd-scene-bg"]);
+  if (!normalizedHex || normalizedHex === "FFFFFF") return "";
+  return `\\pagecolor[HTML]{${normalizedHex}}`;
+}
+
+function normalizeSceneBgHex(rawColor: string | undefined): string | null {
+  if (!rawColor) return null;
+  const trimmed = rawColor.trim();
+  const match = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/u.exec(trimmed);
+  if (!match) return null;
+  const hex = match[1];
+  if (hex.length === 3 || hex.length === 4) {
+    const expanded = hex
+      .slice(0, 3)
+      .split("")
+      .map((ch) => ch + ch)
+      .join("");
+    return expanded.toUpperCase();
+  }
+  if (hex.length === 8) {
+    return hex.slice(0, 6).toUpperCase();
+  }
+  return hex.toUpperCase();
 }
 
 function looksLikeFullDocument(text: string): boolean {
