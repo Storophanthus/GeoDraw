@@ -138,6 +138,9 @@ export function PointPropertiesSection({
           />
           Make this default for this object
         </label>
+      </div>
+
+      <div className="toolInfo">
         <div className="subSectionTitle">Point Style</div>
 
         <div className="fieldBlock" ref={shapePickerRef}>
