@@ -1,22 +1,18 @@
 import { all, create, type MathNode } from "mathjs";
+import {
+  type ScalarDistanceArg as DistanceArg,
+  evaluateScalarDistanceArgs,
+} from "./scene/eval/scalarDistance";
+import {
+  evaluateRegisteredScalarFunctionCall,
+  type ScalarFunctionRuntimeAdapters,
+} from "./scene/eval/scalarFunctionRegistry";
+import { evaluateScalarObjectMeasureArg } from "./scene/eval/scalarObjectMeasure";
+import { evaluateScalarExpressionWithRuntime } from "./scene/eval/scalarExpressionRuntime";
 
 const math = create(all, { number: "number", matrix: "Array", predictable: true });
 const MAX_INPUT_LENGTH = 300;
 const DISALLOWED_TOKEN_RE = /\b(import|createUnit|unit|range|ones|zeros|matrix)\b/i;
-const ALLOWED_FUNCTIONS = new Set([
-  "sin",
-  "cos",
-  "tan",
-  "Sin",
-  "Cos",
-  "Tan",
-  "sqrt",
-  "abs",
-  "min",
-  "max",
-  "pow",
-]);
-const BASE_ALLOWED_SYMBOLS = new Set(["ans", "pi", "Pi", "PI", "e", "tau"]);
 const IDENT_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 export type Symbol =
@@ -26,6 +22,10 @@ export type Symbol =
 export type ParseContext = {
   symbolsByLabel: Map<string, Symbol[]>;
   pointWorldById?: Map<string, { x: number; y: number }>;
+  lineWorldAnchorsById?: Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
+  segmentWorldAnchorsById?: Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
+  circleWorldGeometryById?: Map<string, { center: { x: number; y: number }; radius: number }>;
+  polygonPointIdsById?: Map<string, string[]>;
   scalarsByName: Map<string, number>;
   objectAliases: Map<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }>;
   objectNames: Set<string>;
@@ -36,6 +36,11 @@ export type Command =
   | { type: "CreatePointXY"; x: number; y: number }
   | { type: "CreateMidpointByPoints"; aId: string; bId: string }
   | { type: "CreateMidpointBySegment"; segId: string }
+  | { type: "CreateTriangleCenterPoint"; centerKind: "incenter" | "orthocenter" | "centroid"; aId: string; bId: string; cId: string }
+  | { type: "CreatePointByTranslation"; pointId: string; fromId: string; toId: string }
+  | { type: "CreatePointByRotation"; pointId: string; centerId: string; angleDeg: number; angleExpr: string; direction: "CCW" | "CW" }
+  | { type: "CreatePointByDilation"; pointId: string; centerId: string; factorExpr: string }
+  | { type: "CreatePointByReflection"; pointId: string; axis: { type: "line" | "segment" | "point"; id: string } }
   | { type: "CreateLineXY"; x1: number; y1: number; x2: number; y2: number }
   | { type: "CreateLineByPoints"; aId: string; bId: string }
   | { type: "CreatePerpendicularLine"; throughId: string; base: { type: "line" | "segment"; id: string } }
@@ -47,6 +52,7 @@ export type Command =
   | { type: "CreateSector"; centerId: string; startId: string; endId: string }
   | { type: "CreateSegmentByPoints"; aId: string; bId: string }
   | { type: "CreatePolygonByPoints"; pointIds: string[] }
+  | { type: "CreateRegularPolygonFromEdge"; aId: string; bId: string; sides: number; direction: "CCW" | "CW" }
   | { type: "CreateCircleThreePoint"; aId: string; bId: string; cId: string }
   | { type: "CreateCircleXYR"; x: number; y: number; r: number }
   | { type: "CreateCircleCenterRadius"; centerId: string; r: number; rExpr?: string }
@@ -55,7 +61,7 @@ export type Command =
 export type ParseResult =
   | { kind: "expr"; value: string; numeric?: number }
   | { kind: "cmd"; cmd: Command }
-  | { kind: "assignScalar"; name: string; value: number }
+  | { kind: "assignScalar"; name: string; value: number; expr?: string }
   | { kind: "assignObject"; name: string; cmd: Command }
   | { kind: "error"; message: string };
 
@@ -76,109 +82,37 @@ function err(message: string): ParseResult {
   return { kind: "error", message };
 }
 
-function ensureSafeNode(node: MathNode, allowedSymbols: Set<string>): string | null {
-  const queue: MathNode[] = [node];
-  while (queue.length > 0) {
-    const current = queue.pop();
-    if (!current) continue;
-
-    const anyNode = current as unknown as {
-      type?: string;
-      name?: string;
-      fn?: { name?: string };
-      op?: string;
-      args?: MathNode[];
-      content?: MathNode;
-    };
-
-    switch (anyNode.type) {
-      case "ConstantNode":
-      case "ParenthesisNode":
-        break;
-      case "SymbolNode":
-        if (!anyNode.name || !allowedSymbols.has(anyNode.name)) {
-          return `Unsupported symbol: ${anyNode.name ?? "unknown"}`;
-        }
-        break;
-      case "FunctionNode": {
-        const fnName = anyNode.fn?.name;
-        if (!fnName || !ALLOWED_FUNCTIONS.has(fnName)) {
-          return `Unsupported function: ${fnName ?? "unknown"}`;
-        }
-        break;
-      }
-      case "OperatorNode": {
-        const op = anyNode.op;
-        if (!["+", "-", "*", "/", "^"].includes(op ?? "")) {
-          return `Unsupported operator: ${op ?? "unknown"}`;
-        }
-        break;
-      }
-      default:
-        return `Unsupported expression node: ${anyNode.type ?? "unknown"}`;
-    }
-
-    const children = anyNode.args ?? [];
-    for (let i = 0; i < children.length; i += 1) {
-      if (children[i]) queue.push(children[i]);
-    }
-    if (anyNode.content) queue.push(anyNode.content);
+function unwrapParenthesisNode(node: MathNode): MathNode {
+  let current = node;
+  for (;;) {
+    const anyNode = current as unknown as { type?: string; content?: MathNode };
+    if (anyNode.type !== "ParenthesisNode" || !anyNode.content) return current;
+    current = anyNode.content;
   }
-  return null;
+}
+
+function buildParserScalarFunctionAdapters(ctx: ParseContext): ScalarFunctionRuntimeAdapters {
+  return {
+    resolveDistanceArg: (argExprRaw) => {
+      let node: MathNode;
+      try {
+        node = math.parse(argExprRaw);
+      } catch {
+        return { ok: false, error: "Distance(...) arguments are invalid" };
+      }
+      return resolveDistanceArg(node, ctx);
+    },
+    evaluateMeasureArg: (fnName, argExprRaw) => evaluateMeasureArg(fnName, argExprRaw, ctx),
+  };
 }
 
 function evaluateExpression(expr: string, ctx: ParseContext): EvalResult {
-  if (expr.length > MAX_INPUT_LENGTH) return { ok: false, error: "Input is too long" };
-  if (DISALLOWED_TOKEN_RE.test(expr)) return { ok: false, error: "Expression uses disallowed token" };
-
-  let node: MathNode;
-  try {
-    node = math.parse(expr);
-  } catch {
-    return { ok: false, error: "Invalid expression syntax" };
-  }
-
-  const allowedSymbols = new Set<string>(BASE_ALLOWED_SYMBOLS);
-  for (const key of ctx.scalarsByName.keys()) allowedSymbols.add(key);
-
-  const safe = ensureSafeNode(node, allowedSymbols);
-  if (safe) return { ok: false, error: safe };
-
-  const scope: Record<string, number | ((...args: number[]) => number)> = {
-    ans: ctx.ans ?? 0,
-    pi: Math.PI,
-    Pi: Math.PI,
-    PI: Math.PI,
-    e: Math.E,
-    tau: Math.PI * 2,
-    sin: Math.sin,
-    cos: Math.cos,
-    tan: Math.tan,
-    Sin: Math.sin,
-    Cos: Math.cos,
-    Tan: Math.tan,
-    sqrt: Math.sqrt,
-    abs: Math.abs,
-    min: Math.min,
-    max: Math.max,
-    pow: Math.pow,
-  };
-
-  for (const [name, value] of ctx.scalarsByName.entries()) {
-    scope[name] = value;
-  }
-
-  let value: unknown;
-  try {
-    value = node.evaluate(scope);
-  } catch {
-    return { ok: false, error: "Expression evaluation failed" };
-  }
-
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return { ok: false, error: "Expression must evaluate to a finite number" };
-  }
-  return { ok: true, value };
+  const scalarFunctionAdapters = buildParserScalarFunctionAdapters(ctx);
+  return evaluateScalarExpressionWithRuntime(expr, {
+    ans: ctx.ans,
+    getScalarValue: (name) => ctx.scalarsByName.get(name),
+    ...scalarFunctionAdapters,
+  });
 }
 
 function toScalarExprValue(value: number): ExprValue {
@@ -204,6 +138,7 @@ function evalPointExpressionNode(node: MathNode, ctx: ParseContext): { ok: true;
     type?: string;
     value?: number;
     name?: string;
+    fn?: { name?: string };
     op?: string;
     args?: MathNode[];
     content?: MathNode;
@@ -289,10 +224,32 @@ function evalPointExpressionNode(node: MathNode, ctx: ParseContext): { ok: true;
     return { ok: false, error: `Unsupported operator: ${op}` };
   }
 
+  if (anyNode.type === "FunctionNode") {
+    const fnName = anyNode.fn?.name ?? "";
+    const args = anyNode.args ?? [];
+    const scalarCall = evaluateRegisteredScalarFunctionCall({
+      fnName,
+      args,
+      adapters: buildParserScalarFunctionAdapters(ctx),
+      evalNumericArg: (argNode) => {
+        const arg = evalPointExpressionNode(argNode, ctx);
+        if (!arg.ok) return { ok: false, error: arg.error };
+        if (arg.value.kind !== "scalar") {
+          return { ok: false, error: `Function ${fnName || "unknown"} only supports scalar arguments` };
+        }
+        return { ok: true, value: arg.value.value };
+      },
+    });
+    if (!scalarCall.ok) return { ok: false, error: scalarCall.error };
+    return { ok: true, value: toScalarExprValue(scalarCall.value) };
+  }
+
   return { ok: false, error: `Unsupported expression node: ${anyNode.type ?? "unknown"}` };
 }
 
 function evaluatePointOrScalarExpression(expr: string, ctx: ParseContext): { ok: true; value: ExprValue } | { ok: false; error: string } {
+  const scalar = evaluateExpression(expr, ctx);
+  if (scalar.ok) return { ok: true, value: toScalarExprValue(scalar.value) };
   if (expr.length > MAX_INPUT_LENGTH) return { ok: false, error: "Input is too long" };
   if (DISALLOWED_TOKEN_RE.test(expr)) return { ok: false, error: "Expression uses disallowed token" };
   let node: MathNode;
@@ -382,25 +339,46 @@ function resolveScalarIdentifier(label: string, ctx: ParseContext): { ok: true; 
   return { ok: true, value };
 }
 
+function resolveDistanceArg(node: MathNode, ctx: ParseContext): { ok: true; value: DistanceArg } | { ok: false; error: string } {
+  const unwrapped = unwrapParenthesisNode(node);
+  const anyNode = unwrapped as unknown as { type?: string; name?: string };
+  if (anyNode.type === "SymbolNode" && anyNode.name) {
+    const alias = ctx.objectAliases.get(anyNode.name);
+    if (alias?.type === "line") {
+      const anchors = ctx.lineWorldAnchorsById?.get(alias.id);
+      if (!anchors) return { ok: false, error: `Distance requires line geometry in context: ${anyNode.name}` };
+      return { ok: true, value: { kind: "lineLike", finite: false, a: anchors.a, b: anchors.b } };
+    }
+    if (alias?.type === "segment") {
+      const anchors = ctx.segmentWorldAnchorsById?.get(alias.id);
+      if (!anchors) return { ok: false, error: `Distance requires segment geometry in context: ${anyNode.name}` };
+      return { ok: true, value: { kind: "lineLike", finite: true, a: anchors.a, b: anchors.b } };
+    }
+  }
+
+  const pointOrScalar = evalPointExpressionNode(unwrapped, ctx);
+  if (!pointOrScalar.ok) return { ok: false, error: pointOrScalar.error };
+  if (pointOrScalar.value.kind !== "point") {
+    return { ok: false, error: "Distance expects Point-Point or Point-Line/Segment arguments" };
+  }
+  return { ok: true, value: { kind: "point", x: pointOrScalar.value.x, y: pointOrScalar.value.y } };
+}
+
 function parseDistanceNumeric(args: string[], ctx: ParseContext): EvalResult {
-  if (args.length !== 2) return { ok: false, error: "Distance(A, B) expects 2 point labels" };
-  const aLabel = asIdentifier(args[0]);
-  const bLabel = asIdentifier(args[1]);
-  if (!aLabel || !bLabel) return { ok: false, error: "Distance(A, B) expects point labels" };
-  const a = resolvePointIdentifier(aLabel, ctx);
-  if (!a.ok) return { ok: false, error: a.message };
-  const b = resolvePointIdentifier(bLabel, ctx);
-  if (!b.ok) return { ok: false, error: b.message };
-
-  const pMap = ctx.pointWorldById;
-  if (!pMap) return { ok: false, error: "Distance requires point coordinates in context" };
-  const pa = pMap.get(a.id);
-  const pb = pMap.get(b.id);
-  if (!pa || !pb) return { ok: false, error: "Distance point is missing" };
-
-  const dx = pa.x - pb.x;
-  const dy = pa.y - pb.y;
-  return { ok: true, value: Math.sqrt(dx * dx + dy * dy) };
+  if (args.length !== 2) return { ok: false, error: "Distance(...) expects 2 arguments" };
+  let leftNode: MathNode;
+  let rightNode: MathNode;
+  try {
+    leftNode = math.parse(args[0]);
+    rightNode = math.parse(args[1]);
+  } catch {
+    return { ok: false, error: "Distance(...) arguments are invalid" };
+  }
+  const left = resolveDistanceArg(leftNode, ctx);
+  if (!left.ok) return { ok: false, error: left.error };
+  const right = resolveDistanceArg(rightNode, ctx);
+  if (!right.ok) return { ok: false, error: right.error };
+  return evaluateScalarDistanceArgs(left.value, right.value);
 }
 
 function parseDistanceResult(args: string[], ctx: ParseContext): ParseResult {
@@ -409,9 +387,53 @@ function parseDistanceResult(args: string[], ctx: ParseContext): ParseResult {
   return { kind: "expr", value: formatNumber(d.value), numeric: d.value };
 }
 
+function evaluateMeasureArg(fnName: "Area" | "Perimeter", raw: string, ctx: ParseContext): EvalResult {
+  const circleAliasesById = new Map<string, string>();
+  const polygonAliasesById = new Map<string, string>();
+  for (const [label, ref] of ctx.objectAliases.entries()) {
+    if (ref.type === "circle" && !circleAliasesById.has(ref.id)) circleAliasesById.set(ref.id, label);
+    if (ref.type === "polygon" && !polygonAliasesById.has(ref.id)) polygonAliasesById.set(ref.id, label);
+  }
+  const circles =
+    ctx.circleWorldGeometryById == null
+      ? []
+      : Array.from(ctx.circleWorldGeometryById.keys(), (id) => ({ id, labelText: circleAliasesById.get(id) }));
+  const polygons =
+    ctx.polygonPointIdsById == null
+      ? []
+      : Array.from(ctx.polygonPointIdsById.entries(), ([id, pointIds]) => ({
+          id,
+          pointIds,
+          labelText: polygonAliasesById.get(id),
+        }));
+  return evaluateScalarObjectMeasureArg(fnName, raw, {
+    circles,
+    polygons,
+    getCircleRadius: (circleId) => ctx.circleWorldGeometryById?.get(circleId)?.radius ?? null,
+    getPolygonVertices: (_polygonId, pointIds) => {
+      const pointMap = ctx.pointWorldById;
+      if (!pointMap) return null;
+      const verts: Array<{ x: number; y: number }> = [];
+      for (const pointId of pointIds) {
+        const w = pointMap.get(pointId);
+        if (!w) return null;
+        verts.push(w);
+      }
+      return verts;
+    },
+  });
+}
+
 function parseCommand(name: string, args: string[], ctx: ParseContext): ParseResult {
+  const evalScalarArg = (raw: string): EvalResult => {
+    const out = evaluatePointOrScalarExpression(raw, ctx);
+    if (!out.ok) return { ok: false, error: out.error };
+    if (out.value.kind !== "scalar") return { ok: false, error: "Expression must evaluate to a finite number" };
+    if (!Number.isFinite(out.value.value)) return { ok: false, error: "Expression must evaluate to a finite number" };
+    return { ok: true, value: out.value.value };
+  };
   const evalArg = (raw: string): number | null => {
-    const out = evaluateExpression(raw, ctx);
+    const out = evalScalarArg(raw);
     return out.ok ? out.value : null;
   };
 
@@ -442,6 +464,102 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
       return { kind: "cmd", cmd: { type: "CreateMidpointBySegment", segId: seg.id } };
     }
     return err("Midpoint expects Midpoint(A,B) or Midpoint(s)");
+  }
+
+  if (name === "Incenter" || name === "Ortho" || name === "Orthocenter" || name === "Centroid") {
+    if (args.length !== 3) return err(`${name}(A,B,C) expects 3 point labels`);
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    const cLabel = asIdentifier(args[2]);
+    if (!aLabel || !bLabel || !cLabel) return err(`${name}(A,B,C) expects point labels`);
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const c = resolvePointIdentifier(cLabel, ctx);
+    if (!c.ok) return err(c.message);
+    const centerKind =
+      name === "Incenter" ? "incenter" : name === "Centroid" ? "centroid" : "orthocenter";
+    return {
+      kind: "cmd",
+      cmd: { type: "CreateTriangleCenterPoint", centerKind, aId: a.id, bId: b.id, cId: c.id },
+    };
+  }
+
+  if (name === "Translate") {
+    if (args.length !== 3) return err("Translate(P, A, B) expects 3 point labels");
+    const pointLabel = asIdentifier(args[0]);
+    const fromLabel = asIdentifier(args[1]);
+    const toLabel = asIdentifier(args[2]);
+    if (!pointLabel || !fromLabel || !toLabel) return err("Translate(P, A, B) expects point labels");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const from = resolvePointIdentifier(fromLabel, ctx);
+    if (!from.ok) return err(from.message);
+    const to = resolvePointIdentifier(toLabel, ctx);
+    if (!to.ok) return err(to.message);
+    return { kind: "cmd", cmd: { type: "CreatePointByTranslation", pointId: point.id, fromId: from.id, toId: to.id } };
+  }
+
+  if (name === "Rotate") {
+    if (args.length !== 3 && args.length !== 4) return err("Rotate(P, O, expr[,CW|CCW]) expects 3 or 4 arguments");
+    const pointLabel = asIdentifier(args[0]);
+    const centerLabel = asIdentifier(args[1]);
+    if (!pointLabel || !centerLabel) return err("Rotate(P, O, expr[,CW|CCW]) expects point labels for first two arguments");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const center = resolvePointIdentifier(centerLabel, ctx);
+    if (!center.ok) return err(center.message);
+    const dirRaw = args.length === 4 ? args[3].trim() : "CCW";
+    const direction = dirRaw === "CW" ? "CW" : dirRaw === "CCW" ? "CCW" : null;
+    if (!direction) return err("Rotate direction must be CW or CCW");
+    const angleEval = evalScalarArg(args[2]);
+    if (!angleEval.ok) return err("Rotate expression must evaluate to a finite number");
+    return {
+      kind: "cmd",
+      cmd: {
+        type: "CreatePointByRotation",
+        pointId: point.id,
+        centerId: center.id,
+        angleDeg: angleEval.value,
+        angleExpr: args[2].trim(),
+        direction,
+      },
+    };
+  }
+
+  if (name === "Dilate") {
+    if (args.length !== 3) return err("Dilate(P, O, k) expects 3 arguments");
+    const pointLabel = asIdentifier(args[0]);
+    const centerLabel = asIdentifier(args[1]);
+    if (!pointLabel || !centerLabel) return err("Dilate(P, O, k) expects point labels for first two arguments");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const center = resolvePointIdentifier(centerLabel, ctx);
+    if (!center.ok) return err(center.message);
+    const factorEval = evalScalarArg(args[2]);
+    if (!factorEval.ok) return err("Dilate factor must evaluate to a finite number");
+    return {
+      kind: "cmd",
+      cmd: { type: "CreatePointByDilation", pointId: point.id, centerId: center.id, factorExpr: args[2].trim() },
+    };
+  }
+
+  if (name === "Reflect") {
+    if (args.length !== 2) return err("Reflect(P, l|O) expects 2 arguments");
+    const pointLabel = asIdentifier(args[0]);
+    const axisLabel = asIdentifier(args[1]);
+    if (!pointLabel || !axisLabel) return err("Reflect(P, l|O) expects point and line/segment/point target");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const axisPoint = resolvePointIdentifier(axisLabel, ctx);
+    if (axisPoint.ok) {
+      return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: { type: "point", id: axisPoint.id } } };
+    }
+    const axisAlias = ctx.objectAliases.get(axisLabel);
+    if (!axisAlias) return err(`Unknown reflection target: ${axisLabel}`);
+    if (axisAlias.type !== "line" && axisAlias.type !== "segment") return err(`Not a line/segment: ${axisLabel}`);
+    return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: { type: axisAlias.type, id: axisAlias.id } } };
   }
 
   if (name === "Line") {
@@ -552,7 +670,7 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     const dirRaw = args.length === 4 ? args[3].trim() : "CCW";
     const direction = dirRaw === "CW" ? "CW" : dirRaw === "CCW" ? "CCW" : null;
     if (!direction) return err("AngleFixed direction must be CW or CCW");
-    const angleEval = evaluateExpression(args[2], ctx);
+    const angleEval = evalScalarArg(args[2]);
     if (!angleEval.ok) return err("AngleFixed expression must evaluate to a finite number");
     return {
       kind: "cmd",
@@ -604,6 +722,26 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return { kind: "cmd", cmd: { type: "CreatePolygonByPoints", pointIds } };
   }
 
+  if (name === "RegularPolygon") {
+    if (args.length !== 3 && args.length !== 4) return err("RegularPolygon(A, B, n[,CW|CCW]) expects 3 or 4 arguments");
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    if (!aLabel || !bLabel) return err("RegularPolygon(A, B, n) expects point labels for A and B");
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const nEval = evalScalarArg(args[2]);
+    if (!nEval.ok) return err("RegularPolygon side count must be numeric");
+    const sides = Math.round(nEval.value);
+    if (Math.abs(sides - nEval.value) > 1e-9) return err("RegularPolygon side count must be an integer");
+    if (sides < 3 || sides > 64) return err("RegularPolygon side count must be in [3, 64]");
+    const dirRaw = args.length === 4 ? args[3].trim() : "CCW";
+    const direction = dirRaw === "CW" ? "CW" : dirRaw === "CCW" ? "CCW" : null;
+    if (!direction) return err("RegularPolygon direction must be CW or CCW");
+    return { kind: "cmd", cmd: { type: "CreateRegularPolygonFromEdge", aId: a.id, bId: b.id, sides, direction } };
+  }
+
   if (name === "Circle") {
     if (args.length === 3) {
       const x = evalArg(args[0]);
@@ -622,10 +760,8 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
 
       const secondIdent = asIdentifier(args[1]);
       if (secondIdent) {
-        const secondSymbols = ctx.symbolsByLabel.get(secondIdent);
-        if (secondSymbols && secondSymbols.length > 0) {
-          const through = resolvePointIdentifier(secondIdent, ctx);
-          if (!through.ok) return err(through.message);
+        const through = resolvePointIdentifier(secondIdent, ctx);
+        if (through.ok) {
           return { kind: "cmd", cmd: { type: "CreateCircleCenterThrough", centerId: center.id, throughId: through.id } };
         }
         const scalar = resolveScalarIdentifier(secondIdent, ctx);
@@ -637,7 +773,7 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
         };
       }
 
-      const rEval = evaluateExpression(args[1], ctx);
+      const rEval = evalScalarArg(args[1]);
       if (!rEval.ok) return err("Circle radius must be a finite number");
       if (!(rEval.value > 0)) return err("Circle radius must be > 0");
       return {
@@ -674,20 +810,34 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
 function parseCommandLike(input: string, ctx: ParseContext): ParseResult {
   const commandMatch = input.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
   if (!commandMatch) {
-    const evaluated = evaluateExpression(input, ctx);
+    const evaluated = evaluatePointOrScalarExpression(input, ctx);
     if (!evaluated.ok) return err(evaluated.error);
-    return { kind: "expr", value: formatNumber(evaluated.value), numeric: evaluated.value };
+    if (evaluated.value.kind !== "scalar") return err("Expression must evaluate to a scalar value");
+    return { kind: "expr", value: formatNumber(evaluated.value.value), numeric: evaluated.value.value };
   }
   const name = commandMatch[1];
+  let asCommand: ParseResult;
   const args = splitArgs(commandMatch[2]);
-  if (!args) return err("Invalid command arguments");
-  const asCommand = parseCommand(name, args, ctx);
+  if (!args) {
+    asCommand = err("Invalid command arguments");
+  } else {
+    asCommand = parseCommand(name, args, ctx);
+  }
   if (asCommand.kind !== "error" || !asCommand.message.startsWith("Unknown command:")) {
+    if (asCommand.kind !== "error") return asCommand;
+    // Compound expressions can start with a function call and also end with ')',
+    // which matches command-like regex greedily. Fall back to expression parsing.
+    const evaluated = evaluatePointOrScalarExpression(input, ctx);
+    if (evaluated.ok) {
+      if (evaluated.value.kind !== "scalar") return err("Expression must evaluate to a scalar value");
+      return { kind: "expr", value: formatNumber(evaluated.value.value), numeric: evaluated.value.value };
+    }
     return asCommand;
   }
-  const evaluated = evaluateExpression(input, ctx);
+  const evaluated = evaluatePointOrScalarExpression(input, ctx);
   if (!evaluated.ok) return err(evaluated.error);
-  return { kind: "expr", value: formatNumber(evaluated.value), numeric: evaluated.value };
+  if (evaluated.value.kind !== "scalar") return err("Expression must evaluate to a scalar value");
+  return { kind: "expr", value: formatNumber(evaluated.value.value), numeric: evaluated.value.value };
 }
 
 export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseResult {
@@ -704,20 +854,31 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
     const commandMatch = assignment.right.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
     if (commandMatch) {
       const args = splitArgs(commandMatch[2]);
-      if (!args) return err("Invalid command arguments");
-      const rhsCmd = parseCommand(commandMatch[1], args, ctx);
-      if (rhsCmd.kind === "error") return rhsCmd;
-      if (rhsCmd.kind === "cmd") {
-        if (rhsCmd.cmd.type === "CreateTangentLines") return err("Assignment is not supported for Tangent(P,c) because it may create multiple lines");
-        return { kind: "assignObject", name: left, cmd: rhsCmd.cmd };
-      }
-      if (rhsCmd.kind === "expr") {
-        if (typeof rhsCmd.numeric !== "number" || !Number.isFinite(rhsCmd.numeric)) {
-          return err("Assignment right-hand side must evaluate to a finite number");
+      const rhsCmd = args ? parseCommand(commandMatch[1], args, ctx) : err("Invalid command arguments");
+      if (rhsCmd.kind !== "error") {
+        if (rhsCmd.kind === "cmd") {
+          if (rhsCmd.cmd.type === "CreateTangentLines") return err("Assignment is not supported for Tangent(P,c) because it may create multiple lines");
+          return { kind: "assignObject", name: left, cmd: rhsCmd.cmd };
         }
-        return { kind: "assignScalar", name: left, value: rhsCmd.numeric };
+        if (rhsCmd.kind === "expr") {
+          if (typeof rhsCmd.numeric !== "number" || !Number.isFinite(rhsCmd.numeric)) {
+            return err("Assignment right-hand side must evaluate to a finite number");
+          }
+          return { kind: "assignScalar", name: left, value: rhsCmd.numeric, expr: assignment.right.trim() };
+        }
+        return err("Unsupported assignment right-hand side");
       }
-      return err("Unsupported assignment right-hand side");
+      // Fall through to expression parsing for compound expressions like:
+      // d = Distance(A,B)^2 - Distance(B,C)*Distance(C,A)
+      // which greedily match command-like regex but are not standalone commands.
+      const rhsExprFallback = evaluatePointOrScalarExpression(assignment.right, ctx);
+      if (rhsExprFallback.ok) {
+        if (rhsExprFallback.value.kind === "point") {
+          return { kind: "assignObject", name: left, cmd: { type: "CreatePointXY", x: rhsExprFallback.value.x, y: rhsExprFallback.value.y } };
+        }
+        return { kind: "assignScalar", name: left, value: rhsExprFallback.value.value, expr: assignment.right.trim() };
+      }
+      return rhsCmd;
     }
 
     const rhsExpr = evaluatePointOrScalarExpression(assignment.right, ctx);
@@ -725,7 +886,7 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
     if (rhsExpr.value.kind === "point") {
       return { kind: "assignObject", name: left, cmd: { type: "CreatePointXY", x: rhsExpr.value.x, y: rhsExpr.value.y } };
     }
-    return { kind: "assignScalar", name: left, value: rhsExpr.value.value };
+    return { kind: "assignScalar", name: left, value: rhsExpr.value.value, expr: assignment.right.trim() };
   }
 
   return parseCommandLike(input, ctx);

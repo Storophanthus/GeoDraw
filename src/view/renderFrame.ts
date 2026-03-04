@@ -11,6 +11,9 @@ import {
   drawPendingPreview,
   type AngleFixedToolState,
   type CircleFixedToolState,
+  type PendingPreviewTheme,
+  type RegularPolygonToolState,
+  type TransformToolState,
 } from "./previews/pendingPreview";
 import { drawAngles, drawCircles, drawLines, drawPoints, drawPolygons, drawSegments } from "./renderers";
 import type { DrawableObjectSelection } from "./renderers/types";
@@ -23,6 +26,13 @@ type PendingPreviewTolerances = {
   segmentPx: number;
 };
 
+type CanvasColorTheme = {
+  backgroundColor: string;
+  gridMinorColor: string;
+  gridMajorColor: string;
+  axisColor: string;
+};
+
 type RenderFrameArgs = {
   canvas: HTMLCanvasElement;
   scene: Parameters<typeof beginSceneEvalTick>[0];
@@ -30,6 +40,7 @@ type RenderFrameArgs = {
   vp: Viewport;
   dpr: number;
   gridSettings: RectGridSettings;
+  canvasTheme: CanvasColorTheme;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
   cursorWorld: Vec2 | null;
@@ -40,9 +51,12 @@ type RenderFrameArgs = {
   resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>;
   resolvedAngles: ResolvedAngle[];
   angleFixedTool: AngleFixedToolState;
+  regularPolygonTool: RegularPolygonToolState;
   circleFixedTool: CircleFixedToolState;
+  transformTool: TransformToolState;
   anglePreviewArcRadius: number;
   pendingPreviewTolerances: PendingPreviewTolerances;
+  previewTheme: PendingPreviewTheme;
   selectedDrawableObject: DrawableObjectSelection;
   recentDrawableObject: DrawableObjectSelection;
   copySourceDrawable: DrawableObjectSelection;
@@ -59,6 +73,7 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     vp,
     dpr,
     gridSettings,
+    canvasTheme,
     activeTool,
     pendingSelection,
     cursorWorld,
@@ -69,9 +84,12 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     resolvedPoints,
     resolvedAngles,
     angleFixedTool,
+    regularPolygonTool,
     circleFixedTool,
+    transformTool,
     anglePreviewArcRadius,
     pendingPreviewTolerances,
+    previewTheme,
     selectedDrawableObject,
     recentDrawableObject,
     copySourceDrawable,
@@ -90,10 +108,10 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, vp.widthPx, vp.heightPx);
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = canvasTheme.backgroundColor;
     ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
 
-    drawRectGrid(ctx, camera, vp, gridSettings);
+    drawRectGrid(ctx, camera, vp, gridSettings, canvasTheme);
     drawCircles(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
     drawPolygons(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
     drawLines(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
@@ -110,11 +128,23 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       camera,
       vp,
       angleFixedTool,
+      regularPolygonTool,
       circleFixedTool,
+      transformTool,
       anglePreviewArcRadius,
-      pendingPreviewTolerances
+      pendingPreviewTolerances,
+      previewTheme
     );
-    drawPoints(ctx, resolvedPoints, selectedDrawableObject, camera, vp, copySourceDrawable, dependencyGlowEnabled);
+    drawPoints(
+      ctx,
+      resolvedPoints,
+      selectedDrawableObject,
+      camera,
+      vp,
+      copySourceDrawable,
+      dependencyGlowEnabled,
+      canvasTheme.backgroundColor
+    );
     drawInteractionHighlights(
       ctx,
       activeTool,
@@ -130,14 +160,14 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       pendingSelection && pendingSelection.tool === "export_clip"
         ? pendingSelection.points.map((p) => p.world)
         : [];
-    drawExportClipOverlay(ctx, exportClipWorld, clipPreviewPoints, cursorWorld, camera, vp);
+    drawExportClipOverlay(ctx, exportClipWorld, clipPreviewPoints, cursorWorld, camera, vp, previewTheme);
 
     if (hoverSnap && (activeTool === "point" || activeTool === "move")) {
       const s = camMath.worldToScreen(hoverSnap.world, camera, vp);
       ctx.save();
       ctx.beginPath();
       ctx.arc(s.x, s.y, 6, 0, Math.PI * 2);
-      ctx.strokeStyle = "#f97316";
+      ctx.strokeStyle = previewTheme.snapStroke;
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 3]);
       ctx.stroke();
@@ -158,13 +188,14 @@ function drawExportClipOverlay(
   pendingPoints: Vec2[],
   cursorWorld: Vec2 | null,
   camera: Camera,
-  vp: Viewport
+  vp: Viewport,
+  previewTheme: PendingPreviewTheme
 ): void {
   ctx.save();
   ctx.setLineDash([5, 4]);
-  ctx.strokeStyle = "rgba(14,165,233,0.95)";
-  ctx.fillStyle = "rgba(14,165,233,0.05)";
-  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = previewTheme.strokeStrong;
+  ctx.fillStyle = previewTheme.fillSoft;
+  ctx.lineWidth = Math.max(0.8, previewTheme.lineWidthPx);
 
   if (clip?.kind === "rect") {
     const pMin = camMath.worldToScreen({ x: clip.xmin, y: clip.ymin }, camera, vp);

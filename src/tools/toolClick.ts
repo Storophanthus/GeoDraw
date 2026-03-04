@@ -1,6 +1,6 @@
 import type { Vec2 } from "../geo/vec2";
-import type { GeometryObjectRef, LineLikeObjectRef } from "../scene/points";
-import type { ActiveTool, PendingSelection } from "../state/geoStore";
+import type { GeometryObjectRef, LineLikeObjectRef, ReflectionObjectRef } from "../scene/points";
+import type { ActiveTool, PendingSelection, TransformableObjectRef } from "../state/geoStore";
 import type { ExportClipWorld } from "../state/slices/storeTypes";
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
 import type { SnapCandidate } from "../view/snapEngine";
@@ -8,6 +8,7 @@ import type { SnapCandidate } from "../view/snapEngine";
 export type ToolClickHits = {
   hitPointId: string | null;
   hitSegmentId: string | null;
+  hitTextLabelId?: string | null;
   hitObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null;
   shiftKey: boolean;
   hasCopyStyleSource: boolean;
@@ -18,15 +19,18 @@ export type ToolClickIO = {
   setPendingSelection: (next: PendingSelection) => void;
   clearPendingSelection: () => void;
   createFreePoint: (world: Vec2) => string;
+  createTextLabel: (world: Vec2) => string;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
   createPolygon: (pointIds: string[]) => string | null;
+  createRegularPolygon: (aId: string, bId: string, sides: number, direction: "CCW" | "CW") => string | null;
   createCircle: (centerId: string, throughId: string) => string | null;
   createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createTangentLines: (throughId: string, circleId: string) => string[];
+  createCircleTangentLines: (circleAId: string, circleBId: string) => string[];
   createAngleBisectorLine: (aId: string, bId: string, cId: string) => string | null;
   createAngle: (aId: string, bId: string, cId: string) => string | null;
   createSector: (centerId: string, startId: string, endId: string) => string | null;
@@ -48,13 +52,36 @@ export type ToolClickIO = {
     direction: "CCW" | "CW",
     angleExpr?: string
   ) => string | null;
+  createPointByTranslation: (pointId: string, fromId: string, toId: string) => string | null;
+  createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
+  createPointByReflection: (pointId: string, axis: ReflectionObjectRef) => string | null;
+  transformObjectByTranslation: (source: TransformableObjectRef, fromId: string, toId: string) => string | null;
+  transformObjectByRotation: (
+    source: TransformableObjectRef,
+    centerId: string,
+    angleExpr: string,
+    direction: "CCW" | "CW"
+  ) => string | null;
+  transformObjectByDilation: (source: TransformableObjectRef, centerId: string, factorExpr: string) => string | null;
+  transformObjectByReflection: (source: TransformableObjectRef, axis: ReflectionObjectRef) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
-  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null) => void;
-  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
-  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
+  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string } | null) => void;
+  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string }) => void;
+  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string }) => void;
+  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
+  regularPolygonTool: { sides: number; direction: "CCW" | "CW" };
+  transformTool: {
+    mode: "translate" | "rotate" | "dilate" | "reflect";
+    angleExpr: string;
+    direction: "CCW" | "CW";
+    factorExpr: string;
+  };
+  evaluateAngleExpressionDegrees: (
+    exprRaw: string
+  ) => { ok: true; valueDeg: number } | { ok: false; error: string };
   getPointWorldById: (id: string) => Vec2 | null;
   gridSnapEnabled: boolean;
   snapWorldToGrid: (world: Vec2) => Vec2;
@@ -128,13 +155,145 @@ export function handleToolClick(
   }
 
   if (activeTool === "copyStyle") {
-    if (!hits.hitObject) return;
-    io.setSelectedObject(hits.hitObject);
+    const target = hits.hitTextLabelId
+      ? ({ type: "textLabel", id: hits.hitTextLabelId } as const)
+      : hits.hitObject;
+    if (!target) return;
+    io.setSelectedObject(target);
     if (hits.shiftKey || !hits.hasCopyStyleSource) {
-      io.setCopyStyleSource(hits.hitObject);
+      io.setCopyStyleSource(target);
       return;
     }
-    io.applyCopyStyleTo(hits.hitObject);
+    io.applyCopyStyleTo(target);
+    return;
+  }
+
+  if (activeTool === "label") {
+    if (hits.hitTextLabelId) {
+      io.setSelectedObject({ type: "textLabel", id: hits.hitTextLabelId });
+      return;
+    }
+    const snapWorld = !hits.shiftKey ? hits.snap?.world ?? null : null;
+    const world = snapWorld ?? maybeSnapWorldToGrid(camMath.screenToWorld(screen, io.camera, io.vp));
+    const id = io.createTextLabel(world);
+    io.setSelectedObject({ type: "textLabel", id });
+    return;
+  }
+
+  if (activeTool === "translate" || activeTool === "rotate" || activeTool === "dilate" || activeTool === "reflect") {
+    const pendingTranslate = pendingSelection && pendingSelection.tool === "translate" ? pendingSelection : null;
+    const pendingRotate = pendingSelection && pendingSelection.tool === "rotate" ? pendingSelection : null;
+    const pendingDilate = pendingSelection && pendingSelection.tool === "dilate" ? pendingSelection : null;
+    const pendingReflect = pendingSelection && pendingSelection.tool === "reflect" ? pendingSelection : null;
+    const resolveTransformSource = (): TransformableObjectRef | null => {
+      if (!hits.hitObject) return null;
+      if (hits.hitObject.type === "point") return { type: "point", id: hits.hitObject.id };
+      if (hits.hitObject.type === "segment") return { type: "segment", id: hits.hitObject.id };
+      if (hits.hitObject.type === "line") return { type: "line", id: hits.hitObject.id };
+      if (hits.hitObject.type === "circle") return { type: "circle", id: hits.hitObject.id };
+      if (hits.hitObject.type === "polygon") return { type: "polygon", id: hits.hitObject.id };
+      if (hits.hitObject.type === "angle") return { type: "angle", id: hits.hitObject.id };
+      return null;
+    };
+    const resolveLineLikeTarget = (): LineLikeObjectRef | null => {
+      if (hits.snap?.kind === "onLine" && hits.snap.lineId) return { type: "line", id: hits.snap.lineId };
+      if (hits.snap?.kind === "onSegment" && hits.snap.segId) return { type: "segment", id: hits.snap.segId };
+      if (hits.hitObject?.type === "line") return { type: "line", id: hits.hitObject.id };
+      if (hits.hitObject?.type === "segment") return { type: "segment", id: hits.hitObject.id };
+      return null;
+    };
+    const resolveReflectionTarget = (): ReflectionObjectRef | null => {
+      if (hits.hitPointId) return { type: "point", id: hits.hitPointId };
+      if (hits.hitObject?.type === "point") return { type: "point", id: hits.hitObject.id };
+      return resolveLineLikeTarget();
+    };
+
+    if (activeTool === "translate") {
+      if (!pendingTranslate) {
+        const source = resolveTransformSource();
+        if (!source) return;
+        io.setPendingSelection({
+          tool: "translate",
+          step: 2,
+          source,
+        });
+        return;
+      }
+      if (pendingTranslate.step === 2) {
+        io.setPendingSelection({
+          tool: "translate",
+          step: 3,
+          source: pendingTranslate.source,
+          from: { type: "point", id: resolveOrCreatePointAtCursor() },
+        });
+        return;
+      }
+      const toId = resolveOrCreatePointAtCursor();
+      const created = io.transformObjectByTranslation(pendingTranslate.source, pendingTranslate.from.id, toId);
+      if (!created) return;
+      io.clearPendingSelection();
+      return;
+    }
+
+    if (activeTool === "dilate") {
+      if (!pendingDilate) {
+        const source = resolveTransformSource();
+        if (!source) return;
+        io.setPendingSelection({
+          tool: "dilate",
+          step: 2,
+          source,
+        });
+        return;
+      }
+      const centerId = resolveOrCreatePointAtCursor();
+      const created = io.transformObjectByDilation(pendingDilate.source, centerId, io.transformTool.factorExpr);
+      if (!created) return;
+      io.clearPendingSelection();
+      return;
+    }
+
+    if (activeTool === "rotate") {
+      if (!pendingRotate) {
+        const source = resolveTransformSource();
+        if (!source) return;
+        io.setPendingSelection({
+          tool: "rotate",
+          step: 2,
+          source,
+        });
+        return;
+      }
+      const centerId = resolveOrCreatePointAtCursor();
+      const created = io.transformObjectByRotation(
+        pendingRotate.source,
+        centerId,
+        io.transformTool.angleExpr,
+        io.transformTool.direction
+      );
+      if (!created) return;
+      io.clearPendingSelection();
+      return;
+    }
+
+    if (!pendingReflect) {
+      const source = resolveTransformSource();
+      if (!source) return;
+      io.setPendingSelection({
+        tool: "reflect",
+        step: 2,
+        source,
+      });
+      return;
+    }
+    if (pendingReflect.step === 2) {
+      const axis = resolveReflectionTarget();
+      if (!axis) return;
+      const created = io.transformObjectByReflection(pendingReflect.source, axis);
+      if (!created) return;
+      io.clearPendingSelection();
+      return;
+    }
     return;
   }
 
@@ -163,6 +322,28 @@ export function handleToolClick(
       step: 2,
       points: [...pendingSelection.points, { type: "world", world }],
     });
+    return;
+  }
+
+  if (activeTool === "export_clip_rect") {
+    const snap = hits.shiftKey ? null : hits.snap;
+    const world =
+      snap?.world
+      ?? (hits.hitPointId ? io.getPointWorldById(hits.hitPointId) : null)
+      ?? camMath.screenToWorld(screen, io.camera, io.vp);
+    if (!pendingSelection || pendingSelection.tool !== "export_clip_rect") {
+      io.setPendingSelection({ tool: "export_clip_rect", step: 2, first: { type: "world", world } });
+      return;
+    }
+    const first = pendingSelection.first.world;
+    io.setExportClipWorld({
+      kind: "rect",
+      xmin: Math.min(first.x, world.x),
+      xmax: Math.max(first.x, world.x),
+      ymin: Math.min(first.y, world.y),
+      ymax: Math.max(first.y, world.y),
+    });
+    io.clearPendingSelection();
     return;
   }
 
@@ -208,6 +389,20 @@ export function handleToolClick(
       step: 2,
       points: [...pendingSelection.points, { type: "point", id: nextPointId }],
     });
+    return;
+  }
+
+  if (activeTool === "regular_polygon") {
+    if (!pendingSelection || pendingSelection.tool !== "regular_polygon") {
+      io.setPendingSelection({ tool: "regular_polygon", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+    const bId = resolveOrCreatePointAtCursor();
+    if (bId === pendingSelection.first.id) return;
+    const sides = Math.max(3, Math.min(64, Math.round(io.regularPolygonTool.sides)));
+    const created = io.createRegularPolygon(pendingSelection.first.id, bId, sides, io.regularPolygonTool.direction);
+    if (!created) return;
+    io.clearPendingSelection();
     return;
   }
 
@@ -481,6 +676,12 @@ export function handleToolClick(
       return;
     }
 
+    if (hitCircleId && hitCircleId !== pendingSelection.first.id) {
+      const created = io.createCircleTangentLines(pendingSelection.first.id, hitCircleId);
+      if (created.length > 0) io.clearPendingSelection();
+      return;
+    }
+
     const throughId = resolveOrCreatePointAtCursor();
     const created = io.createTangentLines(throughId, pendingSelection.first.id);
     if (created.length > 0) io.clearPendingSelection();
@@ -488,6 +689,22 @@ export function handleToolClick(
 }
 
 export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSelection: PendingSelection): boolean {
+  if (activeTool === "translate") {
+    if (!pendingSelection || pendingSelection.tool !== "translate") return false;
+    return true;
+  }
+  if (activeTool === "rotate") {
+    if (!pendingSelection || pendingSelection.tool !== "rotate") return false;
+    return true;
+  }
+  if (activeTool === "dilate") {
+    if (!pendingSelection || pendingSelection.tool !== "dilate") return false;
+    return true;
+  }
+  if (activeTool === "reflect") {
+    if (!pendingSelection || pendingSelection.tool !== "reflect") return false;
+    return false;
+  }
   if (activeTool === "perp_line" || activeTool === "parallel_line") {
     if (!pendingSelection || (pendingSelection.tool !== "perp_line" && pendingSelection.tool !== "parallel_line")) return true;
     return pendingSelection.first.type === "lineLike";
@@ -504,12 +721,14 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     activeTool === "circle_3p" ||
     activeTool === "circle_fixed" ||
     activeTool === "polygon" ||
+    activeTool === "regular_polygon" ||
     activeTool === "sector" ||
     activeTool === "midpoint" ||
     activeTool === "angle_bisector" ||
     activeTool === "angle" ||
     activeTool === "angle_fixed" ||
-    activeTool === "export_clip"
+    activeTool === "export_clip" ||
+    activeTool === "export_clip_rect"
   );
 }
 
@@ -526,6 +745,59 @@ export function isValidTarget(
   if (activeTool === "circle_3p") return hoveredHit.type === "point";
   if (activeTool === "circle_fixed") return hoveredHit.type === "point";
   if (activeTool === "polygon") return hoveredHit.type === "point";
+  if (activeTool === "regular_polygon") return hoveredHit.type === "point";
+  if (activeTool === "translate") {
+    if (!pendingSelection || pendingSelection.tool !== "translate") {
+      return (
+        hoveredHit.type === "point" ||
+        hoveredHit.type === "segment" ||
+        hoveredHit.type === "line2p" ||
+        hoveredHit.type === "circle" ||
+        hoveredHit.type === "polygon" ||
+        hoveredHit.type === "angle"
+      );
+    }
+    return hoveredHit.type === "point";
+  }
+  if (activeTool === "rotate") {
+    if (!pendingSelection || pendingSelection.tool !== "rotate") {
+      return (
+        hoveredHit.type === "point" ||
+        hoveredHit.type === "segment" ||
+        hoveredHit.type === "line2p" ||
+        hoveredHit.type === "circle" ||
+        hoveredHit.type === "polygon" ||
+        hoveredHit.type === "angle"
+      );
+    }
+    return hoveredHit.type === "point";
+  }
+  if (activeTool === "dilate") {
+    if (!pendingSelection || pendingSelection.tool !== "dilate") {
+      return (
+        hoveredHit.type === "point" ||
+        hoveredHit.type === "segment" ||
+        hoveredHit.type === "line2p" ||
+        hoveredHit.type === "circle" ||
+        hoveredHit.type === "polygon" ||
+        hoveredHit.type === "angle"
+      );
+    }
+    return hoveredHit.type === "point";
+  }
+  if (activeTool === "reflect") {
+    if (!pendingSelection || pendingSelection.tool !== "reflect") {
+      return (
+        hoveredHit.type === "point" ||
+        hoveredHit.type === "segment" ||
+        hoveredHit.type === "line2p" ||
+        hoveredHit.type === "circle" ||
+        hoveredHit.type === "polygon" ||
+        hoveredHit.type === "angle"
+      );
+    }
+    return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
+  }
   if (activeTool === "angle_bisector") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";
   if (activeTool === "sector") return hoveredHit.type === "point";
@@ -533,7 +805,10 @@ export function isValidTarget(
     if (pendingSelection?.tool === "angle_fixed" && pendingSelection.step === 3) return false;
     return hoveredHit.type === "point";
   }
-  if (activeTool === "export_clip") return false;
+  if (activeTool === "export_clip" || activeTool === "export_clip_rect") return false;
+  if (activeTool === "label") {
+    return false;
+  }
   if (activeTool === "perp_line") {
     if (!pendingSelection || pendingSelection.tool !== "perp_line") {
       return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
@@ -559,7 +834,7 @@ export function isValidTarget(
     if (pendingSelection.first.type === "point") {
       return hoveredHit.type === "circle";
     }
-    return hoveredHit.type === "point";
+    return hoveredHit.type === "point" || hoveredHit.type === "circle";
   }
 
   if (activeTool === "midpoint") {

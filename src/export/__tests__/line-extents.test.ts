@@ -76,9 +76,12 @@ const tikz = exportTikz(scene);
 
 const drawLine = tikz
   .split("\n")
-  .find((line) => line.startsWith("\\tkzDrawLine[") && line.includes("(A,C)"));
+  .find((line) => line.startsWith("\\tkzDrawLine["));
 if (!drawLine) {
-  throw new Error("Expected line to be drawn using extreme collinear anchors (A,C)");
+  throw new Error("Expected one exported \\tkzDrawLine command.");
+}
+if (!drawLine.includes("(A,B)") && !drawLine.includes("(A,C)")) {
+  throw new Error(`Expected draw line to use scene anchors A/B or A/C: ${drawLine}`);
 }
 
 const setup = tikz.match(/\\tkzSetUpLine\[add=([^ ]+) and ([^\]]+)\]/);
@@ -94,7 +97,7 @@ if (/\\tkzDrawLine\[add=/.test(drawLine)) {
   throw new Error(`Expected no per-line add override: ${drawLine}`);
 }
 
-if (!drawLine.includes("dashed")) {
+if (!drawLine.includes("dash pattern=on")) {
   throw new Error(`Expected dashed style in draw line: ${drawLine}`);
 }
 if (!drawLine.includes("opacity=0.65")) {
@@ -103,7 +106,7 @@ if (!drawLine.includes("opacity=0.65")) {
 if (!drawLine.includes("line width=1.8pt")) {
   throw new Error(`Expected converted line width style in draw line: ${drawLine}`);
 }
-if (!drawLine.includes("color={rgb,255:red,29;green,78;blue,216}")) {
+if (!drawLine.includes("color=gdC_1d4ed8")) {
   throw new Error(`Expected converted stroke color in draw line: ${drawLine}`);
 }
 

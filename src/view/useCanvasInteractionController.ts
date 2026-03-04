@@ -14,8 +14,13 @@ import {
 } from "./canvasInteractionHelpers";
 import { getAngleTextRenderSize, type ResolvedAngle } from "./labelOverlays";
 import { createCanvasAuxHandlers, createPointerHandlers } from "./pointerEventController";
-import { computeCanvasCursor, decideMovePointerDown, type PointerMode } from "./pointerInteraction";
-import { hitTestAngleLabelHandle, hitTestPointLabel, hitTestPointLabelFromDom } from "./labelHit";
+import {
+  computeCanvasCursor,
+  decideMovePointerDown,
+  shouldCancelOnCanvasDoubleClick,
+  type PointerMode,
+} from "./pointerInteraction";
+import { hitTestAngleLabelHandle, hitTestObjectLabelFromDom, hitTestPointLabel, hitTestPointLabelFromDom, hitTestTextLabelFromDom } from "./labelHit";
 import {
   hitTestAngleId as engineHitTestAngleId,
   hitTestCircleId as engineHitTestCircleId,
@@ -25,13 +30,19 @@ import {
   hitTestSegmentId as engineHitTestSegmentId,
 } from "../engine";
 import type { SceneModel, ScenePoint } from "../scene/points";
-import type { AngleFixedToolState, CircleFixedToolState } from "./previews/pendingPreview";
+import type {
+  AngleFixedToolState,
+  CircleFixedToolState,
+  RegularPolygonToolState,
+  TransformToolState,
+} from "./previews/pendingPreview";
 
 export type PointerState = {
   active: boolean;
   pid: number;
   mode: PointerMode;
   pointId: string | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -51,13 +62,17 @@ type DragBufferRefs = {
 type InteractionActions = {
   panByScreenDelta: (delta: Vec2) => void;
   movePointTo: (id: string, world: Vec2) => void;
+  movePolygonByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   movePointLabelBy: (id: string, deltaScreenPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
+  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon"; id: string }, world: Vec2) => void;
+  moveTextLabelTo: (id: string, world: Vec2) => void;
   setHoverScreen: (value: Vec2 | null) => void;
   setSnapDisabled: (value: boolean) => void;
   setCursorWorld: (value: Vec2 | null) => void;
   setHoveredHit: (hit: HoveredHit) => void;
-  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "number"; id: string } | null) => void;
+  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null) => void;
+  clearPendingSelection: () => void;
   zoomAtScreenPoint: (vp: Viewport, screen: Vec2, zoomFactor: number) => void;
 };
 
@@ -68,7 +83,7 @@ type InteractionDeps = {
   dragBuffers: DragBufferRefs;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null;
   scene: SceneModel;
   camera: Camera;
   vp: Viewport;
@@ -78,6 +93,8 @@ type InteractionDeps = {
   pointLabelOffsetPx: Vec2;
   angleFixedTool: AngleFixedToolState;
   circleFixedTool: CircleFixedToolState;
+  regularPolygonTool: RegularPolygonToolState;
+  transformTool: TransformToolState;
   constructClickIo: ConstructClickIo;
   tolerances: { point: number; angle: number; segment: number; line: number; circle: number };
   clickEpsilonPx: number;
@@ -102,6 +119,8 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     pointLabelOffsetPx,
     angleFixedTool,
     circleFixedTool,
+    regularPolygonTool,
+    transformTool,
     constructClickIo,
     tolerances,
     clickEpsilonPx,
@@ -157,9 +176,20 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
         {
           panByScreenDelta: actions.panByScreenDelta,
           movePointTo: actions.movePointTo,
+          movePolygonByWorldDelta: actions.movePolygonByWorldDelta,
           movePointLabelBy: actions.movePointLabelBy,
           moveAngleLabelTo: actions.moveAngleLabelTo,
+          moveObjectLabelTo: actions.moveObjectLabelTo,
+          moveTextLabelTo: actions.moveTextLabelTo,
           screenToWorld: (screen) => camMath.screenToWorld(screen, camera, vp),
+          screenDeltaToWorldDelta: (delta) => {
+            const world0 = camMath.screenToWorld({ x: 0, y: 0 }, camera, vp);
+            const world1 = camMath.screenToWorld(delta, camera, vp);
+            return {
+              x: world1.x - world0.x,
+              y: world1.y - world0.y,
+            };
+          },
         }
       );
     };
@@ -198,6 +228,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       setHoveredHit: actions.setHoveredHit,
       setSelectedObject: actions.setSelectedObject,
       resolveHits: (screen, e) => ({
+        hitTextLabelId: hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current),
         hitPointId: engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
         hitLabelId:
           hitTestPointLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current) ??
@@ -208,16 +239,18 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
         hitPolygonId: engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment),
         hitLineId: engineHitTestLineId(screen, scene, camera, vp, tolerances.line),
         hitCircleId: engineHitTestCircleId(screen, scene, camera, vp, tolerances.circle),
+        hitObjectLabel: hitTestObjectLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current),
       }),
       decideMovePointerDown: (hits) =>
         decideMovePointerDown({
           ...hits,
           scenePoints: scene.points,
         }),
-      onToolClickRelease: (screen, e) =>
+      onToolClickRelease: (screen, e, hits) =>
         runConstructClickAdapter({
           screen,
           pointerEvent: e,
+          preHitTextLabelId: hits.hitTextLabelId ?? null,
           activeTool,
           pendingSelection,
           copyStyleSource,
@@ -226,6 +259,8 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           camera,
           vp,
           angleFixedTool,
+          regularPolygonTool,
+          transformTool,
           tolerances,
           io: constructClickIo,
         }),
@@ -243,10 +278,23 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       zoomAtScreenPoint: (screen, zoomFactor) => actions.zoomAtScreenPoint(vp, screen, zoomFactor),
     });
 
+    const onDoubleClick = (e: MouseEvent) => {
+      if (!shouldCancelOnCanvasDoubleClick(activeTool, pendingSelection)) return;
+      e.preventDefault();
+      if (pendingSelection) {
+        actions.clearPendingSelection();
+        return;
+      }
+      if (activeTool === "move") {
+        actions.setSelectedObject(null);
+      }
+    };
+
     const unbind = bindCanvasEventLifecycle(canvas, {
       onDown,
       onMove,
       onFinish: finish,
+      onDoubleClick,
       onLeave,
       onWheel,
     });
@@ -267,6 +315,8 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     copyStyleSource,
     angleFixedTool,
     circleFixedTool,
+    regularPolygonTool,
+    transformTool,
     tolerances,
     actions,
     clickEpsilonPx,

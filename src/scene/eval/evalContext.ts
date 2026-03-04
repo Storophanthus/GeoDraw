@@ -12,12 +12,13 @@ export type SceneEvalStats = {
   ms: number;
 };
 
-export type SceneEvalContext<TPoint, TLine, TSegment, TCircle, TAngle, TNumber> = {
+export type SceneEvalContext<TPoint, TVector, TLine, TSegment, TCircle, TAngle, TNumber> = {
   tick: number;
   startedAt: number;
   pointCache: Map<string, Vec2 | null>;
   inProgress: Set<string>;
   pointById: Map<string, TPoint>;
+  vectorById: Map<string, TVector>;
   lineById: Map<string, TLine>;
   segmentById: Map<string, TSegment>;
   circleById: Map<string, TCircle>;
@@ -34,11 +35,12 @@ export type SceneEvalContext<TPoint, TLine, TSegment, TCircle, TAngle, TNumber> 
   explicit: boolean;
 };
 
-type BuildContextArgs<TPoint, TLine, TSegment, TCircle, TAngle, TNumber> = {
+type BuildContextArgs<TPoint, TVector, TLine, TSegment, TCircle, TAngle, TNumber> = {
   tick: number;
   startedAt: number;
   explicit: boolean;
   pointById: Map<string, TPoint>;
+  vectorById: Map<string, TVector>;
   lineById: Map<string, TLine>;
   segmentById: Map<string, TSegment>;
   circleById: Map<string, TCircle>;
@@ -47,10 +49,10 @@ type BuildContextArgs<TPoint, TLine, TSegment, TCircle, TAngle, TNumber> = {
   dirtyNodes: number;
 };
 
-export function buildSceneEvalContext<TPoint, TLine, TSegment, TCircle, TAngle, TNumber>(
-  args: BuildContextArgs<TPoint, TLine, TSegment, TCircle, TAngle, TNumber>
-): SceneEvalContext<TPoint, TLine, TSegment, TCircle, TAngle, TNumber> {
-  const { tick, startedAt, explicit, pointById, lineById, segmentById, circleById, angleById, numberById, dirtyNodes } =
+export function buildSceneEvalContext<TPoint, TVector, TLine, TSegment, TCircle, TAngle, TNumber>(
+  args: BuildContextArgs<TPoint, TVector, TLine, TSegment, TCircle, TAngle, TNumber>
+): SceneEvalContext<TPoint, TVector, TLine, TSegment, TCircle, TAngle, TNumber> {
+  const { tick, startedAt, explicit, pointById, vectorById, lineById, segmentById, circleById, angleById, numberById, dirtyNodes } =
     args;
   return {
     tick,
@@ -58,6 +60,7 @@ export function buildSceneEvalContext<TPoint, TLine, TSegment, TCircle, TAngle, 
     pointCache: new Map<string, Vec2 | null>(),
     inProgress: new Set<string>(),
     pointById,
+    vectorById,
     lineById,
     segmentById,
     circleById,

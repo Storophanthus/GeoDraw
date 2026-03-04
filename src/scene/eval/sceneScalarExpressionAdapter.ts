@@ -1,0 +1,144 @@
+import type { Vec2 } from "../../geo/vec2";
+import { buildNumberSymbolTable } from "./expressionEval";
+import type { NumberExpressionEvalResult } from "./numericExpression";
+import { evaluateScalarObjectMeasureArg } from "./scalarObjectMeasure";
+import { evaluateScalarExpressionWithRuntime } from "./scalarExpressionRuntime";
+import type { ScalarDistanceArg } from "./scalarDistance";
+
+type SceneNumberLike = { id: string; name: string };
+type ScenePointLike = { id: string; name: string };
+type SceneLineLikeMeta = { id: string; labelText?: string };
+type SceneSegmentLikeMeta = { id: string; aId: string; bId: string; labelText?: string };
+type SceneCircleLikeMeta = { id: string; labelText?: string };
+type ScenePolygonLikeMeta = { id: string; pointIds: string[]; labelText?: string };
+
+export function evaluateSceneScalarNumberExpression(params: {
+  exprRaw: string;
+  numbers: SceneNumberLike[];
+  points: ScenePointLike[];
+  lines: SceneLineLikeMeta[];
+  segments: SceneSegmentLikeMeta[];
+  circles: SceneCircleLikeMeta[];
+  polygons: ScenePolygonLikeMeta[];
+  excludeNumberId?: string;
+  getNumberValue: (numberId: string) => number | null;
+  getPointWorldById: (pointId: string) => Vec2 | null;
+  resolveLineAnchors: (lineId: string) => { a: Vec2; b: Vec2 } | null;
+  getCircleWorldGeometry: (circleId: string) => { center: Vec2; radius: number } | null;
+}): NumberExpressionEvalResult {
+  const scalarSymbols = buildNumberSymbolTable({
+    numbers: params.numbers,
+    getNumberValue: params.getNumberValue,
+    excludeNumberId: params.excludeNumberId,
+  });
+  return evaluateScalarExpressionWithRuntime(params.exprRaw, {
+    getScalarValue: (name) => scalarSymbols.get(name),
+    resolveDistanceArg: (argExprRaw) =>
+      resolveSceneDistanceArg(argExprRaw, {
+        points: params.points,
+        lines: params.lines,
+        segments: params.segments,
+        getPointWorldById: params.getPointWorldById,
+        resolveLineAnchors: params.resolveLineAnchors,
+      }),
+    evaluateMeasureArg: (fnName, argExprRaw) =>
+      evaluateSceneMeasureArg(fnName, argExprRaw, {
+        circles: params.circles,
+        polygons: params.polygons,
+        getCircleWorldGeometry: params.getCircleWorldGeometry,
+        getPointWorldById: params.getPointWorldById,
+      }),
+  });
+}
+
+function resolveSceneDistanceArg(
+  raw: string,
+  deps: {
+    points: ScenePointLike[];
+    lines: SceneLineLikeMeta[];
+    segments: SceneSegmentLikeMeta[];
+    getPointWorldById: (pointId: string) => Vec2 | null;
+    resolveLineAnchors: (lineId: string) => { a: Vec2; b: Vec2 } | null;
+  }
+): { ok: true; value: ScalarDistanceArg } | { ok: false; error: string } {
+  const token = stripOuterParens(raw.trim());
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) {
+    return { ok: false, error: "Distance(...) in numeric expressions expects point/line/segment identifiers" };
+  }
+
+  const point = deps.points.find((p) => p.name === token) ?? deps.points.find((p) => p.id === token);
+  if (point) {
+    const world = deps.getPointWorldById(point.id);
+    if (!world) return { ok: false, error: `Unknown point geometry: ${token}` };
+    return { ok: true, value: { kind: "point", x: world.x, y: world.y } };
+  }
+
+  const line = deps.lines.find((l) => l.id === token) ?? deps.lines.find((l) => (l.labelText?.trim() || "") === token);
+  if (line) {
+    const anchors = deps.resolveLineAnchors(line.id);
+    if (!anchors) return { ok: false, error: `Unknown line geometry: ${token}` };
+    return { ok: true, value: { kind: "lineLike", a: anchors.a, b: anchors.b, finite: false } };
+  }
+
+  const seg =
+    deps.segments.find((s) => s.id === token) ??
+    deps.segments.find((s) => (s.labelText?.trim() || "") === token);
+  if (seg) {
+    const a = deps.getPointWorldById(seg.aId);
+    const b = deps.getPointWorldById(seg.bId);
+    if (!a || !b) return { ok: false, error: `Unknown segment geometry: ${token}` };
+    return { ok: true, value: { kind: "lineLike", a, b, finite: true } };
+  }
+
+  return { ok: false, error: `Unknown object in Distance(...): ${token}` };
+}
+
+function evaluateSceneMeasureArg(
+  fnName: "Area" | "Perimeter",
+  raw: string,
+  deps: {
+    circles: SceneCircleLikeMeta[];
+    polygons: ScenePolygonLikeMeta[];
+    getCircleWorldGeometry: (circleId: string) => { center: Vec2; radius: number } | null;
+    getPointWorldById: (pointId: string) => Vec2 | null;
+  }
+): NumberExpressionEvalResult {
+  return evaluateScalarObjectMeasureArg(fnName, raw, {
+    circles: deps.circles,
+    polygons: deps.polygons,
+    getCircleRadius: (circleId) => deps.getCircleWorldGeometry(circleId)?.radius ?? null,
+    getPolygonVertices: (_polygonId, pointIds) => {
+      const verts: Vec2[] = [];
+      for (const pointId of pointIds) {
+        const w = deps.getPointWorldById(pointId);
+        if (!w) return null;
+        verts.push(w);
+      }
+      return verts;
+    },
+  });
+}
+
+function findMatchingParenIndex(text: string, openIndex: number): number {
+  let depth = 0;
+  for (let i = openIndex; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === "(") depth += 1;
+    else if (ch === ")") {
+      depth -= 1;
+      if (depth === 0) return i;
+      if (depth < 0) return -1;
+    }
+  }
+  return -1;
+}
+
+function stripOuterParens(text: string): string {
+  let s = text.trim();
+  while (s.startsWith("(") && s.endsWith(")")) {
+    const close = findMatchingParenIndex(s, 0);
+    if (close !== s.length - 1) break;
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}

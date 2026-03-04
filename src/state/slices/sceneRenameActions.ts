@@ -43,7 +43,7 @@ export function createSceneRenameActions({ setState }: { setState: SetState }): 
           scene: {
             ...prev.scene,
             points: prev.scene.points.map((point) =>
-              point.id === selected.id ? { ...point, name: nextName } : point
+              point.id === selected.id ? { ...point, name: nextName, captionTex: nextName } : point
             ),
           },
         };

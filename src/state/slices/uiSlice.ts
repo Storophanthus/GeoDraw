@@ -1,8 +1,13 @@
 import type { Camera } from "../../view/camera";
-import type { ActiveTool, AngleFixedDirection, SelectedObject } from "./storeTypes";
+import type { ActiveTool, AngleFixedDirection, SelectedObject, TransformToolMode } from "./storeTypes";
+import { DEFAULT_COLOR_PROFILE_ID, DEFAULT_UI_COLOR_PROFILE_ID } from "../colorProfiles";
 
 export type UiSliceState = {
   camera: Camera;
+  colorProfileId: import("../colorProfiles").ColorProfileId;
+  canvasThemeOverrides: Partial<import("../colorProfiles").CanvasColorTheme>;
+  uiColorProfileId: import("../colorProfiles").UiColorProfileId;
+  uiCssOverrides: Partial<import("../colorProfiles").UiCssVariables>;
   gridEnabled: boolean;
   axesEnabled: boolean;
   gridSnapEnabled: boolean;
@@ -14,6 +19,16 @@ export type UiSliceState = {
   circleFixedTool: {
     radius: string;
   };
+  regularPolygonTool: {
+    sides: number;
+    direction: AngleFixedDirection;
+  };
+  transformTool: {
+    mode: TransformToolMode;
+    angleExpr: string;
+    direction: AngleFixedDirection;
+    factorExpr: string;
+  };
   dependencyGlowEnabled: boolean;
   exportClipWorld: import("./storeTypes").ExportClipWorld | null;
   copyStyle: {
@@ -23,6 +38,7 @@ export type UiSliceState = {
     circleStyle: import("../../scene/points").CircleStyle | null;
     polygonStyle: import("../../scene/points").PolygonStyle | null;
     angleStyle: Partial<import("../../scene/points").AngleStyle> | null;
+    textLabelStyle: import("../../scene/points").SceneTextLabelStyle | null;
     showLabel: import("../../scene/points").ShowLabelMode | null;
   };
 };
@@ -31,6 +47,10 @@ export function createUiSliceState(): UiSliceState {
   const initialZoom = 80;
   return {
     camera: { pos: { x: 0, y: 0 }, zoom: initialZoom, logZoom: Math.log(initialZoom) },
+    colorProfileId: DEFAULT_COLOR_PROFILE_ID,
+    canvasThemeOverrides: {},
+    uiColorProfileId: DEFAULT_UI_COLOR_PROFILE_ID,
+    uiCssOverrides: {},
     gridEnabled: true,
     axesEnabled: true,
     gridSnapEnabled: true,
@@ -42,6 +62,16 @@ export function createUiSliceState(): UiSliceState {
     circleFixedTool: {
       radius: "3",
     },
+    regularPolygonTool: {
+      sides: 5,
+      direction: "CCW",
+    },
+    transformTool: {
+      mode: "translate",
+      angleExpr: "90",
+      direction: "CCW",
+      factorExpr: "2",
+    },
     dependencyGlowEnabled: true,
     exportClipWorld: null,
     copyStyle: {
@@ -51,6 +81,7 @@ export function createUiSliceState(): UiSliceState {
       circleStyle: null,
       polygonStyle: null,
       angleStyle: null,
+      textLabelStyle: null,
       showLabel: null,
     },
   };

@@ -8,6 +8,12 @@ import {
   nextLabelFromIndex,
 } from "../../scene/points";
 import type { SceneModel } from "../../scene/points";
+import {
+  defaultLineLabelPosWorld,
+  defaultLineLabelText,
+  defaultSegmentLabelPosWorld,
+  defaultSegmentLabelText,
+} from "../../scene/objectLabels";
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
 
@@ -22,12 +28,29 @@ export function createSceneLineAngleActions(
   | "createPerpendicularLine"
   | "createParallelLine"
   | "createTangentLines"
+  | "createCircleTangentLines"
   | "createAngleBisectorLine"
   | "createAngle"
   | "createSector"
   | "createAngleFixed"
 > {
   const edgeKey = (aId: string, bId: string) => (aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`);
+  const lineSignature = (anchors: { a: { x: number; y: number }; b: { x: number; y: number } }): string => {
+    const dx = anchors.b.x - anchors.a.x;
+    const dy = anchors.b.y - anchors.a.y;
+    const len = Math.hypot(dx, dy);
+    if (len <= 1e-12) return "";
+    let nx = -dy / len;
+    let ny = dx / len;
+    let c = nx * anchors.a.x + ny * anchors.a.y;
+    if (nx < -1e-12 || (Math.abs(nx) <= 1e-12 && ny < -1e-12)) {
+      nx = -nx;
+      ny = -ny;
+      c = -c;
+    }
+    const q = (v: number) => Math.round(v * 1e9);
+    return `${q(nx)}:${q(ny)}:${q(c)}`;
+  };
   return {
     createPerpendicularLine(throughId, base) {
       let id: string | null = null;
@@ -50,6 +73,15 @@ export function createSceneLineAngleActions(
         const anchors = getLineWorldAnchors(tempLine, prev.scene);
         if (!anchors) return prev;
         id = `l_${prev.nextLineId}`;
+        const lineForLabel = {
+          id,
+          kind: "perpendicular" as const,
+          throughId,
+          base,
+          visible: true,
+          showLabel: false,
+          style: prev.lineDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -62,6 +94,9 @@ export function createSceneLineAngleActions(
                 throughId,
                 base,
                 visible: true,
+                showLabel: false,
+                labelText: defaultLineLabelText(lineForLabel, prev.scene),
+                labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
                 style: { ...prev.lineDefaults },
               },
             ],
@@ -96,6 +131,15 @@ export function createSceneLineAngleActions(
         const anchors = getLineWorldAnchors(tempLine, prev.scene);
         if (!anchors) return prev;
         id = `l_${prev.nextLineId}`;
+        const lineForLabel = {
+          id,
+          kind: "parallel" as const,
+          throughId,
+          base,
+          visible: true,
+          showLabel: false,
+          style: prev.lineDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -108,6 +152,9 @@ export function createSceneLineAngleActions(
                 throughId,
                 base,
                 visible: true,
+                showLabel: false,
+                labelText: defaultLineLabelText(lineForLabel, prev.scene),
+                labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
                 style: { ...prev.lineDefaults },
               },
             ],
@@ -154,6 +201,16 @@ export function createSceneLineAngleActions(
         let nextLineId = prev.nextLineId;
 
         const id0 = `l_${nextLineId++}`;
+        const line0ForLabel = {
+          id: id0,
+          kind: "tangent" as const,
+          throughId,
+          circleId,
+          branchIndex: 0 as const,
+          visible: true,
+          showLabel: false,
+          style: prev.lineDefaults,
+        };
         nextLines.push({
           id: id0,
           kind: "tangent",
@@ -161,6 +218,9 @@ export function createSceneLineAngleActions(
           circleId,
           branchIndex: 0,
           visible: true,
+          showLabel: false,
+          labelText: defaultLineLabelText(line0ForLabel, prev.scene),
+          labelPosWorld: defaultLineLabelPosWorld(line0ForLabel, prev.scene) ?? undefined,
           style: { ...prev.lineDefaults },
         });
         created.push(id0);
@@ -171,6 +231,16 @@ export function createSceneLineAngleActions(
             Math.hypot(a0.b.x - a1.b.x, a0.b.y - a1.b.y) <= 1e-9;
           if (!same) {
             const id1 = `l_${nextLineId++}`;
+            const line1ForLabel = {
+              id: id1,
+              kind: "tangent" as const,
+              throughId,
+              circleId,
+              branchIndex: 1 as const,
+              visible: true,
+              showLabel: false,
+              style: prev.lineDefaults,
+            };
             nextLines.push({
               id: id1,
               kind: "tangent",
@@ -178,6 +248,9 @@ export function createSceneLineAngleActions(
               circleId,
               branchIndex: 1,
               visible: true,
+              showLabel: false,
+              labelText: defaultLineLabelText(line1ForLabel, prev.scene),
+              labelPosWorld: defaultLineLabelPosWorld(line1ForLabel, prev.scene) ?? undefined,
               style: { ...prev.lineDefaults },
             });
             created.push(id1);
@@ -190,6 +263,83 @@ export function createSceneLineAngleActions(
           selectedObject: created.length > 0 ? { type: "line", id: created[created.length - 1] } : prev.selectedObject,
           recentCreatedObject:
             created.length > 0 ? { type: "line", id: created[created.length - 1] } : prev.recentCreatedObject,
+          nextLineId,
+        };
+      });
+      return created;
+    },
+
+    createCircleTangentLines(circleAId, circleBId) {
+      if (circleAId === circleBId) return [];
+      const created: string[] = [];
+      ctx.setState((prev) => {
+        const circleA = prev.scene.circles.find((c) => c.id === circleAId);
+        const circleB = prev.scene.circles.find((c) => c.id === circleBId);
+        if (!circleA || !circleB) return prev;
+
+        const nextLines = [...prev.scene.lines];
+        let nextLineId = prev.nextLineId;
+        const signatures = new Set<string>();
+        const candidates: Array<{ family: "outer" | "inner"; branchIndex: 0 | 1 }> = [
+          { family: "outer", branchIndex: 0 },
+          { family: "outer", branchIndex: 1 },
+          { family: "inner", branchIndex: 0 },
+          { family: "inner", branchIndex: 1 },
+        ];
+
+        for (let i = 0; i < candidates.length; i += 1) {
+          const candidate = candidates[i];
+          const tempLine: SceneModel["lines"][number] = {
+            id: `__temp_circle_tangent_${candidate.family}_${candidate.branchIndex}__`,
+            kind: "circleCircleTangent",
+            circleAId,
+            circleBId,
+            family: candidate.family,
+            branchIndex: candidate.branchIndex,
+            visible: true,
+            style: prev.lineDefaults,
+          };
+          const anchors = getLineWorldAnchors(tempLine, prev.scene);
+          if (!anchors) continue;
+          const signature = lineSignature(anchors);
+          if (!signature || signatures.has(signature)) continue;
+          signatures.add(signature);
+
+          const id = `l_${nextLineId++}`;
+          const lineForLabel = {
+            id,
+            kind: "circleCircleTangent" as const,
+            circleAId,
+            circleBId,
+            family: candidate.family,
+            branchIndex: candidate.branchIndex,
+            visible: true,
+            showLabel: false,
+            style: prev.lineDefaults,
+          };
+          nextLines.push({
+            id,
+            kind: "circleCircleTangent",
+            circleAId,
+            circleBId,
+            family: candidate.family,
+            branchIndex: candidate.branchIndex,
+            visible: true,
+            showLabel: false,
+            labelText: defaultLineLabelText(lineForLabel, prev.scene),
+            labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
+            style: { ...prev.lineDefaults },
+          });
+          created.push(id);
+        }
+
+        if (created.length === 0) return prev;
+        const lastId = created[created.length - 1];
+        return {
+          ...prev,
+          scene: { ...prev.scene, lines: nextLines },
+          selectedObject: { type: "line", id: lastId },
+          recentCreatedObject: { type: "line", id: lastId },
           nextLineId,
         };
       });
@@ -216,6 +366,16 @@ export function createSceneLineAngleActions(
         const anchors = getLineWorldAnchors(tempLine, prev.scene);
         if (!anchors) return prev;
         id = `l_${prev.nextLineId}`;
+        const lineForLabel = {
+          id,
+          kind: "angleBisector" as const,
+          aId,
+          bId,
+          cId,
+          visible: true,
+          showLabel: false,
+          style: prev.lineDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -229,6 +389,9 @@ export function createSceneLineAngleActions(
                 bId,
                 cId,
                 visible: true,
+                showLabel: false,
+                labelText: defaultLineLabelText(lineForLabel, prev.scene),
+                labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
                 style: { ...prev.lineDefaults },
               },
             ],
@@ -259,7 +422,7 @@ export function createSceneLineAngleActions(
         const start = Math.atan2(wa.y - wb.y, wa.x - wb.x);
         const mid = start + theta * 0.5;
         const dir = { x: Math.cos(mid), y: Math.sin(mid) };
-        const labelDist = Math.max(0.45, prev.angleDefaults.arcRadius * 1.25);
+        const labelDist = Math.max(0.35, prev.angleDefaults.arcRadius - 0.4);
         const labelPosWorld = { x: wb.x + dir.x * labelDist, y: wb.y + dir.y * labelDist };
         const markStyle =
           isRightExact && prev.angleDefaults.markStyle === "arc" ? "rightSquare" : prev.angleDefaults.markStyle;
@@ -314,7 +477,7 @@ export function createSceneLineAngleActions(
         if (theta === null) return prev;
         const start = Math.atan2(wStart.y - wCenter.y, wStart.x - wCenter.x);
         const mid = start + theta * 0.5;
-        const labelDist = Math.max(0.45, r * 0.72);
+        const labelDist = Math.max(0.35, r - 0.4);
         const labelPosWorld = { x: wCenter.x + Math.cos(mid) * labelDist, y: wCenter.y + Math.sin(mid) * labelDist };
 
         id = `a_${prev.nextAngleId}`;
@@ -346,6 +509,15 @@ export function createSceneLineAngleActions(
           }
           const segId = `s_${nextSegmentId}`;
           nextSegmentId += 1;
+          const segForLabel = {
+            id: segId,
+            aId,
+            bId,
+            ownedBySectorIds: [id],
+            visible: true,
+            showLabel: false,
+            style: prev.segmentDefaults,
+          };
           newSegments.push({
             id: segId,
             aId,
@@ -353,6 +525,8 @@ export function createSceneLineAngleActions(
             ownedBySectorIds: [id],
             visible: true,
             showLabel: false,
+            labelText: defaultSegmentLabelText(segForLabel, prev.scene),
+            labelPosWorld: defaultSegmentLabelPosWorld(segForLabel, prev.scene) ?? undefined,
             style: { ...prev.segmentDefaults },
           });
           edgeIndexByKey.set(k, newSegments.length - 1);
@@ -439,7 +613,7 @@ export function createSceneLineAngleActions(
         if (oriented === null) return prev;
         const start = Math.atan2(angleAWorld.y - wv.y, angleAWorld.x - wv.x);
         const mid = start + oriented * 0.5;
-        const labelDist = Math.max(0.45, prev.angleDefaults.arcRadius * 1.25);
+        const labelDist = Math.max(0.35, prev.angleDefaults.arcRadius - 0.4);
         const labelPosWorld = { x: wv.x + Math.cos(mid) * labelDist, y: wv.y + Math.sin(mid) * labelDist };
         const angleAId = direction === "CCW" ? basePointId : pointId;
         const angleCId = direction === "CCW" ? pointId : basePointId;
@@ -480,6 +654,7 @@ export function createSceneLineAngleActions(
                 aId: vertexId,
                 bId: pointId,
                 visible: true,
+                showLabel: false,
                 style: { ...prev.lineDefaults },
               },
             ],

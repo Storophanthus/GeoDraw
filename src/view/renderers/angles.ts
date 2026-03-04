@@ -1,5 +1,5 @@
 import type { Vec2 } from "../../geo/vec2";
-import type { SceneModel } from "../../scene/points";
+import { resolveAngleMarks, type SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import {
   computeRightMarkSizePx,
@@ -10,6 +10,15 @@ import {
   drawRightAngleSquareFill,
 } from "../angleRender";
 import { resolveCanvasFillStyle } from "../patternFill";
+import {
+  arrowCanvasLineWidthFromStoredPt,
+  clamp01,
+  collectArrowPositions,
+  DEFAULT_ARROW_LINE_WIDTH_PT,
+  drawArrowPlacements,
+  resolveArrowPairGapPx,
+  segmentArrowHeadSize,
+} from "../pathArrowRender";
 import type { DrawableObjectSelection } from "./types";
 
 export type ResolvedAngleForRender = {
@@ -43,15 +52,21 @@ export function drawAngles(
     const rightApprox = !rightExact && Boolean(angle.isRightApprox);
     const rightLike = rightExact || rightApprox;
     const rightSolid = rightExact || (rightApprox && Boolean(angle.style.promoteToSolid));
+    const resolvedArcMarks = resolveAngleMarks(angle.style);
+    const totalArcLayers = resolvedArcMarks.reduce((sum, mark) => sum + mark.arcMultiplicity, 0);
     const rawMarkStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
-    const drawRightSquareShape = rawMarkStyle === "rightSquare" || (rightLike && rawMarkStyle === "arc");
+    const drawRightSquareShape =
+      !isSector && (rawMarkStyle === "rightSquare" || (rightLike && rawMarkStyle === "arc"));
     const resolvedMarkStyle = (drawRightSquareShape ? "rightSquare" : rawMarkStyle) as
       | "arc"
       | "none"
       | "rightSquare"
       | "rightArcDot";
-    const markSizePx = Math.max(3, Math.min(16, angle.style.markSize ?? 4));
     const rightMarkSizePx = computeRightMarkSizePx(radiusPx, mapStrokeWidth(angle.style.strokeWidth));
+    const startAngle = Math.atan2(as.y - bs.y, as.x - bs.x);
+    const canRenderArcArrow =
+      (Boolean(angle.style.arcArrowMark?.enabled) || (angle.style.arcArrowMarks?.length ?? 0) > 0) &&
+      (isSector || resolvedMarkStyle === "arc" || resolvedMarkStyle === "rightArcDot");
 
     ctx.save();
     if (angle.style.fillEnabled && angle.style.fillOpacity > 0) {
@@ -81,12 +96,11 @@ export function drawAngles(
       else if (dash === "dotted") ctx.setLineDash([2, 4]);
     }
     if (isSector) {
-      const start = Math.atan2(as.y - bs.y, as.x - bs.x);
-      const end = start - entry.theta;
+      const end = startAngle - entry.theta;
       ctx.beginPath();
       ctx.moveTo(bs.x, bs.y);
-      ctx.lineTo(bs.x + Math.cos(start) * radiusPx, bs.y + Math.sin(start) * radiusPx);
-      ctx.arc(bs.x, bs.y, radiusPx, start, end, true);
+      ctx.lineTo(bs.x + Math.cos(startAngle) * radiusPx, bs.y + Math.sin(startAngle) * radiusPx);
+      ctx.arc(bs.x, bs.y, radiusPx, startAngle, end, true);
       ctx.lineTo(bs.x, bs.y);
       ctx.stroke();
     } else if (resolvedMarkStyle !== "none") {
@@ -94,26 +108,46 @@ export function drawAngles(
         drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx);
         ctx.stroke();
       } else {
-        drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
         if (!rightLike) {
-          if ((angle.style.arcMultiplicity ?? 1) >= 2) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 6);
-          if ((angle.style.arcMultiplicity ?? 1) >= 3) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 12);
-          drawArcBarMarks(
-            ctx,
-            as,
-            bs,
-            entry.theta,
-            radiusPx,
-            angle.style.markSymbol ?? "none",
-            markSizePx,
-            angle.style.markPos ?? 0.5,
-            angle.style.markColor ?? angle.style.strokeColor,
-            mapStrokeWidth(angle.style.strokeWidth)
-          );
+          let arcLayerOffset = 0;
+          for (const mark of resolvedArcMarks) {
+            for (let layer = 0; layer < mark.arcMultiplicity; layer += 1) {
+              drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + (arcLayerOffset + layer) * 6);
+            }
+            const markRadius = radiusPx + (arcLayerOffset + (mark.arcMultiplicity - 1) * 0.5) * 6;
+            drawArcBarMarks(
+              ctx,
+              as,
+              bs,
+              entry.theta,
+              markRadius,
+              mark.markSymbol,
+              mark.markSize,
+              mark.markPos,
+              mark.markColor ?? angle.style.markColor ?? angle.style.strokeColor,
+              mapStrokeWidth(angle.style.strokeWidth)
+            );
+            arcLayerOffset += mark.arcMultiplicity;
+          }
         } else if (resolvedMarkStyle === "rightArcDot") {
+          drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
           drawRightInnerDot(ctx, as, bs, cs, rightMarkSizePx, Math.max(1.8, Math.min(4.5, rightMarkSizePx * 0.18)));
         }
       }
+    }
+    if (canRenderArcArrow) {
+      const arrowBaseWidth = mapStrokeWidth(angle.style.strokeWidth);
+      drawArcArrowOverlay(
+        ctx,
+        bs,
+        radiusPx,
+        startAngle,
+        entry.theta,
+        angle.style.arcArrowMarks ?? angle.style.arcArrowMark!,
+        angle.style.strokeColor,
+        angle.style.strokeOpacity,
+        arrowBaseWidth
+      );
     }
 
     if (selectedObject?.type === "angle" && selectedObject.id === angle.id) {
@@ -122,12 +156,11 @@ export function drawAngles(
       ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
       ctx.lineWidth = mapStrokeWidth(angle.style.strokeWidth) + (isNew ? 1.5 : 1.6);
       if (isSector) {
-        const start = Math.atan2(as.y - bs.y, as.x - bs.x);
-        const end = start - entry.theta;
+        const end = startAngle - entry.theta;
         ctx.beginPath();
         ctx.moveTo(bs.x, bs.y);
-        ctx.lineTo(bs.x + Math.cos(start) * (radiusPx + 2), bs.y + Math.sin(start) * (radiusPx + 2));
-        ctx.arc(bs.x, bs.y, radiusPx + 2, start, end, true);
+        ctx.lineTo(bs.x + Math.cos(startAngle) * (radiusPx + 2), bs.y + Math.sin(startAngle) * (radiusPx + 2));
+        ctx.arc(bs.x, bs.y, radiusPx + 2, startAngle, end, true);
         ctx.lineTo(bs.x, bs.y);
         ctx.stroke();
       } else if (resolvedMarkStyle !== "none") {
@@ -135,10 +168,13 @@ export function drawAngles(
           drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx + 2);
           ctx.stroke();
         } else {
-          drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);
           if (!rightLike) {
-            if ((angle.style.arcMultiplicity ?? 1) >= 2) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 8);
-            if ((angle.style.arcMultiplicity ?? 1) >= 3) drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 14);
+            const layers = Math.max(1, totalArcLayers);
+            for (let layer = 0; layer < layers; layer += 1) {
+              drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2 + layer * 6);
+            }
+          } else {
+            drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx + 2);
           }
         }
       }
@@ -151,6 +187,92 @@ export function drawAngles(
 
     ctx.restore();
   }
+}
+
+function drawArcArrowOverlay(
+  ctx: CanvasRenderingContext2D,
+  center: Vec2,
+  radiusPx: number,
+  startAngle: number,
+  theta: number,
+  styleArrows: SceneModel["angles"][number]["style"]["arcArrowMarks"] | SceneModel["angles"][number]["style"]["arcArrowMark"],
+  fallbackColor: string,
+  opacity: number,
+  _fallbackLineWidth: number // retained for signature compat
+): void {
+  // Normalize input to array
+  const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
+  if (arrows.length === 0) return;
+  if (!Number.isFinite(radiusPx) || radiusPx <= 1e-9) return;
+
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = Number.isFinite(opacity) ? clamp01(opacity) : 1;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  const sweep = Math.max(1e-6, theta);
+  const pathLengthPx = Math.max(1e-6, sweep * radiusPx);
+
+  for (const arrow of arrows) {
+    if (!arrow.enabled) continue;
+
+    const color = arrow.color ?? fallbackColor;
+    const lineWidthPt =
+      typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) && arrow.lineWidthPt > 0
+        ? arrow.lineWidthPt
+        : DEFAULT_ARROW_LINE_WIDTH_PT;
+    const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
+    const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale, arrow.arrowLength);
+    const pairGapPx = resolveArrowPairGapPx(arrow.pairGapPx, separation);
+    // For angles, positions are t in [0,1] along the arc sweep
+    const positions = collectArrowPositions(arrow, 0.5);
+    const pairOffset = Math.max(0.002, Math.min(0.24, pairGapPx / pathLengthPx));
+
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lineWidth;
+
+    const pushPlacement = (
+      out: Array<{ tip: Vec2; dirX: number; dirY: number }>,
+      tRaw: number,
+      reversed: boolean
+    ) => {
+      const t = clamp01(tRaw);
+      const phi = startAngle - sweep * t;
+      const tip = {
+        x: center.x + Math.cos(phi) * radiusPx,
+        y: center.y + Math.sin(phi) * radiusPx,
+      };
+      // Arc is drawn with decreasing screen angle (anticlockwise=true).
+      // Tangent vector:
+      const tangentX = Math.sin(phi);
+      const tangentY = -Math.cos(phi);
+      out.push({
+        tip,
+        dirX: reversed ? -tangentX : tangentX,
+        dirY: reversed ? -tangentY : tangentY,
+      });
+    };
+
+    for (let i = 0; i < positions.length; i += 1) {
+      const t = clamp01(positions[i]);
+      const placements: Array<{ tip: Vec2; dirX: number; dirY: number }> = [];
+      if (arrow.direction === "->") {
+        pushPlacement(placements, t, false);
+      } else if (arrow.direction === "<-") {
+        pushPlacement(placements, t, true);
+      } else if (arrow.direction === "<->") {
+        pushPlacement(placements, t - pairOffset, true);
+        pushPlacement(placements, t + pairOffset, false);
+      } else {
+        pushPlacement(placements, t - pairOffset, false);
+        pushPlacement(placements, t + pairOffset, true);
+      }
+      drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
+    }
+  }
+  ctx.restore();
 }
 
 function drawArcBarMarks(

@@ -13,6 +13,15 @@ type ToolInfoSectionProps = {
   circleFixedRadius: string;
   setCircleFixedTool: (next: { radius?: string }) => void;
   circleFixedPreview: NumberExpressionEvalResult;
+  regularPolygonSides: number;
+  regularPolygonDirection: "CCW" | "CW";
+  setRegularPolygonTool: (next: { sides?: number; direction?: "CCW" | "CW" }) => void;
+  transformFactorExpr: string;
+  transformAngleExpr: string;
+  transformDirection: "CCW" | "CW";
+  setTransformTool: (next: { factorExpr?: string; angleExpr?: string; direction?: "CCW" | "CW" }) => void;
+  transformFactorPreview: NumberExpressionEvalResult;
+  transformAnglePreview: AnglePreview;
   pendingSelection: PendingSelection;
   pendingCircleFixedCenterLabel: string | null;
   createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
@@ -29,12 +38,25 @@ export function ToolInfoSection({
   circleFixedRadius,
   setCircleFixedTool,
   circleFixedPreview,
+  regularPolygonSides,
+  regularPolygonDirection,
+  setRegularPolygonTool,
+  transformFactorExpr,
+  transformAngleExpr,
+  transformDirection,
+  setTransformTool,
+  transformFactorPreview,
+  transformAnglePreview,
   pendingSelection,
   pendingCircleFixedCenterLabel,
   createCircleFixedRadius,
   clearPendingSelection,
 }: ToolInfoSectionProps) {
   const isCircleFixedPending = pendingSelection && pendingSelection.tool === "circle_fixed";
+  const translatePending = pendingSelection && pendingSelection.tool === "translate" ? pendingSelection : null;
+  const reflectPending = pendingSelection && pendingSelection.tool === "reflect" ? pendingSelection : null;
+  const rotatePending = pendingSelection && pendingSelection.tool === "rotate" ? pendingSelection : null;
+  const dilatePending = pendingSelection && pendingSelection.tool === "dilate" ? pendingSelection : null;
 
   return (
     <>
@@ -43,6 +65,11 @@ export function ToolInfoSection({
           {copyStyleHasSource
             ? "Copy Style: click targets to apply (Shift-click to change source)"
             : "Copy Style: click an object to pick source (Shift-click anytime to change source)"}
+        </div>
+      )}
+      {activeTool === "label" && (
+        <div className="toolInfo">
+          Label: click object to show/select label, then drag label anchor to reposition.
         </div>
       )}
       {activeTool === "angle_fixed" && (
@@ -124,9 +151,129 @@ export function ToolInfoSection({
           </div>
         </div>
       )}
+      {activeTool === "regular_polygon" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Regular Polygon</div>
+          <div className="controlRow">
+            <label className="controlLabel">Sides</label>
+            <input
+              className="renameInput"
+              type="number"
+              min={3}
+              max={64}
+              step={1}
+              value={regularPolygonSides}
+              onChange={(e) => {
+                const parsed = Number.parseInt(e.target.value, 10);
+                if (!Number.isFinite(parsed)) return;
+                setRegularPolygonTool({ sides: Math.max(3, Math.min(64, parsed)) });
+              }}
+            />
+          </div>
+          <div className="controlRow">
+            <label className="controlLabel">Direction</label>
+            <select
+              className="selectInput"
+              value={regularPolygonDirection}
+              onChange={(e) => setRegularPolygonTool({ direction: e.target.value as "CCW" | "CW" })}
+            >
+              <option value="CCW">CCW</option>
+              <option value="CW">CW</option>
+            </select>
+          </div>
+          <div className="statusText">Click first vertex, then second vertex (first side).</div>
+        </div>
+      )}
+      {activeTool === "translate" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Translate Object</div>
+          <div className="statusText">
+            {!translatePending
+              ? "Step 1: click source object."
+              : translatePending.step === 2
+                ? "Step 2: click vector start point A."
+                : "Step 3: click vector end point B."}
+          </div>
+        </div>
+      )}
+      {activeTool === "reflect" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Reflect Object</div>
+          <div className="statusText">
+            {!reflectPending
+              ? "Step 1: click source object."
+              : "Step 2: click axis line or segment."}
+          </div>
+        </div>
+      )}
+      {activeTool === "rotate" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Rotate Object</div>
+          <div className="controlRow">
+            <label className="controlLabel">Angle Expr (deg)</label>
+            <input
+              className="renameInput"
+              type="text"
+              value={transformAngleExpr}
+              onChange={(e) => setTransformTool({ angleExpr: e.target.value })}
+              placeholder="e.g. 30, 180, A1"
+            />
+          </div>
+          <div className="controlRow">
+            <label className="controlLabel">Direction</label>
+            <select
+              className="selectInput"
+              value={transformDirection}
+              onChange={(e) => setTransformTool({ direction: e.target.value as "CCW" | "CW" })}
+            >
+              <option value="CCW">CCW</option>
+              <option value="CW">CW</option>
+            </select>
+          </div>
+          <div className="statusText">
+            {transformAnglePreview.ok ? `Resolved: ${transformAnglePreview.valueDeg.toFixed(3)}°` : transformAnglePreview.error}
+          </div>
+          <div className="statusText">
+            {!rotatePending
+              ? "Step 1: click source object."
+              : "Step 2: click center point O."}
+          </div>
+        </div>
+      )}
+      {activeTool === "dilate" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Dilate Object</div>
+          <div className="controlRow">
+            <label className="controlLabel">Factor Expr</label>
+            <input
+              className="renameInput"
+              type="text"
+              value={transformFactorExpr}
+              onChange={(e) => setTransformTool({ factorExpr: e.target.value })}
+              placeholder="e.g. 2, 1/3, k_1"
+            />
+          </div>
+          <div className="statusText">
+            {transformFactorPreview.ok && Number.isFinite(transformFactorPreview.value)
+              ? `Resolved: k = ${transformFactorPreview.value.toFixed(6)}`
+              : "Factor must resolve to a finite number."}
+          </div>
+          <div className="statusText">
+            {!dilatePending
+              ? "Step 1: click source object."
+              : "Step 2: click center point O."}
+          </div>
+        </div>
+      )}
       {activeTool === "export_clip" && (
         <div className="toolInfo">
-          <div className="subSectionTitle">Export Clip</div>
+          <div className="subSectionTitle">Export Clip Polygon</div>
+          <div className="statusText">Click vertices, then click near the first vertex to close the clip path.</div>
+        </div>
+      )}
+      {activeTool === "export_clip_rect" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Export Clip Rectangle</div>
           <div className="statusText">Click first corner, then second corner to set TikZ clip rectangle.</div>
         </div>
       )}

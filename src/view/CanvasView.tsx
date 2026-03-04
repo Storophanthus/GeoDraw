@@ -7,19 +7,24 @@ import {
   type ScenePoint,
 } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
+import { getCanvasColorTheme, getUiCssVariables } from "../state/colorProfiles";
 import type { Viewport } from "./camera";
 import type { ConstructClickIo } from "./constructClickAdapter";
 import { findBestSnap, type SnapCandidate } from "./snapEngine";
 import {
   createAngleLabelOverlays,
+  createObjectLabelOverlays,
   createPointLabelOverlays,
+  createTextLabelOverlays,
 } from "./labelOverlays";
 import { resolveAngles } from "./angleResolution";
 import { CanvasLabelsLayer } from "./CanvasLabelsLayer";
 import { renderCanvasFrame } from "./renderFrame";
 import { useCanvasInteractionController, type PointerState } from "./useCanvasInteractionController";
 import { isValidTarget } from "../tools/toolClick";
+import { applyDilationToObject, applyReflectionToObject, applyRotationToObject, applyTranslationToObject } from "../tools/objectTransforms";
 import { snapWorldToRectGrid } from "../render/rectGrid";
+import type { PendingPreviewTheme } from "./previews/pendingPreview";
 
 const POINT_HIT_TOLERANCE_PX = 12;
 const SEGMENT_HIT_TOLERANCE_PX = 10;
@@ -45,6 +50,12 @@ function getAngleStrokeRenderWidth(rawStrokeWidth: number): number {
   return rawStrokeWidth * ANGLE_STROKE_RENDER_SCALE;
 }
 
+function parsePositiveNumber(raw: string, fallback: number): number {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return value;
+}
+
 export function CanvasView() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const labelsLayerRef = useRef<HTMLDivElement | null>(null);
@@ -53,6 +64,7 @@ export function CanvasView() {
     pid: -1,
     mode: "idle",
     pointId: null,
+    objectType: null,
     lastX: 0,
     lastY: 0,
     startX: 0,
@@ -69,6 +81,10 @@ export function CanvasView() {
   const camera = useGeoStore((store) => store.camera);
   const activeTool = useGeoStore((store) => store.activeTool);
   const scene = useGeoStore((store) => store.scene);
+  const colorProfileId = useGeoStore((store) => store.colorProfileId);
+  const canvasThemeOverrides = useGeoStore((store) => store.canvasThemeOverrides);
+  const uiColorProfileId = useGeoStore((store) => store.uiColorProfileId);
+  const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
   const selectedObject = useGeoStore((store) => store.selectedObject);
   const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
   const hoveredHit = useGeoStore((store) => store.hoveredHit);
@@ -92,15 +108,19 @@ export function CanvasView() {
   const panByScreenDelta = useGeoStore((store) => store.panByScreenDelta);
   const zoomAtScreenPoint = useGeoStore((store) => store.zoomAtScreenPoint);
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
+  const createTextLabel = useGeoStore((store) => store.createTextLabel);
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
   const createPolygon = useGeoStore((store) => store.createPolygon);
+  const createRegularPolygon = useGeoStore((store) => store.createRegularPolygon);
   const createCircle = useGeoStore((store) => store.createCircle);
   const createAuxiliaryCircle = useGeoStore((store) => store.createAuxiliaryCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
+  const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createTangentLines = useGeoStore((store) => store.createTangentLines);
+  const createCircleTangentLines = useGeoStore((store) => store.createCircleTangentLines);
   const createAngleBisectorLine = useGeoStore((store) => store.createAngleBisectorLine);
   const createAngle = useGeoStore((store) => store.createAngle);
   const createSector = useGeoStore((store) => store.createSector);
@@ -110,21 +130,51 @@ export function CanvasView() {
   const createPointOnLine = useGeoStore((store) => store.createPointOnLine);
   const createPointOnSegment = useGeoStore((store) => store.createPointOnSegment);
   const createPointOnCircle = useGeoStore((store) => store.createPointOnCircle);
+  const createPointByTranslation = useGeoStore((store) => store.createPointByTranslation);
   const createPointByRotation = useGeoStore((store) => store.createPointByRotation);
+  const createPointByDilation = useGeoStore((store) => store.createPointByDilation);
+  const createPointByReflection = useGeoStore((store) => store.createPointByReflection);
   const createCircleCenterPoint = useGeoStore((store) => store.createCircleCenterPoint);
   const createIntersectionPoint = useGeoStore((store) => store.createIntersectionPoint);
   const movePointTo = useGeoStore((store) => store.movePointTo);
+  const movePolygonByWorldDelta = useGeoStore((store) => store.movePolygonByWorldDelta);
   const movePointLabelBy = useGeoStore((store) => store.movePointLabelBy);
   const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
+  const moveObjectLabelTo = useGeoStore((store) => store.moveObjectLabelTo);
+  const moveTextLabelTo = useGeoStore((store) => store.moveTextLabelTo);
+  const enableObjectLabel = useGeoStore((store) => store.enableObjectLabel);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
   const setExportClipWorld = useGeoStore((store) => store.setExportClipWorld);
+  const setObjectVisibility = useGeoStore((store) => store.setObjectVisibility);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
+  const regularPolygonTool = useGeoStore((store) => store.regularPolygonTool);
+  const transformTool = useGeoStore((store) => store.transformTool);
 
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
   const [snapDisabled, setSnapDisabled] = useState(false);
+  const canvasTheme = useMemo(
+    () => getCanvasColorTheme(colorProfileId, canvasThemeOverrides),
+    [colorProfileId, canvasThemeOverrides]
+  );
+  const uiCssVariables = useMemo(
+    () => getUiCssVariables(uiColorProfileId, uiCssOverrides),
+    [uiColorProfileId, uiCssOverrides]
+  );
+  const previewTheme = useMemo<PendingPreviewTheme>(
+    () => ({
+      stroke: uiCssVariables["--gd-ui-preview-stroke"],
+      strokeStrong: uiCssVariables["--gd-ui-preview-stroke-strong"],
+      fillSoft: uiCssVariables["--gd-ui-preview-fill-soft"],
+      fill: uiCssVariables["--gd-ui-preview-fill"],
+      fillStrong: uiCssVariables["--gd-ui-preview-fill-strong"],
+      snapStroke: uiCssVariables["--gd-ui-preview-snap-stroke"],
+      lineWidthPx: parsePositiveNumber(uiCssVariables["--gd-ui-preview-line-width"], 1.3),
+    }),
+    [uiCssVariables]
+  );
   const gridSettings = useMemo(
     () => ({
       ...GRID_SETTINGS_BASE,
@@ -148,15 +198,19 @@ export function CanvasView() {
       setPendingSelection,
       clearPendingSelection,
       createFreePoint,
+      createTextLabel,
       createSegment,
       createLine,
       createPolygon,
+      createRegularPolygon,
       createCircle,
       createAuxiliaryCircle,
       createCircleThreePoint,
+      createCircleFixedRadius,
       createPerpendicularLine,
       createParallelLine,
       createTangentLines,
+      createCircleTangentLines,
       createAngleBisectorLine,
       createAngle,
       createSector,
@@ -166,12 +220,92 @@ export function CanvasView() {
       createPointOnLine,
       createPointOnSegment,
       createPointOnCircle,
+      createPointByTranslation,
       createPointByRotation,
+      createPointByDilation,
+      createPointByReflection,
+      transformObjectByTranslation: (source, fromId, toId) =>
+        applyTranslationToObject(source, fromId, toId, {
+          scene,
+          createPointByTranslation,
+          createPointByRotation,
+          createPointByDilation,
+          createPointByReflection,
+          createPointOnLine,
+          createSegment,
+          createLine,
+          createAngleBisectorLine,
+          createCircle,
+          createCircleThreePoint,
+          createCircleFixedRadius,
+          createPolygon,
+          createAngle,
+          createSector,
+          setObjectVisibility,
+        }),
+      transformObjectByRotation: (source, centerId, angleExpr, direction) =>
+        applyRotationToObject(source, centerId, angleExpr, direction, {
+          scene,
+          createPointByTranslation,
+          createPointByRotation,
+          createPointByDilation,
+          createPointByReflection,
+          createPointOnLine,
+          createSegment,
+          createLine,
+          createAngleBisectorLine,
+          createCircle,
+          createCircleThreePoint,
+          createCircleFixedRadius,
+          createPolygon,
+          createAngle,
+          createSector,
+          setObjectVisibility,
+        }),
+      transformObjectByDilation: (source, centerId, factorExpr) =>
+        applyDilationToObject(source, centerId, factorExpr, {
+          scene,
+          createPointByTranslation,
+          createPointByRotation,
+          createPointByDilation,
+          createPointByReflection,
+          createPointOnLine,
+          createSegment,
+          createLine,
+          createAngleBisectorLine,
+          createCircle,
+          createCircleThreePoint,
+          createCircleFixedRadius,
+          createPolygon,
+          createAngle,
+          createSector,
+          setObjectVisibility,
+        }),
+      transformObjectByReflection: (source, axis) =>
+        applyReflectionToObject(source, axis, {
+          scene,
+          createPointByTranslation,
+          createPointByRotation,
+          createPointByDilation,
+          createPointByReflection,
+          createPointOnLine,
+          createSegment,
+          createLine,
+          createAngleBisectorLine,
+          createCircle,
+          createCircleThreePoint,
+          createCircleFixedRadius,
+          createPolygon,
+          createAngle,
+          createSector,
+          setObjectVisibility,
+        }),
       createCircleCenterPoint,
       createIntersectionPoint,
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
+      enableObjectLabel,
       setExportClipWorld,
       getPointWorldById: (id) => {
         const point = scene.points.find((p) => p.id === id);
@@ -184,15 +318,19 @@ export function CanvasView() {
       setPendingSelection,
       clearPendingSelection,
       createFreePoint,
+      createTextLabel,
       createSegment,
       createLine,
       createPolygon,
+      createRegularPolygon,
       createCircle,
       createAuxiliaryCircle,
       createCircleThreePoint,
+      createCircleFixedRadius,
       createPerpendicularLine,
       createParallelLine,
       createTangentLines,
+      createCircleTangentLines,
       createAngleBisectorLine,
       createAngle,
       createSector,
@@ -202,13 +340,18 @@ export function CanvasView() {
       createPointOnLine,
       createPointOnSegment,
       createPointOnCircle,
+      createPointByTranslation,
       createPointByRotation,
+      createPointByDilation,
+      createPointByReflection,
       createCircleCenterPoint,
       createIntersectionPoint,
       setSelectedObject,
       setCopyStyleSource,
       applyCopyStyleTo,
+      enableObjectLabel,
       setExportClipWorld,
+      setObjectVisibility,
       effectiveGridSnapEnabled,
       camera,
       gridSettings,
@@ -237,12 +380,20 @@ export function CanvasView() {
   const resolvedAngles = useMemo(() => resolveAngles(scene), [scene]);
 
   const labelOverlays = useMemo(
-    () => createPointLabelOverlays(resolvedPoints, camera, vp),
-    [resolvedPoints, camera, vp]
+    () => createPointLabelOverlays(resolvedPoints, camera, vp, canvasTheme.backgroundColor),
+    [resolvedPoints, camera, vp, canvasTheme.backgroundColor]
   );
   const angleLabelOverlays = useMemo(
     () => createAngleLabelOverlays(resolvedAngles, camera, vp),
     [resolvedAngles, camera, vp]
+  );
+  const objectLabelOverlays = useMemo(
+    () => createObjectLabelOverlays(scene, camera, vp),
+    [scene, camera, vp]
+  );
+  const textLabelOverlays = useMemo(
+    () => createTextLabelOverlays(scene, camera, vp),
+    [scene, camera, vp]
   );
 
   const hoverSnap: SnapCandidate | null = useMemo(() => {
@@ -285,9 +436,9 @@ export function CanvasView() {
     () => () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const selectedDrawableObject = selectedObject?.type === "number" ? null : selectedObject;
-      const recentDrawableObject = recentCreatedObject?.type === "number" ? null : recentCreatedObject;
-      const copySourceDrawable = copyStyle.source?.type === "number" ? null : copyStyle.source;
+      const selectedDrawableObject = selectedObject?.type === "number" || selectedObject?.type === "textLabel" ? null : selectedObject;
+      const recentDrawableObject = recentCreatedObject?.type === "number" || recentCreatedObject?.type === "textLabel" ? null : recentCreatedObject;
+      const copySourceDrawable = copyStyle.source?.type === "number" || copyStyle.source?.type === "textLabel" ? null : copyStyle.source;
       renderCanvasFrame({
         canvas,
         scene,
@@ -295,6 +446,7 @@ export function CanvasView() {
         vp,
         dpr,
         gridSettings,
+        canvasTheme,
         activeTool,
         pendingSelection,
         cursorWorld,
@@ -305,12 +457,15 @@ export function CanvasView() {
         resolvedPoints,
         resolvedAngles,
         angleFixedTool,
+        regularPolygonTool,
         circleFixedTool,
+        transformTool,
         anglePreviewArcRadius: angleDefaults.arcRadius,
         pendingPreviewTolerances: {
           linePx: LINE_HIT_TOLERANCE_PX,
           segmentPx: SEGMENT_HIT_TOLERANCE_PX,
         },
+        previewTheme,
         selectedDrawableObject,
         recentDrawableObject,
         copySourceDrawable,
@@ -335,11 +490,16 @@ export function CanvasView() {
       recentCreatedObject,
       resolvedPoints,
       resolvedAngles,
+      previewTheme,
       scene,
       selectedObject,
       dependencyGlowEnabled,
       exportClipWorld,
       gridSettings,
+      canvasTheme,
+      circleFixedTool,
+      regularPolygonTool,
+      transformTool,
       vp,
     ]
   );
@@ -371,20 +531,26 @@ export function CanvasView() {
     hoveredHit,
     pointLabelOffsetPx: pointDefaults.labelOffsetPx,
     angleFixedTool,
+    regularPolygonTool,
     circleFixedTool,
+    transformTool,
     constructClickIo,
     tolerances: hitTolerances,
     clickEpsilonPx: CLICK_EPSILON_PX,
     actions: {
       panByScreenDelta,
       movePointTo,
+      movePolygonByWorldDelta,
       movePointLabelBy,
       moveAngleLabelTo,
+      moveObjectLabelTo,
+      moveTextLabelTo,
       setHoverScreen,
       setSnapDisabled,
       setCursorWorld,
       setHoveredHit,
       setSelectedObject,
+      clearPendingSelection,
       zoomAtScreenPoint,
     },
   });
@@ -396,6 +562,8 @@ export function CanvasView() {
         labelsLayerRef={labelsLayerRef}
         labelOverlays={labelOverlays}
         angleLabelOverlays={angleLabelOverlays}
+        objectLabelOverlays={objectLabelOverlays}
+        textLabelOverlays={textLabelOverlays}
       />
     </div>
   );

@@ -83,24 +83,18 @@ const hit = hitTestTopObject(scene, camera, vp, { x: 400, y: 300 });
 assert(hit?.type === "point" && hit.id === "p1", "hitTestTopObject should hit point A at viewport center");
 
 let created = 0;
-constructFromClick({
-  screen: { x: 420, y: 320 },
-  activeTool: "point",
-  pendingSelection: null,
-  hits: {
-    hitPointId: null,
-    hitSegmentId: null,
-    hitObject: null,
-    shiftKey: false,
-    hasCopyStyleSource: false,
-    snap: null,
-  },
-  io: {
+let circleCircleTangents = 0;
+type TestIO = Parameters<typeof constructFromClick>[0]["io"];
+function makeIo(overrides: Partial<TestIO> = {}): TestIO {
+  const baseIo: TestIO = {
     setPendingSelection() {},
     clearPendingSelection() {},
     createFreePoint() {
       created += 1;
       return "p_new";
+    },
+    createTextLabel() {
+      return "txt_new";
     },
     createSegment() {
       return null;
@@ -120,6 +114,9 @@ constructFromClick({
     createPolygon() {
       return null;
     },
+    createRegularPolygon() {
+      return null;
+    },
     createPerpendicularLine() {
       return null;
     },
@@ -128,6 +125,10 @@ constructFromClick({
     },
     createTangentLines() {
       return [];
+    },
+    createCircleTangentLines() {
+      circleCircleTangents += 1;
+      return ["l_t0", "l_t1", "l_t2", "l_t3"];
     },
     createAngleBisectorLine() {
       return null;
@@ -159,6 +160,27 @@ constructFromClick({
     createPointByRotation() {
       return null;
     },
+    createPointByTranslation() {
+      return null;
+    },
+    createPointByDilation() {
+      return null;
+    },
+    createPointByReflection() {
+      return null;
+    },
+    transformObjectByTranslation() {
+      return null;
+    },
+    transformObjectByRotation() {
+      return null;
+    },
+    transformObjectByDilation() {
+      return null;
+    },
+    transformObjectByReflection() {
+      return null;
+    },
     createIntersectionPoint() {
       return null;
     },
@@ -169,18 +191,60 @@ constructFromClick({
     setSelectedObject() {},
     setCopyStyleSource() {},
     applyCopyStyleTo() {},
+    enableObjectLabel() {},
     getPointWorldById() {
       return null;
     },
     angleFixedTool: { angleExpr: "45", direction: "CCW" },
+    regularPolygonTool: { sides: 5, direction: "CCW" },
+    transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
+    evaluateAngleExpressionDegrees() {
+      return { ok: true, valueDeg: 45 };
+    },
     gridSnapEnabled: false,
     snapWorldToGrid(world) {
       return world;
     },
     camera,
     vp,
+  };
+  return {
+    ...baseIo,
+    ...overrides,
+    createTextLabel: overrides.createTextLabel ?? baseIo.createTextLabel,
+  };
+}
+
+constructFromClick({
+  screen: { x: 420, y: 320 },
+  activeTool: "point",
+  pendingSelection: null,
+  hits: {
+    hitPointId: null,
+    hitSegmentId: null,
+    hitObject: null,
+    shiftKey: false,
+    hasCopyStyleSource: false,
+    snap: null,
   },
+  io: makeIo(),
 });
 assert(created === 1, "constructFromClick should delegate point creation");
+
+constructFromClick({
+  screen: { x: 420, y: 320 },
+  activeTool: "tangent_line",
+  pendingSelection: { tool: "tangent_line", step: 2, first: { type: "circle", id: "c1" } },
+  hits: {
+    hitPointId: null,
+    hitSegmentId: null,
+    hitObject: { type: "circle", id: "c2" },
+    shiftKey: false,
+    hasCopyStyleSource: false,
+    snap: null,
+  },
+  io: makeIo(),
+});
+assert(circleCircleTangents === 1, "tangent tool should delegate circle-circle selection to createCircleTangentLines");
 
 console.log("engine-boundary: ok");

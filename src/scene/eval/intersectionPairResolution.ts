@@ -1,3 +1,4 @@
+import { distance } from "../../geo/geometry";
 import type { Vec2 } from "../../geo/vec2";
 import type {
   CircleCircleIntersectionPoint,
@@ -16,6 +17,28 @@ import {
 } from "./intersectionAssignments";
 import { circleLinePairAssignmentKey, genericIntersectionPairKey, sameObjectPair } from "./intersectionUtils";
 
+const ROOT_EPS = 1e-6;
+
+function detectOccupiedRootsByOtherPoints(
+  scenePoints: ScenePoint[],
+  pairIds: Set<string>,
+  roots: Vec2[],
+  getCachedPointWorld: (pointId: string) => Vec2 | null
+): boolean[] | undefined {
+  if (roots.length < 2) return undefined;
+  const occupied = roots.map(() => false);
+  for (const item of scenePoints) {
+    if (pairIds.has(item.id)) continue;
+    const world = getCachedPointWorld(item.id);
+    if (!world) continue;
+    for (let i = 0; i < roots.length; i += 1) {
+      if (!occupied[i] && distance(world, roots[i]) <= ROOT_EPS) occupied[i] = true;
+    }
+    if (occupied.every(Boolean)) break;
+  }
+  return occupied;
+}
+
 export function resolveCircleLinePairAssignmentsInScene(
   scenePoints: ScenePoint[],
   circleId: string,
@@ -25,6 +48,7 @@ export function resolveCircleLinePairAssignmentsInScene(
     getCached: (key: string) => Map<string, Vec2 | null> | undefined;
     setCached: (key: string, value: Map<string, Vec2 | null>) => void;
     getExcludedPointWorld: (pointId: string) => Vec2 | null;
+    getCachedPointWorld: (pointId: string) => Vec2 | null;
     getPreviousStablePoint: (pointId: string) => Vec2 | null;
     rememberStablePoint: (pointId: string, value: Vec2) => void;
   }
@@ -39,10 +63,17 @@ export function resolveCircleLinePairAssignmentsInScene(
     if (item.circleId !== circleId || item.lineId !== lineId) continue;
     pairPoints.push(item as CircleLineIntersectionPoint);
   }
+  let occupiedByOtherPoints: [boolean, boolean] | undefined;
+  if (branches.length === 2 && pairPoints.length > 0) {
+    const pairIds = new Set(pairPoints.map((p) => p.id));
+    const occupied = detectOccupiedRootsByOtherPoints(scenePoints, pairIds, [branches[0].point, branches[1].point], ops.getCachedPointWorld);
+    if (occupied && occupied.length === 2) occupiedByOtherPoints = [occupied[0], occupied[1]];
+  }
   const out = assignCircleLinePairPoints(pairPoints, branches, {
     getExcludedPointWorld: ops.getExcludedPointWorld,
     getPreviousStablePoint: ops.getPreviousStablePoint,
     rememberStablePoint: ops.rememberStablePoint,
+    occupiedByOtherPoints,
   });
   ops.setCached(key, out);
   return out;
@@ -57,6 +88,7 @@ export function resolveGenericIntersectionPairAssignmentsInScene(
     getCached: (key: string) => Map<string, Vec2 | null> | undefined;
     setCached: (key: string, value: Map<string, Vec2 | null>) => void;
     getExcludedPointWorld: (pointId: string) => Vec2 | null;
+    getCachedPointWorld: (pointId: string) => Vec2 | null;
     getPreviousStablePoint: (pointId: string) => Vec2 | null;
     rememberStablePoint: (pointId: string, value: Vec2) => void;
   }
@@ -101,10 +133,16 @@ export function resolveGenericIntersectionPairAssignmentsInScene(
       });
     }
   }
+  let occupiedByOtherPoints: boolean[] | undefined;
+  if (intersections.length >= 2 && pairPoints.length > 0) {
+    const pairIds = new Set(pairPoints.map((p) => p.id));
+    occupiedByOtherPoints = detectOccupiedRootsByOtherPoints(scenePoints, pairIds, intersections, ops.getCachedPointWorld);
+  }
   const out = assignGenericIntersectionPairPoints(pairPoints, intersections, {
     getExcludedPointWorld: ops.getExcludedPointWorld,
     getPreviousStablePoint: ops.getPreviousStablePoint,
     rememberStablePoint: ops.rememberStablePoint,
+    occupiedByOtherPoints,
   });
   ops.setCached(key, out);
   return out;

@@ -22,6 +22,7 @@ export function resolveCircleLinePairAssignmentsWithCtx(
       ctx.circleLinePairAssignments.set(key, value);
     },
     getExcludedPointWorld: (pointId) => ops.getPointWorldById(pointId, scene, ctx),
+    getCachedPointWorld: (pointId) => ctx.pointCache.get(pointId) ?? null,
     getPreviousStablePoint: (pointId) => getPreviousStableCircleLinePoint(pointId, stabilitySignature),
     rememberStablePoint: (pointId, value) => rememberStableCircleLinePoint(pointId, stabilitySignature, value),
   });
@@ -43,6 +44,7 @@ export function resolveGenericIntersectionPairAssignmentsWithCtx(
       ctx.genericIntersectionPairAssignments.set(key, value);
     },
     getExcludedPointWorld: (pointId) => ops.getPointWorldById(pointId, scene, ctx),
+    getCachedPointWorld: (pointId) => ctx.pointCache.get(pointId) ?? null,
     getPreviousStablePoint: (pointId) => getPreviousStableGenericIntersectionPoint(pointId, objA, objB),
     rememberStablePoint: (pointId, value) => rememberStableGenericIntersectionPoint(pointId, objA, objB, value),
   });

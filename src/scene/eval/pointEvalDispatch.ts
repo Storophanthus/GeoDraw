@@ -8,16 +8,21 @@ import type {
   IntersectionPoint,
   MidpointFromPoints,
   MidpointFromSegment,
+  PointByDilation,
+  PointByReflection,
   PointByRotation,
+  PointByTranslation,
   PointOnCircle,
   PointOnLine,
   PointOnSegment,
   SceneModel,
   ScenePoint,
   LineLikeIntersectionPoint,
+  TriangleCenterPoint,
 } from "../points";
 import type { SceneEvalContext } from "./sceneContextBuilder";
 import type { AngleExpressionEvalResult } from "./expressionEval";
+import type { NumberExpressionEvalResult } from "./numericExpression";
 import {
   evalCircleCircleIntersectionPoint,
   evalCircleSegmentIntersectionPoint,
@@ -27,12 +32,16 @@ import {
 } from "./pointIntersectionEvaluators";
 import {
   evalCircleCenterPointPoint,
+  evalPointByDilationPoint,
+  evalPointByReflectionPoint,
   evalMidpointPointsPoint,
   evalMidpointSegmentPoint,
   evalPointByRotationPoint,
+  evalPointByTranslationPoint,
   evalPointOnCirclePoint,
   evalPointOnLinePoint,
   evalPointOnSegmentPoint,
+  evalTriangleCenterPointPoint,
 } from "./pointKindEvaluators";
 
 export type PointEvalDispatchOps = {
@@ -48,6 +57,11 @@ export type PointEvalDispatchOps = {
     exprRaw: string,
     ctx: SceneEvalContext
   ) => AngleExpressionEvalResult;
+  evaluateNumberExpressionWithCtx: (
+    scene: SceneModel,
+    exprRaw: string,
+    ctx: SceneEvalContext
+  ) => NumberExpressionEvalResult;
   resolveCircleLinePairAssignments: (
     scene: SceneModel,
     ctx: SceneEvalContext,
@@ -92,7 +106,11 @@ export function evalPointUnchecked(
   if (point.kind === "pointOnSegment") return evalPointOnSegment(point, scene, ctx, ops);
   if (point.kind === "pointOnCircle") return evalPointOnCircle(point, scene, ctx, ops);
   if (point.kind === "pointByRotation") return evalPointByRotation(point, scene, ctx, ops);
+  if (point.kind === "pointByTranslation") return evalPointByTranslation(point, scene, ctx, ops);
+  if (point.kind === "pointByDilation") return evalPointByDilation(point, scene, ctx, ops);
+  if (point.kind === "pointByReflection") return evalPointByReflection(point, scene, ctx, ops);
   if (point.kind === "circleCenter") return evalCircleCenterPoint(point, scene, ctx, ops);
+  if (point.kind === "triangleCenter") return evalTriangleCenterPoint(point, scene, ctx, ops);
   if (point.kind === "circleLineIntersectionPoint") return evalCircleLineIntersection(point, scene, ctx, ops);
   if (point.kind === "circleSegmentIntersectionPoint") return evalCircleSegmentIntersection(point, scene, ctx, ops);
   if (point.kind === "circleCircleIntersectionPoint") return evalCircleCircleIntersection(point, scene, ctx, ops);
@@ -161,6 +179,41 @@ function evalPointByRotation(
   });
 }
 
+function evalPointByTranslation(
+  point: PointByTranslation,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalPointByTranslationPoint(point, scene, ctx, {
+    getPointWorldById: ops.getPointWorldById,
+  });
+}
+
+function evalPointByDilation(
+  point: PointByDilation,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalPointByDilationPoint(point, scene, ctx, {
+    getPointWorldById: ops.getPointWorldById,
+    evaluateNumberExpressionWithCtx: ops.evaluateNumberExpressionWithCtx,
+  });
+}
+
+function evalPointByReflection(
+  point: PointByReflection,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalPointByReflectionPoint(point, scene, ctx, {
+    getPointWorldById: ops.getPointWorldById,
+    resolveLineAnchorsById: ops.resolveLineAnchorsById,
+  });
+}
+
 function evalCircleCenterPoint(
   point: CircleCenterPoint,
   scene: SceneModel,
@@ -169,6 +222,17 @@ function evalCircleCenterPoint(
 ): Vec2 | null {
   return evalCircleCenterPointPoint(point, scene, ctx, {
     getCircleWorldGeometryWithCtx: ops.getCircleWorldGeometryById,
+  });
+}
+
+function evalTriangleCenterPoint(
+  point: TriangleCenterPoint,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalTriangleCenterPointPoint(point, scene, ctx, {
+    getPointWorldById: ops.getPointWorldById,
   });
 }
 

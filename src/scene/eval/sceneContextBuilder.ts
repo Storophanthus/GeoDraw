@@ -1,8 +1,9 @@
 import { buildSceneEvalContext as buildSceneEvalContextCore, type SceneEvalContext as CoreSceneEvalContext } from "./evalContext";
-import type { SceneAngle, SceneCircle, SceneLine, SceneModel, SceneNumber, ScenePoint, SceneSegment } from "../points";
+import type { SceneAngle, SceneCircle, SceneLine, SceneModel, SceneNumber, ScenePoint, SceneSegment, SceneVector } from "../points";
 
 export type SceneEvalContext = CoreSceneEvalContext<
   ScenePoint,
+  SceneVector,
   SceneLine,
   SceneSegment,
   SceneCircle,
@@ -18,6 +19,8 @@ export function buildSceneEvalContextForScene(
 ): SceneEvalContext {
   const pointById = new Map<string, ScenePoint>();
   for (const point of scene.points) pointById.set(point.id, point);
+  const vectorById = new Map<string, SceneVector>();
+  for (const vector of scene.vectors ?? []) vectorById.set(vector.id, vector);
   const lineById = new Map<string, SceneLine>();
   for (const line of scene.lines) lineById.set(line.id, line);
   const segmentById = new Map<string, SceneSegment>();
@@ -33,6 +36,7 @@ export function buildSceneEvalContextForScene(
     startedAt: startedAtMs,
     explicit,
     pointById,
+    vectorById,
     lineById,
     segmentById,
     circleById,
@@ -41,4 +45,3 @@ export function buildSceneEvalContextForScene(
     dirtyNodes: scene.points.length + scene.numbers.length,
   });
 }
-

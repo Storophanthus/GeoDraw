@@ -1,66 +1,119 @@
-import type { SceneModel } from "../scene/points";
-
 type NumbersSectionProps = {
   newNumberValue: string;
   setNewNumberValue: (next: string) => void;
-  newNumberExpr: string;
-  setNewNumberExpr: (next: string) => void;
-  ratioNumeratorId: string;
-  setRatioNumeratorId: (next: string) => void;
-  ratioDenominatorId: string;
-  setRatioDenominatorId: (next: string) => void;
-  numbers: SceneModel["numbers"];
+  newSliderMin: string;
+  setNewSliderMin: (next: string) => void;
+  newSliderMax: string;
+  setNewSliderMax: (next: string) => void;
+  newSliderStep: string;
+  setNewSliderStep: (next: string) => void;
+  newSliderMode: "real" | "degree";
+  setNewSliderMode: (next: "real" | "degree") => void;
   selectedSegmentId: string | null;
   selectedCircleId: string | null;
   selectedAngleId: string | null;
   createNumber: (def:
     | { kind: "constant"; value: number }
+    | { kind: "slider"; value: number; min: number; max: number; step: number; sliderMode?: "real" | "degree" | "radian" }
     | { kind: "segmentLength"; segId: string }
     | { kind: "circleRadius"; circleId: string }
     | { kind: "circleArea"; circleId: string }
-    | { kind: "angleDegrees"; angleId: string }
-    | { kind: "expression"; expr: string }
-    | { kind: "ratio"; numeratorId: string; denominatorId: string }) => string | null;
+    | { kind: "angleDegrees"; angleId: string }) => string | null;
 };
 
 export function NumbersSection({
   newNumberValue,
   setNewNumberValue,
-  newNumberExpr,
-  setNewNumberExpr,
-  ratioNumeratorId,
-  setRatioNumeratorId,
-  ratioDenominatorId,
-  setRatioDenominatorId,
-  numbers,
+  newSliderMin,
+  setNewSliderMin,
+  newSliderMax,
+  setNewSliderMax,
+  newSliderStep,
+  setNewSliderStep,
+  newSliderMode,
+  setNewSliderMode,
   selectedSegmentId,
   selectedCircleId,
   selectedAngleId,
   createNumber,
 }: NumbersSectionProps) {
   return (
-    <div className="toolInfo">
+    <div className="toolInfo" style={{ marginTop: 16 }}>
       <div className="subSectionTitle">Numbers</div>
       <div className="controlRow">
-        <label className="controlLabel">Constant</label>
+        <label className="controlLabel">Slider Value</label>
         <input
           className="renameInput"
           type="text"
           value={newNumberValue}
           onChange={(e) => setNewNumberValue(e.target.value)}
-          placeholder="e.g. 2.5"
+          placeholder="e.g. 1"
+        />
+      </div>
+      <div className="controlRow">
+        <label className="controlLabel">Slider Type</label>
+        <select
+          className="selectInput"
+          value={newSliderMode}
+          onChange={(e) => setNewSliderMode(e.target.value === "degree" ? "degree" : "real")}
+        >
+          <option value="real">Real</option>
+          <option value="degree">Degree</option>
+        </select>
+      </div>
+      <div className="controlRow">
+        <label className="controlLabel">Min</label>
+        <input
+          className="renameInput"
+          type="text"
+          value={newSliderMin}
+          onChange={(e) => setNewSliderMin(e.target.value)}
+          placeholder={newSliderMode === "degree" ? "0" : "0"}
+        />
+      </div>
+      <div className="controlRow">
+        <label className="controlLabel">Max</label>
+        <input
+          className="renameInput"
+          type="text"
+          value={newSliderMax}
+          onChange={(e) => setNewSliderMax(e.target.value)}
+          placeholder={newSliderMode === "degree" ? "360" : "10"}
+        />
+      </div>
+      <div className="controlRow">
+        <label className="controlLabel">Step</label>
+        <input
+          className="renameInput"
+          type="text"
+          value={newSliderStep}
+          onChange={(e) => setNewSliderStep(e.target.value)}
+          placeholder={newSliderMode === "degree" ? "1" : "0.1"}
         />
       </div>
       <div className="actionsRow">
         <button
           className="actionButton secondary"
           onClick={() => {
-            const v = Number(newNumberValue);
-            if (!Number.isFinite(v)) return;
-            createNumber({ kind: "constant", value: v });
+            const value = Number(newNumberValue);
+            const min = Number(newSliderMin);
+            const max = Number(newSliderMax);
+            const step = Number(newSliderStep);
+            if (![value, min, max, step].every(Number.isFinite)) return;
+            if (!(step > 0)) return;
+            const lo = Math.min(min, max);
+            const hi = Math.max(min, max);
+            createNumber({
+              kind: "slider",
+              value: Math.min(hi, Math.max(lo, value)),
+              min: lo,
+              max: hi,
+              step,
+              sliderMode: newSliderMode,
+            });
           }}
         >
-          Add Constant
+          Add Slider
         </button>
         {selectedSegmentId && (
           <button className="actionButton secondary" onClick={() => createNumber({ kind: "segmentLength", segId: selectedSegmentId })}>
@@ -83,67 +136,6 @@ export function NumbersSection({
           </button>
         )}
       </div>
-      <div className="controlRow">
-        <label className="controlLabel">Formula</label>
-        <input
-          className="renameInput"
-          type="text"
-          value={newNumberExpr}
-          onChange={(e) => setNewNumberExpr(e.target.value)}
-          placeholder="e.g. n_1+n_2^2"
-        />
-      </div>
-      <div className="actionsRow">
-        <button
-          className="actionButton secondary"
-          onClick={() => {
-            const expr = newNumberExpr.trim();
-            if (!expr) return;
-            createNumber({ kind: "expression", expr });
-          }}
-        >
-          Add Formula
-        </button>
-      </div>
-      {numbers.length >= 2 && (
-        <>
-          <div className="controlRow">
-            <label className="controlLabel">Ratio Num</label>
-            <select className="selectInput" value={ratioNumeratorId} onChange={(e) => setRatioNumeratorId(e.target.value)}>
-              {numbers.map((num) => (
-                <option key={num.id} value={num.id}>
-                  {num.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="controlRow">
-            <label className="controlLabel">Ratio Den</label>
-            <select className="selectInput" value={ratioDenominatorId} onChange={(e) => setRatioDenominatorId(e.target.value)}>
-              {numbers.map((num) => (
-                <option key={num.id} value={num.id}>
-                  {num.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="actionsRow">
-            <button
-              className="actionButton secondary"
-              onClick={() => {
-                if (!ratioNumeratorId || !ratioDenominatorId || ratioNumeratorId === ratioDenominatorId) return;
-                createNumber({
-                  kind: "ratio",
-                  numeratorId: ratioNumeratorId,
-                  denominatorId: ratioDenominatorId,
-                });
-              }}
-            >
-              Add Ratio
-            </button>
-          </div>
-        </>
-      )}
     </div>
   );
 }

@@ -24,6 +24,17 @@ export function evalNumberDefinitionWithOps(
     return Number.isFinite(def.value) ? def.value : null;
   }
 
+  if (def.kind === "slider") {
+    if (!Number.isFinite(def.value) || !Number.isFinite(def.min) || !Number.isFinite(def.max) || !Number.isFinite(def.step)) {
+      return null;
+    }
+    if (def.step <= 0) return null;
+    const lo = Math.min(def.min, def.max);
+    const hi = Math.max(def.min, def.max);
+    const clamped = Math.min(hi, Math.max(lo, def.value));
+    return clamped;
+  }
+
   if (def.kind === "distancePoints") {
     const a = ops.getPointWorldById(def.aId);
     const b = ops.getPointWorldById(def.bId);

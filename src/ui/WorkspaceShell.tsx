@@ -1,5 +1,5 @@
 import type { ActiveTool } from "../state/geoStore";
-import type { PointerEventHandler } from "react";
+import { useState, type CSSProperties, type PointerEventHandler } from "react";
 import { CanvasView } from "../view/CanvasView";
 import { CommandBar } from "../CommandBar";
 import { FileControls } from "./FileControls";
@@ -24,6 +24,7 @@ export type WorkspaceShellProps = {
   onFitView: () => void;
   onStartResizeLeft: PointerEventHandler<HTMLDivElement>;
   onStartResizeRight: PointerEventHandler<HTMLDivElement>;
+  uiCssVariables?: CSSProperties;
 };
 
 export function WorkspaceShell({
@@ -43,9 +44,12 @@ export function WorkspaceShell({
   onFitView,
   onStartResizeLeft,
   onStartResizeRight,
+  uiCssVariables,
 }: WorkspaceShellProps) {
+  const [leftFlyoutOpen, setLeftFlyoutOpen] = useState(false);
+
   return (
-    <div className="appShell">
+    <div className="appShell" style={uiCssVariables}>
       <ToolPalette
         activeTool={activeTool}
         onSelectTool={onSelectTool}
@@ -53,9 +57,13 @@ export function WorkspaceShell({
         setLeftCollapsed={setLeftCollapsed}
         leftWidth={leftWidth}
         collapsedWidth={collapsedWidth}
+        onFlyoutVisibilityChange={setLeftFlyoutOpen}
       />
 
-      <div className="resizeHandle left" onPointerDown={onStartResizeLeft} />
+      <div
+        className={leftFlyoutOpen ? "resizeHandle left disabled" : "resizeHandle left"}
+        onPointerDown={leftFlyoutOpen ? undefined : onStartResizeLeft}
+      />
 
       <main className="canvasPane">
         <div style={{ position: "absolute", inset: "0 0 64px 0" }}>

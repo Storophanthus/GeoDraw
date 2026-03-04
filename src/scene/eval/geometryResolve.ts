@@ -15,6 +15,58 @@ type GeometryResolveOps = {
   lineInProgress: Set<string>;
 };
 
+function resolveCircleCircleTangentAnchors(
+  centerA: Vec2,
+  radiusA: number,
+  centerB: Vec2,
+  radiusB: number,
+  family: "outer" | "inner",
+  branchIndex: 0 | 1
+): { a: Vec2; b: Vec2 } | null {
+  if (!(radiusA > 1e-12) || !(radiusB > 1e-12)) return null;
+  const dx = centerB.x - centerA.x;
+  const dy = centerB.y - centerA.y;
+  const d2 = dx * dx + dy * dy;
+  if (d2 <= 1e-12) return null;
+
+  const d = Math.sqrt(d2);
+  const delta = family === "outer" ? radiusB - radiusA : -(radiusA + radiusB);
+  const eps = 1e-10;
+  if (Math.abs(delta) > d + eps) return null;
+
+  const h2 = Math.max(0, d2 - delta * delta);
+  const invD2 = 1 / d2;
+  const baseNx = delta * dx * invD2;
+  const baseNy = delta * dy * invD2;
+  const off = Math.sqrt(h2) * invD2;
+  const sign = branchIndex === 0 ? 1 : -1;
+  let nx = baseNx + sign * off * -dy;
+  let ny = baseNy + sign * off * dx;
+  const nLen = Math.hypot(nx, ny);
+  if (nLen <= 1e-12) return null;
+  nx /= nLen;
+  ny /= nLen;
+
+  const sA = 1;
+  const sB = family === "outer" ? 1 : -1;
+  const tangentA = {
+    x: centerA.x - sA * radiusA * nx,
+    y: centerA.y - sA * radiusA * ny,
+  };
+  const tangentB = {
+    x: centerB.x - sB * radiusB * nx,
+    y: centerB.y - sB * radiusB * ny,
+  };
+
+  if (Math.hypot(tangentA.x - tangentB.x, tangentA.y - tangentB.y) <= 1e-12) {
+    return {
+      a: tangentA,
+      b: { x: tangentA.x - ny, y: tangentA.y + nx },
+    };
+  }
+  return { a: tangentA, b: tangentB };
+}
+
 export function resolveLineAnchorsWithOps(
   line: SceneLine,
   ops: GeometryResolveOps
@@ -54,6 +106,23 @@ export function resolveLineAnchorsWithOps(
         a: through,
         b: { x: tx, y: ty },
       };
+    }
+
+    if (line.kind === "circleCircleTangent") {
+      const circleA = ops.getCircleById(line.circleAId);
+      const circleB = ops.getCircleById(line.circleBId);
+      if (!circleA || !circleB) return null;
+      const geomA = getCircleWorldGeometryWithOps(circleA, ops);
+      const geomB = getCircleWorldGeometryWithOps(circleB, ops);
+      if (!geomA || !geomB) return null;
+      return resolveCircleCircleTangentAnchors(
+        geomA.center,
+        geomA.radius,
+        geomB.center,
+        geomB.radius,
+        line.family,
+        line.branchIndex
+      );
     }
 
     if (line.kind !== "perpendicular" && line.kind !== "parallel" && line.kind !== "angleBisector") {

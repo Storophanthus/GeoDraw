@@ -2,6 +2,15 @@ import { getCircleWorldGeometry, type SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import { resolveCanvasFillStyle } from "../patternFill";
 import { applyStrokeDash } from "../strokeStyle";
+import {
+  arrowCanvasLineWidthFromStoredPt,
+  clamp01,
+  collectArrowPositions,
+  DEFAULT_ARROW_LINE_WIDTH_PT,
+  drawArrowPlacements,
+  resolveArrowPairGapPx,
+  segmentArrowHeadSize,
+} from "../pathArrowRender";
 import type { DrawableObjectSelection } from "./types";
 import type { Vec2 } from "../../geo/vec2";
 
@@ -51,6 +60,7 @@ export function drawCircles(
       ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
       ctx.stroke();
     }
+    drawCircleArrowOverlay(ctx, c, r, circle.style);
 
     if (selectedObject?.type === "circle" && selectedObject.id === circle.id) {
       ctx.globalAlpha = 1;
@@ -80,6 +90,102 @@ export function drawCircles(
         ctx.stroke();
       }
     }
+  }
+  ctx.restore();
+}
+
+function drawCircleArrowOverlay(
+  ctx: CanvasRenderingContext2D,
+  center: Vec2,
+  radius: number,
+  style: SceneModel["circles"][number]["style"]
+): void {
+  const arrows = style.arrowMarks ?? (style.arrowMark ? [style.arrowMark] : []);
+  if (arrows.length === 0) return;
+  if (!Number.isFinite(radius) || radius <= 1e-9) return;
+
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = Number.isFinite(style.strokeOpacity) ? clamp01(style.strokeOpacity) : 1;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  for (const arrow of arrows) {
+    if (!arrow.enabled) continue;
+    const color = arrow.color ?? style.strokeColor;
+    const lineWidthPt =
+      typeof arrow.lineWidthPt === "number" && Number.isFinite(arrow.lineWidthPt) && arrow.lineWidthPt > 0
+        ? arrow.lineWidthPt
+        : DEFAULT_ARROW_LINE_WIDTH_PT;
+    const lineWidth = arrowCanvasLineWidthFromStoredPt(lineWidthPt);
+    const { headSize, separation, widthScale } = segmentArrowHeadSize(lineWidth, arrow.sizeScale, arrow.arrowLength);
+
+    // Legacy support for pairGap if somehow still present, though we migrated away from it.
+    // If direction is simple -> or <-, pairGap is ignored usually, unless we want to support it for single arrow?
+    // The previous logic used pairGap only for <-> or >-<.
+    // We'll keep the logic generic: collect positions (usually just one for single arrow), then render.
+
+    const pairGapPx = resolveArrowPairGapPx(arrow.pairGapPx, separation);
+    const positions = collectArrowPositions(arrow, 0.5);
+    // For circle, positions are t in [0,1].
+
+    const pathLengthPx = Math.max(1e-6, 2 * Math.PI * radius);
+    const pairOffset = Math.max(0.002, Math.min(0.24, pairGapPx / pathLengthPx));
+
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lineWidth;
+
+    const placements: Array<{ tip: Vec2; dirX: number; dirY: number }> = [];
+
+    const pushPlacement = (tRaw: number, reversed: boolean) => {
+      const tWrapped = ((tRaw % 1) + 1) % 1;
+      const angle = Math.PI * 2 * tWrapped;
+      const tip = {
+        x: center.x + Math.cos(angle) * radius,
+        y: center.y + Math.sin(angle) * radius,
+      };
+      // Canvas full-circle arc is drawn for increasing angle (CW in canvas coords? wait).
+      // Math.cos/sin corresponds to standard math angle (CCW from right).
+      // Canvas arc(..., 0, 2PI) draws standard circle.
+      // Tangent direction for increasing angle t: (-sin, cos).
+      // If canvas Y is down:
+      // x = cx + r*cos(a), y = cy + r*sin(a).
+      // dx/da = -r*sin(a), dy/da = r*cos(a).
+      // Tangent vector is (-sin(a), cos(a)).
+      // This is Counter-Clockwise in standard cartesian (Y up).
+      // In Canvas (Y down), increasing angle goes Clockwise.
+      // Let's verify standard canvas arc: 0 is right (1,0). PI/2 is down (0,1).
+      // So increasing angle is CW.
+      // dx/da = -r*sin, dy/da = r*cos.
+      // At 0: (0, 1) -> Down. Correct.
+      // At PI/2: (-1, 0) -> Left. Correct.
+      // So the tangent vector (-sin, cos) points in the direction of increasing T (CW).
+      const tangentX = -Math.sin(angle);
+      const tangentY = Math.cos(angle);
+      placements.push({
+        tip,
+        dirX: reversed ? -tangentX : tangentX,
+        dirY: reversed ? -tangentY : tangentY,
+      });
+    };
+
+    for (let i = 0; i < positions.length; i += 1) {
+      const t = positions[i]; // collectArrowPositions already handles distribution
+      if (arrow.direction === "->") {
+        pushPlacement(t, false);
+      } else if (arrow.direction === "<-") {
+        pushPlacement(t, true);
+      } else if (arrow.direction === "<->") {
+        pushPlacement(t - pairOffset, true);
+        pushPlacement(t + pairOffset, false);
+      } else {
+        // >-<
+        pushPlacement(t - pairOffset, false);
+        pushPlacement(t + pairOffset, true);
+      }
+    }
+    drawArrowPlacements(ctx, placements, headSize, arrow.tip, widthScale);
   }
   ctx.restore();
 }

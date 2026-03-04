@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { exportTikz } from "../src/export/tikz.ts";
+import { exportTikz, exportTikzWithOptions, makeEfficientTikz } from "../src/export/tikz.ts";
 import type {
   CircleStyle,
   GeometryObjectRef,
@@ -93,6 +93,8 @@ async function main(): Promise<void> {
     await compileTikzSnippet(fileName.replace(/\.json$/, ""), tikz);
     console.log(`✓ ${fileName}`);
   }
+
+  assertTkzSetupToggleRegression();
 
   console.log(`All ${files.length} export fixtures compiled successfully.`);
 }
@@ -235,6 +237,9 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       throughId: String(raw.throughId),
       base,
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -246,6 +251,24 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       circleId: String(raw.circleId),
       branchIndex: Number(raw.branchIndex) === 1 ? 1 : 0,
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      style: (raw.style as LineStyle) ?? defaultLineStyle,
+    };
+  }
+  if (kind === "circleCircleTangent") {
+    return {
+      id: String(raw.id),
+      kind: "circleCircleTangent",
+      circleAId: String(raw.circleAId),
+      circleBId: String(raw.circleBId),
+      family: String(raw.family) === "inner" ? "inner" : "outer",
+      branchIndex: Number(raw.branchIndex) === 1 ? 1 : 0,
+      visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -257,6 +280,9 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       bId: String(raw.bId),
       cId: String(raw.cId),
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -266,6 +292,9 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
     aId: String(raw.aId),
     bId: String(raw.bId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+    labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+    labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
     style: (raw.style as LineStyle) ?? defaultLineStyle,
   };
 }
@@ -277,6 +306,8 @@ function hydrateSegment(raw: Record<string, unknown>): SceneSegment {
     bId: String(raw.bId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
     showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+    labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+    labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
     style: (raw.style as LineStyle) ?? defaultLineStyle,
   };
 }
@@ -291,6 +322,9 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
       radius: Number(raw.radius),
       radiusExpr: typeof raw.radiusExpr === "string" ? raw.radiusExpr : undefined,
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as CircleStyle) ?? defaultCircleStyle,
     };
   }
@@ -302,6 +336,9 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
       bId: String(raw.bId),
       cId: String(raw.cId),
       visible: raw.visible === undefined ? true : Boolean(raw.visible),
+      showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+      labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+      labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
       style: (raw.style as CircleStyle) ?? defaultCircleStyle,
     };
   }
@@ -311,6 +348,9 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
     centerId: String(raw.centerId),
     throughId: String(raw.throughId),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+    labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+    labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
     style: (raw.style as CircleStyle) ?? defaultCircleStyle,
   };
 }
@@ -354,8 +394,17 @@ function hydratePolygon(raw: Record<string, unknown>): ScenePolygon {
     id: String(raw.id),
     pointIds: Array.isArray(raw.pointIds) ? raw.pointIds.map((id) => String(id)) : [],
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+    labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+    labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
     style: (raw.style as PolygonStyle) ?? defaultPolygonStyle,
   };
+}
+
+function isVec2Like(value: unknown): value is { x: number; y: number } {
+  if (!value || typeof value !== "object") return false;
+  const maybe = value as { x?: unknown; y?: unknown };
+  return Number.isFinite(maybe.x) && Number.isFinite(maybe.y);
 }
 
 function hydrateNumber(raw: Record<string, unknown>): SceneNumber {
@@ -368,6 +417,26 @@ function hydrateNumber(raw: Record<string, unknown>): SceneNumber {
 }
 
 function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene: SceneModel, exportError: Error | null): void {
+  if (fileName === "object-labels-basic.json") {
+    if (exportError) throw exportError;
+    const nodeCount = (tikz.match(/\\node(?:\[[^\]]*\])?\s+at\s+\(/g) ?? []).length;
+    if (nodeCount < 4) {
+      throw new Error(`Expected object-label fixture to emit at least 4 node labels, got ${nodeCount}.`);
+    }
+    if (!tikz.includes("{$s$}")) {
+      throw new Error("Expected segment object label to be exported.");
+    }
+    if (!tikz.includes("{$m$}")) {
+      throw new Error("Expected line object label to be exported.");
+    }
+    if (!tikz.includes("{$\\Gamma_1$}")) {
+      throw new Error("Expected circle object label to be exported.");
+    }
+    if (!tikz.includes("{$ABDC$}")) {
+      throw new Error("Expected polygon object label to be exported.");
+    }
+  }
+
   if (fileName === "perpendicular-line-through-point.json") {
     if (exportError) {
       if (!exportError.message.includes("Unsupported construction: PerpendicularLine")) {
@@ -400,6 +469,178 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("\\tkzDrawLine")) {
       throw new Error("Expected tangent fixture to draw tangent line.");
     }
+  }
+
+  if (fileName === "tangent-circle-circle.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefExtSimilitudeCenter") || !tikz.includes("\\tkzDefIntSimilitudeCenter")) {
+      throw new Error("Expected circle-circle tangent fixture to emit tkz similitude-center constructions.");
+    }
+    if (!tikz.includes("\\tkzDefLine[tangent from =")) {
+      throw new Error("Expected circle-circle tangent fixture to emit tangent-from-point line construction.");
+    }
+    if (!tikz.includes("\\tkzDrawLine")) {
+      throw new Error("Expected circle-circle tangent fixture to draw tangent lines.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-branch-pairing.json") {
+    if (exportError) {
+      if (
+        !exportError.message.includes("tangent line-circle intersections are unsupported in tkz export") &&
+        !exportError.message.includes("near-tangent line-circle intersections are unsupported in tkz export")
+      ) {
+        throw exportError;
+      }
+      return;
+    }
+    if (!tikz.includes("\\tkzDefExtSimilitudeCenter") || !tikz.includes("\\tkzDefIntSimilitudeCenter")) {
+      throw new Error("Expected branch-pairing tangent fixture to emit similitude-center constructions.");
+    }
+    // Regression: common-tangent branch pairing must respect tkz tangent-from-point point order.
+    // This fixture previously exported the outer tangent as (tkzTanCC_7_1,tkzTanCC_9_1), which mismatched branches.
+    if (tikz.includes("(tkzTanCC_7_1,tkzTanCC_9_1)")) {
+      throw new Error("Regression: exported circle-circle tangent reused mismatched tangent-point branch pair.");
+    }
+    if (!tikz.includes("(tkzTanCC_8_2,tkzTanCC_10_2)")) {
+      throw new Error("Regression: expected corrected outer common-tangent branch pairing in exported TikZ.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-a-inner-intersecting-visible-fail.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDefIntSimilitudeCenter")) {
+      throw new Error("Impossible intersecting inner tangents should be skipped, not exported.");
+    }
+    if (tikz.includes("tkzTanCC_")) {
+      throw new Error("Impossible intersecting inner tangents should not emit tangent helper points.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-a-inner-intersecting-hidden-pass.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Expected hidden-inner-tangent fixture to still export visible outer tangent constructively.");
+    }
+    if (tikz.includes("inner tangents are undefined for intersecting circles")) {
+      throw new Error("Hidden impossible tangents should not poison export.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-exact-external.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefLine[perpendicular=through tkzTanCC_T_")) {
+      throw new Error("Expected exact external tangency fixture to export collapsed inner tangent constructively via perpendicular-through-contact.");
+    }
+    if (!tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Expected exact external tangency fixture to still export non-degenerate outer tangents constructively.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-exact-internal.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefLine[perpendicular=through tkzTanCC_T_")) {
+      throw new Error("Expected exact internal tangency fixture to export collapsed outer tangent constructively via perpendicular-through-contact.");
+    }
+    if (tikz.includes("\\tkzDefIntSimilitudeCenter")) {
+      throw new Error("Impossible inner tangents in exact internal tangency should be skipped, not exported.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-near-equal-outer-safe.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Near-equal outer tangent fixture should avoid unstable external similitude-center construction.");
+    }
+    if (!tikz.includes("tkzTanCC_expA_") || !tikz.includes("tkzTanCC_expB_")) {
+      throw new Error("Near-equal outer tangent fixture should use explicit tangent-point fallback in unsafe tkz region.");
+    }
+    if (tikz.includes("tkzTanCC_R_")) {
+      throw new Error("Near-equal outer tangent fixture should avoid reduced-radius helper tangent construction in unsafe region.");
+    }
+    if (!tikz.includes("% gd fallback: unsafe near-equal outer tangent")) {
+      throw new Error("Near-equal outer tangent fixture should emit an explicit fallback comment marker in constructions.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-near-equal-outer-intersecting-safe.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error(
+        "Near-equal intersecting outer tangent fixture should avoid unstable external similitude-center construction."
+      );
+    }
+    if (!tikz.includes("tkzTanCC_expA_") || !tikz.includes("tkzTanCC_expB_")) {
+      throw new Error(
+        "Near-equal intersecting outer tangent fixture should use explicit tangent-point fallback in unsafe tkz region."
+      );
+    }
+    if (tikz.includes("tkzTanCC_R_")) {
+      throw new Error(
+        "Near-equal intersecting outer tangent fixture should avoid reduced-radius helper tangent construction in unsafe region."
+      );
+    }
+    if (!tikz.includes("% gd fallback: unsafe near-equal outer tangent")) {
+      throw new Error(
+        "Near-equal intersecting outer tangent fixture should emit an explicit fallback comment marker in constructions."
+      );
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (!efficient.includes("tkzTanCC_expA_") || !efficient.includes("tkzTanCC_expB_")) {
+      throw new Error("Efficient export must preserve explicit tangent-point fallback for unsafe near-equal outer tangents.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-equal-radius-outer-safe.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Equal-radius outer tangent fixture should avoid external similitude-center construction at infinity.");
+    }
+    if (tikz.includes("tkzTanCC_A_") || tikz.includes("tkzTanCC_B_")) {
+      throw new Error("Equal-radius outer tangent fixture should avoid hard-coded tangent-point fallback.");
+    }
+    if (!tikz.includes("tkzTanCC_eqRot_") || !tikz.includes("\\tkzDefPointBy[rotation=center")) {
+      throw new Error("Equal-radius outer tangent fixture should use constructive rotation-based parallel tangent construction.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-equal-radius-outer-intersecting-safe.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Equal-radius intersecting outer tangent fixture should avoid external similitude-center construction at infinity.");
+    }
+    if (tikz.includes("tkzTanCC_A_") || tikz.includes("tkzTanCC_B_")) {
+      throw new Error("Equal-radius intersecting outer tangent fixture should avoid hard-coded tangent-point fallback.");
+    }
+    if (!tikz.includes("tkzTanCC_eqRot_") || !tikz.includes("\\tkzDefPointBy[rotation=center")) {
+      throw new Error("Equal-radius intersecting outer tangent fixture should use constructive rotation-based parallel tangent construction.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-near-degenerate-external-fail.json") {
+    if (!exportError) {
+      throw new Error("Near-degenerate external tangency fixture should fail closed in exporter.");
+    }
+    if (!exportError.message.includes("near-degenerate external tangency")) {
+      throw new Error("Near-degenerate external tangency fixture should report explicit topology in the error message.");
+    }
+    if (!exportError.message.includes("d=") || !exportError.message.includes("r1=") || !exportError.message.includes("extGap=")) {
+      throw new Error("Near-degenerate external tangency fixture should include numeric diagnostics in the error message.");
+    }
+    return;
+  }
+
+  if (fileName === "tangent-circle-circle-near-degenerate-internal-fail.json") {
+    if (!exportError) {
+      throw new Error("Near-degenerate internal tangency fixture should fail closed in exporter.");
+    }
+    if (!exportError.message.includes("near-degenerate internal tangency")) {
+      throw new Error("Near-degenerate internal tangency fixture should report explicit topology in the error message.");
+    }
+    if (!exportError.message.includes("d=") || !exportError.message.includes("r1=") || !exportError.message.includes("intGap=")) {
+      throw new Error("Near-degenerate internal tangency fixture should include numeric diagnostics in the error message.");
+    }
+    return;
   }
 
   if (fileName === "angle-bisector-internal.json") {
@@ -500,7 +741,9 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!/\\tkzInterLL\(F,G\)\(E,D\)\s+\\tkzGetPoint\{J\}/.test(tikz)) {
       throw new Error("Regression: expected J to be defined from InterLL(F,G)(E,D).");
     }
-    if (!/\\tkzInterLC(?:\[[^\]]*\])?\(F,G\)\(K,J\)\s+\\tkzGetPoints\{O\}\{[^}]+\}/.test(tikz)) {
+    if (
+      !/\\tkzInterLC(?:\[[^\]]*\])?\((?:F,G|G,F)\)\(K,J\)\s+\\tkzGetPoints(?:\{O\}\{[^}]+\}|\{[^}]+\}\{O\})/.test(tikz)
+    ) {
       throw new Error("Regression: expected O to be defined from InterLC(F,G)(K,J).");
     }
     const drawLines = parseDrawLines(tikz);
@@ -631,6 +874,59 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("mkpos=0.35")) throw new Error("Expected mark-bars angle to emit mkpos=0.35.");
   }
 
+  if (fileName === "angle-mark-list-quad.json") {
+    if (exportError) throw exportError;
+    const markAngleLines = tikz.match(/\\tkzMarkAngle\[[^\]]*\]/g) ?? [];
+    const groupedMarkAngleForeach = /\\foreach\s+\\[A-Za-z@][A-Za-z0-9@]*(?:\/\\[A-Za-z@][A-Za-z0-9@]*)+\s+in\s*\{[^}]*\}\{\\tkzMarkAngle\[/.test(
+      tikz
+    );
+    if (markAngleLines.length < 2 && !groupedMarkAngleForeach) {
+      throw new Error("Expected angle mark list quad fixture to emit repeated or grouped \\tkzMarkAngle commands.");
+    }
+    if (markAngleLines.length >= 2) {
+      const doubleArcLines = markAngleLines.filter((line) => line.includes("arc=ll"));
+      if (doubleArcLines.length < 2) {
+        throw new Error("Expected angle mark list quad fixture to emit two double-arc mark commands.");
+      }
+      const sizes = doubleArcLines
+        .map((line) => {
+          const m = line.match(/size=([0-9.]+)/);
+          return m ? Number(m[1]) : NaN;
+        })
+        .filter((value) => Number.isFinite(value));
+      if (sizes.length < 2 || !(sizes[1] > sizes[0])) {
+        throw new Error("Expected stacked angle mark list to increase arc size on later entries.");
+      }
+    } else {
+      if (!tikz.includes("\\foreach") || !tikz.includes("\\tkzMarkAngle[") || !tikz.includes("ll")) {
+        throw new Error("Expected grouped angle mark list quad fixture to include two double-arc entries.");
+      }
+    }
+  }
+
+  if (fileName === "angle-mark-list-bars.json") {
+    if (exportError) throw exportError;
+    const markAngleLines = tikz.match(/\\tkzMarkAngle\[[^\]]*\]/g) ?? [];
+    const groupedMarkAngleForeach = /\\foreach\s+\\[A-Za-z@][A-Za-z0-9@]*(?:\/\\[A-Za-z@][A-Za-z0-9@]*)*\s+in\s*\{[^}]*\}\{\\tkzMarkAngle\[/.test(
+      tikz
+    );
+    if (markAngleLines.length < 2 && !groupedMarkAngleForeach) {
+      throw new Error("Expected angle mark list bars fixture to emit repeated or grouped \\tkzMarkAngle commands.");
+    }
+    const hasFirstBar =
+      markAngleLines.some((line) => line.includes("mark=||") && line.includes("mkpos=0.3")) ||
+      (groupedMarkAngleForeach && tikz.includes("/||") && tikz.includes("/0.3"));
+    if (!hasFirstBar) {
+      throw new Error("Expected angle mark list bars fixture to emit first bar-mark entry with mkpos=0.3.");
+    }
+    const hasSecondBar =
+      markAngleLines.some((line) => line.includes("mark=|") && line.includes("mkpos=0.72")) ||
+      (groupedMarkAngleForeach && tikz.includes("/|") && tikz.includes("/0.72"));
+    if (!hasSecondBar) {
+      throw new Error("Expected angle mark list bars fixture to emit second bar-mark entry with mkpos=0.72.");
+    }
+  }
+
   if (fileName === "angle-right-square.json") {
     if (exportError) throw exportError;
     if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-square angle to emit \\tkzMarkRightAngles.");
@@ -655,13 +951,13 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "undefined-circle-line-points.json") {
-    if (exportError) throw exportError;
-    if (tikz.includes("\\tkzDrawPoints[tkzVertex](E") || tikz.includes(",E,") || tikz.includes(",F,")) {
-      throw new Error("Expected undefined circle-line points to be omitted from point drawing.");
+    if (!exportError) {
+      throw new Error("Visible undefined circle-line points should fail closed in exporter.");
     }
-    if (tikz.includes("\\tkzLabelPoint") && (tikz.includes("(E){") || tikz.includes("(F){"))) {
-      throw new Error("Expected undefined circle-line points to be omitted from label drawing.");
+    if (!exportError.message.includes("Cannot export visible undefined point")) {
+      throw new Error("Expected explicit visible undefined point exporter error.");
     }
+    return;
   }
 
   if (fileName === "segment-mark-basic.json") {
@@ -683,34 +979,373 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "segment-mark-list.json") {
+    if (exportError) throw exportError;
+    const markLines = tikz.match(/\\tkzMarkSegment\[[^\]]*\]/g) ?? [];
+    if (markLines.length < 2) {
+      throw new Error("Expected segment mark list fixture to emit multiple \\tkzMarkSegment commands.");
+    }
+    if (!markLines.some((line) => line.includes("mark=||") && line.includes("pos=0.25"))) {
+      throw new Error("Expected segment mark list fixture to include first mark at pos=0.25.");
+    }
+    if (!markLines.some((line) => line.includes("mark=x") && line.includes("pos=0.75"))) {
+      throw new Error("Expected segment mark list fixture to include second mark at pos=0.75.");
+    }
+  }
+
+  if (fileName === "segment-mark-multi.json") {
+    if (exportError) throw exportError;
+    const usesForeach = tikz.includes("\\foreach \\gdPos in {");
+    if (usesForeach) {
+      if (!tikz.includes("\\tkzMarkSegment[") || !tikz.includes("pos=\\gdPos")) {
+        throw new Error("Expected segment multi-mark fixture to use foreach-driven \\tkzMarkSegment output.");
+      }
+      if (!tikz.includes("{0.2,0.3,0.4}")) {
+        throw new Error("Expected segment multi-mark foreach export to include positions 0.2,0.3,0.4.");
+      }
+    } else {
+      const markLines = tikz.match(/\\tkzMarkSegment\[[^\]]*\]/g) ?? [];
+      if (markLines.length < 3) {
+        throw new Error("Expected segment multi-mark fixture to emit repeated \\tkzMarkSegment commands.");
+      }
+      if (!markLines.some((line) => line.includes("pos=0.2"))) {
+        throw new Error("Expected segment multi-mark fixture to include pos=0.2.");
+      }
+      if (!markLines.some((line) => line.includes("pos=0.3"))) {
+        throw new Error("Expected segment multi-mark fixture to include pos=0.3.");
+      }
+      if (!markLines.some((line) => line.includes("pos=0.4"))) {
+        throw new Error("Expected segment multi-mark fixture to include pos=0.4.");
+      }
+    }
+  }
+
+  if (fileName === "segment-mark-multi-fine-step.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\foreach \\gdPos in {")) {
+      throw new Error("Expected fine-step multi-mark fixture to emit foreach compact segment mark output.");
+    }
+    if (tikz.includes("000000000000") || tikz.includes("000000000001")) {
+      throw new Error("Expected fine-step multi-mark standard export to avoid floating-tail precision artifacts.");
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (!efficient.includes("\\foreach \\gdPos in {")) {
+      throw new Error("Expected fine-step multi-mark efficient export to keep foreach compact segment mark output.");
+    }
+    if (efficient.includes("000000000000") || efficient.includes("000000000001")) {
+      throw new Error("Expected fine-step multi-mark efficient export to avoid floating-tail precision artifacts.");
+    }
+  }
+
   if (fileName === "segment-mark-arrow-end.json") {
     if (exportError) throw exportError;
     if (!tikz.includes("-{Stealth")) {
       throw new Error("Expected segment end-arrow fixture to emit Stealth end-arrow draw.");
     }
-    if (!tikz.includes("-- (E);")) {
+    if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\([^,]+,E\)/.test(tikz)) {
       throw new Error("Expected segment end-arrow fixture to draw to endpoint.");
     }
   }
 
+  if (fileName === "segment-mark-arrow-end-list-priority.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("-{Stealth")) {
+      throw new Error("Expected list-based segment end-arrow fixture to emit Stealth end-arrow draw.");
+    }
+    if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\([^,]+,E\)/.test(tikz)) {
+      throw new Error("Expected list-based segment end-arrow fixture to draw to endpoint.");
+    }
+    if (tikz.includes("mark=at position")) {
+      throw new Error("Expected list-based segment end-arrow fixture to avoid mid-position markings.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-end-dual-same-color.json") {
+    if (exportError) throw exportError;
+    const efSegmentDraws = tikz.match(/\\tkzDrawSegment\[[^\]]*\]\(E,F\)/g) ?? [];
+    if (efSegmentDraws.some((cmd) => !cmd.includes("}-{Stealth["))) {
+      throw new Error("Expected dual endpoint arrows to replace base segment stroke.");
+    }
+    if (!tikz.includes("}-{Stealth[")) {
+      throw new Error("Expected dual endpoint arrows to merge into a single bidirectional endpoint draw.");
+    }
+    const mergedCount = (tikz.match(/\\tkzDrawSegment\[[^\]]*\{Stealth\[[^\]]*\]\}-\{Stealth\[[^\]]*\]\}[^\]]*\]\(E,F\)/g) ?? []).length;
+    if (mergedCount !== 1) {
+      throw new Error(`Expected one merged E,F bidirectional segment draw command; found ${mergedCount}.`);
+    }
+    if (/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(F,E\)/.test(tikz)) {
+      throw new Error("Expected no separate reverse full-length tkz segment draw after bidirectional merge.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-end-dual-mixed-size.json") {
+    if (exportError) throw exportError;
+    const efSegmentDraws = tikz.match(/\\tkzDrawSegment\[[^\]]*\]\(E,F\)/g) ?? [];
+    if (efSegmentDraws.some((cmd) => !cmd.includes("-{Stealth["))) {
+      throw new Error("Expected mixed-size dual endpoint arrows to replace base segment stroke.");
+    }
+    const fullForward = /\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(E,F\)/.test(tikz);
+    if (!fullForward) {
+      throw new Error("Expected mixed-size dual endpoint arrows to keep one full carrier draw.");
+    }
+    if (/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(F,E\)/.test(tikz)) {
+      throw new Error("Expected non-carrier reverse endpoint arrow to avoid full-length reverse draw.");
+    }
+    if (!tikz.includes("$(") || !tikz.includes("!0.")) {
+      throw new Error("Expected non-carrier reverse endpoint arrow to emit short head-only endpoint draw.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-end-plus-mid-same-color.json") {
+    if (exportError) throw exportError;
+    const efSegmentDraws = tikz.match(/\\tkzDrawSegment\[[^\]]*\]\(E,F\)/g) ?? [];
+    if (efSegmentDraws.some((cmd) => !cmd.includes("-{Stealth["))) {
+      throw new Error("Expected endpoint+mid fixture to replace base segment stroke with endpoint arrow draw.");
+    }
+    if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(E,F\)/.test(tikz)) {
+      throw new Error("Expected endpoint+mid fixture to emit endpoint draw for E->F.");
+    }
+    if (!tikz.includes("mark=at position")) {
+      throw new Error("Expected endpoint+mid fixture to preserve midpoint arrow marks.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-end-color-mismatch.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDrawSegment") || !tikz.includes("(E,F)")) {
+      throw new Error("Expected color-mismatch endpoint fixture to keep base segment stroke.");
+    }
+    if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\(E,F\)/.test(tikz)) {
+      throw new Error("Expected color-mismatch endpoint fixture to still emit endpoint draw.");
+    }
+  }
+
   if (fileName === "segment-mark-arrow-mid.json") {
+    if (exportError) throw exportError;
     if (!tikz.includes("postaction=decorate")) {
       throw new Error("Expected segment mid-arrow fixture to emit decoration-based draw.");
     }
     if (!tikz.includes("mark=at position")) {
       throw new Error("Expected segment mid-arrow fixture to emit mark=at position.");
     }
+    if (!tikz.includes("\\arrowreversed")) {
+      throw new Error("Expected segment mid-arrow fixture to include reversed arrow command.");
+    }
+    const markCount = (tikz.match(/mark=at position/g) ?? []).length;
+    if (markCount < 2) {
+      throw new Error("Expected segment bidirectional mid-arrow to emit separated mark positions.");
+    }
+    const marks = extractMarkCommands(tikz);
+    if (marks.length < 2) {
+      throw new Error("Expected segment bidirectional mid-arrow to emit parseable mark commands.");
+    }
+    const [left, right] = marks
+      .slice(0, 2)
+      .sort((a, b) => a.position - b.position);
+    if (left.cmd !== "arrowreversed" || right.cmd !== "arrow") {
+      throw new Error("Expected segment <-> mid-arrow to emit outward command order: reversed then forward.");
+    }
+    const segment = scene.segments[0];
+    const pointA = scene.points.find((point) => point.id === segment?.aId);
+    const pointB = scene.points.find((point) => point.id === segment?.bId);
+    const worldA = pointA ? getPointWorldPos(pointA, scene) : null;
+    const worldB = pointB ? getPointWorldPos(pointB, scene) : null;
+    const pathLengthWorld = worldA && worldB ? Math.hypot(worldB.x - worldA.x, worldB.y - worldA.y) : 0;
+    const pxPerWorld = extractEffectiveDrawScale(tikz) * 37.8;
+    const gapPx = (right.position - left.position) * pathLengthWorld * pxPerWorld;
+    if (!Number.isFinite(gapPx) || gapPx < 3) {
+      throw new Error("Expected segment <-> mid-arrow marks to be separated enough to be visually distinct.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-mid-near-edge.json") {
+    if (exportError) throw exportError;
+    if (/\\tkzDrawSegment\[[^\]]*-\{(?:Stealth|Latex|Triangle)\[[^\]]*\][^\]]*\]/.test(tikz)) {
+      throw new Error("Expected near-edge mid arrow fixture to remain decoration-based (not endpoint draw).");
+    }
+    const marks = extractMarkCommands(tikz);
+    if (marks.length < 1) {
+      throw new Error("Expected near-edge mid arrow fixture to emit parseable mark commands.");
+    }
+    const first = marks[0];
+    if (first.cmd !== "arrowreversed") {
+      throw new Error("Expected near-edge mid <- arrow to emit arrowreversed command.");
+    }
+    if (Math.abs(first.position - 0.02) > 0.005) {
+      throw new Error(`Expected near-edge mid arrow position ~0.02, got ${first.position}.`);
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-mid-endpoint-compat.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("-{Stealth")) {
+      throw new Error("Expected endpoint-compat fixture to emit end-arrow draw for legacy mid pos=1.");
+    }
+    if (!/\\tkzDrawSegment\[[^\]]*-\{Stealth\[[^\]]*\][^\]]*\]\([^,]+,F\)/.test(tikz)) {
+      throw new Error("Expected endpoint-compat fixture to draw to endpoint F.");
+    }
+    if (tikz.includes("mark=at position")) {
+      throw new Error("Expected endpoint-compat fixture to avoid mark-at-position output.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-mid-gap.json") {
+    if (exportError) throw exportError;
+    const marks = extractMarkCommands(tikz);
+    if (marks.length < 2) {
+      throw new Error("Expected mid-gap fixture to emit parseable mark commands.");
+    }
+    const [left, right] = marks
+      .slice(0, 2)
+      .sort((a, b) => a.position - b.position);
+    if (left.cmd !== "arrowreversed" || right.cmd !== "arrow") {
+      throw new Error("Expected segment <-> mid-gap fixture to emit outward command order.");
+    }
+    const measuredGap = right.position - left.position;
+    const segment = scene.segments[0];
+    const pointA = scene.points.find((point) => point.id === segment?.aId);
+    const pointB = scene.points.find((point) => point.id === segment?.bId);
+    const worldA = pointA ? getPointWorldPos(pointA, scene) : null;
+    const worldB = pointB ? getPointWorldPos(pointB, scene) : null;
+    const pathLengthWorld =
+      worldA && worldB ? Math.hypot(worldB.x - worldA.x, worldB.y - worldA.y) : 0;
+    if (!(pathLengthWorld > 1e-9)) {
+      throw new Error("Expected mid-gap fixture to have a resolvable non-zero segment length.");
+    }
+    const explicitPairGap =
+      (Array.isArray(segment?.style.segmentArrowMarks) && segment.style.segmentArrowMarks.length > 0
+        ? segment.style.segmentArrowMarks[0]?.pairGapPx
+        : segment?.style.segmentArrowMark?.pairGapPx) ?? 30;
+    const pairGapPx = Number.isFinite(explicitPairGap) ? Number(explicitPairGap) : 30;
+    const pictureScaleMatch = tikz.match(/\\begin\{tikzpicture\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+    const scopeScaleMatch = tikz.match(/\\begin\{scope\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+    const tikzScale = pictureScaleMatch
+      ? Number(pictureScaleMatch[1])
+      : scopeScaleMatch
+        ? Number(scopeScaleMatch[1])
+        : 1;
+    const pxPerWorld = Number.isFinite(tikzScale) && tikzScale > 0 ? tikzScale * 37.8 : 80;
+    const expectedGap = (2 * pairGapPx) / (pathLengthWorld * pxPerWorld); // 2*pairGapPx / (pathLengthWorld * export px density)
+    if (Math.abs(measuredGap - expectedGap) > 0.005) {
+      throw new Error(`Expected explicit pairGapPx spacing ${expectedGap}, got ${measuredGap}.`);
+    }
   }
 
   if (fileName === "segment-mark-arrow-mid-multi.json") {
+    if (exportError) throw exportError;
     if (!tikz.includes("postaction=decorate")) {
       throw new Error("Expected segment multi mid-arrow fixture to emit decoration-based draw.");
     }
-    if (!tikz.includes("mark=between positions")) {
-      throw new Error("Expected segment multi mid-arrow fixture to emit mark=between positions.");
+    if (!tikz.includes("mark=at position")) {
+      throw new Error("Expected segment multi mid-arrow fixture to emit per-position marks.");
     }
-    if (!tikz.includes("step 0.05")) {
-      throw new Error("Expected segment multi mid-arrow fixture to emit step 0.05.");
+    const markCount = (tikz.match(/mark=at position/g) ?? []).length;
+    if (markCount < 3) {
+      throw new Error("Expected segment multi mid-arrow fixture to emit multiple mark entries.");
+    }
+  }
+
+  if (fileName === "segment-mark-arrow-mid-inward.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\arrow[")) {
+      throw new Error("Expected inward mid-arrow fixture to include forward arrow command.");
+    }
+    if (!tikz.includes("\\arrowreversed[")) {
+      throw new Error("Expected inward mid-arrow fixture to include reversed arrow command.");
+    }
+    if (!tikz.includes("{Latex[")) {
+      throw new Error("Expected inward mid-arrow fixture to emit Latex tip style.");
+    }
+    const marks = extractMarkCommands(tikz);
+    if (marks.length < 2) {
+      throw new Error("Expected inward mid-arrow fixture to emit parseable mark commands.");
+    }
+    const [left, right] = marks
+      .slice(0, 2)
+      .sort((a, b) => a.position - b.position);
+    if (left.cmd !== "arrow" || right.cmd !== "arrowreversed") {
+      throw new Error("Expected segment >-< mid-arrow to emit inward command order: forward then reversed.");
+    }
+    const segment = scene.segments[0];
+    const pointA = scene.points.find((point) => point.id === segment?.aId);
+    const pointB = scene.points.find((point) => point.id === segment?.bId);
+    const worldA = pointA ? getPointWorldPos(pointA, scene) : null;
+    const worldB = pointB ? getPointWorldPos(pointB, scene) : null;
+    const pathLengthWorld = worldA && worldB ? Math.hypot(worldB.x - worldA.x, worldB.y - worldA.y) : 0;
+    const pxPerWorld = extractEffectiveDrawScale(tikz) * 37.8;
+    const gapPx = (right.position - left.position) * pathLengthWorld * pxPerWorld;
+    if (!Number.isFinite(gapPx) || gapPx < 3) {
+      throw new Error("Expected segment >-< mid-arrow marks to be separated enough to be visually distinct.");
+    }
+  }
+
+  if (fileName === "circle-arrow-basic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("arc[start angle=0,end angle=-360,radius=")) {
+      throw new Error("Expected circle arrow fixture to emit clockwise full-arc path arrow overlay.");
+    }
+    if (!tikz.includes("postaction=decorate")) {
+      throw new Error("Expected circle arrow fixture to emit decoration-based arrow overlay.");
+    }
+    if (!tikz.includes("{Latex[")) {
+      throw new Error("Expected circle arrow fixture to emit Latex arrow tip.");
+    }
+  }
+
+  if (fileName === "circle-arrow-mid-position-parity.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("(0.5,-2.5) arc[start angle=0,end angle=-360,radius=2.5]")) {
+      throw new Error("Expected circle mid-arrow parity fixture to anchor full-circle overlay at center+radius (+x) start.");
+    }
+    if (tikz.includes("(D) arc[start angle=")) {
+      throw new Error("Expected circle mid-arrow parity fixture to avoid through-point-based full-circle start.");
+    }
+    const marks = extractMarkCommands(tikz);
+    if (marks.length < 2) {
+      throw new Error("Expected circle mid-arrow parity fixture to emit parseable paired mark commands.");
+    }
+    const [left, right] = marks
+      .slice(0, 2)
+      .sort((a, b) => a.position - b.position);
+    if (left.cmd !== "arrow" || right.cmd !== "arrowreversed") {
+      throw new Error("Expected circle >-< parity fixture to emit inward command order.");
+    }
+  }
+
+  if (fileName === "sector-arrow-basic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDrawSector")) {
+      throw new Error("Expected sector arrow fixture to emit sector draw command.");
+    }
+    const hasArcOverlay =
+      tikz.includes(") arc[start angle=") ||
+      tikz.includes(") arc (");
+    if (!hasArcOverlay) {
+      throw new Error("Expected sector arrow fixture to emit arc path overlay.");
+    }
+    if (!tikz.includes("{Triangle[")) {
+      throw new Error("Expected sector arrow fixture to emit Triangle arrow tip.");
+    }
+  }
+
+
+
+  if (
+    fileName === "segment-mark-arrow-mid.json" ||
+    fileName === "segment-mark-arrow-end-plus-mid-same-color.json" ||
+    fileName === "segment-mark-arrow-mid-near-edge.json" ||
+    fileName === "segment-mark-arrow-mid-gap.json" ||
+    fileName === "segment-mark-arrow-mid-inward.json" ||
+    fileName === "circle-arrow-basic.json" ||
+    fileName === "circle-arrow-mid-position-parity.json" ||
+    fileName === "sector-arrow-basic.json"
+  ) {
+    const hasMarkingArrowLib =
+      tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta}") ||
+      tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta,bending}");
+    const hasConstructiveArrowLib = tikz.includes("\\usetikzlibrary{arrows.meta,bending}");
+    if (!hasMarkingArrowLib && !hasConstructiveArrowLib) {
+      throw new Error("Expected arrow fixtures to emit an arrows.meta (+ optional markings/bending) library line.");
     }
   }
 
@@ -779,6 +1414,31 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   if (exportError) throw exportError;
 }
 
+function extractMarkCommands(tikz: string): Array<{ position: number; cmd: "arrow" | "arrowreversed" }> {
+  const marks: Array<{ position: number; cmd: "arrow" | "arrowreversed" }> = [];
+  const regex = /mark=at position\s+([0-9]*\.?[0-9]+)\s+with\s+\{\\(arrow|arrowreversed)\[/g;
+  for (const match of tikz.matchAll(regex)) {
+    const position = Number(match[1]);
+    const cmd = match[2] === "arrowreversed" ? "arrowreversed" : "arrow";
+    if (Number.isFinite(position)) marks.push({ position, cmd });
+  }
+  return marks;
+}
+
+function extractEffectiveDrawScale(tikz: string): number {
+  const pictureScaleMatch = tikz.match(/\\begin\{tikzpicture\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+  if (pictureScaleMatch) {
+    const value = Number(pictureScaleMatch[1]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  const scopeScaleMatch = tikz.match(/\\begin\{scope\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+  if (scopeScaleMatch) {
+    const value = Number(scopeScaleMatch[1]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return 1;
+}
+
 function parseDrawLines(
   tikz: string
 ): Array<{ a: string; b: string }> {
@@ -800,6 +1460,60 @@ function parseGlobalLineAdd(tikz: string): number | null {
   const right = Number(m[2]);
   if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
   return Math.max(left, right);
+}
+
+function assertTkzSetupToggleRegression(): void {
+  const scene: SceneModel = {
+    points: [
+      {
+        id: "pA",
+        kind: "free",
+        name: "A",
+        captionTex: "A",
+        visible: true,
+        showLabel: "name",
+        position: { x: 0, y: 0 },
+        style: defaultPointStyle,
+      },
+      {
+        id: "pB",
+        kind: "free",
+        name: "B",
+        captionTex: "B",
+        visible: true,
+        showLabel: "name",
+        position: { x: 4, y: 0 },
+        style: defaultPointStyle,
+      },
+    ],
+    numbers: [],
+    lines: [],
+    segments: [
+      {
+        id: "sAB",
+        aId: "pA",
+        bId: "pB",
+        visible: true,
+        showLabel: false,
+        style: defaultLineStyle,
+      },
+    ],
+    circles: [],
+    polygons: [],
+    angles: [],
+  };
+
+  const withSetup = exportTikzWithOptions(scene, { emitTkzSetup: true });
+  if (!withSetup.includes("\\tkzInit[") || !withSetup.includes("\\tkzClip[space=") || !withSetup.includes("\\tkzSetUpLine[")) {
+    throw new Error("Regression: emitTkzSetup=true must include tkz setup lines.");
+  }
+  const withoutSetup = exportTikzWithOptions(scene, { emitTkzSetup: false });
+  if (withoutSetup.includes("\\tkzInit[") || withoutSetup.includes("\\tkzClip[space=") || withoutSetup.includes("\\tkzSetUpLine[")) {
+    throw new Error("Regression: emitTkzSetup=false must omit tkz setup lines.");
+  }
+  if (!withoutSetup.includes("\\tkzDrawSegment")) {
+    throw new Error("Regression: geometry must still export when tkz setup lines are omitted.");
+  }
 }
 
 function lineCoversPoint(

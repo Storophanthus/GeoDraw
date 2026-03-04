@@ -175,6 +175,135 @@ function testCircleLinePairOwnership(): void {
   }
 }
 
+function testCircleLineSingletonAvoidsOccupiedRoot(): void {
+  const scene: SceneModel = {
+    points: [
+      freePoint("i", "I", 0, 0),
+      freePoint("k", "K", -1, 0),
+      freePoint("d", "D", 2, 0),
+      {
+        id: "j",
+        kind: "circleLineIntersectionPoint",
+        name: "J",
+        captionTex: "J",
+        visible: true,
+        showLabel: "name",
+        circleId: "c2",
+        lineId: "l1",
+        branchIndex: 1,
+        style: pointStyle,
+      },
+    ],
+    numbers: [],
+    polygons: [],
+    lines: [{ id: "l1", kind: "twoPoint", aId: "i", bId: "k", visible: true, style: lineStyle }],
+    segments: [],
+    circles: [{ id: "c2", kind: "twoPoint", centerId: "d", throughId: "i", visible: true, style: circleStyle }],
+    angles: [],
+  };
+
+  // In this anchor ordering, branchIndex=1 points to the occupied root I unless
+  // ownership logic prefers the other (unoccupied) root.
+  beginSceneEvalTick(scene);
+  const iw = getWorldOrThrow(scene, "i");
+  const jw = getWorldOrThrow(scene, "j");
+  endSceneEvalTick(scene);
+  if (distance(iw, jw) <= 1e-6) {
+    throw new Error("Circle-line singleton ownership regression: J collapsed to occupied root I");
+  }
+
+  // Recompute under reversed line orientation; J must remain the other root.
+  setFreePoint(scene, "k", { x: 1, y: 0 });
+  beginSceneEvalTick(scene);
+  const iw2 = getWorldOrThrow(scene, "i");
+  const jw2 = getWorldOrThrow(scene, "j");
+  endSceneEvalTick(scene);
+  if (distance(iw2, jw2) <= 1e-6) {
+    throw new Error("Circle-line singleton ownership regression after drag: J collapsed to occupied root I");
+  }
+}
+
+function testCircleCircleSingletonAvoidsOccupiedRootFromPointOnCircle(): void {
+  const scene: SceneModel = {
+    points: [
+      freePoint("a", "A", 4.599062198729685, 7.042269234421111),
+      freePoint("d", "D", 4.841911790255554, -3.422603818439255),
+      {
+        id: "o",
+        kind: "midpointPoints",
+        name: "O",
+        captionTex: "O",
+        visible: true,
+        showLabel: "name",
+        aId: "a",
+        bId: "d",
+        style: pointStyle,
+      },
+      {
+        id: "b",
+        kind: "pointOnCircle",
+        name: "B",
+        captionTex: "B",
+        visible: true,
+        showLabel: "name",
+        circleId: "c1",
+        t: -0.681381943044133,
+        style: pointStyle,
+      },
+      {
+        id: "c",
+        kind: "circleCircleIntersectionPoint",
+        name: "C",
+        captionTex: "C",
+        visible: true,
+        showLabel: "name",
+        circleAId: "c1",
+        circleBId: "c2",
+        branchIndex: 0,
+        style: pointStyle,
+      },
+    ],
+    numbers: [],
+    polygons: [],
+    lines: [],
+    segments: [],
+    circles: [
+      { id: "c1", kind: "twoPoint", centerId: "o", throughId: "d", visible: true, style: circleStyle },
+      { id: "c2", kind: "twoPoint", centerId: "a", throughId: "b", visible: true, style: circleStyle },
+    ],
+    angles: [],
+  };
+
+  const startT = -0.681381943044133;
+  const endT = -2.101751956157441;
+  const steps = 80;
+  for (let i = 0; i <= steps; i += 1) {
+    const t = lerp(startT, endT, i / steps);
+    const bPoint = requirePoint(scene, "b");
+    if (bPoint.kind !== "pointOnCircle") throw new Error("b is not pointOnCircle");
+    bPoint.t = t;
+
+    beginSceneEvalTick(scene);
+    const bw = getWorldOrThrow(scene, "b");
+    const cw = getWorldOrThrow(scene, "c");
+    const g1 = getCircleWorldGeometry(scene.circles[0], scene);
+    const g2 = getCircleWorldGeometry(scene.circles[1], scene);
+    if (!g1 || !g2) throw new Error("circle geometry unavailable");
+    const roots = circleCircleIntersections(g1.center, g1.radius, g2.center, g2.radius);
+    endSceneEvalTick(scene);
+
+    if (roots.length !== 2) continue;
+    const pair: [Vec2, Vec2] = [roots[0], roots[1]];
+    const idxB = closestRootIndex(bw, pair);
+    const idxC = closestRootIndex(cw, pair);
+    if (idxB === idxC) {
+      throw new Error(
+        `Circle-circle singleton ownership regression at step ${i}: C collapsed to occupied root B (root ${idxB})`
+      );
+    }
+  }
+}
+
 function testCircleCirclePairOwnership(): void {
   const scene: SceneModel = {
     points: [
@@ -801,6 +930,8 @@ function testLineSectorArcIntersectionTracksBoundary(): void {
 }
 
 testCircleLinePairOwnership();
+testCircleLineSingletonAvoidsOccupiedRoot();
+testCircleCircleSingletonAvoidsOccupiedRootFromPointOnCircle();
 testCircleCirclePairOwnership();
 testGenericBranchIndexOverridesPreferredWorld();
 testGenericSegmentCircleBranchIndexOverridesPreferredWorld();

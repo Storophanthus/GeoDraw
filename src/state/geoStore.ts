@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { camera as cameraMath } from "../view/camera";
-import { getNumberValue } from "../scene/points";
+import { getNumberValue, type SceneNumberDefinition } from "../scene/points";
 import {
   type SetStateOptions,
 } from "./slices/historySlice";
@@ -34,6 +34,7 @@ import type {
   PendingSelection,
   RenameResult,
   SelectedObject,
+  TransformableObjectRef,
 } from "./slices/storeTypes";
 import { createUiActions } from "./slices/uiActions";
 import { createSceneRenameActions } from "./slices/sceneRenameActions";
@@ -42,6 +43,7 @@ import { geoStoreHelpers } from "./geoStoreHelpers";
 import { isNameUnique } from "../scene/pointBasics";
 import { rebuildRightAngleProvenance, registerSegmentPair } from "../domain/rightAngleProvenance";
 import type { Command } from "../CommandParser";
+import { planAliasRedefine, type CommandAliasTarget } from "../domain/redefinePlanner";
 
 export type {
   ActiveTool,
@@ -53,6 +55,7 @@ export type {
   PendingSelection,
   RenameResult,
   SelectedObject,
+  TransformableObjectRef,
 };
 const initialState: GeoState = createInitialGeoState();
 rebuildRightAngleProvenance(initialState.scene);
@@ -65,7 +68,6 @@ const commandBarObjectAliases = new Map<
   string,
   { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }
 >();
-type CommandAliasTarget = { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string };
 
 function edgeKey(aId: string, bId: string): string {
   return aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`;
@@ -86,6 +88,21 @@ function pruneStaleCommandAliases(scene: GeoState["scene"]): void {
       commandBarObjectAliases.delete(name);
     }
   }
+}
+
+function applyAssignedPointLabel(pointId: string, label: string): void {
+  setState((prev) => {
+    const point = prev.scene.points.find((p) => p.id === pointId);
+    if (!point) return prev;
+    if (point.name === label && point.captionTex === label) return prev;
+    return {
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((p) => (p.id === pointId ? { ...p, name: label, captionTex: label } : p)),
+      },
+    };
+  });
 }
 
 const actions: GeoActions = {
@@ -144,23 +161,32 @@ export const commandBarApi = {
     }
     return out;
   },
-  setScalarVar(name: string, value: number): { ok: true; mode: "created" | "updated" } | { ok: false; error: string } {
+  setScalarVar(
+    name: string,
+    value: number,
+    exprRaw?: string
+  ): { ok: true; mode: "created" | "updated" } | { ok: false; error: string } {
     const trimmed = name.trim();
     if (!trimmed) return { ok: false as const, error: "Scalar name is empty" };
     if (!Number.isFinite(value)) return { ok: false as const, error: "Scalar value must be finite" };
     const state = runtime.getState();
     pruneStaleCommandAliases(state.scene);
     const existingNumber = state.scene.numbers.find((n) => n.name === trimmed);
+    const nextDefinition = chooseCommandScalarNumberDefinition({
+      scene: state.scene,
+      targetName: trimmed,
+      fallbackValue: value,
+      exprRaw,
+      existingNumberId: existingNumber?.id,
+    });
+    if (!nextDefinition.ok) return nextDefinition;
     if (existingNumber) {
-      if (existingNumber.definition.kind !== "constant") {
-        return { ok: false as const, error: `Cannot redefine non-constant number: ${trimmed}` };
-      }
       setState((prev) => ({
         ...prev,
         scene: {
           ...prev.scene,
           numbers: prev.scene.numbers.map((n) =>
-            n.id === existingNumber.id ? { ...n, definition: { kind: "constant", value } } : n
+            n.id === existingNumber.id ? { ...n, definition: nextDefinition.definition } : n
           ),
         },
       }));
@@ -170,7 +196,7 @@ export const commandBarApi = {
       return { ok: false as const, error: `Name already used: ${trimmed}` };
     }
     if (commandBarObjectAliases.has(trimmed)) return { ok: false as const, error: `Name already used: ${trimmed}` };
-    const id = actions.createNumber({ kind: "constant", value }, trimmed);
+    const id = actions.createNumber(nextDefinition.definition, trimmed);
     if (!id) return { ok: false as const, error: `Name already used: ${trimmed}` };
     return { ok: true as const, mode: "created" };
   },
@@ -218,6 +244,7 @@ export const commandBarApi = {
     if (!existing) {
       if (cmd.type === "CreatePointXY") {
         const out = commandBarApi.setPointXY(label, cmd.x, cmd.y);
+        if (out.ok) applyAssignedPointLabel(out.id, label);
         return out.ok
           ? { ok: true as const, mode: out.mode, objectType: "point" as const, id: out.id }
           : { ok: false as const, error: out.error };
@@ -257,6 +284,11 @@ export const commandBarApi = {
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         return { ok: true as const, mode: "created", objectType: "polygon", id };
       }
+      if (cmd.type === "CreateRegularPolygonFromEdge") {
+        const id = commandBarApi.createRegularPolygonWithLabel(cmd.aId, cmd.bId, cmd.sides, cmd.direction, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "polygon", id };
+      }
       if (cmd.type === "CreateCircleCenterThrough") {
         const id = commandBarApi.createCircleCenterThroughWithLabel(cmd.centerId, cmd.throughId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
@@ -290,11 +322,43 @@ export const commandBarApi = {
       if (cmd.type === "CreateMidpointByPoints") {
         const id = commandBarApi.createMidpointByPointsWithLabel(cmd.aId, cmd.bId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
         return { ok: true as const, mode: "created", objectType: "point", id };
       }
       if (cmd.type === "CreateMidpointBySegment") {
         const id = commandBarApi.createMidpointBySegmentWithLabel(cmd.segId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreateTriangleCenterPoint") {
+        const id = commandBarApi.createTriangleCenterPointWithLabel(cmd.centerKind, cmd.aId, cmd.bId, cmd.cId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreatePointByTranslation") {
+        const id = commandBarApi.createPointByTranslationWithLabel(cmd.pointId, cmd.fromId, cmd.toId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreatePointByRotation") {
+        const id = commandBarApi.createPointByRotationWithLabel(cmd.pointId, cmd.centerId, cmd.angleDeg, cmd.angleExpr, cmd.direction, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreatePointByDilation") {
+        const id = commandBarApi.createPointByDilationWithLabel(cmd.pointId, cmd.centerId, cmd.factorExpr, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreatePointByReflection") {
+        const id = commandBarApi.createPointByReflectionWithLabel(cmd.pointId, cmd.axis, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
         return { ok: true as const, mode: "created", objectType: "point", id };
       }
       if (cmd.type === "CreateCircleXYR") {
@@ -304,6 +368,31 @@ export const commandBarApi = {
         return { ok: true as const, mode: "created", objectType: "circle", id };
       }
       return { ok: false as const, error: `Unsupported assignment target for ${label}` };
+    }
+
+    const redefinePlan = planAliasRedefine(scene, label, existing, cmd);
+    if (!redefinePlan.ok) return { ok: false as const, error: redefinePlan.error };
+
+    if (existing.type === "point") {
+      if (cmd.type !== "CreatePointXY") return { ok: false as const, error: `Cannot redefine point ${label} with this command` };
+      let updated = false;
+      setState((prev) => {
+        const point = prev.scene.points.find((p) => p.id === existing.id);
+        if (!point || point.kind !== "free" || point.locked) return prev;
+        updated = true;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: prev.scene.points.map((p) => (p.id === point.id ? { ...p, position: { x: cmd.x, y: cmd.y } } : p)),
+          },
+          selectedObject: { type: "point", id: point.id },
+          recentCreatedObject: { type: "point", id: point.id },
+        };
+      });
+      return updated
+        ? { ok: true as const, mode: "updated", objectType: "point", id: existing.id }
+        : { ok: false as const, error: `Cannot redefine point ${label}` };
     }
 
     if (existing.type === "line") {
@@ -784,6 +873,15 @@ export const commandBarApi = {
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
     const pointId = actions.createMidpointFromPoints(aId, bId);
     if (!pointId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === pointId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
     commandBarObjectAliases.set(name, { type: "point", id: pointId });
     return pointId;
   },
@@ -797,8 +895,144 @@ export const commandBarApi = {
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
     const pointId = actions.createMidpointFromSegment(segId);
     if (!pointId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === pointId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
     commandBarObjectAliases.set(name, { type: "point", id: pointId });
     return pointId;
+  },
+  createTriangleCenterPointWithLabel(
+    centerKind: "incenter" | "orthocenter" | "centroid",
+    aId: string,
+    bId: string,
+    cId: string,
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const pointId = actions.createTriangleCenterPoint(centerKind, aId, bId, cId);
+    if (!pointId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === pointId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: pointId });
+    return pointId;
+  },
+  createPointByTranslationWithLabel(pointId: string, fromId: string, toId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const createdId = actions.createPointByTranslation(pointId, fromId, toId);
+    if (!createdId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === createdId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
+  },
+  createPointByRotationWithLabel(
+    pointId: string,
+    centerId: string,
+    angleDeg: number,
+    angleExpr: string,
+    direction: "CCW" | "CW",
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const createdId = actions.createPointByRotation(centerId, pointId, angleDeg, direction, angleExpr);
+    if (!createdId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === createdId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
+  },
+  createPointByDilationWithLabel(pointId: string, centerId: string, factorExpr: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const createdId = actions.createPointByDilation(pointId, centerId, factorExpr);
+    if (!createdId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === createdId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
+  },
+  createPointByReflectionWithLabel(
+    pointId: string,
+    axis: { type: "line" | "segment" | "point"; id: string },
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const createdId = actions.createPointByReflection(pointId, axis);
+    if (!createdId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === createdId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
   },
   createCircleCenterThroughWithLabel(centerId: string, throughId: string, label: string): string | null {
     const name = label.trim();
@@ -853,6 +1087,25 @@ export const commandBarApi = {
     commandBarObjectAliases.set(name, { type: "polygon", id: polygonId });
     return polygonId;
   },
+  createRegularPolygonWithLabel(
+    aId: string,
+    bId: string,
+    sides: number,
+    direction: "CCW" | "CW",
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const polygonId = actions.createRegularPolygon(aId, bId, sides, direction);
+    if (!polygonId) return null;
+    commandBarObjectAliases.set(name, { type: "polygon", id: polygonId });
+    return polygonId;
+  },
   createAngleWithLabel(aId: string, bId: string, cId: string, label: string): string | null {
     const name = label.trim();
     if (!name) return null;
@@ -899,6 +1152,30 @@ export const commandBarApi = {
     return angleId;
   },
 };
+
+function chooseCommandScalarNumberDefinition(params: {
+  scene: GeoState["scene"];
+  targetName: string;
+  fallbackValue: number;
+  exprRaw?: string;
+  existingNumberId?: string;
+}): { ok: true; definition: SceneNumberDefinition } | { ok: false; error: string } {
+  const expr = (params.exprRaw ?? "").trim();
+  const fallback: SceneNumberDefinition = { kind: "constant", value: params.fallbackValue };
+  if (!expr) return { ok: true, definition: fallback };
+
+  // Prevent immediate self-reference recursion when reassigning an existing number by name.
+  if (
+    params.existingNumberId &&
+    new RegExp(`\\b${params.targetName.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`).test(expr)
+  ) {
+    return { ok: false, error: `Self-referential scalar assignment is not supported: ${params.targetName}` };
+  }
+
+  const exprDef: SceneNumberDefinition = { kind: "expression", expr };
+  if (isValidNumberDefinition(exprDef, params.scene)) return { ok: true, definition: exprDef };
+  return { ok: true, definition: fallback };
+}
 
 export function getGeoStore(): GeoStore {
   return { ...runtime.getState(), ...actions };

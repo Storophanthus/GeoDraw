@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_o",
+      "name": "O",
+      "definition": { "kind": "free", "x": 0.2, "y": -0.1 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_a",
+      "name": "A",
+      "definition": { "kind": "free", "x": 2.8, "y": -0.1 },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "lines": [],
+  "segments": [],
+  "circles": [
+    {
+      "id": "c_1",
+      "kind": "twoPoint",
+      "centerId": "p_o",
+      "throughId": "p_a",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "strokeDash": "solid",
+        "strokeOpacity": 1,
+        "fillOpacity": 0,
+        "pattern": "",
+        "arrowMark": {
+          "enabled": true,
+          "direction": "<->",
+          "tip": "Latex",
+          "distribution": "single",
+          "pos": 0.33,
+          "sizeScale": 1
+        }
+      }
+    }
+  ],
+  "angles": [],
+  "numbers": []
+}

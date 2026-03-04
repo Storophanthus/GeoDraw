@@ -43,6 +43,7 @@ export function createInteractionActions(
                 circleStyle: null,
                 polygonStyle: null,
                 angleStyle: null,
+                textLabelStyle: null,
                 showLabel: null,
               },
         circleFixedTool: prev.circleFixedTool,
@@ -139,7 +140,9 @@ function computeSceneBounds(scene: GeoState["scene"]): { xmin: number; xmax: num
     if (p) add(p.x, p.y);
   }
   for (let i = 0; i < scene.circles.length; i += 1) {
-    const g = getCircleWorldGeometry(scene.circles[i], scene);
+    const circle = scene.circles[i];
+    if (!circle.visible) continue;
+    const g = getCircleWorldGeometry(circle, scene);
     if (!g || !Number.isFinite(g.radius)) continue;
     add(g.center.x - g.radius, g.center.y - g.radius);
     add(g.center.x + g.radius, g.center.y + g.radius);

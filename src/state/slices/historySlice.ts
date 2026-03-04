@@ -1,5 +1,6 @@
 import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneModel } from "../../scene/points";
 import type { ActiveTool, GeoState, SelectedObject } from "./storeTypes";
+import type { CanvasColorTheme, ColorProfileId } from "../colorProfiles";
 
 export type SetStateOptions = {
   history?: "auto" | "push" | "coalesce" | "skip";
@@ -7,6 +8,8 @@ export type SetStateOptions = {
 };
 
 export type HistorySnapshot = {
+  colorProfileId?: ColorProfileId;
+  canvasThemeOverrides?: Partial<CanvasColorTheme>;
   gridEnabled: boolean;
   axesEnabled: boolean;
   gridSnapEnabled: boolean;
@@ -21,6 +24,8 @@ export type HistorySnapshot = {
   nextPolygonId: number;
   nextAngleId: number;
   nextNumberId: number;
+  nextVectorId?: number;
+  nextTextLabelId?: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
@@ -29,6 +34,7 @@ export type HistorySnapshot = {
   angleDefaults: AngleStyle;
   angleFixedTool: GeoState["angleFixedTool"];
   circleFixedTool: GeoState["circleFixedTool"];
+  transformTool?: GeoState["transformTool"];
   exportClipWorld?: GeoState["exportClipWorld"];
   copyStyle: GeoState["copyStyle"];
 };
@@ -49,6 +55,8 @@ export const MAX_HISTORY = 200;
 
 export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
   return {
+    colorProfileId: prev.colorProfileId,
+    canvasThemeOverrides: prev.canvasThemeOverrides,
     gridEnabled: prev.gridEnabled,
     axesEnabled: prev.axesEnabled,
     gridSnapEnabled: prev.gridSnapEnabled,
@@ -63,6 +71,8 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     nextPolygonId: prev.nextPolygonId,
     nextAngleId: prev.nextAngleId,
     nextNumberId: prev.nextNumberId,
+    nextVectorId: prev.nextVectorId,
+    nextTextLabelId: prev.nextTextLabelId,
     pointDefaults: prev.pointDefaults,
     segmentDefaults: prev.segmentDefaults,
     lineDefaults: prev.lineDefaults,
@@ -71,6 +81,7 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     angleDefaults: prev.angleDefaults,
     angleFixedTool: prev.angleFixedTool,
     circleFixedTool: prev.circleFixedTool,
+    transformTool: prev.transformTool,
     exportClipWorld: prev.exportClipWorld,
     copyStyle: prev.copyStyle,
   };
@@ -82,6 +93,8 @@ export function cloneHistorySnapshot(snapshot: HistorySnapshot): HistorySnapshot
 
 export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
   return (
+    prev.colorProfileId !== next.colorProfileId ||
+    prev.canvasThemeOverrides !== next.canvasThemeOverrides ||
     prev.scene !== next.scene ||
     prev.nextPointId !== next.nextPointId ||
     prev.nextSegmentId !== next.nextSegmentId ||
@@ -90,6 +103,8 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.nextPolygonId !== next.nextPolygonId ||
     prev.nextAngleId !== next.nextAngleId ||
     prev.nextNumberId !== next.nextNumberId ||
+    prev.nextVectorId !== next.nextVectorId ||
+    prev.nextTextLabelId !== next.nextTextLabelId ||
     prev.pointDefaults !== next.pointDefaults ||
     prev.segmentDefaults !== next.segmentDefaults ||
     prev.lineDefaults !== next.lineDefaults ||

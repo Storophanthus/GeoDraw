@@ -1,14 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
     Copy,
     Hash,
     Layers,
+    Type as TypeIcon,
 } from "lucide-react";
 import type { SceneModel } from "../scene/points";
 import type { SelectedObject } from "../state/slices/storeTypes";
 import { getNumberValue } from "../scene/points";
 import { commandBarApi, useGeoStore } from "../state/geoStore";
 import { IconAngle, IconPoint, IconLine, IconCircleRadius } from "./icons";
+import { formatRoundedDisplay } from "./displayFormat";
 
 type ObjectBrowserProps = {
     scene: SceneModel;
@@ -16,11 +18,35 @@ type ObjectBrowserProps = {
     setSelectedObject: (obj: SelectedObject) => void;
 };
 
-type TabId = "all" | "points" | "lines" | "circles" | "angles" | "numbers";
+type TabId = "all" | "points" | "lines" | "circles" | "angles" | "text" | "numbers";
+
+function tabForSelectedObject(selected: SelectedObject | null): TabId | null {
+    if (!selected) return null;
+    switch (selected.type) {
+        case "point":
+            return "points";
+        case "segment":
+        case "line":
+            return "lines";
+        case "circle":
+        case "polygon":
+            return "circles";
+        case "angle":
+            return "angles";
+        case "textLabel":
+            return "text";
+        case "number":
+            return "numbers";
+        default:
+            return null;
+    }
+}
 
 export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: ObjectBrowserProps) {
     const [activeTab, setActiveTab] = useState<TabId>("all");
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
+    const objectRowRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+    const lastSelectionKeyRef = useRef<string | null>(null);
     const setObjectVisibility = useGeoStore((store) => store.setObjectVisibility);
 
     // Toggles state
@@ -33,6 +59,33 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
     const setAxesEnabled = useGeoStore((store) => store.setAxesEnabled);
     const setGridSnapEnabled = useGeoStore((store) => store.setGridSnapEnabled);
     const setDependencyGlowEnabled = useGeoStore((store) => store.setDependencyGlowEnabled);
+
+    useEffect(() => {
+        const selectionKey = selectedObject ? `${selectedObject.type}:${selectedObject.id}` : null;
+        if (selectionKey === lastSelectionKeyRef.current) return;
+        lastSelectionKeyRef.current = selectionKey;
+        const targetTab = tabForSelectedObject(selectedObject);
+        if (!targetTab) return;
+        setActiveTab((prev) => (prev === targetTab ? prev : targetTab));
+    }, [selectedObject]);
+
+    useEffect(() => {
+        if (!selectedObject) return;
+        const targetTab = tabForSelectedObject(selectedObject);
+        if (!targetTab || activeTab !== targetTab) return;
+        const key = `${selectedObject.type}:${selectedObject.id}`;
+        const row = objectRowRefs.current.get(key);
+        if (!row) return;
+        row.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }, [selectedObject, activeTab]);
+
+    const bindObjectRowRef = useCallback(
+        (key: string) => (el: HTMLButtonElement | null) => {
+            if (el) objectRowRefs.current.set(key, el);
+            else objectRowRefs.current.delete(key);
+        },
+        []
+    );
 
     const pointNameById = useMemo(() => new Map(scene.points.map((p) => [p.id, p.name])), [scene.points]);
     const lineById = useMemo(() => new Map(scene.lines.map((l) => [l.id, l])), [scene.lines]);
@@ -67,10 +120,14 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         if (l.kind === "twoPoint") return `Line(${pointLabel(l.aId)},${pointLabel(l.bId)})`;
         if (l.kind === "angleBisector") return `AngleBisector(${pointLabel(l.aId)},${pointLabel(l.bId)},${pointLabel(l.cId)})`;
         if (l.kind === "tangent") return `Tangent(${pointLabel(l.throughId)},${circleRefText(l.circleId)})`;
+        if (l.kind === "circleCircleTangent") return `Tangent(${circleRefText(l.circleAId)},${circleRefText(l.circleBId)})`;
         if (l.kind === "perpendicular") return `Perpendicular(${pointLabel(l.throughId)},${lineLikeText(l.base)})`;
         if (l.kind === "parallel") return `Parallel(${pointLabel(l.throughId)},${lineLikeText(l.base)})`;
         return `Line(${ref.id})`;
     };
+
+    const reflectionTargetText = (ref: { type: "line" | "segment" | "point"; id: string }): string =>
+        ref.type === "point" ? pointLabel(ref.id) : lineLikeText(ref as { type: "line" | "segment"; id: string });
 
     const copyCommand = async (value: string, key: string) => {
         try {
@@ -96,7 +153,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         title: string,
         commandText: string
     ) => (
-        <button key={key} className={selected ? "objectItem active" : "objectItem"} onClick={onSelect}>
+        <button key={key} ref={bindObjectRowRef(key)} className={selected ? "objectItem active" : "objectItem"} onClick={onSelect}>
             <div className="objectItemText">
                 <span className="objectItemLabel">{title}</span>
                 <span className="objectItemCommand" title={commandText}>{commandText}</span>
@@ -127,7 +184,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
     );
 
     const tabs: Array<{ id: TabId; icon: React.ElementType; label: string; description: string; count: number }> = [
-        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.polygons.length + scene.angles.length + scene.numbers.length },
+        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.polygons.length + scene.angles.length + (scene.textLabels?.length ?? 0) + scene.numbers.length },
         {
             id: "points",
             icon: IconPoint as React.ElementType,
@@ -138,6 +195,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         { id: "lines", icon: IconLine as React.ElementType, label: "Lines", description: "Filter by Lines & Segments", count: scene.segments.length + scene.lines.length },
         { id: "circles", icon: IconCircleRadius as React.ElementType, label: "Shapes", description: "Filter by Circles/Polygons", count: scene.circles.length + scene.polygons.length },
         { id: "angles", icon: IconAngle as React.ElementType, label: "Angles", description: "Filter by Angles", count: scene.angles.length },
+        { id: "text", icon: TypeIcon, label: "Labels", description: "Filter by Text Labels", count: scene.textLabels?.length ?? 0 },
         { id: "numbers", icon: Hash, label: "Numbers", description: "Filter by Numbers & Values", count: scene.numbers.length },
     ];
 
@@ -147,6 +205,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         const showLines = activeTab === "all" || activeTab === "lines";
         const showCircles = activeTab === "all" || activeTab === "circles";
         const showAngles = activeTab === "all" || activeTab === "angles";
+        const showTextLabels = activeTab === "all" || activeTab === "text";
         const showNumbers = activeTab === "all" || activeTab === "numbers";
 
         return (
@@ -160,7 +219,11 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         (next) => setObjectVisibility({ type: "point", id: point.id }, next),
                         `Point ${point.name}`,
                         point.kind === "free"
-                            ? withAliasPrefix("point", point.id, `Point(${point.position.x.toFixed(4)},${point.position.y.toFixed(4)})`)
+                            ? withAliasPrefix(
+                                "point",
+                                point.id,
+                                `Point(${formatRoundedDisplay(point.position.x, 4)},${formatRoundedDisplay(point.position.y, 4)})`
+                              )
                             : point.kind === "midpointPoints"
                                 ? withAliasPrefix("point", point.id, `Midpoint(${pointLabel(point.aId)},${pointLabel(point.bId)})`)
                                 : point.kind === "midpointSegment"
@@ -171,6 +234,24 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                                             point.id,
                                             `Rotate(${pointLabel(point.pointId)},${pointLabel(point.centerId)},${point.angleExpr ?? point.angleDeg},${point.direction})`
                                         )
+                                        : point.kind === "pointByTranslation"
+                                            ? withAliasPrefix(
+                                                "point",
+                                                point.id,
+                                                `Translate(${pointLabel(point.pointId)},${pointLabel(point.fromId)},${pointLabel(point.toId)})`
+                                            )
+                                            : point.kind === "pointByDilation"
+                                                ? withAliasPrefix(
+                                                    "point",
+                                                    point.id,
+                                                    `Dilate(${pointLabel(point.pointId)},${pointLabel(point.centerId)},${point.factorExpr ?? point.factor ?? "?"})`
+                                                )
+                                                : point.kind === "pointByReflection"
+                                                    ? withAliasPrefix(
+                                                        "point",
+                                                        point.id,
+                                                        `Reflect(${pointLabel(point.pointId)},${reflectionTargetText(point.axis)})`
+                                                    )
                                         : point.kind === "pointOnCircle"
                                             ? withAliasPrefix("point", point.id, `PointOn(${circleRefText(point.circleId)})`)
                                             : point.kind === "pointOnLine"
@@ -271,6 +352,18 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     )
                 ))}
 
+                {showTextLabels && (scene.textLabels ?? []).map((label) => (
+                    renderObjectRow(
+                        `textLabel:${label.id}`,
+                        selectedObject?.type === "textLabel" && selectedObject.id === label.id,
+                        () => setSelectedObject({ type: "textLabel", id: label.id }),
+                        label.visible,
+                        (next) => setObjectVisibility({ type: "textLabel", id: label.id }, next),
+                        `Label ${label.name}`,
+                        `Text(${JSON.stringify(label.text)})`
+                    )
+                ))}
+
                 {showNumbers && scene.numbers.map((num) => (
                     renderObjectRow(
                         `number:${num.id}`,
@@ -297,11 +390,13 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
             scene.circles.length === 0 &&
             scene.polygons.length === 0 &&
             scene.angles.length === 0 &&
+            (scene.textLabels?.length ?? 0) === 0 &&
             scene.numbers.length === 0) ||
         (activeTab === "points" && scene.points.length === 0) ||
         (activeTab === "lines" && scene.segments.length === 0 && scene.lines.length === 0) ||
         (activeTab === "circles" && scene.circles.length === 0 && scene.polygons.length === 0) ||
         (activeTab === "angles" && scene.angles.length === 0) ||
+        (activeTab === "text" && (scene.textLabels?.length ?? 0) === 0) ||
         (activeTab === "numbers" && scene.numbers.length === 0);
 
     return (

@@ -4,41 +4,29 @@ import {
   type AngleExpressionEvalResult,
 } from "./eval/expressionEval";
 import {
-  beginSceneEvalTick as beginSceneEvalTickCore,
-  endSceneEvalTick as endSceneEvalTickCore,
-  getOrCreateSceneEvalContext as getOrCreateSceneEvalContextCore,
   type SceneEvalStats,
   updateImplicitEvalStats,
 } from "./eval/evalContext";
-import { objectIntersectionsWithOps } from "./eval/intersectionQueries";
-import { computeOrientedAngleRad } from "./eval/angleMath";
 import {
-  evaluateAngleExpressionDegreesWithCtxInScene,
-  evaluateNumberExpressionWithCtxInScene,
-} from "./eval/numberExpressionEvaluators";
-import { evalNumberByIdWithCtxInScene } from "./eval/numberEvaluators";
+  beginSceneEvalTickInScenePublic,
+  endSceneEvalTickInScenePublic,
+  evaluateAngleExpressionDegreesInScenePublic,
+  evaluateNumberExpressionInScenePublic,
+  getLastSceneEvalStatsInScenePublic,
+} from "./eval/sceneEvalApiFacade";
+import { evaluateAngleExpressionDegreesWithCtxInSceneModel } from "./eval/sceneExpressionFacade";
+import { evalNumberByIdWithSceneFacades, evaluateNumberExpressionWithCtxUsingFacades } from "./eval/sceneNumberExpressionFacade";
+import { createSceneEvalStateStore } from "./eval/sceneEvalStateStore";
 import {
-  asCircleWithCtx,
-  asLineLikeWithCtx,
-  asSectorArcWithCtx,
-  buildGeometryResolveOpsWithCtx,
-  getCircleWorldGeometryWithCtxInScene,
-  resolveLineAnchorsWithCtx,
-} from "./eval/geometryAdapters";
-import {
-  rememberStableGenericIntersectionPoint,
-  rememberStableCircleLinePoint,
-  resolveCircleLinePairAssignmentsWithCtx,
-  resolveGenericIntersectionPairAssignmentsWithCtx,
-} from "./eval/intersectionStabilityAdapters";
-import {
-  evalPointUnchecked as evalPointUncheckedCore,
-} from "./eval/pointEvalDispatch";
+  getCircleWorldGeometryInScenePublic,
+  getLineWorldAnchorsInScenePublic,
+  getNumberValueInScenePublic,
+  getPointWorldPosInSceneWithImplicitStats,
+  resolveTextLabelDisplayTextInScene,
+} from "./eval/scenePublicEvalFacade";
+import { evalPointUncheckedInSceneWithFacades } from "./eval/scenePointEvalFacade";
 import { evalPointWithCtxInScene } from "./eval/pointRuntime";
-import {
-  buildSceneEvalContextForScene,
-  type SceneEvalContext,
-} from "./eval/sceneContextBuilder";
+import { type SceneEvalContext } from "./eval/sceneContextBuilder";
 
 export {
   isNameUnique,
@@ -50,6 +38,12 @@ export {
 export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
+export {
+  collectSegmentMarkPositions,
+  resolveAngleMarks,
+  resolveSegmentMarkAnchorPos,
+  resolveSegmentMarks,
+} from "./sceneMarkStyleUtils";
 
 export type PointShape =
   | "circle"
@@ -82,27 +76,49 @@ export type LineStyle = {
   strokeWidth: number;
   dash: "solid" | "dashed" | "dotted";
   opacity: number;
-  segmentMark?: {
-    enabled: boolean;
-    mark: "none" | "|" | "||" | "|||" | "s" | "s|" | "s||" | "x" | "o" | "oo" | "z";
-    pos: number;
-    sizePt: number;
-    color?: string;
-    lineWidthPt?: number;
-  };
-  segmentArrowMark?: {
-    enabled: boolean;
-    mode: "end" | "mid";
-    direction: "->" | "<-" | "<->";
-    pos?: number;
-    distribution?: "single" | "multi";
-    startPos?: number;
-    endPos?: number;
-    step?: number;
-    sizeScale?: number;
-    color?: string;
-    lineWidthPt?: number;
-  };
+  segmentMark?: SegmentMark;
+  segmentMarks?: SegmentMark[];
+  segmentArrowMark?: SegmentArrowMark;
+  segmentArrowMarks?: SegmentArrowMark[];
+};
+
+export type ArrowDirection = "->" | "<-" | "<->" | ">-<";
+
+export type ArrowTipStyle = "Stealth" | "Latex" | "Triangle";
+
+export type PathArrowMark = {
+  enabled: boolean;
+  direction: ArrowDirection;
+  tip?: ArrowTipStyle;
+  pos?: number;
+  distribution?: "single" | "multi";
+  startPos?: number;
+  endPos?: number;
+  step?: number;
+  sizeScale?: number;
+  arrowLength?: number;
+  color?: string;
+  lineWidthPt?: number;
+  pairGapPx?: number;
+};
+
+export type SegmentArrowMark = PathArrowMark & {
+  mode: "end" | "mid";
+};
+
+export type SegmentMarkSymbol = "none" | "|" | "||" | "|||" | "s" | "s|" | "s||" | "x" | "o" | "oo" | "z";
+
+export type SegmentMark = {
+  enabled: boolean;
+  mark: SegmentMarkSymbol;
+  pos: number;
+  sizePt: number;
+  color?: string;
+  lineWidthPt?: number;
+  distribution?: "single" | "multi";
+  startPos?: number;
+  endPos?: number;
+  step?: number;
 };
 
 export type CircleStyle = {
@@ -114,6 +130,8 @@ export type CircleStyle = {
   fillOpacity?: number;
   pattern?: string;
   patternColor?: string;
+  arrowMark?: PathArrowMark;
+  arrowMarks?: PathArrowMark[];
 };
 
 export type PolygonStyle = {
@@ -125,6 +143,8 @@ export type PolygonStyle = {
   fillOpacity?: number;
   pattern?: string;
   patternColor?: string;
+  // Kept optional for style-copy compatibility with circle styles.
+  arrowMark?: PathArrowMark;
 };
 
 export type AngleMarkStyle =
@@ -136,6 +156,15 @@ export type AngleMarkStyle =
   | "right";
 
 export type AngleMarkSymbol = "none" | "|" | "||" | "|||";
+
+export type AngleMark = {
+  enabled: boolean;
+  arcMultiplicity: 1 | 2 | 3;
+  markSymbol: AngleMarkSymbol;
+  markPos: number;
+  markSize: number;
+  markColor?: string;
+};
 
 export type AngleStyle = {
   strokeColor: string;
@@ -155,12 +184,15 @@ export type AngleStyle = {
   markPos: number;
   markSize: number;
   markColor: string;
+  angleMarks?: AngleMark[];
   arcRadius: number;
   labelText: string;
   labelPosWorld: Vec2;
   showLabel: boolean;
   showValue: boolean;
   promoteToSolid?: boolean;
+  arcArrowMark?: PathArrowMark;
+  arcArrowMarks?: PathArrowMark[];
 };
 
 export type ShowLabelMode = "none" | "name" | "caption";
@@ -265,6 +297,54 @@ export type PointByRotation = {
   style: PointStyle;
 };
 
+export type PointByTranslation = {
+  id: string;
+  kind: "pointByTranslation";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  pointId: string;
+  vectorId?: string;
+  fromId: string;
+  toId: string;
+  style: PointStyle;
+};
+
+export type PointByDilation = {
+  id: string;
+  kind: "pointByDilation";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  pointId: string;
+  centerId: string;
+  factor?: number;
+  factorExpr?: string;
+  style: PointStyle;
+};
+
+export type PointByReflection = {
+  id: string;
+  kind: "pointByReflection";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  pointId: string;
+  // Kept as "axis" for backward compatibility with persisted scenes.
+  // Supports reflection across a line/segment or central reflection about a point.
+  axis: ReflectionObjectRef;
+  style: PointStyle;
+};
+
 export type CircleCenterPoint = {
   id: string;
   kind: "circleCenter";
@@ -278,6 +358,24 @@ export type CircleCenterPoint = {
   style: PointStyle;
 };
 
+export type TriangleCenterKind = "incenter" | "orthocenter" | "centroid";
+
+export type TriangleCenterPoint = {
+  id: string;
+  kind: "triangleCenter";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  centerKind: TriangleCenterKind;
+  aId: string;
+  bId: string;
+  cId: string;
+  style: PointStyle;
+};
+
 export type GeometryObjectRef =
   | { type: "line"; id: string }
   | { type: "segment"; id: string }
@@ -285,6 +383,23 @@ export type GeometryObjectRef =
   | { type: "angle"; id: string };
 
 export type LineLikeObjectRef = { type: "line"; id: string } | { type: "segment"; id: string };
+export type ReflectionObjectRef = LineLikeObjectRef | { type: "point"; id: string };
+
+export type SceneVectorFromPoints = {
+  id: string;
+  kind: "vectorFromPoints";
+  fromId: string;
+  toId: string;
+};
+
+export type SceneVectorFree = {
+  id: string;
+  kind: "freeVector";
+  dx: number;
+  dy: number;
+};
+
+export type SceneVector = SceneVectorFromPoints | SceneVectorFree;
 
 export type IntersectionPoint = {
   id: string;
@@ -376,12 +491,22 @@ export type ScenePoint =
   | PointOnSegment
   | PointOnCircle
   | PointByRotation
+  | PointByTranslation
+  | PointByDilation
+  | PointByReflection
   | CircleCenterPoint
+  | TriangleCenterPoint
   | IntersectionPoint
   | LineLikeIntersectionPoint
   | CircleLineIntersectionPoint
   | CircleSegmentIntersectionPoint
   | CircleCircleIntersectionPoint;
+
+export type ObjectLabelFields = {
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
+};
 
 export type SceneSegment = {
   id: string;
@@ -395,6 +520,8 @@ export type SceneSegment = {
   ownedBySectorIds?: string[];
   visible: boolean;
   showLabel: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -404,6 +531,9 @@ export type SceneLineTwoPoint = {
   aId: string;
   bId: string;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -413,6 +543,9 @@ export type SceneLinePerpendicular = {
   throughId: string;
   base: LineLikeObjectRef;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -422,6 +555,9 @@ export type SceneLineParallel = {
   throughId: string;
   base: LineLikeObjectRef;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -432,6 +568,9 @@ export type SceneLineAngleBisector = {
   bId: string;
   cId: string;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
@@ -442,10 +581,33 @@ export type SceneLineTangent = {
   circleId: string;
   branchIndex: 0 | 1;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: LineStyle;
 };
 
-export type SceneLine = SceneLineTwoPoint | SceneLinePerpendicular | SceneLineParallel | SceneLineAngleBisector | SceneLineTangent;
+export type SceneLineCircleCircleTangent = {
+  id: string;
+  kind: "circleCircleTangent";
+  circleAId: string;
+  circleBId: string;
+  family: "outer" | "inner";
+  branchIndex: 0 | 1;
+  visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
+  style: LineStyle;
+};
+
+export type SceneLine =
+  | SceneLineTwoPoint
+  | SceneLinePerpendicular
+  | SceneLineParallel
+  | SceneLineAngleBisector
+  | SceneLineTangent
+  | SceneLineCircleCircleTangent;
 
 export type SceneCircleTwoPoint = {
   id: string;
@@ -453,6 +615,9 @@ export type SceneCircleTwoPoint = {
   centerId: string;
   throughId: string;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: CircleStyle;
 };
 
@@ -463,6 +628,9 @@ export type SceneCircleThreePoint = {
   bId: string;
   cId: string;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: CircleStyle;
 };
 
@@ -473,6 +641,9 @@ export type SceneCircleFixedRadius = {
   radius: number;
   radiusExpr?: string;
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: CircleStyle;
 };
 
@@ -482,6 +653,9 @@ export type ScenePolygon = {
   id: string;
   pointIds: string[];
   visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
   style: PolygonStyle;
 };
 
@@ -502,6 +676,15 @@ export type SceneAngle = {
 export type SceneNumberConstant = {
   kind: "constant";
   value: number;
+};
+
+export type SceneNumberSlider = {
+  kind: "slider";
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  sliderMode?: "real" | "degree" | "radian";
 };
 
 export type SceneNumberDistancePoints = {
@@ -543,6 +726,7 @@ export type SceneNumberExpression = {
 
 export type SceneNumberDefinition =
   | SceneNumberConstant
+  | SceneNumberSlider
   | SceneNumberDistancePoints
   | SceneNumberSegmentLength
   | SceneNumberCircleRadius
@@ -558,39 +742,55 @@ export type SceneNumber = {
   definition: SceneNumberDefinition;
 };
 
+export type SceneTextLabelStyle = {
+  textColor: string;
+  textSize: number;
+  useTex: boolean;
+  rotationDeg?: number;
+};
+
+export type SceneTextLabel = {
+  id: string;
+  name: string;
+  text: string;
+  contentMode?: "static" | "number" | "expression";
+  numberId?: string;
+  expr?: string;
+  visible: boolean;
+  positionWorld: Vec2;
+  style: SceneTextLabelStyle;
+};
+
 export type SceneModel = {
   points: ScenePoint[];
+  vectors?: SceneVector[];
   segments: SceneSegment[];
   lines: SceneLine[];
   circles: SceneCircle[];
   polygons: ScenePolygon[];
   angles: SceneAngle[];
   numbers: SceneNumber[];
+  textLabels?: SceneTextLabel[];
 };
 
-const sceneEvalContexts = new WeakMap<SceneModel, SceneEvalContext>();
-const sceneLastEvalStats = new WeakMap<SceneModel, SceneEvalStats>();
-let sceneEvalTick = 0;
-
-function buildSceneEvalContext(scene: SceneModel, explicit: boolean): SceneEvalContext {
-  const tick = ++sceneEvalTick;
-  return buildSceneEvalContextForScene(scene, explicit, tick, performance.now());
-}
-
-function getOrCreateSceneEvalContext(scene: SceneModel): SceneEvalContext {
-  return getOrCreateSceneEvalContextCore(scene, sceneEvalContexts, () => buildSceneEvalContext(scene, false));
-}
+const sceneEvalState = createSceneEvalStateStore();
 
 export function beginSceneEvalTick(scene: SceneModel): void {
-  beginSceneEvalTickCore(scene, sceneEvalContexts, () => buildSceneEvalContext(scene, true));
+  beginSceneEvalTickInScenePublic(scene, {
+    sceneEvalContexts: sceneEvalState.sceneEvalContexts,
+    buildSceneEvalContext: sceneEvalState.buildSceneEvalContext,
+  });
 }
 
 export function endSceneEvalTick(scene: SceneModel): SceneEvalStats | null {
-  return endSceneEvalTickCore(scene, sceneEvalContexts, sceneLastEvalStats);
+  return endSceneEvalTickInScenePublic(scene, {
+    sceneEvalContexts: sceneEvalState.sceneEvalContexts,
+    sceneLastEvalStats: sceneEvalState.sceneLastEvalStats,
+  });
 }
 
 export function getLastSceneEvalStats(scene: SceneModel): SceneEvalStats | null {
-  return sceneLastEvalStats.get(scene) ?? null;
+  return getLastSceneEvalStatsInScenePublic(scene, sceneEvalState.sceneLastEvalStats);
 }
 
 export function getPointWorldPos(
@@ -599,10 +799,11 @@ export function getPointWorldPos(
   visited: Set<string> = new Set()
 ): Vec2 | null {
   void visited;
-  const ctx = getOrCreateSceneEvalContext(scene);
-  const value = evalPoint(point.id, scene, ctx);
-  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
-  return value;
+  return getPointWorldPosInSceneWithImplicitStats(point, scene, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneEvalState.sceneLastEvalStats),
+    evalPointById: evalPoint,
+  });
 }
 
 function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
@@ -612,24 +813,10 @@ function evalPoint(pointId: string, scene: SceneModel, ctx: SceneEvalContext): V
 }
 
 function evalPointUnchecked(point: ScenePoint, scene: SceneModel, ctx: SceneEvalContext): Vec2 | null {
-  return evalPointUncheckedCore(point, scene, ctx, {
+  return evalPointUncheckedInSceneWithFacades(point, scene, ctx, {
     getPointWorldById,
-    resolveLineAnchorsById: (lineId, s, c) => {
-      const line = c.lineById.get(lineId);
-      if (!line) return null;
-      return resolveLineAnchors(line, s, c);
-    },
-    getCircleWorldGeometryById: (circleId, s, c) => {
-      const circle = c.circleById.get(circleId);
-      if (!circle) return null;
-      return getCircleWorldGeometryWithCtx(circle, s, c);
-    },
     evaluateAngleExpressionDegreesWithCtx,
-    resolveCircleLinePairAssignments,
-    rememberStableCircleLinePoint,
-    objectIntersections,
-    resolveGenericIntersectionPairAssignments,
-    rememberStableGenericIntersectionPoint,
+    evaluateNumberExpressionWithCtx,
   });
 }
 
@@ -637,151 +824,59 @@ function getPointWorldById(pointId: string, scene: SceneModel, ctx: SceneEvalCon
   return evalPoint(pointId, scene, ctx);
 }
 
-function objectIntersections(
-  a: GeometryObjectRef,
-  b: GeometryObjectRef,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): Vec2[] {
-  return objectIntersectionsWithOps(a, b, {
-    asLineLike: (ref) => asLineLike(ref, scene, ctx),
-    asCircle: (ref) => asCircle(ref, scene, ctx),
-    asSectorArc: (ref) => asSectorArc(ref, scene, ctx),
-    onLineLineCall: () => {
-      ctx.stats.lineLineCalls += 1;
-    },
-    onCircleLineCall: () => {
-      ctx.stats.circleLineCalls += 1;
-    },
-    onCircleCircleCall: () => {
-      ctx.stats.circleCircleCalls += 1;
-    },
-    onAllocation: (count) => {
-      ctx.stats.allocationsEstimate += count;
-    },
-  });
-}
-
-function asLineLike(
-  ref: GeometryObjectRef,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { a: Vec2; b: Vec2; finite: boolean } | null {
-  return asLineLikeWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
-}
-
-function resolveLineAnchors(
-  line: SceneLine,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { a: Vec2; b: Vec2 } | null {
-  return resolveLineAnchorsWithCtx(line, scene, ctx, buildGeometryResolveOps(scene, ctx));
-}
-
 export function getLineWorldAnchors(line: SceneLine, scene: SceneModel): { a: Vec2; b: Vec2 } | null {
-  const ctx = getOrCreateSceneEvalContext(scene);
-  const value = resolveLineAnchors(line, scene, ctx);
-  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
-  return value;
-}
-
-function asCircle(
-  ref: GeometryObjectRef,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { center: Vec2; radius: number } | null {
-  return asCircleWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
-}
-
-function asSectorArc(
-  ref: GeometryObjectRef,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { center: Vec2; radius: number; start: number; sweep: number } | null {
-  return asSectorArcWithCtx(ref, scene, ctx, buildGeometryResolveOps(scene, ctx));
-}
-
-function getCircleWorldGeometryWithCtx(
-  circle: SceneCircle,
-  scene: SceneModel,
-  ctx: SceneEvalContext
-): { center: Vec2; radius: number } | null {
-  return getCircleWorldGeometryWithCtxInScene(circle, scene, ctx, buildGeometryResolveOps(scene, ctx));
-}
-
-function buildGeometryResolveOps(scene: SceneModel, ctx: SceneEvalContext) {
-  return buildGeometryResolveOpsWithCtx(scene, ctx, {
+  return getLineWorldAnchorsInScenePublic(line, scene, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneEvalState.sceneLastEvalStats),
     getPointWorldById,
     evaluateNumberExpressionWithCtx,
   });
 }
 
 export function getCircleWorldGeometry(circle: SceneCircle, scene: SceneModel): { center: Vec2; radius: number } | null {
-  const ctx = getOrCreateSceneEvalContext(scene);
-  const value = getCircleWorldGeometryWithCtx(circle, scene, ctx);
-  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
-  return value;
-}
-
-function resolveCircleLinePairAssignments(
-  scene: SceneModel,
-  ctx: SceneEvalContext,
-  circleId: string,
-  lineId: string,
-  branches: Array<{ point: Vec2; t: number }>,
-  stabilitySignature: string
-): Map<string, Vec2 | null> {
-  return resolveCircleLinePairAssignmentsWithCtx(scene, ctx, circleId, lineId, branches, stabilitySignature, {
+  return getCircleWorldGeometryInScenePublic(circle, scene, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneEvalState.sceneLastEvalStats),
     getPointWorldById,
-  });
-}
-
-function resolveGenericIntersectionPairAssignments(
-  scene: SceneModel,
-  ctx: SceneEvalContext,
-  objA: GeometryObjectRef,
-  objB: GeometryObjectRef,
-  intersections: Vec2[]
-): Map<string, Vec2 | null> {
-  return resolveGenericIntersectionPairAssignmentsWithCtx(scene, ctx, objA, objB, intersections, {
-    getPointWorldById,
+    evaluateNumberExpressionWithCtx,
   });
 }
 
 export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel): number | null {
-  const id = typeof numOrId === "string" ? numOrId : numOrId.id;
-  const ctx = getOrCreateSceneEvalContext(scene);
-  const value = evalNumberById(id, scene, ctx);
-  updateImplicitEvalStats(scene, ctx, sceneLastEvalStats);
-  return value;
+  return getNumberValueInScenePublic(numOrId, scene, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    evalNumberById,
+    updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneEvalState.sceneLastEvalStats),
+  });
+}
+
+export function resolveTextLabelDisplayText(label: SceneTextLabel, scene: SceneModel): string {
+  return resolveTextLabelDisplayTextInScene(label, scene, {
+    getNumberValue,
+    evaluateNumberExpression,
+  });
 }
 
 function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): number | null {
-  return evalNumberByIdWithCtxInScene(id, scene, ctx, {
+  return evalNumberByIdWithSceneFacades(id, scene, ctx, {
     getPointWorldById,
-    getCircleWorldGeometryById: (circleId, s, c) => {
-      const circle = c.circleById.get(circleId);
-      if (!circle) return null;
-      return getCircleWorldGeometryWithCtx(circle, s, c);
-    },
-    evaluateNumberExpressionWithCtx,
   });
 }
 
 export { computeConvexAngleRad, computeOrientedAngleRad, isRightAngle, RIGHT_ANGLE_EPS } from "./eval/angleMath";
 
 export function evaluateAngleExpressionDegrees(scene: SceneModel, exprRaw: string): AngleExpressionEvalResult {
-  const expr = exprRaw.trim();
-  if (!expr) return { ok: false, error: "Empty angle expression." };
-  const ctx = getOrCreateSceneEvalContext(scene);
-  return evaluateAngleExpressionDegreesWithCtx(scene, expr, ctx);
+  return evaluateAngleExpressionDegreesInScenePublic(scene, exprRaw, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    evaluateAngleExpressionDegreesWithCtx,
+  });
 }
 
 export function evaluateNumberExpression(scene: SceneModel, exprRaw: string): NumberExpressionEvalResult {
-  const expr = exprRaw.trim();
-  if (!expr) return { ok: false, error: "Empty number expression." };
-  const ctx = getOrCreateSceneEvalContext(scene);
-  return evaluateNumberExpressionWithCtx(scene, expr, ctx);
+  return evaluateNumberExpressionInScenePublic(scene, exprRaw, {
+    getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
+    evaluateNumberExpressionWithCtx: (s, expr, c) => evaluateNumberExpressionWithCtx(s, expr, c),
+  });
 }
 
 function evaluateAngleExpressionDegreesWithCtx(
@@ -789,42 +884,10 @@ function evaluateAngleExpressionDegreesWithCtx(
   exprRaw: string,
   ctx: SceneEvalContext
 ): AngleExpressionEvalResult {
-  return evaluateAngleExpressionDegreesWithCtxInScene(
-    exprRaw,
-    {
-      angles: scene.angles.map((angle) => ({
-        id: angle.id,
-        aId: angle.aId,
-        bId: angle.bId,
-        cId: angle.cId,
-        labelText: angle.style.labelText,
-      })),
-      numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
-    },
-    {
-      getAngleValueDeg: (angleId) => {
-        const angle = ctx.angleById.get(angleId);
-        if (!angle) return null;
-        const a = getPointWorldById(angle.aId, scene, ctx);
-        const b = getPointWorldById(angle.bId, scene, ctx);
-        const c = getPointWorldById(angle.cId, scene, ctx);
-        if (!a || !b || !c) return null;
-        const theta = computeOrientedAngleRad(a, b, c);
-        if (theta === null) return null;
-        return (theta * 180) / Math.PI;
-      },
-      getAnglePointNames: (angleId) => {
-        const angle = ctx.angleById.get(angleId);
-        if (!angle) return null;
-        const pa = ctx.pointById.get(angle.aId);
-        const pb = ctx.pointById.get(angle.bId);
-        const pc = ctx.pointById.get(angle.cId);
-        if (!pa || !pb || !pc) return null;
-        return { aName: pa.name, bName: pb.name, cName: pc.name };
-      },
-      getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
-    }
-  );
+  return evaluateAngleExpressionDegreesWithCtxInSceneModel(scene, exprRaw, ctx, {
+    getPointWorldById,
+    evalNumberById,
+  });
 }
 
 function evaluateNumberExpressionWithCtx(
@@ -833,14 +896,5 @@ function evaluateNumberExpressionWithCtx(
   ctx: SceneEvalContext,
   excludeNumberId?: string
 ): NumberExpressionEvalResult {
-  return evaluateNumberExpressionWithCtxInScene(
-    exprRaw,
-    {
-      numbers: scene.numbers.map((num) => ({ id: num.id, name: num.name })),
-    },
-    {
-      getNumberValue: (numberId) => evalNumberById(numberId, scene, ctx),
-      excludeNumberId,
-    }
-  );
+  return evaluateNumberExpressionWithCtxUsingFacades(scene, exprRaw, ctx, { getPointWorldById }, excludeNumberId);
 }

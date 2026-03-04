@@ -1,6 +1,10 @@
 import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
-import type { GeometryObjectRef, SceneModel, SceneNumberDefinition, ScenePoint, ShowLabelMode } from "../../scene/points";
+import type { GeometryObjectRef, ReflectionObjectRef, SceneModel, SceneNumberDefinition, ScenePoint, ShowLabelMode } from "../../scene/points";
 import { evaluateNumberExpression } from "../../scene/points";
+import {
+  defaultCircleLabelPosWorld,
+  defaultCircleLabelText,
+} from "../../scene/objectLabels";
 import type { Vec2 } from "../../geo/vec2";
 import type { SceneCreationStateLike } from "../../domain/intersectionReuse";
 import type { SetStateOptions } from "./historySlice";
@@ -56,6 +60,9 @@ export function createSceneCreationActions(
   | "createPointOnSegment"
   | "createPointOnCircle"
   | "createPointByRotation"
+  | "createPointByTranslation"
+  | "createPointByDilation"
+  | "createPointByReflection"
   | "createIntersectionPoint"
   | "createNumber"
 > {
@@ -79,6 +86,15 @@ export function createSceneCreationActions(
           return prev;
         }
         id = `c_${prev.nextCircleId}`;
+        const circleForLabel = {
+          id,
+          kind: "twoPoint" as const,
+          centerId,
+          throughId,
+          visible: false,
+          showLabel: false,
+          style: prev.circleDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -91,6 +107,9 @@ export function createSceneCreationActions(
                 centerId,
                 throughId,
                 visible: false,
+                showLabel: false,
+                labelText: defaultCircleLabelText(circleForLabel, prev.scene),
+                labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
               },
             ],
@@ -109,6 +128,15 @@ export function createSceneCreationActions(
         const t = prev.scene.points.find((p) => p.id === throughId);
         if (!c || !t) return prev;
         id = `c_${prev.nextCircleId}`;
+        const circleForLabel = {
+          id,
+          kind: "twoPoint" as const,
+          centerId,
+          throughId,
+          visible: true,
+          showLabel: false,
+          style: prev.circleDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -121,6 +149,9 @@ export function createSceneCreationActions(
                 centerId,
                 throughId,
                 visible: true,
+                showLabel: false,
+                labelText: defaultCircleLabelText(circleForLabel, prev.scene),
+                labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
               },
             ],
@@ -148,6 +179,16 @@ export function createSceneCreationActions(
         const area2 = (bw.x - aw.x) * (cw.y - aw.y) - (bw.y - aw.y) * (cw.x - aw.x);
         if (Math.abs(area2) <= 1e-9) return prev;
         id = `c_${prev.nextCircleId}`;
+        const circleForLabel = {
+          id,
+          kind: "threePoint" as const,
+          aId,
+          bId,
+          cId,
+          visible: true,
+          showLabel: false,
+          style: prev.circleDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -161,6 +202,9 @@ export function createSceneCreationActions(
                 bId,
                 cId,
                 visible: true,
+                showLabel: false,
+                labelText: defaultCircleLabelText(circleForLabel, prev.scene),
+                labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
               },
             ],
@@ -183,6 +227,16 @@ export function createSceneCreationActions(
         const evaluated = evaluateNumberExpression(prev.scene, expr);
         if (!evaluated.ok || !Number.isFinite(evaluated.value) || evaluated.value <= 0) return prev;
         id = `c_${prev.nextCircleId}`;
+        const circleForLabel = {
+          id,
+          kind: "fixedRadius" as const,
+          centerId,
+          radius: evaluated.value,
+          radiusExpr: expr,
+          visible: true,
+          showLabel: false,
+          style: prev.circleDefaults,
+        };
         return {
           ...prev,
           scene: {
@@ -196,6 +250,9 @@ export function createSceneCreationActions(
                 radius: evaluated.value,
                 radiusExpr: expr,
                 visible: true,
+                showLabel: false,
+                labelText: defaultCircleLabelText(circleForLabel, prev.scene),
+                labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
               },
             ],
@@ -363,6 +420,161 @@ export function createSceneCreationActions(
                 angleExpr,
                 direction,
                 radiusMode: "keep",
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createPointByTranslation(pointId, fromId, toId) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const point = prev.scene.points.find((item) => item.id === pointId);
+        const from = prev.scene.points.find((item) => item.id === fromId);
+        const to = prev.scene.points.find((item) => item.id === toId);
+        if (!point || !from || !to) return prev;
+        const pointWorld = getPointWorldPos(point, prev.scene);
+        const fromWorld = getPointWorldPos(from, prev.scene);
+        const toWorld = getPointWorldPos(to, prev.scene);
+        if (!pointWorld || !fromWorld || !toWorld) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        const existingVector = (prev.scene.vectors ?? []).find(
+          (vector) => vector.kind === "vectorFromPoints" && vector.fromId === fromId && vector.toId === toId
+        );
+        const vectorId = existingVector?.id ?? `v_${prev.nextVectorId}`;
+        const vectors = existingVector
+          ? (prev.scene.vectors ?? [])
+          : [...(prev.scene.vectors ?? []), { id: vectorId, kind: "vectorFromPoints" as const, fromId, toId }];
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            vectors,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "pointByTranslation",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: "name" as ShowLabelMode,
+                locked: false,
+                auxiliary: false,
+                pointId,
+                vectorId,
+                fromId,
+                toId,
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+          nextVectorId: existingVector ? prev.nextVectorId : prev.nextVectorId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createPointByDilation(pointId, centerId, factorExpr) {
+      const expr = factorExpr.trim();
+      if (!expr) return null;
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const point = prev.scene.points.find((item) => item.id === pointId);
+        const center = prev.scene.points.find((item) => item.id === centerId);
+        if (!point || !center) return prev;
+        const pointWorld = getPointWorldPos(point, prev.scene);
+        const centerWorld = getPointWorldPos(center, prev.scene);
+        if (!pointWorld || !centerWorld) return prev;
+        const evaluated = evaluateNumberExpression(prev.scene, expr);
+        if (!evaluated.ok || !Number.isFinite(evaluated.value)) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "pointByDilation",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: "name" as ShowLabelMode,
+                locked: false,
+                auxiliary: false,
+                pointId,
+                centerId,
+                factor: evaluated.value,
+                factorExpr: expr,
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createPointByReflection(pointId, axis: ReflectionObjectRef) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const point = prev.scene.points.find((item) => item.id === pointId);
+        if (!point) return prev;
+        const axisExists = axis.type === "line"
+          ? prev.scene.lines.some((line) => line.id === axis.id)
+          : axis.type === "segment"
+            ? prev.scene.segments.some((seg) => seg.id === axis.id)
+            : prev.scene.points.some((p) => p.id === axis.id);
+        if (!axisExists) return prev;
+        const pointWorld = getPointWorldPos(point, prev.scene);
+        if (!pointWorld) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "pointByReflection",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: "name" as ShowLabelMode,
+                locked: false,
+                auxiliary: false,
+                pointId,
+                axis,
                 style: {
                   ...prev.pointDefaults,
                   labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },

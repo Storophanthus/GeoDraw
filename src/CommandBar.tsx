@@ -1,6 +1,6 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { parseCommandInput, type ParseContext, type Symbol } from "./CommandParser";
-import { getPointWorldPos } from "./scene/points";
+import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos } from "./scene/points";
 import type { SceneModel } from "./scene/points";
 import { commandBarApi, useGeoStore } from "./state/geoStore";
 
@@ -42,9 +42,41 @@ function buildParseContext(
     if (w) pointWorldById.set(p.id, w);
   }
 
+  const segmentWorldAnchorsById = new Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>();
+  for (let i = 0; i < scene.segments.length; i += 1) {
+    const seg = scene.segments[i];
+    const a = pointWorldById.get(seg.aId);
+    const b = pointWorldById.get(seg.bId);
+    if (a && b) segmentWorldAnchorsById.set(seg.id, { a, b });
+  }
+
+  const lineWorldAnchorsById = new Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>();
+  for (let i = 0; i < scene.lines.length; i += 1) {
+    const line = scene.lines[i];
+    const anchors = getLineWorldAnchors(line, scene);
+    if (anchors) lineWorldAnchorsById.set(line.id, anchors);
+  }
+
+  const circleWorldGeometryById = new Map<string, { center: { x: number; y: number }; radius: number }>();
+  for (let i = 0; i < scene.circles.length; i += 1) {
+    const circle = scene.circles[i];
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (geom) circleWorldGeometryById.set(circle.id, geom);
+  }
+
+  const polygonPointIdsById = new Map<string, string[]>();
+  for (let i = 0; i < scene.polygons.length; i += 1) {
+    const polygon = scene.polygons[i];
+    polygonPointIdsById.set(polygon.id, [...polygon.pointIds]);
+  }
+
   return {
     symbolsByLabel,
     pointWorldById,
+    lineWorldAnchorsById,
+    segmentWorldAnchorsById,
+    circleWorldGeometryById,
+    polygonPointIdsById,
     scalarsByName: new Map(Object.entries(scalarVars)),
     objectAliases: new Map(Object.entries(objectAliases)),
     objectNames: new Set(Object.keys(objectAliases)),
@@ -58,11 +90,17 @@ export function CommandBar() {
   const createLine = useGeoStore((store) => store.createLine);
   const createSegment = useGeoStore((store) => store.createSegment);
   const createPolygon = useGeoStore((store) => store.createPolygon);
+  const createRegularPolygon = useGeoStore((store) => store.createRegularPolygon);
   const createCircle = useGeoStore((store) => store.createCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
+  const createTriangleCenterPoint = useGeoStore((store) => store.createTriangleCenterPoint);
+  const createPointByTranslation = useGeoStore((store) => store.createPointByTranslation);
+  const createPointByRotation = useGeoStore((store) => store.createPointByRotation);
+  const createPointByDilation = useGeoStore((store) => store.createPointByDilation);
+  const createPointByReflection = useGeoStore((store) => store.createPointByReflection);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createTangentLines = useGeoStore((store) => store.createTangentLines);
@@ -79,9 +117,9 @@ export function CommandBar() {
   const [collapsed, setCollapsed] = useState(false);
 
   const statusColor = useMemo(() => {
-    if (status.kind === "ok") return "#166534";
-    if (status.kind === "error") return "#b91c1c";
-    return "#475569";
+    if (status.kind === "ok") return "var(--gd-ui-success-text, #166534)";
+    if (status.kind === "error") return "var(--gd-ui-danger-text, #b91c1c)";
+    return "var(--gd-ui-text-muted, #475569)";
   }, [status.kind]);
 
   const pushHistory = (entry: string) => {
@@ -118,7 +156,7 @@ export function CommandBar() {
     }
 
     if (parsed.kind === "assignScalar") {
-      const out = commandBarApi.setScalarVar(parsed.name, parsed.value);
+      const out = commandBarApi.setScalarVar(parsed.name, parsed.value, parsed.expr);
       if (!out.ok) {
         setStatus({ kind: "error", text: out.error });
         return;
@@ -199,6 +237,16 @@ export function CommandBar() {
       return;
     }
 
+    if (cmd.type === "CreateRegularPolygonFromEdge") {
+      const polygonId = createRegularPolygon(cmd.aId, cmd.bId, cmd.sides, cmd.direction);
+      if (!polygonId) {
+        setStatus({ kind: "error", text: "Cannot construct regular polygon" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created polygon ${polygonId}` });
+      return;
+    }
+
     if (cmd.type === "CreateMidpointByPoints") {
       const pointId = createMidpointFromPoints(cmd.aId, cmd.bId);
       if (!pointId) {
@@ -213,6 +261,56 @@ export function CommandBar() {
       const pointId = createMidpointFromSegment(cmd.segId);
       if (!pointId) {
         setStatus({ kind: "error", text: "Cannot construct midpoint" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateTriangleCenterPoint") {
+      const pointId = createTriangleCenterPoint(cmd.centerKind, cmd.aId, cmd.bId, cmd.cId);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct triangle center" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePointByTranslation") {
+      const pointId = createPointByTranslation(cmd.pointId, cmd.fromId, cmd.toId);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct translated point" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePointByRotation") {
+      const pointId = createPointByRotation(cmd.centerId, cmd.pointId, cmd.angleDeg, cmd.direction, cmd.angleExpr);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct rotated point" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePointByDilation") {
+      const pointId = createPointByDilation(cmd.pointId, cmd.centerId, cmd.factorExpr);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct dilated point" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePointByReflection") {
+      const pointId = createPointByReflection(cmd.pointId, cmd.axis);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct reflected point" });
         return;
       }
       setStatus({ kind: "ok", text: `Created point ${pointId}` });
@@ -366,98 +464,43 @@ export function CommandBar() {
   };
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: 10,
-        right: 10,
-        bottom: 10,
-        zIndex: 60,
-        pointerEvents: "auto",
-      }}
-    >
+    <div className="commandBarWrap">
       {collapsed ? (
-        <div style={{ display: "flex", justifyContent: "center" }}>
+        <div className="commandBarCollapsed">
           <button
             type="button"
             onClick={() => setCollapsed(false)}
-            style={{
-              border: "1px solid #cbd5e1",
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.96)",
-              color: "#0f172a",
-              padding: "6px 12px",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-              boxShadow: "0 2px 8px rgba(15,23,42,0.08)",
-            }}
+            className="commandBarCollapseButton"
             title="Show command bar"
           >
             ▴ Command
           </button>
         </div>
       ) : (
-        <div
-          style={{
-            background: "rgba(255,255,255,0.95)",
-            border: "1px solid #cbd5e1",
-            borderRadius: 10,
-            boxShadow: "0 2px 10px rgba(15,23,42,0.08)",
-            padding: "8px 10px",
-            display: "grid",
-            gridTemplateColumns: "1fr auto auto",
-            gap: 10,
-            alignItems: "center",
-          }}
-        >
+        <div className="commandBarExpanded">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Line(A,B), Circle(O,A), Sector(O,A,B), AngleFixed(B,A,30,CW)"
-            style={{
-              width: "100%",
-              minWidth: 0,
-              border: "1px solid #cbd5e1",
-              borderRadius: 8,
-              padding: "8px 10px",
-              fontSize: 13,
-              background: "#fff",
-            }}
+            className="commandBarInput"
+            placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Translate(P,A,B), Rotate(P,O,30), Dilate(P,O,2), Reflect(P,l|O)"
           />
           <button
             type="button"
             onClick={runCommand}
-            style={{
-              border: "1px solid #cbd5e1",
-              borderRadius: 8,
-              background: "#f8fafc",
-              color: "#0f172a",
-              padding: "8px 12px",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
+            className="commandBarRunButton"
           >
             Run
           </button>
           <button
             type="button"
             onClick={() => setCollapsed(true)}
-            style={{
-              border: "1px solid #cbd5e1",
-              borderRadius: 8,
-              background: "#fff",
-              color: "#334155",
-              padding: "8px 10px",
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
+            className="commandBarHideButton"
             title="Hide command bar"
           >
             ▾
           </button>
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: statusColor, minHeight: 16 }}>{status.text}</div>
+          <div className="commandBarStatus" style={{ color: statusColor }}>{status.text}</div>
         </div>
       )}
     </div>

@@ -1,24 +1,30 @@
 import type { Vec2 } from "../geo/vec2";
 import { constructFromClick, hitTestPointId, hitTestSegmentId, hitTestTopObject } from "../engine";
 import type { ActiveTool, PendingSelection } from "../state/geoStore";
-import type { Camera, Viewport } from "./camera";
+import { camera as camMath, type Camera, type Viewport } from "./camera";
 import { findBestSnap } from "./snapEngine";
-import type { SceneModel } from "../scene/points";
+import { evaluateAngleExpressionDegrees, type SceneModel } from "../scene/points";
 
 type ConstructFromClickArgs = Parameters<typeof constructFromClick>[0];
-export type ConstructClickIo = Omit<ConstructFromClickArgs["io"], "angleFixedTool" | "camera" | "vp">;
+export type ConstructClickIo = Omit<
+  ConstructFromClickArgs["io"],
+  "angleFixedTool" | "regularPolygonTool" | "transformTool" | "evaluateAngleExpressionDegrees" | "camera" | "vp"
+>;
 
 type RunConstructClickParams = {
   screen: Vec2;
   pointerEvent: PointerEvent;
+  preHitTextLabelId?: string | null;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null;
   scene: SceneModel;
   resolvedPoints: Array<{ point: SceneModel["points"][number]; world: Vec2 }>;
   camera: Camera;
   vp: Viewport;
   angleFixedTool: ConstructFromClickArgs["io"]["angleFixedTool"];
+  regularPolygonTool: ConstructFromClickArgs["io"]["regularPolygonTool"];
+  transformTool: ConstructFromClickArgs["io"]["transformTool"];
   tolerances: {
     point: number;
     angle: number;
@@ -33,6 +39,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
   const {
     screen,
     pointerEvent,
+    preHitTextLabelId = null,
     activeTool,
     pendingSelection,
     copyStyleSource,
@@ -41,6 +48,8 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     camera,
     vp,
     angleFixedTool,
+    regularPolygonTool,
+    transformTool,
     tolerances,
     io,
   } = params;
@@ -52,18 +61,38 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     lineTolPx: tolerances.line,
     circleTolPx: tolerances.circle,
   });
-  const snap =
-    !pointerEvent.shiftKey && activeTool !== "move" && activeTool !== "copyStyle"
+  const cursorWorld = camMath.screenToWorld(screen, camera, vp);
+  const snappedWorld =
+    !pointerEvent.shiftKey && io.gridSnapEnabled
+      ? io.snapWorldToGrid(cursorWorld)
+      : null;
+  const snappedScreen = snappedWorld ? camMath.worldToScreen(snappedWorld, camera, vp) : null;
+  const rawHitPointId = hitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point);
+  const snappedHitPointId = snappedScreen ? hitTestPointId(snappedScreen, resolvedPoints, camera, vp, tolerances.point) : null;
+
+  let snap =
+    !pointerEvent.shiftKey && activeTool !== "move" && activeTool !== "copyStyle" && activeTool !== "label"
       ? findBestSnap(screen, camera, vp, scene, tolerances.point)
       : null;
+  if (snappedHitPointId && (!snap || snap.kind !== "point")) {
+    const pointWorld = io.getPointWorldById(snappedHitPointId) ?? snappedWorld ?? cursorWorld;
+    const screenDistPx = snappedScreen ? Math.hypot(screen.x - snappedScreen.x, screen.y - snappedScreen.y) : 0;
+    snap = {
+      kind: "point",
+      pointId: snappedHitPointId,
+      world: pointWorld,
+      screenDistPx,
+    };
+  }
 
   constructFromClick({
     screen,
     activeTool,
     pendingSelection,
     hits: {
-      hitPointId: hitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
+      hitPointId: rawHitPointId ?? snappedHitPointId,
       hitSegmentId: hitTestSegmentId(screen, scene, camera, vp, tolerances.segment),
+      hitTextLabelId: preHitTextLabelId,
       hitObject,
       shiftKey: pointerEvent.shiftKey,
       hasCopyStyleSource: Boolean(copyStyleSource),
@@ -72,6 +101,9 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     io: {
       ...io,
       angleFixedTool,
+      regularPolygonTool,
+      transformTool,
+      evaluateAngleExpressionDegrees: (exprRaw) => evaluateAngleExpressionDegrees(scene, exprRaw),
       camera,
       vp,
     },

@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "C",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": -2, "y": -2.5 },
+      "dependsOn": []
+    },
+    {
+      "id": "p_2",
+      "name": "D",
+      "visible": true,
+      "showLabel": "name",
+      "definition": { "kind": "free", "x": 0, "y": -1 },
+      "dependsOn": []
+    }
+  ],
+  "lines": [],
+  "segments": [],
+  "circles": [
+    {
+      "id": "c_1",
+      "kind": "twoPoint",
+      "centerId": "p_1",
+      "throughId": "p_2",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "strokeDash": "solid",
+        "strokeOpacity": 1,
+        "arrowMark": {
+          "enabled": true,
+          "direction": ">-<",
+          "tip": "Stealth",
+          "pos": 0.5,
+          "distribution": "single",
+          "sizeScale": 1,
+          "color": "#000000",
+          "lineWidthPt": 1
+        }
+      }
+    }
+  ],
+  "angles": [],
+  "numbers": []
+}

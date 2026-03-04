@@ -1,6 +1,11 @@
 import { getPointWorldPos, type SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
-import { drawSegmentArrowOverlay, drawSegmentMarkOverlay } from "../segmentOverlayRender";
+import {
+  drawSegmentArrowOverlay,
+  drawSegmentMarkOverlay,
+  drawSegmentWithEndpointArrow,
+  resolveSegmentEndpointReplacementArrow,
+} from "../segmentOverlayRender";
 import { applyStrokeDash } from "../strokeStyle";
 import type { DrawableObjectSelection } from "./types";
 
@@ -26,18 +31,24 @@ export function drawSegments(
 
     const p1 = camMath.worldToScreen(a, camera, vp);
     const p2 = camMath.worldToScreen(b, camera, vp);
+    const endpointReplacementArrow = resolveSegmentEndpointReplacementArrow(seg.style);
+    if (endpointReplacementArrow) {
+      drawSegmentWithEndpointArrow(ctx, p1, p2, seg.style, endpointReplacementArrow.arrow);
+      drawSegmentMarkOverlay(ctx, p1, p2, seg.style);
+      drawSegmentArrowOverlay(ctx, p1, p2, seg.style, new Set([endpointReplacementArrow.key]));
+    } else {
+      applyStrokeDash(ctx, seg.style.dash, seg.style.strokeWidth);
+      ctx.strokeStyle = seg.style.strokeColor;
+      ctx.globalAlpha = seg.style.opacity;
+      ctx.lineWidth = seg.style.strokeWidth;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
 
-    applyStrokeDash(ctx, seg.style.dash, seg.style.strokeWidth);
-    ctx.strokeStyle = seg.style.strokeColor;
-    ctx.globalAlpha = seg.style.opacity;
-    ctx.lineWidth = seg.style.strokeWidth;
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-
-    drawSegmentMarkOverlay(ctx, p1, p2, seg.style);
-    drawSegmentArrowOverlay(ctx, p1, p2, seg.style);
+      drawSegmentMarkOverlay(ctx, p1, p2, seg.style);
+      drawSegmentArrowOverlay(ctx, p1, p2, seg.style);
+    }
 
     if (selectedObject?.type === "segment" && selectedObject.id === seg.id) {
       ctx.globalAlpha = 1;

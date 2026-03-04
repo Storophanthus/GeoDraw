@@ -17,6 +17,10 @@ export type SnapshotPointDefinition =
   | { kind: "pointOnSegment"; segId: string; u: number }
   | { kind: "pointOnCircle"; circleId: string; t: number }
   | { kind: "circleCenter"; circleId: string }
+  | { kind: "triangleCenter"; centerKind: "incenter" | "orthocenter" | "centroid"; aId: string; bId: string; cId: string }
+  | { kind: "pointByTranslation"; pointId: string; fromId: string; toId: string; vectorId?: string }
+  | { kind: "pointByDilation"; pointId: string; centerId: string; factor?: number; factorExpr?: string }
+  | { kind: "pointByReflection"; pointId: string; axis: { type: "line" | "segment" | "point"; id: string } }
   | {
       kind: "pointByRotation";
       centerId: string;
@@ -70,14 +74,21 @@ export type SnapshotPoint = {
   dependsOn: string[];
 };
 
+export type SnapshotVector =
+  | { id: string; definition: { kind: "vectorFromPoints"; fromId: string; toId: string } }
+  | { id: string; definition: { kind: "freeVector"; dx: number; dy: number } };
+
 export type SnapshotLine = {
   id: string;
-  kind?: "twoPoint" | "perpendicular" | "parallel" | "tangent" | "angleBisector";
+  kind?: "twoPoint" | "perpendicular" | "parallel" | "tangent" | "circleCircleTangent" | "angleBisector";
   aId?: string;
   bId?: string;
   cId?: string;
   throughId?: string;
   circleId?: string;
+  circleAId?: string;
+  circleBId?: string;
+  family?: "outer" | "inner";
   branchIndex?: 0 | 1;
   base?: { type: "line" | "segment"; id: string };
   visible: boolean;
@@ -107,6 +118,7 @@ export type SnapshotCircle = {
 export type ConstructionSnapshot = {
   version: 1;
   points: SnapshotPoint[];
+  vectors: SnapshotVector[];
   numbers: Array<{
     id: string;
     name: string;
@@ -150,6 +162,14 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
+  const vectors = (scene.vectors ?? [])
+    .map((vector) =>
+      vector.kind === "vectorFromPoints"
+        ? ({ id: vector.id, definition: { kind: "vectorFromPoints", fromId: vector.fromId, toId: vector.toId } } as const)
+        : ({ id: vector.id, definition: { kind: "freeVector", dx: vector.dx, dy: vector.dy } } as const)
+    )
+    .sort((a, b) => a.id.localeCompare(b.id));
+
   const numbers = scene.numbers
     .map((num) => ({
       id: num.id,
@@ -175,6 +195,16 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
               kind: "tangent" as const,
               throughId: line.throughId,
               circleId: line.circleId,
+              branchIndex: line.branchIndex,
+              visible: line.visible,
+            }
+        : line.kind === "circleCircleTangent"
+          ? {
+              id: line.id,
+              kind: "circleCircleTangent" as const,
+              circleAId: line.circleAId,
+              circleBId: line.circleBId,
+              family: line.family,
               branchIndex: line.branchIndex,
               visible: line.visible,
             }
@@ -262,6 +292,7 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
   return {
     version: 1,
     points,
+    vectors,
     numbers,
     lines,
     segments,
@@ -323,6 +354,27 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
   if (point.kind === "circleCenter") {
     return { kind: "circleCenter", circleId: point.circleId };
   }
+  if (point.kind === "pointByTranslation") {
+    return {
+      kind: "pointByTranslation",
+      pointId: point.pointId,
+      fromId: point.fromId,
+      toId: point.toId,
+      vectorId: point.vectorId,
+    };
+  }
+  if (point.kind === "pointByDilation") {
+    return {
+      kind: "pointByDilation",
+      pointId: point.pointId,
+      centerId: point.centerId,
+      factor: point.factor,
+      factorExpr: point.factorExpr,
+    };
+  }
+  if (point.kind === "pointByReflection") {
+    return { kind: "pointByReflection", pointId: point.pointId, axis: point.axis };
+  }
   if (point.kind === "pointByRotation") {
     return {
       kind: "pointByRotation",
@@ -372,6 +424,15 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
       },
     };
   }
+  if (point.kind === "triangleCenter") {
+    return {
+      kind: "triangleCenter",
+      centerKind: point.centerKind,
+      aId: point.aId,
+      bId: point.bId,
+      cId: point.cId,
+    };
+  }
   return {
     kind: "intersectionPoint",
     objA: point.objA,
@@ -392,6 +453,17 @@ function pointDependsOn(point: ScenePoint): string[] {
   if (point.kind === "pointOnSegment") return [point.segId];
   if (point.kind === "pointOnCircle") return [point.circleId];
   if (point.kind === "circleCenter") return [point.circleId];
+  if (point.kind === "triangleCenter") return [point.aId, point.bId, point.cId];
+  if (point.kind === "pointByTranslation") {
+    const refs = [point.pointId, point.fromId, point.toId];
+    if (point.vectorId) refs.push(`vector:${point.vectorId}`);
+    return refs;
+  }
+  if (point.kind === "pointByDilation") return [point.pointId, point.centerId];
+  if (point.kind === "pointByReflection") {
+    if (point.axis.type === "point") return [point.pointId, point.axis.id];
+    return [point.pointId, objectRefKey(point.axis)];
+  }
   if (point.kind === "pointByRotation") return [point.centerId, point.pointId];
   if (point.kind === "circleLineIntersectionPoint") {
     const refs = [point.circleId, point.lineId];

@@ -4,11 +4,11 @@ import { useGlobalCanvasHotkeys } from "./useGlobalCanvasHotkeys";
 import { useSidebarResize } from "./useSidebarResize";
 import type { WorkspaceShellProps } from "./WorkspaceShell";
 
-const LEFT_MIN = 48;
+const LEFT_MIN = 86;
 const LEFT_MAX = 240;
-const RIGHT_MIN = 240;
+const RIGHT_MIN = 300;
 const RIGHT_MAX = 560;
-const COLLAPSED_W = 18;
+const COLLAPSED_W = 40;
 
 export function useAppShellController(): WorkspaceShellProps {
   const activeTool = useGeoStore((store) => store.activeTool);
@@ -21,7 +21,7 @@ export function useAppShellController(): WorkspaceShellProps {
   const canRedo = useGeoStore((store) => store.canRedo);
   const fitViewToScene = useGeoStore((store) => store.fitViewToScene);
 
-  const [leftWidth, setLeftWidth] = useState(56);
+  const [leftWidth, setLeftWidth] = useState(96);
   const [rightWidth, setRightWidth] = useState(312);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);

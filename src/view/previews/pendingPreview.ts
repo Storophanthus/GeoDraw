@@ -2,6 +2,12 @@ import { add, mul, sub } from "../../geo/geometry";
 import type { Vec2 } from "../../geo/vec2";
 import { hitTestLineId, hitTestSegmentId } from "../../engine";
 import {
+  evalPointByRotation,
+  evalPointByDilation,
+  evalPointByReflection,
+  evalPointByTranslation,
+} from "../../scene/eval/pointGeometryEval";
+import {
   computeOrientedAngleRad,
   evaluateAngleExpressionDegrees,
   evaluateNumberExpression,
@@ -26,6 +32,22 @@ import {
 
 export type AngleFixedToolState = { angleExpr: string; direction: "CCW" | "CW" };
 export type CircleFixedToolState = { radius: string };
+export type RegularPolygonToolState = { sides: number; direction: "CCW" | "CW" };
+export type TransformToolState = {
+  mode: "translate" | "rotate" | "dilate" | "reflect";
+  angleExpr: string;
+  direction: "CCW" | "CW";
+  factorExpr: string;
+};
+export type PendingPreviewTheme = {
+  stroke: string;
+  strokeStrong: string;
+  fillSoft: string;
+  fill: string;
+  fillStrong: string;
+  snapStroke: string;
+  lineWidthPx: number;
+};
 
 function circumcircleFromThreePoints(a: Vec2, b: Vec2, c: Vec2): { center: Vec2; radius: number } | null {
   const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
@@ -42,6 +64,24 @@ function circumcircleFromThreePoints(a: Vec2, b: Vec2, c: Vec2): { center: Vec2;
   return { center, radius };
 }
 
+function rotateAround(center: Vec2, p: Vec2, angleRad: number): Vec2 {
+  const dx = p.x - center.x;
+  const dy = p.y - center.y;
+  const cs = Math.cos(angleRad);
+  const sn = Math.sin(angleRad);
+  return {
+    x: center.x + dx * cs - dy * sn,
+    y: center.y + dx * sn + dy * cs,
+  };
+}
+
+function signedAngleRad(toolDirection: "CCW" | "CW", interiorAngleRad: number): number {
+  // pointByRotation rotates previous vertex around current one; due reversed edge
+  // vector, requested polygon orientation requires flipped rotation sign.
+  const rotationDirection = toolDirection === "CCW" ? "CW" : "CCW";
+  return rotationDirection === "CCW" ? interiorAngleRad : -interiorAngleRad;
+}
+
 export function drawPendingPreview(
   ctx: CanvasRenderingContext2D,
   pendingSelection: PendingSelection,
@@ -53,9 +93,12 @@ export function drawPendingPreview(
   camera: Camera,
   vp: Viewport,
   angleFixedTool: AngleFixedToolState,
+  regularPolygonTool: RegularPolygonToolState,
   circleFixedTool: CircleFixedToolState,
+  transformTool: TransformToolState,
   anglePreviewArcRadius: number,
-  tolerances: { linePx: number; segmentPx: number }
+  tolerances: { linePx: number; segmentPx: number },
+  previewTheme: PendingPreviewTheme
 ): void {
   if (!pendingSelection) return;
   const firstSelection = "first" in pendingSelection ? pendingSelection.first : null;
@@ -67,8 +110,8 @@ export function drawPendingPreview(
   ctx.save();
   ctx.globalAlpha = 0.65;
   ctx.setLineDash([6, 5]);
-  ctx.strokeStyle = "#0ea5e9";
-  ctx.lineWidth = 1.3;
+  ctx.strokeStyle = previewTheme.stroke;
+  ctx.lineWidth = previewTheme.lineWidthPx;
 
   const drawInfinitePreviewLine = (through: Vec2, dirVec: Vec2): void => {
     const len = Math.hypot(dirVec.x, dirVec.y);
@@ -82,15 +125,59 @@ export function drawPendingPreview(
     ctx.lineTo(q2.x, q2.y);
     ctx.stroke();
   };
+  const drawPreviewSegment = (a: Vec2, b: Vec2): void => {
+    const pA = camMath.worldToScreen(a, camera, vp);
+    const pB = camMath.worldToScreen(b, camera, vp);
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y);
+    ctx.lineTo(pB.x, pB.y);
+    ctx.stroke();
+  };
+  const drawPreviewPoint = (world: Vec2): void => {
+    const screen = camMath.worldToScreen(world, camera, vp);
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = previewTheme.fillStrong;
+    ctx.strokeStyle = previewTheme.strokeStrong;
+    ctx.lineWidth = previewTheme.lineWidthPx;
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  };
+  const getHoveredPointWorld = (): Vec2 | null => {
+    if (hoverSnap?.kind === "point" && hoverSnap.pointId) {
+      const point = scene.points.find((item) => item.id === hoverSnap.pointId);
+      return point ? getPointWorldPos(point, scene) : null;
+    }
+    if (hoveredHit?.type === "point") {
+      const point = scene.points.find((item) => item.id === hoveredHit.id);
+      return point ? getPointWorldPos(point, scene) : null;
+    }
+    return cursorWorld;
+  };
+  const getHoveredPointOnlyWorld = (): Vec2 | null => {
+    if (hoverSnap?.kind === "point" && hoverSnap.pointId) {
+      const point = scene.points.find((item) => item.id === hoverSnap.pointId);
+      return point ? getPointWorldPos(point, scene) : null;
+    }
+    if (hoveredHit?.type === "point") {
+      const point = scene.points.find((item) => item.id === hoveredHit.id);
+      return point ? getPointWorldPos(point, scene) : null;
+    }
+    return null;
+  };
 
   if (pendingSelection.tool === "export_clip" && pendingSelection.step === 2) {
     const points = pendingSelection.points.map((entry) => entry.world);
     if (points.length >= 1) {
       const first = camMath.worldToScreen(points[0], camera, vp);
       ctx.globalAlpha = 0.85;
-      ctx.strokeStyle = "#0ea5e9";
-      ctx.fillStyle = "rgba(14,165,233,0.08)";
-      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = previewTheme.stroke;
+      ctx.fillStyle = previewTheme.fillSoft;
+      ctx.lineWidth = previewTheme.lineWidthPx;
       ctx.beginPath();
       ctx.moveTo(first.x, first.y);
       for (let i = 1; i < points.length; i += 1) {
@@ -107,17 +194,41 @@ export function drawPendingPreview(
       ctx.setLineDash([]);
       const canClose = points.length >= 3 && cursorScreen && Math.hypot(cursorScreen.x - first.x, cursorScreen.y - first.y) <= 14;
       ctx.beginPath();
-      ctx.fillStyle = "rgba(14,165,233,0.95)";
+      ctx.fillStyle = previewTheme.fillStrong;
       ctx.arc(first.x, first.y, 4, 0, Math.PI * 2);
       ctx.fill();
       if (canClose) {
         ctx.beginPath();
-        ctx.strokeStyle = "rgba(14,165,233,0.95)";
-        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = previewTheme.fillStrong;
+        ctx.lineWidth = Math.max(previewTheme.lineWidthPx, 1.4);
         ctx.arc(first.x, first.y, 9, 0, Math.PI * 2);
         ctx.stroke();
       }
     }
+    ctx.restore();
+    return;
+  }
+
+  if (pendingSelection.tool === "export_clip_rect" && pendingSelection.step === 2 && cursorWorld) {
+    const a = pendingSelection.first.world;
+    const minX = Math.min(a.x, cursorWorld.x);
+    const maxX = Math.max(a.x, cursorWorld.x);
+    const minY = Math.min(a.y, cursorWorld.y);
+    const maxY = Math.max(a.y, cursorWorld.y);
+    const pMin = camMath.worldToScreen({ x: minX, y: minY }, camera, vp);
+    const pMax = camMath.worldToScreen({ x: maxX, y: maxY }, camera, vp);
+    const x = Math.min(pMin.x, pMax.x);
+    const y = Math.min(pMin.y, pMax.y);
+    const w = Math.abs(pMax.x - pMin.x);
+    const h = Math.abs(pMax.y - pMin.y);
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = previewTheme.stroke;
+    ctx.fillStyle = previewTheme.fillSoft;
+    ctx.lineWidth = previewTheme.lineWidthPx;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
     return;
   }
@@ -139,6 +250,23 @@ export function drawPendingPreview(
       .filter((world): world is Vec2 => Boolean(world));
     if (polyWorld.length > 0) {
       const polyScreen = polyWorld.map((world) => camMath.worldToScreen(world, camera, vp));
+      const previewPath = [...polyScreen];
+      if (cursorWorld) {
+        previewPath.push(camMath.worldToScreen(cursorWorld, camera, vp));
+      }
+      if (previewPath.length >= 3) {
+        const prevAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = 0.14;
+        ctx.fillStyle = previewTheme.fill;
+        ctx.beginPath();
+        ctx.moveTo(previewPath[0].x, previewPath[0].y);
+        for (let i = 1; i < previewPath.length; i += 1) {
+          ctx.lineTo(previewPath[i].x, previewPath[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = prevAlpha;
+      }
       ctx.beginPath();
       ctx.moveTo(polyScreen[0].x, polyScreen[0].y);
       for (let i = 1; i < polyScreen.length; i += 1) {
@@ -150,6 +278,38 @@ export function drawPendingPreview(
       }
       ctx.stroke();
     }
+    ctx.restore();
+    return;
+  }
+
+  if (pendingSelection.tool === "regular_polygon" && p1 && cursorWorld) {
+    const n = Math.max(3, Math.min(64, Math.round(regularPolygonTool.sides)));
+    const first = firstWorld;
+    const second = cursorWorld;
+    if (!first) {
+      ctx.restore();
+      return;
+    }
+    if (Math.hypot(second.x - first.x, second.y - first.y) <= 1e-9) {
+      ctx.restore();
+      return;
+    }
+    const interior = Math.PI - (Math.PI * 2) / n;
+    const angleStep = signedAngleRad(regularPolygonTool.direction, interior);
+    const poly: Vec2[] = [first, second];
+    while (poly.length < n) {
+      const center = poly[poly.length - 1];
+      const base = poly[poly.length - 2];
+      poly.push(rotateAround(center, base, angleStep));
+    }
+    const polyScreen = poly.map((world) => camMath.worldToScreen(world, camera, vp));
+    ctx.beginPath();
+    ctx.moveTo(polyScreen[0].x, polyScreen[0].y);
+    for (let i = 1; i < polyScreen.length; i += 1) {
+      ctx.lineTo(polyScreen[i].x, polyScreen[i].y);
+    }
+    ctx.closePath();
+    ctx.stroke();
     ctx.restore();
     return;
   }
@@ -176,7 +336,7 @@ export function drawPendingPreview(
   if (p1 && pendingSelection.tool === "circle_cp" && cursorScreen) {
     const radiusPx = Math.hypot(cursorScreen.x - p1.x, cursorScreen.y - p1.y);
     ctx.globalAlpha = 0.45;
-    ctx.lineWidth = 1.1;
+    ctx.lineWidth = previewTheme.lineWidthPx;
     ctx.beginPath();
     ctx.arc(p1.x, p1.y, radiusPx, 0, Math.PI * 2);
     ctx.stroke();
@@ -191,7 +351,7 @@ export function drawPendingPreview(
       if (geom) {
         const c = camMath.worldToScreen(geom.center, camera, vp);
         ctx.globalAlpha = 0.45;
-        ctx.lineWidth = 1.1;
+        ctx.lineWidth = previewTheme.lineWidthPx;
         ctx.beginPath();
         ctx.arc(c.x, c.y, geom.radius * camera.zoom, 0, Math.PI * 2);
         ctx.stroke();
@@ -204,11 +364,392 @@ export function drawPendingPreview(
     if (evaluated.ok && Number.isFinite(evaluated.value) && evaluated.value > 0) {
       const radiusPx = evaluated.value * camera.zoom;
       ctx.globalAlpha = 0.45;
-      ctx.lineWidth = 1.1;
+      ctx.lineWidth = previewTheme.lineWidthPx;
       ctx.beginPath();
       ctx.arc(p1.x, p1.y, radiusPx, 0, Math.PI * 2);
       ctx.stroke();
     }
+  }
+
+  if (
+    pendingSelection.tool === "translate" ||
+    pendingSelection.tool === "rotate" ||
+    pendingSelection.tool === "dilate" ||
+    pendingSelection.tool === "reflect"
+  ) {
+    const source = pendingSelection.source;
+    const sourceAnchor = (): Vec2 | null => {
+      if (source.type === "point") return geoPointWorld(scene, source.id);
+      if (source.type === "segment") {
+        const seg = scene.segments.find((item) => item.id === source.id);
+        if (!seg) return null;
+        const a = geoPointWorld(scene, seg.aId);
+        const b = geoPointWorld(scene, seg.bId);
+        if (!a || !b) return null;
+        return { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 };
+      }
+      if (source.type === "line") {
+        const line = scene.lines.find((item) => item.id === source.id);
+        if (!line) return null;
+        const anchors = getLineWorldAnchors(line, scene);
+        if (!anchors) return null;
+        return { x: (anchors.a.x + anchors.b.x) * 0.5, y: (anchors.a.y + anchors.b.y) * 0.5 };
+      }
+      if (source.type === "polygon") {
+        const polygon = scene.polygons.find((item) => item.id === source.id);
+        if (!polygon || polygon.pointIds.length === 0) return null;
+        let sx = 0;
+        let sy = 0;
+        let count = 0;
+        for (const pointId of polygon.pointIds) {
+          const world = geoPointWorld(scene, pointId);
+          if (!world) continue;
+          sx += world.x;
+          sy += world.y;
+          count += 1;
+        }
+        if (count === 0) return null;
+        return { x: sx / count, y: sy / count };
+      }
+      if (source.type === "circle") {
+        const circle = scene.circles.find((item) => item.id === source.id);
+        if (!circle) return null;
+        const geom = getCircleWorldGeometry(circle, scene);
+        return geom?.center ?? null;
+      }
+      const angle = scene.angles.find((item) => item.id === source.id);
+      if (!angle) return null;
+      return geoPointWorld(scene, angle.bId);
+    };
+
+    const resolveReflectionRef =
+      hoverSnap?.kind === "point" && hoverSnap.pointId
+        ? ({ type: "point", id: hoverSnap.pointId } as const)
+        : hoverSnap?.kind === "onLine" && hoverSnap.lineId
+        ? ({ type: "line", id: hoverSnap.lineId } as const)
+        : hoverSnap?.kind === "onSegment" && hoverSnap.segId
+          ? ({ type: "segment", id: hoverSnap.segId } as const)
+          : hoveredHit?.type === "point"
+            ? ({ type: "point", id: hoveredHit.id } as const)
+          : hoveredHit?.type === "line2p"
+            ? ({ type: "line", id: hoveredHit.id } as const)
+            : hoveredHit?.type === "segment"
+              ? ({ type: "segment", id: hoveredHit.id } as const)
+              : cursorScreen
+                ? (() => {
+                    const lineId = hitTestLineId(cursorScreen, scene, camera, vp, tolerances.linePx);
+                    if (lineId) return { type: "line", id: lineId } as const;
+                    const segId = hitTestSegmentId(cursorScreen, scene, camera, vp, tolerances.segmentPx);
+                    if (segId) return { type: "segment", id: segId } as const;
+                    return null;
+                  })()
+                : null;
+
+    let transformPointWorld: ((world: Vec2) => Vec2 | null) | null = null;
+    if (pendingSelection.tool === "translate") {
+      if (pendingSelection.step === 2) {
+        const anchor = sourceAnchor();
+        const fromWorld = getHoveredPointWorld();
+        if (anchor && fromWorld) drawPreviewSegment(anchor, fromWorld);
+        ctx.restore();
+        return;
+      }
+      const fromWorld = geoPointWorld(scene, pendingSelection.from.id);
+      const toWorld = getHoveredPointWorld();
+      if (!fromWorld || !toWorld) {
+        ctx.restore();
+        return;
+      }
+      drawPreviewSegment(fromWorld, toWorld);
+      transformPointWorld = (world) => evalPointByTranslation(world, fromWorld, toWorld);
+    } else if (pendingSelection.tool === "rotate") {
+      // Rotate finalizes on a point center. Preview only when hovering a valid
+      // point to avoid the misleading "translation-like" preview drift.
+      const center = getHoveredPointOnlyWorld();
+      if (!center) {
+        ctx.restore();
+        return;
+      }
+      const angle = evaluateAngleExpressionDegrees(scene, transformTool.angleExpr);
+      if (!angle.ok || !Number.isFinite(angle.valueDeg)) {
+        ctx.restore();
+        return;
+      }
+      const anchor = sourceAnchor();
+      transformPointWorld = (world) => {
+        if (Math.hypot(world.x - center.x, world.y - center.y) <= 1e-12) {
+          return { x: center.x, y: center.y };
+        }
+        return evalPointByRotation(center, world, angle.valueDeg, transformTool.direction);
+      };
+      drawPreviewPoint(center);
+      if (anchor) {
+        const rotatedAnchor = evalPointByRotation(center, anchor, angle.valueDeg, transformTool.direction);
+        drawPreviewSegment(center, anchor);
+        if (rotatedAnchor) drawPreviewSegment(center, rotatedAnchor);
+      }
+    } else if (pendingSelection.tool === "dilate") {
+      const center = getHoveredPointWorld();
+      if (!center) {
+        ctx.restore();
+        return;
+      }
+      const factor = evaluateNumberExpression(scene, transformTool.factorExpr);
+      if (!factor.ok || !Number.isFinite(factor.value)) {
+        ctx.restore();
+        return;
+      }
+      transformPointWorld = (world) => evalPointByDilation(world, center, factor.value);
+    } else {
+      if (!resolveReflectionRef) {
+        ctx.restore();
+        return;
+      }
+      if (resolveReflectionRef.type === "point") {
+        const center = geoPointWorld(scene, resolveReflectionRef.id);
+        if (!center) {
+          ctx.restore();
+          return;
+        }
+        drawPreviewPoint(center);
+        transformPointWorld = (world) => evalPointByDilation(world, center, -1);
+      } else {
+        const axisAnchors =
+          resolveReflectionRef.type === "line"
+          ? (() => {
+              const line = scene.lines.find((item) => item.id === resolveReflectionRef.id);
+              if (!line) return null;
+              return getLineWorldAnchors(line, scene);
+            })()
+          : (() => {
+              const seg = scene.segments.find((item) => item.id === resolveReflectionRef.id);
+              if (!seg) return null;
+              const a = geoPointWorld(scene, seg.aId);
+              const b = geoPointWorld(scene, seg.bId);
+              if (!a || !b) return null;
+              return { a, b };
+            })();
+        if (!axisAnchors) {
+          ctx.restore();
+          return;
+        }
+        drawInfinitePreviewLine(axisAnchors.a, sub(axisAnchors.b, axisAnchors.a));
+        transformPointWorld = (world) => evalPointByReflection(world, axisAnchors.a, axisAnchors.b);
+      }
+    }
+
+    if (!transformPointWorld) {
+      ctx.restore();
+      return;
+    }
+
+    const drawWorldPolyline = (worldPoints: Vec2[], close = false, fillAlpha = 0): void => {
+      if (worldPoints.length < 2) return;
+      const screenPoints = worldPoints.map((world) => camMath.worldToScreen(world, camera, vp));
+      if (close && screenPoints.length >= 3 && fillAlpha > 0) {
+        const prevAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = fillAlpha;
+        ctx.fillStyle = previewTheme.fill;
+        ctx.beginPath();
+        ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+        for (let i = 1; i < screenPoints.length; i += 1) ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = prevAlpha;
+      }
+      ctx.beginPath();
+      ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+      for (let i = 1; i < screenPoints.length; i += 1) ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+      if (close) ctx.closePath();
+      ctx.stroke();
+    };
+
+    if (source.type === "point") {
+      const world = geoPointWorld(scene, source.id);
+      if (!world) {
+        ctx.restore();
+        return;
+      }
+      const transformed = transformPointWorld(world);
+      if (!transformed) {
+        ctx.restore();
+        return;
+      }
+      drawPreviewSegment(world, transformed);
+      drawPreviewPoint(transformed);
+      ctx.restore();
+      return;
+    }
+
+    if (source.type === "segment") {
+      const seg = scene.segments.find((item) => item.id === source.id);
+      if (!seg) {
+        ctx.restore();
+        return;
+      }
+      const a = geoPointWorld(scene, seg.aId);
+      const b = geoPointWorld(scene, seg.bId);
+      if (!a || !b) {
+        ctx.restore();
+        return;
+      }
+      const ta = transformPointWorld(a);
+      const tb = transformPointWorld(b);
+      if (!ta || !tb) {
+        ctx.restore();
+        return;
+      }
+      drawPreviewSegment(ta, tb);
+      ctx.restore();
+      return;
+    }
+
+    if (source.type === "line") {
+      const line = scene.lines.find((item) => item.id === source.id);
+      if (!line) {
+        ctx.restore();
+        return;
+      }
+      const anchors = getLineWorldAnchors(line, scene);
+      if (!anchors) {
+        ctx.restore();
+        return;
+      }
+      const ta = transformPointWorld(anchors.a);
+      const tb = transformPointWorld(anchors.b);
+      if (!ta || !tb) {
+        ctx.restore();
+        return;
+      }
+      const dir = sub(tb, ta);
+      if (dir.x * dir.x + dir.y * dir.y <= 1e-12) {
+        ctx.restore();
+        return;
+      }
+      drawInfinitePreviewLine(ta, dir);
+      ctx.restore();
+      return;
+    }
+
+    if (source.type === "polygon") {
+      const polygon = scene.polygons.find((item) => item.id === source.id);
+      if (!polygon || polygon.pointIds.length < 3) {
+        ctx.restore();
+        return;
+      }
+      const transformed: Vec2[] = [];
+      for (const pointId of polygon.pointIds) {
+        const world = geoPointWorld(scene, pointId);
+        if (!world) continue;
+        const out = transformPointWorld(world);
+        if (!out) continue;
+        transformed.push(out);
+      }
+      if (transformed.length >= 3) {
+        drawWorldPolyline(transformed, true, 0.14);
+      }
+      ctx.restore();
+      return;
+    }
+
+    if (source.type === "circle") {
+      const circle = scene.circles.find((item) => item.id === source.id);
+      if (!circle) {
+        ctx.restore();
+        return;
+      }
+      if (circle.kind === "threePoint") {
+        const a = geoPointWorld(scene, circle.aId);
+        const b = geoPointWorld(scene, circle.bId);
+        const c = geoPointWorld(scene, circle.cId);
+        if (!a || !b || !c) {
+          ctx.restore();
+          return;
+        }
+        const ta = transformPointWorld(a);
+        const tb = transformPointWorld(b);
+        const tc = transformPointWorld(c);
+        if (!ta || !tb || !tc) {
+          ctx.restore();
+          return;
+        }
+        const geom = circumcircleFromThreePoints(ta, tb, tc);
+        if (!geom) {
+          ctx.restore();
+          return;
+        }
+        const cs = camMath.worldToScreen(geom.center, camera, vp);
+        ctx.beginPath();
+        ctx.arc(cs.x, cs.y, geom.radius * camera.zoom, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+      const geom = getCircleWorldGeometry(circle, scene);
+      if (!geom) {
+        ctx.restore();
+        return;
+      }
+      const center = geom.center;
+      const through =
+        circle.kind === "twoPoint"
+          ? geoPointWorld(scene, circle.throughId)
+          : { x: center.x + geom.radius, y: center.y };
+      if (!through) {
+        ctx.restore();
+        return;
+      }
+      const transformedCenter = transformPointWorld(center);
+      const transformedThrough = transformPointWorld(through);
+      if (!transformedCenter || !transformedThrough) {
+        ctx.restore();
+        return;
+      }
+      const radius = Math.hypot(transformedThrough.x - transformedCenter.x, transformedThrough.y - transformedCenter.y);
+      if (!Number.isFinite(radius) || radius <= 1e-12) {
+        ctx.restore();
+        return;
+      }
+      const cs = camMath.worldToScreen(transformedCenter, camera, vp);
+      ctx.beginPath();
+      ctx.arc(cs.x, cs.y, radius * camera.zoom, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    const angle = scene.angles.find((item) => item.id === source.id);
+    if (!angle) {
+      ctx.restore();
+      return;
+    }
+    const a = geoPointWorld(scene, angle.aId);
+    const b = geoPointWorld(scene, angle.bId);
+    const c = geoPointWorld(scene, angle.cId);
+    if (!a || !b || !c) {
+      ctx.restore();
+      return;
+    }
+    const ta = transformPointWorld(a);
+    const tb = transformPointWorld(b);
+    const tc = transformPointWorld(c);
+    if (!ta || !tb || !tc) {
+      ctx.restore();
+      return;
+    }
+    drawPreviewSegment(tb, ta);
+    drawPreviewSegment(tb, tc);
+    if (angle.kind === "sector") {
+      const as = camMath.worldToScreen(ta, camera, vp);
+      const bs = camMath.worldToScreen(tb, camera, vp);
+      const theta = computeOrientedAngleRad(ta, tb, tc);
+      if (theta !== null) {
+        const radiusPx = Math.max(2, Math.hypot(as.x - bs.x, as.y - bs.y));
+        drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
+      }
+    }
+    ctx.restore();
+    return;
   }
 
   if (pendingSelection.tool === "perp_line" || pendingSelection.tool === "parallel_line") {
@@ -291,6 +832,63 @@ export function drawPendingPreview(
             ? hoveredHit.id
             : null;
     } else {
+      const hoveredCircleId =
+        hoverSnap?.kind === "onCircle" && hoverSnap.circleId
+          ? hoverSnap.circleId
+          : hoveredHit?.type === "circle"
+            ? hoveredHit.id
+            : null;
+      if (hoveredCircleId && hoveredCircleId !== pendingSelection.first.id) {
+        const fallbackStyle = { strokeColor: "#334155", strokeWidth: 1.2, dash: "solid" as const, opacity: 1 };
+        const previewStyle = scene.lines[0]?.style ?? fallbackStyle;
+        const signatures = new Set<string>();
+        const signatureFor = (a: Vec2, b: Vec2): string => {
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const len = Math.hypot(dx, dy);
+          if (len <= 1e-12) return "";
+          let nx = -dy / len;
+          let ny = dx / len;
+          let c = nx * a.x + ny * a.y;
+          if (nx < -1e-12 || (Math.abs(nx) <= 1e-12 && ny < -1e-12)) {
+            nx = -nx;
+            ny = -ny;
+            c = -c;
+          }
+          const q = (v: number) => Math.round(v * 1e9);
+          return `${q(nx)}:${q(ny)}:${q(c)}`;
+        };
+        const candidates: Array<{ family: "outer" | "inner"; branchIndex: 0 | 1 }> = [
+          { family: "outer", branchIndex: 0 },
+          { family: "outer", branchIndex: 1 },
+          { family: "inner", branchIndex: 0 },
+          { family: "inner", branchIndex: 1 },
+        ];
+        for (let i = 0; i < candidates.length; i += 1) {
+          const candidate = candidates[i];
+          const anchors = getLineWorldAnchors(
+            {
+              id: `__preview_tangent_${candidate.family}_${candidate.branchIndex}__`,
+              kind: "circleCircleTangent",
+              circleAId: pendingSelection.first.id,
+              circleBId: hoveredCircleId,
+              family: candidate.family,
+              branchIndex: candidate.branchIndex,
+              visible: true,
+              style: previewStyle,
+            },
+            scene
+          );
+          if (!anchors) continue;
+          const signature = signatureFor(anchors.a, anchors.b);
+          if (!signature || signatures.has(signature)) continue;
+          signatures.add(signature);
+          drawInfinitePreviewLine(anchors.a, sub(anchors.b, anchors.a));
+        }
+        ctx.restore();
+        return;
+      }
+
       circleId = pendingSelection.first.id;
       if (hoverSnap?.kind === "point" && hoverSnap.pointId) {
         const p = scene.points.find((pt) => pt.id === hoverSnap.pointId);
@@ -388,7 +986,7 @@ export function drawPendingPreview(
         if (rightStatus === "none") {
           drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
         } else {
-          const rightMarkSizePx = computeRightMarkSizePx(radiusPx, 1.3);
+          const rightMarkSizePx = computeRightMarkSizePx(radiusPx, previewTheme.lineWidthPx);
           ctx.save();
           ctx.setLineDash(rightStatus === "approx" ? [5, 4] : []);
           drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx);
@@ -402,7 +1000,7 @@ export function drawPendingPreview(
         ctx.save();
         ctx.globalAlpha = 0.9;
         ctx.setLineDash([]);
-        ctx.fillStyle = "#0284c7";
+        ctx.fillStyle = previewTheme.strokeStrong;
         ctx.font = "12px system-ui";
         const deg = (theta * 180) / Math.PI;
         ctx.fillText(`${formatPreviewAngleDegrees(deg)}°`, lx, ly);
@@ -458,16 +1056,16 @@ export function drawPendingPreview(
 
     ctx.save();
     ctx.globalAlpha = 0.18;
-    ctx.fillStyle = "#0ea5e9";
+    ctx.fillStyle = previewTheme.fill;
     drawAngleSector(ctx, as, os, theta, radiusPx);
     ctx.fill();
     ctx.restore();
 
     ctx.save();
     ctx.globalAlpha = 0.7;
-    ctx.strokeStyle = "#0284c7";
+    ctx.strokeStyle = previewTheme.strokeStrong;
     ctx.setLineDash([6, 5]);
-    ctx.lineWidth = 1.3;
+    ctx.lineWidth = previewTheme.lineWidthPx;
     ctx.beginPath();
     ctx.moveTo(os.x, os.y);
     ctx.lineTo(os.x + Math.cos(start) * radiusPx, os.y + Math.sin(start) * radiusPx);
@@ -567,4 +1165,9 @@ function formatPreviewAngleDegrees(degRaw: number): string {
   const nearest5 = Math.round(deg / 5) * 5;
   if (Math.abs(deg - nearest5) <= 1e-3) return String(nearest5);
   return deg.toFixed(2);
+}
+
+function geoPointWorld(scene: SceneModel, pointId: string): Vec2 | null {
+  const point = scene.points.find((item) => item.id === pointId);
+  return point ? getPointWorldPos(point, scene) : null;
 }

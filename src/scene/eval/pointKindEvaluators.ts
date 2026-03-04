@@ -1,23 +1,37 @@
 import type { Vec2 } from "../../geo/vec2";
 import {
+  evalPointByDilation,
+  evalPointByReflection,
   evalMidpoint,
   evalPointByRotation,
+  evalPointByTranslation,
+  evalPointByTranslationVector,
   evalPointOnCircle,
   evalPointOnLine,
   evalPointOnSegment,
+  evalTriangleCentroid,
+  evalTriangleIncenter,
+  evalTriangleOrthocenter,
 } from "./pointGeometryEval";
 import type {
   CircleCenterPoint,
+  ReflectionObjectRef,
   MidpointFromPoints,
   MidpointFromSegment,
+  PointByDilation,
+  PointByReflection,
   PointByRotation,
+  PointByTranslation,
   PointOnCircle,
   PointOnLine,
   PointOnSegment,
+  SceneVector,
   SceneModel,
+  TriangleCenterPoint,
 } from "../points";
 import type { SceneEvalContext } from "./sceneContextBuilder";
 import type { AngleExpressionEvalResult } from "./expressionEval";
+import type { NumberExpressionEvalResult } from "./numericExpression";
 
 export function evalMidpointPointsPoint(
   point: MidpointFromPoints,
@@ -124,6 +138,133 @@ export function evalPointByRotationPoint(
   return evalPointByRotation(center, base, exprEval.valueDeg, point.direction);
 }
 
+export function evalPointByTranslationPoint(
+  point: PointByTranslation,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+  }
+): Vec2 | null {
+  const base = ops.getPointWorldById(point.pointId, scene, ctx);
+  if (!base) return null;
+  if (point.vectorId) {
+    const delta = resolveVectorDelta(point.vectorId, scene, ctx, {
+      getPointWorldById: ops.getPointWorldById,
+    });
+    if (!delta) return null;
+    ctx.stats.allocationsEstimate += 1;
+    return evalPointByTranslationVector(base, delta);
+  }
+  const from = ops.getPointWorldById(point.fromId, scene, ctx);
+  const to = ops.getPointWorldById(point.toId, scene, ctx);
+  if (!from || !to) return null;
+  ctx.stats.allocationsEstimate += 1;
+  return evalPointByTranslation(base, from, to);
+}
+
+function resolveVectorDelta(
+  vectorId: string,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+  }
+): Vec2 | null {
+  const vector = ctx.vectorById.get(vectorId);
+  if (!vector) return null;
+  return vectorDeltaFromDefinition(vector, scene, ctx, ops);
+}
+
+function vectorDeltaFromDefinition(
+  vector: SceneVector,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+  }
+): Vec2 | null {
+  if (vector.kind === "freeVector") {
+    if (!Number.isFinite(vector.dx) || !Number.isFinite(vector.dy)) return null;
+    return { x: vector.dx, y: vector.dy };
+  }
+  const from = ops.getPointWorldById(vector.fromId, scene, ctx);
+  const to = ops.getPointWorldById(vector.toId, scene, ctx);
+  if (!from || !to) return null;
+  return { x: to.x - from.x, y: to.y - from.y };
+}
+
+export function evalPointByDilationPoint(
+  point: PointByDilation,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+    evaluateNumberExpressionWithCtx: (
+      scene: SceneModel,
+      exprRaw: string,
+      ctx: SceneEvalContext
+    ) => NumberExpressionEvalResult;
+  }
+): Vec2 | null {
+  const base = ops.getPointWorldById(point.pointId, scene, ctx);
+  const center = ops.getPointWorldById(point.centerId, scene, ctx);
+  if (!base || !center) return null;
+  const expr = point.factorExpr?.trim() || (typeof point.factor === "number" ? String(point.factor) : "");
+  if (!expr) return null;
+  const factorEval = ops.evaluateNumberExpressionWithCtx(scene, expr, ctx);
+  if (!factorEval.ok) return null;
+  ctx.stats.allocationsEstimate += 1;
+  return evalPointByDilation(base, center, factorEval.value);
+}
+
+function resolveReflectionTarget(
+  axis: ReflectionObjectRef,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+    resolveLineAnchorsById: (lineId: string, scene: SceneModel, ctx: SceneEvalContext) => { a: Vec2; b: Vec2 } | null;
+  }
+): { kind: "axis"; a: Vec2; b: Vec2 } | { kind: "center"; center: Vec2 } | null {
+  if (axis.type === "point") {
+    const center = ops.getPointWorldById(axis.id, scene, ctx);
+    if (!center) return null;
+    return { kind: "center", center };
+  }
+  if (axis.type === "line") {
+    const anchors = ops.resolveLineAnchorsById(axis.id, scene, ctx);
+    if (!anchors) return null;
+    return { kind: "axis", a: anchors.a, b: anchors.b };
+  }
+  const seg = ctx.segmentById.get(axis.id);
+  if (!seg) return null;
+  const a = ops.getPointWorldById(seg.aId, scene, ctx);
+  const b = ops.getPointWorldById(seg.bId, scene, ctx);
+  if (!a || !b) return null;
+  return { kind: "axis", a, b };
+}
+
+export function evalPointByReflectionPoint(
+  point: PointByReflection,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+    resolveLineAnchorsById: (lineId: string, scene: SceneModel, ctx: SceneEvalContext) => { a: Vec2; b: Vec2 } | null;
+  }
+): Vec2 | null {
+  const base = ops.getPointWorldById(point.pointId, scene, ctx);
+  if (!base) return null;
+  const axis = resolveReflectionTarget(point.axis, scene, ctx, ops);
+  if (!axis) return null;
+  ctx.stats.allocationsEstimate += 1;
+  if (axis.kind === "center") {
+    return evalPointByDilation(base, axis.center, -1);
+  }
+  return evalPointByReflection(base, axis.a, axis.b);
+}
+
 export function evalCircleCenterPointPoint(
   point: CircleCenterPoint,
   scene: SceneModel,
@@ -139,4 +280,22 @@ export function evalCircleCenterPointPoint(
   const geom = ops.getCircleWorldGeometryWithCtx(point.circleId, scene, ctx);
   if (!geom) return null;
   return geom.center;
+}
+
+export function evalTriangleCenterPointPoint(
+  point: TriangleCenterPoint,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+  }
+): Vec2 | null {
+  const a = ops.getPointWorldById(point.aId, scene, ctx);
+  const b = ops.getPointWorldById(point.bId, scene, ctx);
+  const c = ops.getPointWorldById(point.cId, scene, ctx);
+  if (!a || !b || !c) return null;
+  ctx.stats.allocationsEstimate += 1;
+  if (point.centerKind === "centroid") return evalTriangleCentroid(a, b, c);
+  if (point.centerKind === "incenter") return evalTriangleIncenter(a, b, c);
+  return evalTriangleOrthocenter(a, b, c);
 }

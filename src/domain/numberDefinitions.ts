@@ -2,6 +2,15 @@ import { evaluateNumberExpression, type SceneModel, type SceneNumberDefinition }
 
 export function isValidNumberDefinition(def: SceneNumberDefinition, scene: SceneModel): boolean {
   if (def.kind === "constant") return Number.isFinite(def.value);
+  if (def.kind === "slider") {
+    return (
+      Number.isFinite(def.value) &&
+      Number.isFinite(def.min) &&
+      Number.isFinite(def.max) &&
+      Number.isFinite(def.step) &&
+      def.step > 0
+    );
+  }
   if (def.kind === "distancePoints") {
     return scene.points.some((p) => p.id === def.aId) && scene.points.some((p) => p.id === def.bId);
   }
@@ -25,6 +34,11 @@ export function isValidNumberDefinition(def: SceneNumberDefinition, scene: Scene
 }
 
 export function numberPrefixForDefinition(def: SceneNumberDefinition): string {
+  if (def.kind === "slider") {
+    if (def.sliderMode === "radian") return "t";
+    if (def.sliderMode === "degree") return "ang";
+    return "n";
+  }
   if (def.kind === "distancePoints" || def.kind === "segmentLength") return "l";
   if (def.kind === "circleRadius") return "r";
   if (def.kind === "circleArea") return "Area";

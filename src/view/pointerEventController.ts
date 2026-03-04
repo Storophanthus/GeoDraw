@@ -7,6 +7,7 @@ type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -18,6 +19,7 @@ type PointerStateRef = { current: PointerState };
 type DragFrameRef = { current: number | null };
 
 type PointerHits = {
+  hitTextLabelId?: string | null;
   hitPointId: string | null;
   hitLabelId: string | null;
   hitAngleLabelId: string | null;
@@ -26,11 +28,18 @@ type PointerHits = {
   hitSegmentId: string | null;
   hitLineId: string | null;
   hitCircleId: string | null;
+  hitObjectLabel:
+  | { type: "segment"; id: string }
+  | { type: "line"; id: string }
+  | { type: "circle"; id: string }
+  | { type: "polygon"; id: string }
+  | null;
 };
 
 type MoveDecision = {
   mode: PointerMode;
   pointId: string | null;
+  dragObjectType: "segment" | "line" | "circle" | "polygon" | null;
   selectedObject:
   | { type: "point"; id: string }
   | { type: "segment"; id: string }
@@ -38,6 +47,7 @@ type MoveDecision = {
   | { type: "circle"; id: string }
   | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
+  | { type: "textLabel"; id: string }
   | null;
 };
 
@@ -69,11 +79,12 @@ type CreatePointerHandlersDeps = {
       | { type: "circle"; id: string }
       | { type: "polygon"; id: string }
       | { type: "angle"; id: string }
+      | { type: "textLabel"; id: string }
       | null
   ) => void;
   resolveHits: (screen: Vec2, e: PointerEvent) => PointerHits;
   decideMovePointerDown: (hits: PointerHits) => MoveDecision;
-  onToolClickRelease: (screen: Vec2, e: PointerEvent) => void;
+  onToolClickRelease: (screen: Vec2, e: PointerEvent, hits: PointerHits) => void;
   zoomAtScreenPoint: (screen: Vec2, factor: number) => void;
   panByScreenDelta: (delta: Vec2) => void;
 };
@@ -166,12 +177,33 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
 
     let mode: PointerMode = "idle";
     let pointId: string | null = null;
+    let objectType: PointerState["objectType"] = null;
 
     if (deps.activeTool === "move") {
       const decision = deps.decideMovePointerDown(hits);
       mode = decision.mode;
       pointId = decision.pointId;
+      objectType = decision.dragObjectType;
       deps.setSelectedObject(decision.selectedObject);
+    } else if (deps.activeTool === "label") {
+      const decision = deps.decideMovePointerDown(hits);
+      if (
+        decision.mode === "drag-label"
+        || decision.mode === "drag-angle-label"
+        || decision.mode === "drag-object-label"
+        || decision.mode === "drag-text-label"
+      ) {
+        mode = decision.mode;
+        pointId = decision.pointId;
+        objectType = decision.dragObjectType;
+      } else {
+        mode = "tool-click";
+        pointId = null;
+        objectType = null;
+      }
+      if (decision.selectedObject) {
+        deps.setSelectedObject(decision.selectedObject);
+      }
     } else {
       mode = "tool-click";
     }
@@ -181,6 +213,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pid: e.pointerId,
       mode,
       pointId,
+      objectType,
       lastX: e.clientX,
       lastY: e.clientY,
       startX: e.clientX,
@@ -284,7 +317,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
 
     if (st.mode === "tool-click" && !st.moved) {
       const screen = deps.readScreen(e);
-      deps.onToolClickRelease(screen, e);
+      deps.onToolClickRelease(screen, e, deps.resolveHits(screen, e));
     }
 
     deps.pointerRef.current = {
@@ -292,6 +325,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pid: -1,
       mode: "idle",
       pointId: null,
+      objectType: null,
       lastX: 0,
       lastY: 0,
       startX: 0,

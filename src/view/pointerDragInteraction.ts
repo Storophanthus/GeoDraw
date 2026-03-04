@@ -5,6 +5,7 @@ type PointerStateLike = {
   active: boolean;
   mode: PointerMode;
   pointId: string | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
 };
 
 export type DragBufferAccess = {
@@ -23,9 +24,16 @@ export type DragBufferAccess = {
 type DragUpdateOps = {
   panByScreenDelta: (delta: Vec2) => void;
   movePointTo: (pointId: string, world: Vec2) => void;
+  movePolygonByWorldDelta: (polygonId: string, deltaWorld: Vec2) => void;
   movePointLabelBy: (pointId: string, delta: Vec2) => void;
   moveAngleLabelTo: (angleId: string, world: Vec2) => void;
+  moveObjectLabelTo: (
+    obj: { type: "segment" | "line" | "circle" | "polygon"; id: string },
+    world: Vec2
+  ) => void;
+  moveTextLabelTo: (id: string, world: Vec2) => void;
   screenToWorld: (screen: Vec2) => Vec2;
+  screenDeltaToWorldDelta: (delta: Vec2) => Vec2;
 };
 
 export function applyBufferedDragUpdate(
@@ -53,10 +61,43 @@ export function applyBufferedDragUpdate(
     return;
   }
 
+  if (st.mode === "drag-polygon" && st.pointId) {
+    const panDelta = buffers.getPanDelta();
+    if (panDelta.x !== 0 || panDelta.y !== 0) {
+      ops.movePolygonByWorldDelta(st.pointId, ops.screenDeltaToWorldDelta(panDelta));
+      buffers.setPanDelta({ x: 0, y: 0 });
+    }
+    return;
+  }
+
   if (st.mode === "drag-angle-label" && st.pointId) {
     const angleLabelScreen = buffers.getAngleLabelScreen();
     if (angleLabelScreen) {
       ops.moveAngleLabelTo(st.pointId, ops.screenToWorld(angleLabelScreen));
+    }
+    return;
+  }
+
+  if (st.mode === "drag-object-label" && st.pointId && st.objectType) {
+    if (
+      st.objectType !== "segment"
+      && st.objectType !== "line"
+      && st.objectType !== "circle"
+      && st.objectType !== "polygon"
+    ) {
+      return;
+    }
+    const objectLabelScreen = buffers.getAngleLabelScreen();
+    if (objectLabelScreen) {
+      ops.moveObjectLabelTo({ type: st.objectType, id: st.pointId }, ops.screenToWorld(objectLabelScreen));
+    }
+    return;
+  }
+
+  if (st.mode === "drag-text-label" && st.pointId) {
+    const textLabelScreen = buffers.getAngleLabelScreen();
+    if (textLabelScreen) {
+      ops.moveTextLabelTo(st.pointId, ops.screenToWorld(textLabelScreen));
     }
     return;
   }
@@ -92,6 +133,15 @@ export function bufferDragForMode(
     return true;
   }
 
+  if (st.mode === "drag-polygon" && st.pointId) {
+    const panDelta = buffers.getPanDelta();
+    buffers.setPanDelta({
+      x: panDelta.x + dx,
+      y: panDelta.y + dy,
+    });
+    return true;
+  }
+
   if (st.mode === "drag-label" && st.pointId) {
     const labelDelta = buffers.getLabelDelta();
     buffers.setLabelDelta({
@@ -102,6 +152,16 @@ export function bufferDragForMode(
   }
 
   if (st.mode === "drag-angle-label" && st.pointId) {
+    buffers.setAngleLabelScreen(screen);
+    return true;
+  }
+
+  if (st.mode === "drag-object-label" && st.pointId) {
+    buffers.setAngleLabelScreen(screen);
+    return true;
+  }
+
+  if (st.mode === "drag-text-label" && st.pointId) {
     buffers.setAngleLabelScreen(screen);
     return true;
   }

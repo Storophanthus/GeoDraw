@@ -14,7 +14,19 @@ export type RectGridSettings = {
   majorWidth: number;
 };
 
-export function drawRectGrid(ctx: CanvasRenderingContext2D, cam: Camera, vp: Viewport, s: RectGridSettings) {
+type GridPalette = {
+  gridMinorColor: string;
+  gridMajorColor: string;
+  axisColor: string;
+};
+
+export function drawRectGrid(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  vp: Viewport,
+  s: RectGridSettings,
+  palette: GridPalette
+) {
   if (!s.enabled) return;
 
   const spacingWorld = gridSpacingWorld(cam, s);
@@ -44,11 +56,11 @@ export function drawRectGrid(ctx: CanvasRenderingContext2D, cam: Camera, vp: Vie
 
   ctx.save();
   ctx.setLineDash([]);
-  ctx.strokeStyle = "#000000";
 
   for (let i = iMin; i <= iMax; i++) {
     const x = i * spacingWorld;
     const major = s.majorEvery > 0 && i % s.majorEvery === 0;
+    ctx.strokeStyle = major ? palette.gridMajorColor : palette.gridMinorColor;
     ctx.globalAlpha = major ? s.majorOpacity : s.minorOpacity;
     ctx.lineWidth = major ? s.majorWidth : s.minorWidth;
 
@@ -64,6 +76,7 @@ export function drawRectGrid(ctx: CanvasRenderingContext2D, cam: Camera, vp: Vie
   for (let j = jMin; j <= jMax; j++) {
     const y = j * spacingWorld;
     const major = s.majorEvery > 0 && j % s.majorEvery === 0;
+    ctx.strokeStyle = major ? palette.gridMajorColor : palette.gridMinorColor;
     ctx.globalAlpha = major ? s.majorOpacity : s.minorOpacity;
     ctx.lineWidth = major ? s.majorWidth : s.minorWidth;
 
@@ -79,7 +92,7 @@ export function drawRectGrid(ctx: CanvasRenderingContext2D, cam: Camera, vp: Vie
   if (s.showAxes ?? true) {
     ctx.globalAlpha = 0.42;
     ctx.lineWidth = Math.max(1.2, s.majorWidth + 0.3);
-    ctx.strokeStyle = "#334155";
+    ctx.strokeStyle = palette.axisColor;
     const xAxisA = camera.worldToScreen(gridToWorld({ x: minX, y: 0 }, rot), cam, vp);
     const xAxisB = camera.worldToScreen(gridToWorld({ x: maxX, y: 0 }, rot), cam, vp);
     ctx.beginPath();
