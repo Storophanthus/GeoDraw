@@ -760,10 +760,8 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
 
       const secondIdent = asIdentifier(args[1]);
       if (secondIdent) {
-        const secondSymbols = ctx.symbolsByLabel.get(secondIdent);
-        if (secondSymbols && secondSymbols.length > 0) {
-          const through = resolvePointIdentifier(secondIdent, ctx);
-          if (!through.ok) return err(through.message);
+        const through = resolvePointIdentifier(secondIdent, ctx);
+        if (through.ok) {
           return { kind: "cmd", cmd: { type: "CreateCircleCenterThrough", centerId: center.id, throughId: through.id } };
         }
         const scalar = resolveScalarIdentifier(secondIdent, ctx);

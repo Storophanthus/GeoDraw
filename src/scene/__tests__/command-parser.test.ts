@@ -465,6 +465,27 @@ const assignCircleRadius = mustAssignObject("c_2 = Circle(O,r)", withScalarR, "c
 if (assignCircleRadius.type !== "CreateCircleCenterRadius" || assignCircleRadius.r !== 5 || assignCircleRadius.rExpr !== "r") {
   throw new Error("c_2=Circle(O,r) mismatch");
 }
+const withStoredRadiusLikeSymbol: ParseContext = {
+  ...baseCtx,
+  symbolsByLabel: new Map([
+    ...baseCtx.symbolsByLabel.entries(),
+    ["r_1", [{ kind: "other", id: "n_1", label: "r_1", type: "number" }]],
+  ]),
+  scalarsByName: new Map([["r_1", 5]]),
+};
+const assignCircleStoredRadius = mustAssignObject(
+  "c_3 = Circle(O,r_1)",
+  withStoredRadiusLikeSymbol,
+  "c_3",
+  "CreateCircleCenterRadius"
+);
+if (
+  assignCircleStoredRadius.type !== "CreateCircleCenterRadius" ||
+  assignCircleStoredRadius.r !== 5 ||
+  assignCircleStoredRadius.rExpr !== "r_1"
+) {
+  throw new Error("c_3=Circle(O,r_1) mismatch");
+}
 
 mustError("Line(A,Z)", baseCtx, "Unknown point: Z");
 
