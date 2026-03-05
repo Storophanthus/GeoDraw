@@ -2,9 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 const host = process.env.TAURI_DEV_HOST;
+const base = process.env.VITE_BASE_PATH || "/";
 
 export default defineConfig({
   plugins: [react()],
+  base,
   clearScreen: false,
   server: {
     port: 1420,

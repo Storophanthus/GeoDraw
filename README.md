@@ -40,6 +40,23 @@ For desktop app development:
 npm run tauri
 ```
 
+## Web Deployment (GitHub Pages)
+
+This repo now includes automatic deployment to GitHub Pages via:
+
+- `.github/workflows/deploy-pages.yml`
+
+On each push to `main`, GitHub Actions builds the app and publishes `dist/`.
+
+After enabling Pages in repository settings, the site URL is typically:
+
+- `https://<your-github-username>.github.io/<repo-name>/`
+
+Notes:
+
+- The web build supports the interactive canvas and editor workflows.
+- Desktop-only features (Tauri file APIs and local TeX PDF compilation in Preview) are not available in browser-only hosting.
+
 ## Validation
 
 Run before opening/merging a PR:
