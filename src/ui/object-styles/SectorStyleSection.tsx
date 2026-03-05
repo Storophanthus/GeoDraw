@@ -18,7 +18,7 @@ const DEFAULT_SECTOR_MARK: AngleMark = {
   arcMultiplicity: 1,
   markSymbol: "|",
   markPos: 0.5,
-  markSize: 1.2,
+  markSize: 5.2,
   distribution: "single",
   startPos: 0.45,
   endPos: 0.55,
@@ -55,7 +55,7 @@ export function SectorStyleSection({
             enabled: true,
             markSymbol: legacySymbol,
             markPos: selectedSector.style.markPos ?? 0.5,
-            markSize: selectedSector.style.markSize ?? 1.2,
+            markSize: selectedSector.style.markSize ?? 5.2,
             markColor: selectedSector.style.markColor ?? selectedSector.style.strokeColor,
           },
         ];
@@ -68,7 +68,7 @@ export function SectorStyleSection({
       arcMultiplicity: 1 as const,
       markSymbol: mark.markSymbol ?? selectedSector.style.markSymbol ?? "|",
       markPos: Number.isFinite(mark.markPos) ? mark.markPos : 0.5,
-      markSize: Number.isFinite(mark.markSize) ? mark.markSize : 1.2,
+      markSize: Number.isFinite(mark.markSize) ? mark.markSize : 5.2,
       markColor: mark.markColor ?? selectedSector.style.markColor ?? selectedSector.style.strokeColor,
     }));
   }, [selectedSector]);
@@ -90,7 +90,7 @@ export function SectorStyleSection({
         arcMultiplicity: 1,
         markSymbol: first?.markSymbol ?? "none",
         markPos: first?.markPos ?? 0.5,
-        markSize: first?.markSize ?? 1.2,
+        markSize: first?.markSize ?? 5.2,
         markColor: first?.markColor ?? selectedSector.style.strokeColor,
       });
     },
@@ -435,7 +435,7 @@ export function SectorStyleSection({
               min={0.2}
               max={20}
               step={0.1}
-              value={selectedSectorMark.markSize ?? 1.2}
+              value={selectedSectorMark.markSize ?? 5.2}
               onChange={(e) => {
                 const nextMarks = [...resolvedSectorMarks];
                 nextMarks[selectedSectorMarkIndex] = { ...selectedSectorMark, markSize: Number(e.target.value) };
@@ -448,7 +448,7 @@ export function SectorStyleSection({
               min={0.2}
               max={20}
               step={0.1}
-              value={selectedSectorMark.markSize ?? 1.2}
+              value={selectedSectorMark.markSize ?? 5.2}
               onChange={(e) => {
                 const nextMarks = [...resolvedSectorMarks];
                 nextMarks[selectedSectorMarkIndex] = { ...selectedSectorMark, markSize: Number(e.target.value) };
