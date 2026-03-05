@@ -34,6 +34,13 @@ Notes:
 - `Point(x,y)`
 - `Midpoint(A,B)`
 - `Midpoint(s)` where `s` is a named segment alias (from assignment)
+- `Incenter(A,B,C)`
+- `Orthocenter(A,B,C)` (alias: `Ortho(A,B,C)`)
+- `Centroid(A,B,C)`
+- `Translate(P,A,B)`
+- `Rotate(P,O,expr[,CW|CCW])`
+- `Dilate(P,O,k)`
+- `Reflect(P,l|s|O)` where `l/s` are named line/segment aliases, `O` is a point
 - `Line(x1,y1,x2,y2)`
 - `Line(A,B)`
 - `Perpendicular(P,l)` where `l` is a named line/segment alias
@@ -44,11 +51,14 @@ Notes:
 - `AngleFixed(V,A,expr[,CW|CCW])`
 - `Sector(O,A,B)`
 - `Segment(A,B)`
+- `Polygon(A,B,C,...)`
+- `RegularPolygon(A,B,n[,CW|CCW])`
 - `Circle(x,y,r)`
 - `Circle3P(A,B,C)` (alias: `CircleThreePoint(A,B,C)`)
 - `Circle(O,A)`
 - `Circle(O,r)`
-- `Distance(A,B)` (returns number, creates nothing)
+- `Distance(...)` (returns number, creates nothing)
+  - common forms: `Distance(A,B)`, `Distance(A,l)`, `Distance(l,A)`, `Distance(A,s)`, `Distance(s,A)`
 
 ## Assignments
 - Scalar:
@@ -57,6 +67,13 @@ Notes:
 - Object:
   - `P = Point(1,2)`
   - `M = Midpoint(A,B)`
+  - `I = Incenter(A,B,C)`
+  - `H = Orthocenter(A,B,C)`
+  - `G = Centroid(A,B,C)`
+  - `T = Translate(A,B,C)`
+  - `R = Rotate(A,O,30,CW)`
+  - `D = Dilate(A,O,2)`
+  - `Q = Reflect(A,l)`
   - `l = Line(A,B)`
   - `p = Perpendicular(A,l)`
   - `q = Parallel(B,l)`
@@ -65,8 +82,10 @@ Notes:
   - `af = AngleFixed(B,A,30,CW)`
   - `sec = Sector(O,A,B)`
   - `s = Segment(A,B)`
+  - `poly = Polygon(A,B,C,D)`
+  - `rp = RegularPolygon(A,B,6)`
   - `c3 = Circle3P(A,B,C)`
-  - `c = Circle(O,r)`
+  - `c = Circle(O,r_1)` (`r_1` can come from "Store Radius")
 
 Redefine behavior (current):
 - `name = <numeric expr>`:
@@ -76,6 +95,7 @@ Redefine behavior (current):
   - if `name` is an existing free point, its coordinates are updated in-place.
   - if `name` is new, a new point is created.
 - Non-free points and non-constant numbers are fail-closed (error).
+- Existing object aliases can be redefined only with compatible constructor types (fail-closed otherwise).
 
 Notes:
 - `Tangent(P,c)` can create one or two tangent lines, so assignment is intentionally rejected.

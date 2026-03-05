@@ -10,12 +10,33 @@
 \usepackage{longtable}
 \usepackage{booktabs}
 \usepackage{array}
+\usepackage{graphicx}
 
 \hypersetup{
   colorlinks=true,
   linkcolor=blue!60!black,
   urlcolor=blue!60!black
 }
+
+\newcommand{\gdshot}[3]{
+  \begin{figure}[h]
+    \centering
+    \IfFileExists{#1}{
+      \includegraphics[width=#2]{#1}
+    }{
+      \fbox{
+        \parbox{0.85\linewidth}{
+          \centering
+          Screenshot placeholder\\[0.2em]
+          \texttt{#1}
+        }
+      }
+    }
+    \caption{#3}
+  \end{figure}
+}
+
+\newcommand{\gdicon}[1]{\includegraphics[height=1.8ex]{#1}}
 
 \title{\textbf{GeoDraw User Guide}\\\large End-User Manual}
 \author{GeoDraw}
@@ -85,49 +106,69 @@ The window is divided into:
   \item \texttt{Esc}: cancel Copy Style mode / clear pending selections
 \end{itemize}
 
+\subsection{Fit View}
+Use \textbf{Fit View} \gdicon{screenshots/icons/fit-view.png} from the top action row (next to Undo/Redo), or press \texttt{Shift + F}.
+\begin{itemize}[leftmargin=1.5em]
+  \item Re-centers the camera to include current scene geometry.
+  \item Applies padding so objects are not touching viewport edges.
+  \item If no geometry is available, camera stays unchanged.
+\end{itemize}
+\gdshot{screenshots/fit-view.png}{0.9\linewidth}{Fit View action and resulting re-centered camera.}
+
 \section{Tool Palette}
 Long-press or right-click a group button to open its flyout tools.
 
 \subsection{Move Group}
 \begin{itemize}[leftmargin=1.5em]
-  \item \textbf{Move / Select} (\texttt{V}): select and manipulate objects.
-  \item \textbf{Export Clip}: create a clip polygon for export (click vertices, close by clicking near the first vertex).
+  \item \gdicon{screenshots/tools/move.png} \textbf{Move / Select} (\texttt{V}): select and manipulate objects.
+  \item \gdicon{screenshots/tools/export_clip_rect.png} \textbf{Export Clip Rectangle}: create rectangular clip for export.
+  \item \gdicon{screenshots/tools/export_clip.png} \textbf{Export Clip Polygon}: create polygon clip for export (close by clicking near the first vertex).
 \end{itemize}
 
 \subsection{Points Group}
 \begin{itemize}[leftmargin=1.5em]
-  \item \textbf{Point} (\texttt{P}): create/select points.
-  \item \textbf{Midpoint} (\texttt{M}): midpoint from two points or from a segment.
+  \item \gdicon{screenshots/tools/point.png} \textbf{Point} (\texttt{P}): create/select points.
+  \item \gdicon{screenshots/tools/midpoint.png} \textbf{Midpoint} (\texttt{M}): midpoint from two points or from a segment.
+\end{itemize}
+
+\subsection{Transform Group}
+\begin{itemize}[leftmargin=1.5em]
+  \item \gdicon{screenshots/tools/translate.png} \textbf{Translate}: create translated copy from vector \texttt{AB}.
+  \item \gdicon{screenshots/tools/rotate.png} \textbf{Rotate}: rotate object around selected center.
+  \item \gdicon{screenshots/tools/reflect.png} \textbf{Reflect}: reflect object across line/segment/point.
+  \item \gdicon{screenshots/tools/dilate.png} \textbf{Dilate}: scale object from selected center.
 \end{itemize}
 
 \subsection{Lines Group}
 \begin{itemize}[leftmargin=1.5em]
-  \item \textbf{Segment} (\texttt{S})
-  \item \textbf{Line Through 2 Points} (\texttt{L})
-  \item \textbf{Perpendicular Line}
-  \item \textbf{Parallel Line}
-  \item \textbf{Tangent Line}
-  \item \textbf{Internal Angle Bisector}
+  \item \gdicon{screenshots/tools/segment.png} \textbf{Segment} (\texttt{S})
+  \item \gdicon{screenshots/tools/line2p.png} \textbf{Line Through 2 Points} (\texttt{L})
+  \item \gdicon{screenshots/tools/perp_line.png} \textbf{Perpendicular Line}
+  \item \gdicon{screenshots/tools/parallel_line.png} \textbf{Parallel Line}
+  \item \gdicon{screenshots/tools/tangent_line.png} \textbf{Tangent Line}
+  \item \gdicon{screenshots/tools/angle_bisector.png} \textbf{Internal Angle Bisector}
 \end{itemize}
 
 \subsection{Angle Group}
 \begin{itemize}[leftmargin=1.5em]
-  \item \textbf{Angle}: select 3 points (A, vertex B, C).
-  \item \textbf{Angle with Fixed Value}: define expression and direction (CW/CCW), then construct.
+  \item \gdicon{screenshots/tools/angle.png} \textbf{Angle}: select 3 points (A, vertex B, C).
+  \item \gdicon{screenshots/tools/angle_fixed.png} \textbf{Angle with Fixed Value}: define expression and direction (CW/CCW), then construct.
 \end{itemize}
 
 \subsection{Circles Group}
 \begin{itemize}[leftmargin=1.5em]
-  \item \textbf{Circle Center + Point} (\texttt{O})
-  \item \textbf{Circle through 3 Points}
-  \item \textbf{Circle with Fixed Radius}
-  \item \textbf{Circular Sector}
-  \item \textbf{Polygon}
+  \item \gdicon{screenshots/tools/circle_cp.png} \textbf{Circle Center + Point} (\texttt{O})
+  \item \gdicon{screenshots/tools/circle_3p.png} \textbf{Circle through 3 Points}
+  \item \gdicon{screenshots/tools/circle_fixed.png} \textbf{Circle with Fixed Radius}
+  \item \gdicon{screenshots/tools/sector.png} \textbf{Circular Sector}
+  \item \gdicon{screenshots/tools/polygon.png} \textbf{Polygon}
+  \item \gdicon{screenshots/tools/regular_polygon.png} \textbf{Regular Polygon}
 \end{itemize}
 
 \subsection{Styles Group}
 \begin{itemize}[leftmargin=1.5em]
-  \item \textbf{Copy Style} (\texttt{C}): pick a source style, then apply to targets.
+  \item \gdicon{screenshots/tools/copyStyle.png} \textbf{Copy Style} (\texttt{C}): pick a source style, then apply to targets.
+  \item \gdicon{screenshots/tools/label.png} \textbf{Label Tool}: place text labels on the canvas.
 \end{itemize}
 
 \section{Objects Tab (Right Sidebar)}
@@ -162,6 +203,17 @@ When an object is selected, the panel shows editable properties.
   \item Segment marks (\texttt{|}, \texttt{||}, \texttt{|||}, etc.) and arrow marks (end/mid).
 \end{itemize}
 
+\subsection{Arrow controls}
+Arrow styling \gdicon{screenshots/icons/arrow-controls.png} is available in Segment, Circle, and Angle (arc) style panels.
+\begin{itemize}[leftmargin=1.5em]
+  \item Multi-arrow list editor: add, duplicate, remove, and select arrow entries.
+  \item Direction options: forward/backward and paired directions.
+  \item Tip style: Stealth, Latex, Triangle.
+  \item Placement and distribution controls (single/multi, plus segment end/mid modes where applicable).
+  \item Appearance controls: color, width, size, and arrow length.
+\end{itemize}
+\gdshot{screenshots/arrow-controls.png}{0.78\linewidth}{Arrow list editor in object style properties.}
+
 \subsection{Circle/Polygon/Sector properties}
 \begin{itemize}[leftmargin=1.5em]
   \item Stroke and fill settings.
@@ -180,6 +232,15 @@ When an object is selected, the panel shows editable properties.
   \end{itemize}
 \end{itemize}
 
+\subsection{Marking controls}
+Marking tools \gdicon{screenshots/icons/marking-controls.png} support both segment congruence marks and angle arc marks.
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Segment marks}: symbol, distribution, position, size, width, and color.
+  \item \textbf{Angle marks}: single/double/triple arc count, bar symbol, position, size, and color.
+  \item Both use list-based editors, so multiple mark entries can be layered.
+\end{itemize}
+\gdshot{screenshots/mark-controls.png}{0.78\linewidth}{Segment and angle marking controls in the properties panel.}
+
 \subsection{Tool info panels}
 Special tools (Fixed Angle, Fixed Radius Circle, Export Clip, Copy Style) show context-specific instructions and inputs.
 
@@ -196,33 +257,33 @@ Command Bar supports expression evaluation, object creation commands, and assign
 \subsection{Expression examples}
 \begin{itemize}[leftmargin=1.5em]
   \item \texttt{5*5}
-  \item \texttt{sin(pi/6)}
+  \item \texttt{sin(pi/6)}, \texttt{atan2d(4,3)}
   \item \texttt{Distance(A,B)}
 \end{itemize}
 
-\subsection{Construction command examples}
+\subsection{Supported construction commands}
 \begin{itemize}[leftmargin=1.5em]
-  \item \texttt{Point(1,2)}
-  \item \texttt{Line(A,B)}
-  \item \texttt{Line(0,0,3,4)}
-  \item \texttt{Segment(A,B)}
-  \item \texttt{Polygon(A,B,C,D)}
-  \item \texttt{Circle(O,A)}
-  \item \texttt{Circle(O,3.5)}
-  \item \texttt{Circle(0,0,5)}
+  \item \textbf{Point/transform}: \texttt{Point(x,y)}, \texttt{Midpoint(A,B)}, \texttt{Midpoint(s)}, \texttt{Incenter(A,B,C)}, \texttt{Orthocenter(A,B,C)} (\texttt{Ortho}), \texttt{Centroid(A,B,C)}, \texttt{Translate(P,A,B)}, \texttt{Rotate(P,O,expr[,CW|CCW])}, \texttt{Dilate(P,O,k)}, \texttt{Reflect(P,l|s|O)}.
+  \item \textbf{Line/segment}: \texttt{Line(A,B)}, \texttt{Line(x1,y1,x2,y2)}, \texttt{Perpendicular(P,l)}, \texttt{Parallel(P,l)}, \texttt{Tangent(P,c)}, \texttt{AngleBisector(A,B,C)}, \texttt{Segment(A,B)}.
+  \item \textbf{Angle/polygon}: \texttt{Angle(A,B,C)}, \texttt{AngleFixed(V,A,expr[,CW|CCW])}, \texttt{Sector(O,A,B)}, \texttt{Polygon(A,B,C,...)}, \texttt{RegularPolygon(A,B,n[,CW|CCW])}.
+  \item \textbf{Circle}: \texttt{Circle(x,y,r)}, \texttt{Circle(O,A)}, \texttt{Circle(O,r)}, \texttt{Circle3P(A,B,C)} (alias: \texttt{CircleThreePoint(A,B,C)}).
+  \item \textbf{Numeric query}: \texttt{Distance(...)} returns a scalar value (no object created).
 \end{itemize}
 
 \subsection{Assignments}
 \begin{itemize}[leftmargin=1.5em]
   \item Scalar: \texttt{n\_1 = 2.023}
-  \item Named object: \texttt{P = Point(1,2)}, \texttt{l = Line(A,B)}, \texttt{c = Circle(O,3)}
+  \item Named object: \texttt{P = Point(1,2)}, \texttt{l = Line(A,B)}, \texttt{c = Circle(O,r\_1)}
   \item Point-expression assignment (vector style): \texttt{X = A + B}
 \end{itemize}
 
 \subsection{Important assignment rule}
-Names are fail-closed/no-overwrite by default:
+Assignment is selective and fail-closed:
 \begin{itemize}[leftmargin=1.5em]
-  \item If a name is already used by a point/number/alias, reassignment is rejected.
+  \item Existing constant numbers are updated in-place by scalar assignment.
+  \item Existing free points are updated in-place by point assignment.
+  \item Existing aliases can be redefined only with compatible constructor types.
+  \item Non-free points, non-constant numbers, and incompatible alias redefines are rejected.
 \end{itemize}
 
 \section{Export Tab}
@@ -240,6 +301,18 @@ Names are fail-closed/no-overwrite by default:
     \item Label Scale
   \end{itemize}
 \end{itemize}
+
+\subsection{Preview window (PDF + editable TikZ)}
+Press \textbf{Preview} \gdicon{screenshots/icons/pdf-preview.png} in Export to open the dedicated TikZ preview window.
+\begin{itemize}[leftmargin=1.5em]
+  \item Left pane: compiled PDF preview from the current TikZ source.
+  \item Right pane: editable \texttt{tikzpicture} code.
+  \item \textbf{Optional Preamble} section for custom preamble lines (for example \texttt{\textbackslash pagecolor\{...\}}).
+  \item Find/replace tools with case-match option.
+  \item \textbf{Update PDF} recompiles, and \textbf{Copy Edited TikZ} copies the edited code.
+  \item Compiler log panel is available for diagnostics when compilation fails.
+\end{itemize}
+\gdshot{screenshots/tikz-preview-window.png}{0.95\linewidth}{TikZ Preview window with PDF pane, code editor, and compiler log.}
 
 \subsection{JSON export}
 \begin{itemize}[leftmargin=1.5em]
@@ -283,8 +356,9 @@ Check per-object visibility checkbox in Object Browser.
 
 \section{Current Limits (User-visible)}
 \begin{itemize}[leftmargin=1.5em]
-  \item Command Bar currently rejects overwrite of existing names.
-  \item Some advanced symbolic redefinition workflows (GeoGebra-style redefine in-place) are not yet exposed as a dedicated UI flow.
+  \item Tangent assignment is intentionally blocked because \texttt{Tangent(P,c)} may create multiple lines.
+  \item Alias-based commands (\texttt{Midpoint(s)}, \texttt{Perpendicular}, \texttt{Parallel}, \texttt{Tangent}) require prior named aliases.
+  \item Some advanced symbolic redefine workflows are intentionally fail-closed.
 \end{itemize}
 
 \appendix
