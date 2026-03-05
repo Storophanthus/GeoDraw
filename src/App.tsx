@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { getUiCssVariables } from "./state/colorProfiles";
+import { getRecommendedUiProfileForColorProfile, getUiCssVariables } from "./state/colorProfiles";
 import { useGeoStore } from "./state/geoStore";
 import {
   loadStoredConstructionPreferences,
@@ -33,13 +33,19 @@ function WorkspaceApp() {
   useEffect(() => {
     const storedUi = loadStoredUiPreferences();
     const storedConstruction = loadStoredConstructionPreferences();
-    const merged =
-      storedUi || storedConstruction
-        ? {
-            ...(storedConstruction ?? {}),
-            ...(storedUi ?? {}),
-          }
-        : null;
+    const merged = (() => {
+      if (!storedUi && !storedConstruction) return null;
+      if (storedConstruction && !storedUi) {
+        return {
+          ...storedConstruction,
+          uiColorProfileId: getRecommendedUiProfileForColorProfile(storedConstruction.colorProfileId),
+        };
+      }
+      return {
+        ...(storedConstruction ?? {}),
+        ...(storedUi ?? {}),
+      };
+    })();
     if (merged) {
       applyAppPreferences(merged);
     }

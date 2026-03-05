@@ -52,7 +52,7 @@ export type SceneStyleDefaults = {
 };
 
 export const DEFAULT_COLOR_PROFILE_ID: ColorProfileId = "beige_light";
-export const DEFAULT_UI_COLOR_PROFILE_ID: UiColorProfileId = "vanilla";
+export const DEFAULT_UI_COLOR_PROFILE_ID: UiColorProfileId = "beige";
 
 const DEFAULT_PATH_ARROW_UI = 1.0;
 const DEFAULT_PATH_ARROW_LINE_WIDTH_PT = DEFAULT_PATH_ARROW_UI * 8;
@@ -259,6 +259,17 @@ export const UI_COLOR_PROFILE_OPTIONS: ReadonlyArray<{ id: UiColorProfileId; lab
   { id: "beige", label: "Beige" },
   { id: "dark", label: "Dark Mode" },
 ] as const;
+
+const RECOMMENDED_UI_PROFILE_BY_COLOR_PROFILE: Record<ColorProfileId, UiColorProfileId> = {
+  classic: "vanilla",
+  grayscale_white_dot: "grayscale",
+  beige_light: "beige",
+  dark_mode: "dark",
+};
+
+export function getRecommendedUiProfileForColorProfile(profileId: ColorProfileId): UiColorProfileId {
+  return RECOMMENDED_UI_PROFILE_BY_COLOR_PROFILE[profileId] ?? DEFAULT_UI_COLOR_PROFILE_ID;
+}
 
 type UiProfileSwatch = {
   background: string;

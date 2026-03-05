@@ -2,6 +2,7 @@ import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
 import {
   applyProfileColorsToDefaults,
+  getRecommendedUiProfileForColorProfile,
   getUiProfileBaseVariables,
   recolorSceneForProfile,
   type SceneStyleDefaults,
@@ -162,6 +163,9 @@ export function createUiActions(
     setColorProfile(profileId) {
       ctx.setState((prev) => {
         if (prev.colorProfileId === profileId) return prev;
+        const prevRecommendedUi = getRecommendedUiProfileForColorProfile(prev.colorProfileId);
+        const nextRecommendedUi = getRecommendedUiProfileForColorProfile(profileId);
+        const keepProfilePairing = prev.uiColorProfileId === prevRecommendedUi;
         const nextDefaults = applyProfileColorsToDefaults(
           {
             pointDefaults: prev.pointDefaults,
@@ -176,6 +180,7 @@ export function createUiActions(
         return {
           ...prev,
           colorProfileId: profileId,
+          uiColorProfileId: keepProfilePairing ? nextRecommendedUi : prev.uiColorProfileId,
           scene: recolorSceneForProfile(prev.scene, prev.colorProfileId, profileId),
           pointDefaults: nextDefaults.pointDefaults,
           segmentDefaults: nextDefaults.segmentDefaults,
