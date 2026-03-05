@@ -51,7 +51,7 @@ export type SceneStyleDefaults = {
   angleDefaults: AngleStyle;
 };
 
-export const DEFAULT_COLOR_PROFILE_ID: ColorProfileId = "classic";
+export const DEFAULT_COLOR_PROFILE_ID: ColorProfileId = "beige_light";
 export const DEFAULT_UI_COLOR_PROFILE_ID: UiColorProfileId = "vanilla";
 
 const DEFAULT_PATH_ARROW_UI = 1.0;
