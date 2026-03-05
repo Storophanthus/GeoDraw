@@ -22,6 +22,7 @@ type ObjectStyleSectionsProps = {
   selectedLine: SceneLine | null;
   selectedCircle: SceneCircle | null;
   selectedPolygon: ScenePolygon | null;
+  selectedPolygonOwnedEdgesVisible: boolean;
   selectedAngle: SceneAngle | null;
   selectedAngleRightStatus: "none" | "approx" | "exact";
   updateSelectedSegmentStyle: (style: Partial<LineStyle>) => void;
@@ -33,6 +34,7 @@ type ObjectStyleSectionsProps = {
   updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+  setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
   deleteSelectedObject: () => void;
 };
 
@@ -42,6 +44,7 @@ export function ObjectStyleSections({
   selectedLine,
   selectedCircle,
   selectedPolygon,
+  selectedPolygonOwnedEdgesVisible,
   selectedAngle,
   selectedAngleRightStatus,
   updateSelectedSegmentStyle,
@@ -53,6 +56,7 @@ export function ObjectStyleSections({
   updateSelectedLineFields,
   updateSelectedCircleFields,
   updateSelectedPolygonFields,
+  setSelectedPolygonOwnedSegmentsVisible,
   deleteSelectedObject,
 }: ObjectStyleSectionsProps) {
   return (
@@ -76,8 +80,10 @@ export function ObjectStyleSections({
       {!selectedPointPresent && !selectedAngle && selectedPolygon && (
         <PolygonStyleSection
           selectedPolygon={selectedPolygon}
+          selectedPolygonOwnedEdgesVisible={selectedPolygonOwnedEdgesVisible}
           updateSelectedPolygonStyle={updateSelectedPolygonStyle}
           updateSelectedPolygonFields={updateSelectedPolygonFields}
+          setSelectedPolygonOwnedSegmentsVisible={setSelectedPolygonOwnedSegmentsVisible}
         />
       )}
 

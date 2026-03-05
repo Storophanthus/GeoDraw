@@ -1,6 +1,5 @@
-import type { Camera, Viewport } from "../../view/camera";
-import { drawPolygons } from "../../view/renderers/polygons";
-import type { SceneModel } from "../points";
+import { exportTikz } from "../tikz.ts";
+import type { SceneModel } from "../../scene/points.ts";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(msg);
@@ -29,8 +28,8 @@ const segmentStyle = {
 };
 
 const polygonStyle = {
-  strokeColor: "#334155",
-  strokeWidth: 1.6,
+  strokeColor: "#ef4444",
+  strokeWidth: 4,
   strokeDash: "solid" as const,
   strokeOpacity: 1,
   fillColor: "#93c5fd",
@@ -114,63 +113,18 @@ function createScene(edgeVisible: boolean): SceneModel {
   };
 }
 
-function createMockContext(): { ctx: CanvasRenderingContext2D; calls: string[] } {
-  const calls: string[] = [];
-  const ctx = {
-    globalAlpha: 1,
-    strokeStyle: "#000000",
-    fillStyle: "#000000",
-    lineWidth: 1,
-    save() {
-      calls.push("save");
-    },
-    restore() {
-      calls.push("restore");
-    },
-    setLineDash() {
-      calls.push("setLineDash");
-    },
-    beginPath() {
-      calls.push("beginPath");
-    },
-    moveTo() {
-      calls.push("moveTo");
-    },
-    lineTo() {
-      calls.push("lineTo");
-    },
-    closePath() {
-      calls.push("closePath");
-    },
-    fill() {
-      calls.push("fill");
-    },
-    stroke() {
-      calls.push("stroke");
-    },
-  } as unknown as CanvasRenderingContext2D;
-  return { ctx, calls };
-}
-
-const camera: Camera = { pos: { x: 0, y: 0 }, zoom: 100 };
-const vp: Viewport = { widthPx: 800, heightPx: 600 };
-
 {
-  const scene = createScene(false);
-  const { ctx, calls } = createMockContext();
-  drawPolygons(ctx, scene, camera, vp, null, null, null);
-  const fillCount = calls.filter((call) => call === "fill").length;
-  const strokeCount = calls.filter((call) => call === "stroke").length;
-  assert(fillCount === 1, "Polygon fill should still render when owned segments are hidden.");
-  assert(strokeCount === 0, "Polygon border should not render when all owned segments are hidden.");
+  const tikz = exportTikz(createScene(false));
+  assert(tikz.includes("\\fill["), "Expected polygon fill to remain exported when owned segments are hidden.");
+  assert(!tikz.includes("\\tkzDrawSegment"), "Expected no segment strokes when owned segments are hidden.");
+  assert(!tikz.includes("\\draw["), "Expected polygon stroke to be suppressed when edge segments exist.");
 }
 
 {
-  const scene = createScene(true);
-  const { ctx, calls } = createMockContext();
-  drawPolygons(ctx, scene, camera, vp, null, null, null);
-  const strokeCount = calls.filter((call) => call === "stroke").length;
-  assert(strokeCount === 0, "Polygon border should defer to owned segment rendering for visible edges.");
+  const tikz = exportTikz(createScene(true));
+  const segmentDraws = tikz.match(/\\tkzDrawSegment/g) ?? [];
+  assert(segmentDraws.length === 3, "Expected exactly three segment edges for triangle polygon export.");
+  assert(!tikz.includes("\\draw["), "Expected polygon stroke to defer to owned segment drawing.");
 }
 
-console.log("polygon-owned-segment-visibility: ok");
+console.log("polygon-owned-segment-visibility-export: ok");

@@ -155,6 +155,9 @@ const DEFAULT_PATH_ARROW_UI = 1.3;
 // 16.8px (Canvas) * 0.5 = 8.4pt base -> 10.08pt tip length (Stealth).
 const CANVAS_PX_TO_TIKZ_PT = 0.5;
 
+function edgeKey(aId: string, bId: string): string {
+  return aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`;
+}
 
 export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}): TikzCommand[] {
   const pointById = new Map(scene.points.map((p) => [p.id, p]));
@@ -172,6 +175,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const drawPointsLayer: TikzCommand[] = [];
   const drawLabelsLayer: TikzCommand[] = [];
   const definedPointIds = new Set<string>();
+  const polygonOwnedEdgePresence = new Set<string>();
+  for (const segment of scene.segments) {
+    if (!Array.isArray(segment.ownedByPolygonIds) || segment.ownedByPolygonIds.length === 0) continue;
+    const key = edgeKey(segment.aId, segment.bId);
+    for (const polygonId of segment.ownedByPolygonIds) {
+      polygonOwnedEdgePresence.add(`${polygonId}::${key}`);
+    }
+  }
 
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
   const viewport = options.viewport ?? computeExportViewport(scene);
@@ -1758,7 +1769,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       drawFills.push({ kind: "DrawRaw", tex: `\\fill${fillOpts} ${path} -- cycle;` });
     }
     const strokeOpts = strokeStyle ? `[${strokeStyle}]` : "";
-    drawStrokes.push({ kind: "DrawRaw", tex: `\\draw${strokeOpts} ${path} -- cycle;` });
+    for (let i = 0; i < polygon.pointIds.length; i += 1) {
+      const nextIndex = (i + 1) % polygon.pointIds.length;
+      const scopedKey = `${polygon.id}::${edgeKey(polygon.pointIds[i], polygon.pointIds[nextIndex])}`;
+      // Polygon edges are managed by owned segment objects when present.
+      if (polygonOwnedEdgePresence.has(scopedKey)) continue;
+      drawStrokes.push({
+        kind: "DrawRaw",
+        tex: `\\draw${strokeOpts} (${names[i]}) -- (${names[nextIndex]});`,
+      });
+    }
   }
   for (const angle of scene.angles) {
     if (!angle.visible) continue;

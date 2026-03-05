@@ -99,6 +99,39 @@ export function handleToolClick(
   const maybeSnapWorldToGrid = (world: Vec2): Vec2 =>
     io.gridSnapEnabled && !hits.shiftKey ? io.snapWorldToGrid(world) : world;
 
+  const createPointFromSectorArcSnap = (snap: SnapCandidate): string | null => {
+    if (
+      snap.kind !== "onSectorArc"
+      || !snap.sectorCenterId
+      || !snap.sectorStartId
+      || typeof snap.sectorAngleDeg !== "number"
+    ) {
+      return null;
+    }
+    const epsDeg = 1e-6;
+    if (Math.abs(snap.sectorAngleDeg) <= epsDeg) return snap.sectorStartId;
+    if (
+      snap.sectorEndId
+      && typeof snap.sectorSweepDeg === "number"
+      && Math.abs(snap.sectorAngleDeg - snap.sectorSweepDeg) <= epsDeg
+    ) {
+      return snap.sectorEndId;
+    }
+    const supportCircleId = io.createAuxiliaryCircle(snap.sectorCenterId, snap.sectorStartId);
+    const centerWorld = io.getPointWorldById(snap.sectorCenterId);
+    if (supportCircleId && centerWorld) {
+      const t = Math.atan2(snap.world.y - centerWorld.y, snap.world.x - centerWorld.x);
+      const created = io.createPointOnCircle(supportCircleId, t);
+      if (created) return created;
+    }
+    return io.createPointByRotation(
+      snap.sectorCenterId,
+      snap.sectorStartId,
+      snap.sectorAngleDeg,
+      "CCW"
+    );
+  };
+
   const resolveOrCreatePointAtCursor = (): string => {
     const snap = hits.shiftKey ? null : hits.snap;
     if (snap?.kind === "point" && snap.pointId) return snap.pointId;
@@ -116,6 +149,10 @@ export function handleToolClick(
     }
     if (snap?.kind === "onCircle" && snap.circleId && typeof snap.t === "number") {
       const created = io.createPointOnCircle(snap.circleId, snap.t);
+      if (created) return created;
+    }
+    if (snap?.kind === "onSectorArc") {
+      const created = createPointFromSectorArcSnap(snap);
       if (created) return created;
     }
     if (hits.hitPointId) return hits.hitPointId;
@@ -143,6 +180,15 @@ export function handleToolClick(
     }
     if (snap?.kind === "onCircle" && snap.circleId && typeof snap.t === "number") {
       io.createPointOnCircle(snap.circleId, snap.t);
+      return;
+    }
+    if (snap?.kind === "onSectorArc") {
+      const created = createPointFromSectorArcSnap(snap);
+      if (created) {
+        if (created === snap.sectorStartId || created === snap.sectorEndId) {
+          io.setSelectedObject({ type: "point", id: created });
+        }
+      }
       return;
     }
     if (hits.hitPointId) {
@@ -476,17 +522,40 @@ export function handleToolClick(
     const center = io.getPointWorldById(pendingSelection.first.id);
     const start = io.getPointWorldById(pendingSelection.second.id);
     if (!center || !start) return;
+    const radius = Math.hypot(start.x - center.x, start.y - center.y);
+    if (!Number.isFinite(radius) || radius <= 1e-12) return;
+    const snappedPointId =
+      !hits.shiftKey && hits.snap?.kind === "point" && hits.snap.pointId
+        ? hits.snap.pointId
+        : hits.hitPointId;
+    if (
+      snappedPointId
+      && snappedPointId !== pendingSelection.first.id
+      && snappedPointId !== pendingSelection.second.id
+    ) {
+      const snappedPointWorld = io.getPointWorldById(snappedPointId);
+      if (snappedPointWorld) {
+        const snappedRadius = Math.hypot(snappedPointWorld.x - center.x, snappedPointWorld.y - center.y);
+        const radiusEps = Math.max(1e-6, radius * 1e-6);
+        if (Math.abs(snappedRadius - radius) <= radiusEps) {
+          const created = io.createSector(pendingSelection.first.id, pendingSelection.second.id, snappedPointId);
+          if (!created) return;
+          io.clearPendingSelection();
+          return;
+        }
+      }
+    }
     const pickedWorld =
-      (hits.hitPointId ? io.getPointWorldById(hits.hitPointId) : null) ?? camMath.screenToWorld(screen, io.camera, io.vp);
+      (!hits.shiftKey && hits.snap ? hits.snap.world : null)
+      ?? (hits.hitPointId ? io.getPointWorldById(hits.hitPointId) : null)
+      ?? camMath.screenToWorld(screen, io.camera, io.vp);
     if (!pickedWorld) return;
     const vx = pickedWorld.x - center.x;
     const vy = pickedWorld.y - center.y;
     const d = Math.hypot(vx, vy);
-    const r = Math.hypot(start.x - center.x, start.y - center.y);
-    if (!Number.isFinite(r) || r <= 1e-12) return;
-    const ux = d <= 1e-12 ? (start.x - center.x) / r : vx / d;
-    const uy = d <= 1e-12 ? (start.y - center.y) / r : vy / d;
-    const endOnCircle = { x: center.x + ux * r, y: center.y + uy * r };
+    const ux = d <= 1e-12 ? (start.x - center.x) / radius : vx / d;
+    const uy = d <= 1e-12 ? (start.y - center.y) / radius : vy / d;
+    const endOnCircle = { x: center.x + ux * radius, y: center.y + uy * radius };
     const startAng = Math.atan2(start.y - center.y, start.x - center.x);
     const endAng = Math.atan2(endOnCircle.y - center.y, endOnCircle.x - center.x);
     let delta = endAng - startAng;

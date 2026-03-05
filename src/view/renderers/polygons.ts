@@ -18,14 +18,12 @@ export function drawPolygons(
   copySource: DrawableObjectSelection
 ): void {
   ctx.save();
-  const ownedEdgeVisibility = new Map<string, boolean>();
+  const ownedEdgePresence = new Set<string>();
   for (const seg of scene.segments) {
     if (!Array.isArray(seg.ownedByPolygonIds) || seg.ownedByPolygonIds.length === 0) continue;
     const key = edgeKey(seg.aId, seg.bId);
     for (const polygonId of seg.ownedByPolygonIds) {
-      const scopedKey = `${polygonId}::${key}`;
-      const prev = ownedEdgeVisibility.get(scopedKey);
-      ownedEdgeVisibility.set(scopedKey, prev === undefined ? seg.visible : prev || seg.visible);
+      ownedEdgePresence.add(`${polygonId}::${key}`);
     }
   }
 
@@ -63,8 +61,8 @@ export function drawPolygons(
     for (let i = 0; i < polygon.pointIds.length; i += 1) {
       const nextIndex = (i + 1) % polygon.pointIds.length;
       const scopedKey = `${polygon.id}::${edgeKey(polygon.pointIds[i], polygon.pointIds[nextIndex])}`;
-      const edgeVisible = ownedEdgeVisibility.has(scopedKey) ? Boolean(ownedEdgeVisibility.get(scopedKey)) : true;
-      if (!edgeVisible) continue;
+      // Polygon tool generates edge segments; let those segment objects render/manage edge strokes.
+      if (ownedEdgePresence.has(scopedKey)) continue;
       ctx.beginPath();
       ctx.moveTo(screenPoints[i].x, screenPoints[i].y);
       ctx.lineTo(screenPoints[nextIndex].x, screenPoints[nextIndex].y);

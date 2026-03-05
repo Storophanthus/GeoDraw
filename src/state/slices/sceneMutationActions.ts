@@ -45,6 +45,7 @@ export function createSceneMutationActions({
   | "updateSelectedLineFields"
   | "updateSelectedCircleFields"
   | "updateSelectedPolygonFields"
+  | "setSelectedPolygonOwnedSegmentsVisible"
   | "updateSelectedAngleFields"
   | "updateSelectedNumberDefinition"
   | "updateSelectedTextLabelFields"
@@ -442,13 +443,30 @@ export function createSceneMutationActions({
     updateSelectedPolygonStyle(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "polygon") return prev;
+        const polygonId = prev.selectedObject.id;
+        const segmentStylePatch = lineStylePatchFromPolygonStrokePatch(next);
         return {
           ...prev,
           scene: {
             ...prev.scene,
             polygons: prev.scene.polygons.map((polygon) =>
-              polygon.id === prev.selectedObject!.id ? { ...polygon, style: { ...polygon.style, ...next } } : polygon
+              polygon.id === polygonId ? { ...polygon, style: { ...polygon.style, ...next } } : polygon
             ),
+            segments:
+              segmentStylePatch == null
+                ? prev.scene.segments
+                : prev.scene.segments.map((segment) => {
+                    if (!Array.isArray(segment.ownedByPolygonIds) || !segment.ownedByPolygonIds.includes(polygonId)) {
+                      return segment;
+                    }
+                    return {
+                      ...segment,
+                      style: {
+                        ...segment.style,
+                        ...segmentStylePatch,
+                      },
+                    };
+                  }),
           },
         };
       });
@@ -533,6 +551,33 @@ export function createSceneMutationActions({
                 ? ensurePolygonLabelFields({ ...polygon, ...next }, prev.scene)
                 : polygon
             ),
+          },
+        };
+      });
+    },
+
+    setSelectedPolygonOwnedSegmentsVisible(visible) {
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "polygon") return prev;
+        const polygonId = prev.selectedObject.id;
+        let changed = false;
+        const segments = prev.scene.segments.map((segment) => {
+          if (!Array.isArray(segment.ownedByPolygonIds) || !segment.ownedByPolygonIds.includes(polygonId)) {
+            return segment;
+          }
+          if (segment.visible === visible) return segment;
+          changed = true;
+          return {
+            ...segment,
+            visible,
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            segments,
           },
         };
       });
@@ -1196,6 +1241,32 @@ function polygonStyleFromLineStyle(style: LineStyle): PolygonStyle {
     strokeOpacity: style.opacity,
     arrowMark: pathArrowMarkFromSegmentArrow(style.segmentArrowMark),
   };
+}
+
+function lineStylePatchFromPolygonStrokePatch(next: Partial<PolygonStyle>): Partial<LineStyle> | null {
+  let changed = false;
+  const patch: Partial<LineStyle> = {};
+  if (next.strokeColor !== undefined) {
+    patch.strokeColor = next.strokeColor;
+    changed = true;
+  }
+  if (next.strokeWidth !== undefined) {
+    patch.strokeWidth = next.strokeWidth;
+    changed = true;
+  }
+  if (next.strokeDash !== undefined) {
+    patch.dash = next.strokeDash;
+    changed = true;
+  }
+  if (next.strokeOpacity !== undefined) {
+    patch.opacity = next.strokeOpacity;
+    changed = true;
+  }
+  if (next.arrowMark !== undefined) {
+    patch.segmentArrowMark = segmentArrowMarkFromPathArrow(next.arrowMark, "mid");
+    changed = true;
+  }
+  return changed ? patch : null;
 }
 
 function lineStyleFromCircleStyle(style: CircleStyle): LineStyle {

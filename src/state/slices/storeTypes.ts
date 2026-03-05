@@ -404,6 +404,7 @@ export type GeoActions = {
   updateSelectedPolygonFields: (
     next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
   ) => void;
+  setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
   updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;
   updateSelectedNumberDefinition: (next: SceneNumberDefinition) => void;
   updateSelectedTextLabelFields: (

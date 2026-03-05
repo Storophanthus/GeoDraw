@@ -21,7 +21,7 @@ type LineLike = { ref: GeometryObjectRef; a: Vec2; b: Vec2; finite: boolean };
 type CircleLike = { ref: GeometryObjectRef; center: Vec2; radius: number };
 type SectorLike = { ref: GeometryObjectRef; center: Vec2; radius: number; start: number; sweep: number };
 
-type SnapKind = "point" | "intersection" | "onLine" | "onSegment" | "onCircle";
+type SnapKind = "point" | "intersection" | "onLine" | "onSegment" | "onCircle" | "onSectorArc";
 const VIS_EPS = 1;
 const HUGE_RADIUS_PICK_PX = 200_000;
 
@@ -36,6 +36,12 @@ export type SnapCandidate = {
   s?: number;
   u?: number;
   t?: number;
+  sectorId?: string;
+  sectorCenterId?: string;
+  sectorStartId?: string;
+  sectorEndId?: string;
+  sectorAngleDeg?: number;
+  sectorSweepDeg?: number;
   objA?: GeometryObjectRef;
   objB?: GeometryObjectRef;
 };
@@ -174,13 +180,31 @@ export function findBestSnap(
     const dToBoundary = Math.abs(Math.hypot(screen.x - cScreen.x, screen.y - cScreen.y) - rScreen);
     if (dToBoundary > tolerancePx) continue;
     const sweep = computeSweep(a, b, c);
-    nearSectors.push({
+    const sector: SectorLike = {
       ref: { type: "angle", id: angle.id },
       center: b,
       radius,
       start: Math.atan2(a.y - b.y, a.x - b.x),
       sweep,
-    });
+    };
+    nearSectors.push(sector);
+    const projected = projectPointToSectorArc(cursorWorld, sector);
+    const projectedScreen = camMath.worldToScreen(projected.point, camera, vp);
+    const arcDistancePx = Math.hypot(projectedScreen.x - screen.x, projectedScreen.y - screen.y);
+    if (arcDistancePx <= tolerancePx) {
+      candidates.push({
+        kind: "onSectorArc",
+        world: projected.point,
+        screenDistPx: arcDistancePx,
+        sectorId: angle.id,
+        sectorCenterId: angle.bId,
+        sectorStartId: angle.aId,
+        sectorEndId: angle.cId,
+        sectorAngleDeg: (projected.angleRad * 180) / Math.PI,
+        sectorSweepDeg: (projected.sweepRad * 180) / Math.PI,
+        priority: 3,
+      });
+    }
   }
 
   const lineLikes = [...nearLines, ...nearSegments];
@@ -313,6 +337,32 @@ function computeSweep(a: Vec2, b: Vec2, c: Vec2): number {
   while (delta < 0) delta += full;
   while (delta >= full) delta -= full;
   return delta;
+}
+
+function normalizeAngleDelta(rad: number): number {
+  const full = Math.PI * 2;
+  let out = rad;
+  while (out < 0) out += full;
+  while (out >= full) out -= full;
+  return out;
+}
+
+function projectPointToSectorArc(
+  world: Vec2,
+  sector: SectorLike
+): { point: Vec2; angleRad: number; sweepRad: number } {
+  const sweep = normalizeAngleDelta(sector.sweep);
+  const rawAngle = normalizeAngleDelta(Math.atan2(world.y - sector.center.y, world.x - sector.center.x) - sector.start);
+  const clamped = Math.max(0, Math.min(rawAngle, sweep));
+  const absoluteAngle = sector.start + clamped;
+  return {
+    point: {
+      x: sector.center.x + Math.cos(absoluteAngle) * sector.radius,
+      y: sector.center.y + Math.sin(absoluteAngle) * sector.radius,
+    },
+    angleRad: clamped,
+    sweepRad: sweep,
+  };
 }
 
 function pointOnSectorArc(p: Vec2, sector: SectorLike): boolean {

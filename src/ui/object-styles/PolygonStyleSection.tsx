@@ -12,14 +12,18 @@ const FILL_PATTERN_OPTIONS = [
 
 type PolygonStyleSectionProps = {
     selectedPolygon: ScenePolygon;
+    selectedPolygonOwnedEdgesVisible: boolean;
     updateSelectedPolygonStyle: (style: Partial<ScenePolygon["style"]>) => void;
     updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+    setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
 };
 
 export function PolygonStyleSection({
     selectedPolygon,
+    selectedPolygonOwnedEdgesVisible,
     updateSelectedPolygonStyle,
     updateSelectedPolygonFields,
+    setSelectedPolygonOwnedSegmentsVisible,
 }: PolygonStyleSectionProps) {
     const selectedAreaStyle = selectedPolygon.style;
 
@@ -34,6 +38,14 @@ export function PolygonStyleSection({
                 />
                 Show Label
             </label>
+            <label className="checkboxRow">
+                <input
+                    type="checkbox"
+                    checked={selectedPolygonOwnedEdgesVisible}
+                    onChange={(e) => setSelectedPolygonOwnedSegmentsVisible(e.target.checked)}
+                />
+                Show Edges
+            </label>
             {Boolean(selectedPolygon.showLabel) && (
                 <div className="controlRow">
                     <label className="controlLabel">Label Text</label>
@@ -45,7 +57,7 @@ export function PolygonStyleSection({
                 </div>
             )}
             <div className="controlRow">
-                <label className="controlLabel">Stroke Color</label>
+                <label className="controlLabel">Edge Color</label>
                 <input
                     className="colorInput"
                     type="color"
@@ -54,7 +66,7 @@ export function PolygonStyleSection({
                 />
             </div>
             <div className="controlRow controlRowWithNumeric">
-                <label className="controlLabel">Stroke Width</label>
+                <label className="controlLabel">Edge Width</label>
                 <input
                     className="sizeSlider"
                     type="range"
@@ -75,7 +87,7 @@ export function PolygonStyleSection({
                 />
             </div>
             <div className="controlRow">
-                <label className="controlLabel">Dash</label>
+                <label className="controlLabel">Edge Dash</label>
                 <select
                     className="selectInput"
                     value={selectedAreaStyle.strokeDash}
@@ -89,7 +101,7 @@ export function PolygonStyleSection({
                 </select>
             </div>
             <div className="controlRow">
-                <label className="controlLabel">Stroke Opacity</label>
+                <label className="controlLabel">Edge Opacity</label>
                 <input
                     className="sizeSlider"
                     type="range"

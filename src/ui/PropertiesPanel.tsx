@@ -67,6 +67,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
   const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
   const updateSelectedPolygonFields = useGeoStore((store) => store.updateSelectedPolygonFields);
+  const setSelectedPolygonOwnedSegmentsVisible = useGeoStore((store) => store.setSelectedPolygonOwnedSegmentsVisible);
   const updateSelectedNumberDefinition = useGeoStore((store) => store.updateSelectedNumberDefinition);
   const updateSelectedTextLabelFields = useGeoStore((store) => store.updateSelectedTextLabelFields);
   const updateSelectedTextLabelStyle = useGeoStore((store) => store.updateSelectedTextLabelStyle);
@@ -96,6 +97,14 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     () => (selectedObject?.type === "angle" ? scene.angles.find((item) => item.id === selectedObject.id) ?? null : null),
     [scene.angles, selectedObject]
   );
+  const selectedPolygonOwnedEdgesVisible = useMemo(() => {
+    if (!selectedPolygon) return true;
+    const ownedSegments = scene.segments.filter(
+      (segment) => Array.isArray(segment.ownedByPolygonIds) && segment.ownedByPolygonIds.includes(selectedPolygon.id)
+    );
+    if (ownedSegments.length === 0) return true;
+    return ownedSegments.every((segment) => segment.visible);
+  }, [scene.segments, selectedPolygon]);
   const selectedNumber = useMemo(
     () => (selectedObject?.type === "number" ? scene.numbers.find((item) => item.id === selectedObject.id) ?? null : null),
     [scene.numbers, selectedObject]
@@ -400,6 +409,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
         selectedLine={selectedLine}
         selectedCircle={selectedCircle}
         selectedPolygon={selectedPolygon}
+        selectedPolygonOwnedEdgesVisible={selectedPolygonOwnedEdgesVisible}
         selectedAngle={selectedAngle}
         selectedAngleRightStatus={selectedAngleRightStatus}
         updateSelectedSegmentStyle={updateSelectedSegmentStyle}
@@ -411,6 +421,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
         updateSelectedLineFields={updateSelectedLineFields}
         updateSelectedCircleFields={updateSelectedCircleFields}
         updateSelectedPolygonFields={updateSelectedPolygonFields}
+        setSelectedPolygonOwnedSegmentsVisible={setSelectedPolygonOwnedSegmentsVisible}
         deleteSelectedObject={deleteSelectedObject}
       />
       <NumbersSection

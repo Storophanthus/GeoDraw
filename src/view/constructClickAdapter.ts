@@ -74,7 +74,9 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     !pointerEvent.shiftKey && activeTool !== "move" && activeTool !== "copyStyle" && activeTool !== "label"
       ? findBestSnap(screen, camera, vp, scene, tolerances.point)
       : null;
-  if (snappedHitPointId && (!snap || snap.kind !== "point")) {
+  // Grid-snapped point lookup is only a fallback when geometry snapping found nothing.
+  // Otherwise it can steal clicks from on-line/on-circle snapping workflows.
+  if (snappedHitPointId && !snap) {
     const pointWorld = io.getPointWorldById(snappedHitPointId) ?? snappedWorld ?? cursorWorld;
     const screenDistPx = snappedScreen ? Math.hypot(screen.x - snappedScreen.x, screen.y - snappedScreen.y) : 0;
     snap = {
