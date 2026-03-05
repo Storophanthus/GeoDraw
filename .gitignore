@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local backup snapshots
+src_backup_*/
+src-tauri_backup_*/
