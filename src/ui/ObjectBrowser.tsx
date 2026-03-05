@@ -20,7 +20,7 @@ type ObjectBrowserProps = {
 
 type TabId = "all" | "points" | "lines" | "circles" | "angles" | "text" | "numbers";
 
-function tabForSelectedObject(selected: SelectedObject | null): TabId | null {
+function tabForSelectedObject(selected: SelectedObject | null, scene?: SceneModel): TabId | null {
     if (!selected) return null;
     switch (selected.type) {
         case "point":
@@ -31,8 +31,13 @@ function tabForSelectedObject(selected: SelectedObject | null): TabId | null {
         case "circle":
         case "polygon":
             return "circles";
-        case "angle":
+        case "angle": {
+            if (scene) {
+                const angle = scene.angles.find((item) => item.id === selected.id);
+                if (angle?.kind === "sector") return "circles";
+            }
             return "angles";
+        }
         case "textLabel":
             return "text";
         case "number":
@@ -64,14 +69,14 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         const selectionKey = selectedObject ? `${selectedObject.type}:${selectedObject.id}` : null;
         if (selectionKey === lastSelectionKeyRef.current) return;
         lastSelectionKeyRef.current = selectionKey;
-        const targetTab = tabForSelectedObject(selectedObject);
+        const targetTab = tabForSelectedObject(selectedObject, scene);
         if (!targetTab) return;
         setActiveTab((prev) => (prev === targetTab ? prev : targetTab));
-    }, [selectedObject]);
+    }, [selectedObject, scene]);
 
     useEffect(() => {
         if (!selectedObject) return;
-        const targetTab = tabForSelectedObject(selectedObject);
+        const targetTab = tabForSelectedObject(selectedObject, scene);
         if (!targetTab || activeTab !== targetTab) return;
         const key = `${selectedObject.type}:${selectedObject.id}`;
         const row = objectRowRefs.current.get(key);
@@ -193,8 +198,20 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
             count: scene.points.length
         },
         { id: "lines", icon: IconLine as React.ElementType, label: "Lines", description: "Filter by Lines & Segments", count: scene.segments.length + scene.lines.length },
-        { id: "circles", icon: IconCircleRadius as React.ElementType, label: "Shapes", description: "Filter by Circles/Polygons", count: scene.circles.length + scene.polygons.length },
-        { id: "angles", icon: IconAngle as React.ElementType, label: "Angles", description: "Filter by Angles", count: scene.angles.length },
+        {
+            id: "circles",
+            icon: IconCircleRadius as React.ElementType,
+            label: "Shapes",
+            description: "Filter by Circles/Polygons/Sectors",
+            count: scene.circles.length + scene.polygons.length + scene.angles.filter((angle) => angle.kind === "sector").length,
+        },
+        {
+            id: "angles",
+            icon: IconAngle as React.ElementType,
+            label: "Angles",
+            description: "Filter by Angles",
+            count: scene.angles.filter((angle) => angle.kind !== "sector").length,
+        },
         { id: "text", icon: TypeIcon, label: "Labels", description: "Filter by Text Labels", count: scene.textLabels?.length ?? 0 },
         { id: "numbers", icon: Hash, label: "Numbers", description: "Filter by Numbers & Values", count: scene.numbers.length },
     ];
@@ -336,19 +353,27 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     )
                 ))}
 
-                {showAngles && scene.angles.map((angle) => (
+                {showCircles && scene.angles.filter((angle) => angle.kind === "sector").map((angle) => (
                     renderObjectRow(
                         `angle:${angle.id}`,
                         selectedObject?.type === "angle" && selectedObject.id === angle.id,
                         () => setSelectedObject({ type: "angle", id: angle.id }),
                         angle.visible,
                         (next) => setObjectVisibility({ type: "angle", id: angle.id }, next),
-                        angle.kind === "sector"
-                            ? `Sector ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`
-                            : `Angle ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`,
-                        withAliasPrefix("angle", angle.id, angle.kind === "sector"
-                            ? `Sector(${pointLabel(angle.bId)},${pointLabel(angle.aId)},${pointLabel(angle.cId)})`
-                            : `Angle(${pointLabel(angle.aId)},${pointLabel(angle.bId)},${pointLabel(angle.cId)})`)
+                        `Sector ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`,
+                        withAliasPrefix("angle", angle.id, `Sector(${pointLabel(angle.bId)},${pointLabel(angle.aId)},${pointLabel(angle.cId)})`)
+                    )
+                ))}
+
+                {showAngles && scene.angles.filter((angle) => angle.kind !== "sector").map((angle) => (
+                    renderObjectRow(
+                        `angle:${angle.id}`,
+                        selectedObject?.type === "angle" && selectedObject.id === angle.id,
+                        () => setSelectedObject({ type: "angle", id: angle.id }),
+                        angle.visible,
+                        (next) => setObjectVisibility({ type: "angle", id: angle.id }, next),
+                        `Angle ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`,
+                        withAliasPrefix("angle", angle.id, `Angle(${pointLabel(angle.aId)},${pointLabel(angle.bId)},${pointLabel(angle.cId)})`)
                     )
                 ))}
 
@@ -394,8 +419,8 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
             scene.numbers.length === 0) ||
         (activeTab === "points" && scene.points.length === 0) ||
         (activeTab === "lines" && scene.segments.length === 0 && scene.lines.length === 0) ||
-        (activeTab === "circles" && scene.circles.length === 0 && scene.polygons.length === 0) ||
-        (activeTab === "angles" && scene.angles.length === 0) ||
+        (activeTab === "circles" && scene.circles.length === 0 && scene.polygons.length === 0 && !scene.angles.some((angle) => angle.kind === "sector")) ||
+        (activeTab === "angles" && !scene.angles.some((angle) => angle.kind !== "sector")) ||
         (activeTab === "text" && (scene.textLabels?.length ?? 0) === 0) ||
         (activeTab === "numbers" && scene.numbers.length === 0);
 

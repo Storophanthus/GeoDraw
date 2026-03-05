@@ -1,5 +1,5 @@
 import type { Vec2 } from "../../geo/vec2";
-import { resolveAngleMarks, type SceneModel } from "../../scene/points";
+import { collectAngleMarkPositions, resolveAngleMarks, type SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import {
   computeRightMarkSizePx,
@@ -103,6 +103,27 @@ export function drawAngles(
       ctx.arc(bs.x, bs.y, radiusPx, startAngle, end, true);
       ctx.lineTo(bs.x, bs.y);
       ctx.stroke();
+      if (resolvedMarkStyle === "arc" && resolvedArcMarks.length > 0) {
+        drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
+        for (let i = 0; i < resolvedArcMarks.length; i += 1) {
+          const mark = resolvedArcMarks[i];
+          const positions = collectAngleMarkPositions(mark, 0.5);
+          for (let j = 0; j < positions.length; j += 1) {
+            drawArcBarMarks(
+              ctx,
+              as,
+              bs,
+              entry.theta,
+              radiusPx,
+              mark.markSymbol,
+              mark.markSize,
+              positions[j],
+              mark.markColor ?? angle.style.markColor ?? angle.style.strokeColor,
+              mapStrokeWidth(angle.style.strokeWidth)
+            );
+          }
+        }
+      }
     } else if (resolvedMarkStyle !== "none") {
       if (rightLike && resolvedMarkStyle === "rightSquare") {
         drawRightAngleMark(ctx, as, bs, cs, rightMarkSizePx);
@@ -178,11 +199,14 @@ export function drawAngles(
           }
         }
       }
-      const lScreen = camMath.worldToScreen(angle.style.labelPosWorld, camera, vp);
-      ctx.beginPath();
-      ctx.arc(lScreen.x, lScreen.y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(245,158,11,0.85)";
-      ctx.fill();
+      const hasVisibleAngleLabel = Boolean(angle.style.showLabel || angle.style.showValue || angle.style.labelText.trim());
+      if (hasVisibleAngleLabel) {
+        const lScreen = camMath.worldToScreen(angle.style.labelPosWorld, camera, vp);
+        ctx.beginPath();
+        ctx.arc(lScreen.x, lScreen.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(245,158,11,0.85)";
+        ctx.fill();
+      }
     }
 
     ctx.restore();
@@ -290,14 +314,16 @@ function drawArcBarMarks(
   const count = mark === "|" ? 1 : mark === "||" ? 2 : mark === "|||" ? 3 : 0;
   if (count === 0) return;
   const start = Math.atan2(a.y - b.y, a.x - b.x);
-  const p = Math.max(0.1, Math.min(0.9, Number.isFinite(pos) ? pos : 0.5));
+  const p = clamp01(Number.isFinite(pos) ? pos : 0.5);
   const mid = start - theta * p;
-  // Keep bars visually proportional to the arc radius and closer together like textbook marks.
-  const tickHalf = Math.max(3.6, Math.min(radius * 0.4, markSize * 1.08 + radius * 0.09));
-  const baseStep = Math.max(0.022, Math.min(0.075, (tickHalf * 0.54) / Math.max(1, radius)));
+  const size = Number.isFinite(markSize) ? Math.max(0.2, markSize) : 1.2;
+  // Match segment-style sizing: fixed stroke marker scale independent of sector radius.
+  const tickHalf = Math.max(1.4, size * 2.2);
+  const gap = Math.max(1.8, size * 0.85);
+  const baseStep = Math.max(0.01, Math.min(0.2, gap / Math.max(1, radius)));
   ctx.save();
   ctx.strokeStyle = markColor;
-  ctx.lineWidth = strokeWidth;
+  ctx.lineWidth = Math.max(0.5, strokeWidth);
   for (let i = 0; i < count; i += 1) {
     // Bars are distributed along the arc (angle offset), not radially.
     const phi = mid + (i - (count - 1) * 0.5) * baseStep;

@@ -14,6 +14,7 @@ import { AngleStyleSection } from "./object-styles/AngleStyleSection";
 import { CircleStyleSection } from "./object-styles/CircleStyleSection";
 import { LineStyleSection } from "./object-styles/LineStyleSection";
 import { PolygonStyleSection } from "./object-styles/PolygonStyleSection";
+import { SectorStyleSection } from "./object-styles/SectorStyleSection";
 import { SegmentStyleSection } from "./object-styles/SegmentStyleSection";
 
 type ObjectStyleSectionsProps = {
@@ -95,10 +96,18 @@ export function ObjectStyleSections({
         />
       )}
 
-      {!selectedPointPresent && selectedAngle && (
+      {!selectedPointPresent && selectedAngle && selectedAngle.kind !== "sector" && (
         <AngleStyleSection
           selectedAngle={selectedAngle}
           selectedAngleRightStatus={selectedAngleRightStatus}
+          updateSelectedAngleStyle={updateSelectedAngleStyle}
+          deleteSelectedObject={deleteSelectedObject}
+        />
+      )}
+
+      {!selectedPointPresent && selectedAngle && selectedAngle.kind === "sector" && (
+        <SectorStyleSection
+          selectedSector={selectedAngle}
           updateSelectedAngleStyle={updateSelectedAngleStyle}
           deleteSelectedObject={deleteSelectedObject}
         />

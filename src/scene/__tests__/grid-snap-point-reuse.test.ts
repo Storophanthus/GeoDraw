@@ -925,4 +925,689 @@ runScenario("line2p");
   assert(pending === null, "Expected sector pending selection to clear after creation.");
 }
 
+{
+  // Regression: tangent tool should accept sector arc snap as a circle target.
+  const tangentSectorScene: SceneModel = {
+    points: [
+      {
+        id: "pO",
+        kind: "free",
+        name: "O",
+        captionTex: "O",
+        visible: true,
+        showLabel: "name",
+        position: { x: 0, y: 0 },
+        style: pointStyle,
+        locked: false,
+        auxiliary: false,
+      },
+      {
+        id: "pA",
+        kind: "free",
+        name: "A",
+        captionTex: "A",
+        visible: true,
+        showLabel: "name",
+        position: { x: 2, y: 0 },
+        style: pointStyle,
+        locked: false,
+        auxiliary: false,
+      },
+      {
+        id: "pB",
+        kind: "free",
+        name: "B",
+        captionTex: "B",
+        visible: true,
+        showLabel: "name",
+        position: { x: 0, y: 2 },
+        style: pointStyle,
+        locked: false,
+        auxiliary: false,
+      },
+      {
+        id: "pT",
+        kind: "free",
+        name: "T",
+        captionTex: "T",
+        visible: true,
+        showLabel: "name",
+        position: { x: 4, y: 0 },
+        style: pointStyle,
+        locked: false,
+        auxiliary: false,
+      },
+    ],
+    numbers: [],
+    lines: [],
+    segments: [],
+    circles: [],
+    polygons: [],
+    angles: [
+      {
+        id: "angSector",
+        kind: "sector",
+        aId: "pA",
+        bId: "pO",
+        cId: "pB",
+        isRightExact: false,
+        visible: true,
+        style: angleStyle,
+      },
+    ],
+  };
+  const tangentResolvedPoints = tangentSectorScene.points
+    .map((point) => {
+      const world = getPointWorldPos(point, tangentSectorScene);
+      return world ? { point, world } : null;
+    })
+    .filter((item): item is { point: SceneModel["points"][number]; world: { x: number; y: number } } => Boolean(item));
+  let pending: unknown = { tool: "tangent_line", step: 2, first: { type: "point", id: "pT" } };
+  let auxCircleCreates = 0;
+  let tangentCalls = 0;
+  const io: ConstructClickIo = {
+    setPendingSelection(next) {
+      pending = next;
+    },
+    clearPendingSelection() {
+      pending = null;
+    },
+    createFreePoint() {
+      return "p_new";
+    },
+    createTextLabel() {
+      return "txt_new";
+    },
+    createSegment() {
+      return null;
+    },
+    createLine() {
+      return null;
+    },
+    createPolygon() {
+      return null;
+    },
+    createRegularPolygon() {
+      return null;
+    },
+    createCircle() {
+      return null;
+    },
+    createAuxiliaryCircle(centerId, throughId) {
+      auxCircleCreates += 1;
+      if (centerId !== "pO" || throughId !== "pA") {
+        throw new Error(`Unexpected auxiliary circle request: (${centerId}, ${throughId})`);
+      }
+      return "c_sector_aux";
+    },
+    createCircleThreePoint() {
+      return null;
+    },
+    createPerpendicularLine() {
+      return null;
+    },
+    createParallelLine() {
+      return null;
+    },
+    createTangentLines(throughId, circleId) {
+      tangentCalls += 1;
+      if (throughId !== "pT") throw new Error(`Unexpected tangent through point: ${throughId}`);
+      if (circleId !== "c_sector_aux") throw new Error(`Expected tangent target to be helper circle, got ${circleId}`);
+      return ["l_tan"];
+    },
+    createCircleTangentLines() {
+      return [];
+    },
+    createAngleBisectorLine() {
+      return null;
+    },
+    createAngle() {
+      return null;
+    },
+    createSector() {
+      return null;
+    },
+    createAngleFixed() {
+      return null;
+    },
+    createMidpointFromPoints() {
+      return null;
+    },
+    createMidpointFromSegment() {
+      return null;
+    },
+    createPointOnLine() {
+      return null;
+    },
+    createPointOnSegment() {
+      return null;
+    },
+    createPointOnCircle() {
+      return null;
+    },
+    createPointByRotation() {
+      return null;
+    },
+    createPointByTranslation() {
+      return null;
+    },
+    createPointByDilation() {
+      return null;
+    },
+    createPointByReflection() {
+      return null;
+    },
+    transformObjectByTranslation() {
+      return null;
+    },
+    transformObjectByRotation() {
+      return null;
+    },
+    transformObjectByDilation() {
+      return null;
+    },
+    transformObjectByReflection() {
+      return null;
+    },
+    createIntersectionPoint() {
+      return null;
+    },
+    createCircleCenterPoint() {
+      return null;
+    },
+    setExportClipWorld() {},
+    setSelectedObject() {},
+    setCopyStyleSource() {},
+    applyCopyStyleTo() {},
+    enableObjectLabel() {},
+    getPointWorldById(id) {
+      return resolveWorldPoint(tangentSectorScene, id);
+    },
+    gridSnapEnabled: true,
+    snapWorldToGrid(world) {
+      return world;
+    },
+  };
+
+  runConstructClickAdapter({
+    screen: { x: 541, y: 159 },
+    pointerEvent: { shiftKey: false } as PointerEvent,
+    activeTool: "tangent_line",
+    pendingSelection: pending as never,
+    copyStyleSource: null,
+    scene: tangentSectorScene,
+    resolvedPoints: tangentResolvedPoints,
+    camera,
+    vp,
+    angleFixedTool: { angleExpr: "45", direction: "CCW" },
+    regularPolygonTool: { sides: 5, direction: "CCW" },
+    transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
+    tolerances: {
+      point: 12,
+      angle: 20,
+      segment: 10,
+      line: 10,
+      circle: 12,
+    },
+    io,
+  });
+
+  assert(auxCircleCreates === 1, "Expected tangent-on-sector click to resolve/create helper circle.");
+  assert(tangentCalls === 1, "Expected tangent tool to create tangent from point to sector support circle.");
+  assert(pending === null, "Expected tangent pending selection to clear after successful creation.");
+}
+
+{
+  // Regression: midpoint tool should accept sector arc snap and select sector center point.
+  const midpointSectorScene: SceneModel = {
+    points: [
+      {
+        id: "pO",
+        kind: "free",
+        name: "O",
+        captionTex: "O",
+        visible: true,
+        showLabel: "name",
+        position: { x: 0, y: 0 },
+        style: pointStyle,
+        locked: false,
+        auxiliary: false,
+      },
+      {
+        id: "pA",
+        kind: "free",
+        name: "A",
+        captionTex: "A",
+        visible: true,
+        showLabel: "name",
+        position: { x: 2, y: 0 },
+        style: pointStyle,
+        locked: false,
+        auxiliary: false,
+      },
+      {
+        id: "pB",
+        kind: "free",
+        name: "B",
+        captionTex: "B",
+        visible: true,
+        showLabel: "name",
+        position: { x: 0, y: 2 },
+        style: pointStyle,
+        locked: false,
+        auxiliary: false,
+      },
+    ],
+    numbers: [],
+    lines: [],
+    segments: [],
+    circles: [],
+    polygons: [],
+    angles: [
+      {
+        id: "angSector",
+        kind: "sector",
+        aId: "pA",
+        bId: "pO",
+        cId: "pB",
+        isRightExact: false,
+        visible: true,
+        style: angleStyle,
+      },
+    ],
+  };
+  const midpointResolvedPoints = midpointSectorScene.points
+    .map((point) => {
+      const world = getPointWorldPos(point, midpointSectorScene);
+      return world ? { point, world } : null;
+    })
+    .filter((item): item is { point: SceneModel["points"][number]; world: { x: number; y: number } } => Boolean(item));
+  let selectedPointId: string | null = null;
+  let pending: unknown = null;
+  let circleCenterCalls = 0;
+  const io: ConstructClickIo = {
+    setPendingSelection(next) {
+      pending = next;
+    },
+    clearPendingSelection() {
+      pending = null;
+    },
+    createFreePoint() {
+      return "p_new";
+    },
+    createTextLabel() {
+      return "txt_new";
+    },
+    createSegment() {
+      return null;
+    },
+    createLine() {
+      return null;
+    },
+    createPolygon() {
+      return null;
+    },
+    createRegularPolygon() {
+      return null;
+    },
+    createCircle() {
+      return null;
+    },
+    createAuxiliaryCircle() {
+      return null;
+    },
+    createCircleThreePoint() {
+      return null;
+    },
+    createPerpendicularLine() {
+      return null;
+    },
+    createParallelLine() {
+      return null;
+    },
+    createTangentLines() {
+      return [];
+    },
+    createCircleTangentLines() {
+      return [];
+    },
+    createAngleBisectorLine() {
+      return null;
+    },
+    createAngle() {
+      return null;
+    },
+    createSector() {
+      return null;
+    },
+    createAngleFixed() {
+      return null;
+    },
+    createMidpointFromPoints() {
+      return null;
+    },
+    createMidpointFromSegment() {
+      return null;
+    },
+    createPointOnLine() {
+      return null;
+    },
+    createPointOnSegment() {
+      return null;
+    },
+    createPointOnCircle() {
+      return null;
+    },
+    createPointByRotation() {
+      return null;
+    },
+    createPointByTranslation() {
+      return null;
+    },
+    createPointByDilation() {
+      return null;
+    },
+    createPointByReflection() {
+      return null;
+    },
+    transformObjectByTranslation() {
+      return null;
+    },
+    transformObjectByRotation() {
+      return null;
+    },
+    transformObjectByDilation() {
+      return null;
+    },
+    transformObjectByReflection() {
+      return null;
+    },
+    createIntersectionPoint() {
+      return null;
+    },
+    createCircleCenterPoint() {
+      circleCenterCalls += 1;
+      return "never";
+    },
+    setExportClipWorld() {},
+    setSelectedObject(obj) {
+      if (obj?.type === "point") selectedPointId = obj.id;
+    },
+    setCopyStyleSource() {},
+    applyCopyStyleTo() {},
+    enableObjectLabel() {},
+    getPointWorldById(id) {
+      return resolveWorldPoint(midpointSectorScene, id);
+    },
+    gridSnapEnabled: true,
+    snapWorldToGrid(world) {
+      return world;
+    },
+  };
+
+  runConstructClickAdapter({
+    screen: { x: 541, y: 159 },
+    pointerEvent: { shiftKey: false } as PointerEvent,
+    activeTool: "midpoint",
+    pendingSelection: null,
+    copyStyleSource: null,
+    scene: midpointSectorScene,
+    resolvedPoints: midpointResolvedPoints,
+    camera,
+    vp,
+    angleFixedTool: { angleExpr: "45", direction: "CCW" },
+    regularPolygonTool: { sides: 5, direction: "CCW" },
+    transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
+    tolerances: {
+      point: 12,
+      angle: 20,
+      segment: 10,
+      line: 10,
+      circle: 12,
+    },
+    io,
+  });
+
+  assert(circleCenterCalls === 0, "Expected midpoint-on-sector to bypass circle-center creation.");
+  assert(selectedPointId === "pO", "Expected midpoint-on-sector to select center point O.");
+  assert(pending === null, "Expected midpoint-on-sector to leave no pending selection.");
+}
+
+{
+  // Regression: perpendicular tool should accept a segment snap even when overlapping sector is the top object.
+  const sceneWithSectorAndSegment: SceneModel = {
+    points: [
+      {
+        id: "pO",
+        kind: "free",
+        name: "O",
+        captionTex: "O",
+        visible: true,
+        showLabel: "name",
+        position: { x: 0, y: 0 },
+        style: pointStyle,
+        locked: false,
+        auxiliary: false,
+      },
+      {
+        id: "pA",
+        kind: "free",
+        name: "A",
+        captionTex: "A",
+        visible: true,
+        showLabel: "name",
+        position: { x: 2, y: 0 },
+        style: pointStyle,
+        locked: false,
+        auxiliary: false,
+      },
+      {
+        id: "pB",
+        kind: "free",
+        name: "B",
+        captionTex: "B",
+        visible: true,
+        showLabel: "name",
+        position: { x: 0, y: 2 },
+        style: pointStyle,
+        locked: false,
+        auxiliary: false,
+      },
+    ],
+    numbers: [],
+    lines: [],
+    segments: [
+      {
+        id: "sOB",
+        aId: "pO",
+        bId: "pB",
+        ownedBySectorIds: ["angSector"],
+        visible: true,
+        showLabel: false,
+        style: {
+          strokeColor: "#0f172a",
+          strokeWidth: 1.2,
+          dash: "solid",
+          opacity: 1,
+        },
+      },
+    ],
+    circles: [],
+    polygons: [],
+    angles: [
+      {
+        id: "angSector",
+        kind: "sector",
+        aId: "pA",
+        bId: "pO",
+        cId: "pB",
+        isRightExact: false,
+        visible: true,
+        style: angleStyle,
+      },
+    ],
+  };
+  const resolvedPoints = sceneWithSectorAndSegment.points
+    .map((point) => {
+      const world = getPointWorldPos(point, sceneWithSectorAndSegment);
+      return world ? { point, world } : null;
+    })
+    .filter((item): item is { point: SceneModel["points"][number]; world: { x: number; y: number } } => Boolean(item));
+  let pending: unknown = null;
+  const io: ConstructClickIo = {
+    setPendingSelection(next) {
+      pending = next;
+    },
+    clearPendingSelection() {
+      pending = null;
+    },
+    createFreePoint() {
+      return "p_new";
+    },
+    createTextLabel() {
+      return "txt_new";
+    },
+    createSegment() {
+      return null;
+    },
+    createLine() {
+      return null;
+    },
+    createPolygon() {
+      return null;
+    },
+    createRegularPolygon() {
+      return null;
+    },
+    createCircle() {
+      return null;
+    },
+    createAuxiliaryCircle() {
+      return null;
+    },
+    createCircleThreePoint() {
+      return null;
+    },
+    createPerpendicularLine() {
+      return null;
+    },
+    createParallelLine() {
+      return null;
+    },
+    createTangentLines() {
+      return [];
+    },
+    createCircleTangentLines() {
+      return [];
+    },
+    createAngleBisectorLine() {
+      return null;
+    },
+    createAngle() {
+      return null;
+    },
+    createSector() {
+      return null;
+    },
+    createAngleFixed() {
+      return null;
+    },
+    createMidpointFromPoints() {
+      return null;
+    },
+    createMidpointFromSegment() {
+      return null;
+    },
+    createPointOnLine() {
+      return null;
+    },
+    createPointOnSegment() {
+      return null;
+    },
+    createPointOnCircle() {
+      return null;
+    },
+    createPointByRotation() {
+      return null;
+    },
+    createPointByTranslation() {
+      return null;
+    },
+    createPointByDilation() {
+      return null;
+    },
+    createPointByReflection() {
+      return null;
+    },
+    transformObjectByTranslation() {
+      return null;
+    },
+    transformObjectByRotation() {
+      return null;
+    },
+    transformObjectByDilation() {
+      return null;
+    },
+    transformObjectByReflection() {
+      return null;
+    },
+    createIntersectionPoint() {
+      return null;
+    },
+    createCircleCenterPoint() {
+      return null;
+    },
+    setExportClipWorld() {},
+    setSelectedObject() {},
+    setCopyStyleSource() {},
+    applyCopyStyleTo() {},
+    enableObjectLabel() {},
+    getPointWorldById(id) {
+      return resolveWorldPoint(sceneWithSectorAndSegment, id);
+    },
+    gridSnapEnabled: true,
+    snapWorldToGrid(world) {
+      return world;
+    },
+  };
+
+  // Click near OB; sector overlaps this area but on-segment snap should still drive perp_line step-1 target.
+  runConstructClickAdapter({
+    screen: { x: 400, y: 205 },
+    pointerEvent: { shiftKey: false } as PointerEvent,
+    activeTool: "perp_line",
+    pendingSelection: null,
+    copyStyleSource: null,
+    scene: sceneWithSectorAndSegment,
+    resolvedPoints,
+    camera,
+    vp,
+    angleFixedTool: { angleExpr: "45", direction: "CCW" },
+    regularPolygonTool: { sides: 5, direction: "CCW" },
+    transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
+    tolerances: {
+      point: 12,
+      angle: 20,
+      segment: 10,
+      line: 10,
+      circle: 12,
+    },
+    io,
+  });
+
+  const pendingValue = pending as
+    | { tool?: string; first?: { type?: string; ref?: { type?: string; id?: string } } }
+    | null;
+  assert(pendingValue?.tool === "perp_line", "Expected perpendicular workflow to start.");
+  assert(
+    Boolean(
+      pendingValue
+      && pendingValue.first?.type === "lineLike"
+      && pendingValue.first.ref?.type === "segment"
+      && pendingValue.first.ref?.id === "sOB"
+    ),
+    "Expected perpendicular tool to target segment sOB even under overlapping sector."
+  );
+}
+
 console.log("grid-snap-point-reuse: ok");

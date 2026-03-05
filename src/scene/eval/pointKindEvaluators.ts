@@ -106,13 +106,49 @@ export function evalPointOnCirclePoint(
       scene: SceneModel,
       ctx: SceneEvalContext
     ) => { center: Vec2; radius: number } | null;
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
   }
 ): Vec2 | null {
   const geom = ops.getCircleWorldGeometryWithCtx(point.circleId, scene, ctx);
   if (!geom) return null;
   const { center, radius } = geom;
+  const t = clampPointOnSectorArc(point, scene, ctx, ops, center);
   ctx.stats.allocationsEstimate += 1;
-  return evalPointOnCircle(center, radius, point.t);
+  return evalPointOnCircle(center, radius, t);
+}
+
+function clampPointOnSectorArc(
+  point: PointOnCircle,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+  },
+  circleCenter: Vec2
+): number {
+  if (!point.sectorArcId) return point.t;
+  const sector = scene.angles.find((angle) => angle.id === point.sectorArcId && angle.kind === "sector");
+  if (!sector) return point.t;
+  const centerWorld = ops.getPointWorldById(sector.bId, scene, ctx);
+  const startWorld = ops.getPointWorldById(sector.aId, scene, ctx);
+  const endWorld = ops.getPointWorldById(sector.cId, scene, ctx);
+  if (!centerWorld || !startWorld || !endWorld) return point.t;
+  if (Math.hypot(centerWorld.x - circleCenter.x, centerWorld.y - circleCenter.y) > 1e-6) return point.t;
+  const start = Math.atan2(startWorld.y - centerWorld.y, startWorld.x - centerWorld.x);
+  const end = Math.atan2(endWorld.y - centerWorld.y, endWorld.x - centerWorld.x);
+  const sweep = normalizeAngleRad(end - start);
+  if (!Number.isFinite(sweep)) return point.t;
+  const rel = normalizeAngleRad(point.t - start);
+  const clampedRel = Math.max(0, Math.min(rel, sweep));
+  return start + clampedRel;
+}
+
+function normalizeAngleRad(value: number): number {
+  const full = Math.PI * 2;
+  let out = value;
+  while (out < 0) out += full;
+  while (out >= full) out -= full;
+  return out;
 }
 
 export function evalPointByRotationPoint(

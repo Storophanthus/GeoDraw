@@ -55,11 +55,11 @@ export function objectIntersectionsWithOps(
   }
   if (la && sectorArcB) {
     ops.onCircleLineCall();
-    return lineSectorBoundaryIntersections(la, sectorArcB);
+    return lineSectorArcIntersections(la, sectorArcB);
   }
   if (lb && sectorArcA) {
     ops.onCircleLineCall();
-    return lineSectorBoundaryIntersections(lb, sectorArcA);
+    return lineSectorArcIntersections(lb, sectorArcA);
   }
   return [];
 }
@@ -78,7 +78,7 @@ function pointOnSectorArc(p: Vec2, arc: SectorArcGeom): boolean {
   return d <= sweep + eps;
 }
 
-function lineSectorBoundaryIntersections(line: LineLike, sector: SectorArcGeom): Vec2[] {
+function lineSectorArcIntersections(line: LineLike, sector: SectorArcGeom): Vec2[] {
   const out: Vec2[] = [];
   const pushUnique = (p: Vec2) => {
     const eps = 1e-6;
@@ -94,37 +94,5 @@ function lineSectorBoundaryIntersections(line: LineLike, sector: SectorArcGeom):
     pushUnique(p);
   }
 
-  const startPoint = {
-    x: sector.center.x + sector.radius * Math.cos(sector.start),
-    y: sector.center.y + sector.radius * Math.sin(sector.start),
-  };
-  const endAngle = sector.start + sector.sweep;
-  const endPoint = {
-    x: sector.center.x + sector.radius * Math.cos(endAngle),
-    y: sector.center.y + sector.radius * Math.sin(endAngle),
-  };
-
-  const sideStartHit = lineLineIntersection(line.a, line.b, sector.center, startPoint);
-  if (sideStartHit && lineLikeContainsPoint(line, sideStartHit) && pointWithinSegmentDomain(sideStartHit, sector.center, startPoint)) {
-    pushUnique(sideStartHit);
-  }
-
-  const sideEndHit = lineLineIntersection(line.a, line.b, sector.center, endPoint);
-  if (sideEndHit && lineLikeContainsPoint(line, sideEndHit) && pointWithinSegmentDomain(sideEndHit, sector.center, endPoint)) {
-    pushUnique(sideEndHit);
-  }
-
   return out;
-}
-
-function pointWithinSegmentDomain(p: Vec2, a: Vec2, b: Vec2): boolean {
-  const eps = 1e-6;
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const dd = dx * dx + dy * dy;
-  if (dd <= eps * eps) return Math.hypot(p.x - a.x, p.y - a.y) <= eps;
-  const ux = p.x - a.x;
-  const uy = p.y - a.y;
-  const u = (ux * dx + uy * dy) / dd;
-  return u >= -eps && u <= 1 + eps;
 }

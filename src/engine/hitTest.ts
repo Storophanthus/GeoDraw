@@ -189,6 +189,8 @@ export function hitTestAngleId(
 ): string | null {
   let bestId: string | null = null;
   let best = tolerancePx;
+  let bestNonSectorId: string | null = null;
+  let bestNonSector = tolerancePx;
   for (let i = resolvedAngles.length - 1; i >= 0; i -= 1) {
     const entry = resolvedAngles[i];
     if (!entry.angle.visible) continue;
@@ -212,8 +214,12 @@ export function hitTestAngleId(
       best = d;
       bestId = entry.angle.id;
     }
+    if (entry.angle.kind !== "sector" && d <= bestNonSector) {
+      bestNonSector = d;
+      bestNonSectorId = entry.angle.id;
+    }
   }
-  return bestId;
+  return bestNonSectorId ?? bestId;
 }
 
 export function hitTestPolygonId(
@@ -271,8 +277,11 @@ export function hitTestTopObject(
   const pointId = hitTestPointId(screenPoint, resolvedPoints, camera, vp, pointTolPx);
   if (pointId) return { type: "point", id: pointId };
   const angleId = hitTestAngleId(screenPoint, resolveVisibleAngles(scene), camera, vp, angleTolPx);
-  if (angleId) return { type: "angle", id: angleId };
   const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx);
+  if (angleId && segmentId && isSectorAngle(scene, angleId)) {
+    return { type: "segment", id: segmentId };
+  }
+  if (angleId) return { type: "angle", id: angleId };
   if (segmentId) return { type: "segment", id: segmentId };
   const lineId = hitTestLineId(screenPoint, scene, camera, vp, lineTolPx);
   if (lineId) return { type: "line", id: lineId };
@@ -282,6 +291,11 @@ export function hitTestTopObject(
   if (polygonId) return { type: "polygon", id: polygonId };
 
   return null;
+}
+
+function isSectorAngle(scene: SceneModel, angleId: string): boolean {
+  const angle = scene.angles.find((item) => item.id === angleId);
+  return Boolean(angle && angle.kind === "sector");
 }
 
 function pointInPolygon(point: Vec2, vertices: Vec2[]): boolean {

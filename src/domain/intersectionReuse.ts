@@ -332,10 +332,10 @@ function resolveObjectIntersections(
     return lineCircleIntersections(lb.a, lb.b, ca.center, ca.radius).filter((p) => lineLikeContainsPoint(lb, p));
   }
   if (la && sb) {
-    return lineSectorBoundaryIntersections(la, sb);
+    return lineSectorArcIntersections(la, sb);
   }
   if (lb && sa) {
-    return lineSectorBoundaryIntersections(lb, sa);
+    return lineSectorArcIntersections(lb, sa);
   }
   if (ca && cb) return circleCircleIntersections(ca.center, ca.radius, cb.center, cb.radius);
   return [];
@@ -425,7 +425,7 @@ function pointOnSectorArc(p: Vec2, arc: SectorArcGeom): boolean {
   return d <= sweep + eps;
 }
 
-function lineSectorBoundaryIntersections(line: LineLikeGeom, sector: SectorArcGeom): Vec2[] {
+function lineSectorArcIntersections(line: LineLikeGeom, sector: SectorArcGeom): Vec2[] {
   const out: Vec2[] = [];
   const pushUnique = (p: Vec2) => {
     const eps = 1e-6;
@@ -440,26 +440,5 @@ function lineSectorBoundaryIntersections(line: LineLikeGeom, sector: SectorArcGe
     if (!lineLikeContainsPoint(line, p) || !pointOnSectorArc(p, sector)) continue;
     pushUnique(p);
   }
-
-  const startPoint = {
-    x: sector.center.x + sector.radius * Math.cos(sector.start),
-    y: sector.center.y + sector.radius * Math.sin(sector.start),
-  };
-  const endAngle = sector.start + sector.sweep;
-  const endPoint = {
-    x: sector.center.x + sector.radius * Math.cos(endAngle),
-    y: sector.center.y + sector.radius * Math.sin(endAngle),
-  };
-
-  const sideStartHit = lineLineIntersection(line.a, line.b, sector.center, startPoint);
-  if (sideStartHit && lineLikeContainsPoint(line, sideStartHit) && pointWithinSegmentDomain(sideStartHit, sector.center, startPoint)) {
-    pushUnique(sideStartHit);
-  }
-
-  const sideEndHit = lineLineIntersection(line.a, line.b, sector.center, endPoint);
-  if (sideEndHit && lineLikeContainsPoint(line, sideEndHit) && pointWithinSegmentDomain(sideEndHit, sector.center, endPoint)) {
-    pushUnique(sideEndHit);
-  }
-
   return out;
 }

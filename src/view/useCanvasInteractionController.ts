@@ -67,6 +67,7 @@ type InteractionActions = {
   moveAngleLabelTo: (id: string, world: Vec2) => void;
   moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon"; id: string }, world: Vec2) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
+  moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   setHoverScreen: (value: Vec2 | null) => void;
   setSnapDisabled: (value: boolean) => void;
   setCursorWorld: (value: Vec2 | null) => void;
@@ -181,6 +182,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           moveAngleLabelTo: actions.moveAngleLabelTo,
           moveObjectLabelTo: actions.moveObjectLabelTo,
           moveTextLabelTo: actions.moveTextLabelTo,
+          moveTextLabelByWorldDelta: actions.moveTextLabelByWorldDelta,
           screenToWorld: (screen) => camMath.screenToWorld(screen, camera, vp),
           screenDeltaToWorldDelta: (delta) => {
             const world0 = camMath.screenToWorld({ x: 0, y: 0 }, camera, vp);
@@ -245,6 +247,8 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
         decideMovePointerDown({
           ...hits,
           scenePoints: scene.points,
+          sceneSegments: scene.segments,
+          sceneAngles: scene.angles,
         }),
       onToolClickRelease: (screen, e, hits) =>
         runConstructClickAdapter({

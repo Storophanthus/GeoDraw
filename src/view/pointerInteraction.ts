@@ -46,6 +46,19 @@ type MovePointerDownInput = {
     | { type: "polygon"; id: string }
     | null;
   scenePoints: ScenePoint[];
+  sceneSegments?: Array<{
+    id: string;
+    aId: string;
+    bId: string;
+    ownedBySectorIds?: string[];
+  }>;
+  sceneAngles?: Array<{
+    id: string;
+    kind?: "angle" | "sector";
+    aId: string;
+    bId: string;
+    cId: string;
+  }>;
 };
 
 export function decideMovePointerDown(input: MovePointerDownInput): MovePointerDownDecision {
@@ -61,7 +74,10 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     hitAngleId,
     hitObjectLabel = null,
     scenePoints,
+    sceneSegments = [],
+    sceneAngles = [],
   } = input;
+  void sceneSegments;
 
   if (hitTextLabelId) {
     return {
@@ -109,6 +125,12 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     };
   }
 
+  if (hitSegmentId) {
+    if (hitAngleId && isSectorAngleHit(hitAngleId, sceneAngles)) {
+      return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "segment", id: hitSegmentId } };
+    }
+  }
+
   if (hitAngleId) {
     return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "angle", id: hitAngleId } };
   }
@@ -135,6 +157,14 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
   }
 
   return { mode: "pan", pointId: null, dragObjectType: null, selectedObject: null };
+}
+
+function isSectorAngleHit(
+  angleId: string,
+  angles: Array<{ id: string; kind?: "angle" | "sector"; aId: string; bId: string; cId: string }>
+): boolean {
+  const angle = angles.find((item) => item.id === angleId);
+  return Boolean(angle && angle.kind === "sector");
 }
 
 export function computeCanvasCursor(

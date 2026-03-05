@@ -7,6 +7,7 @@ type CanvasLabelsLayerProps = {
   angleLabelOverlays: AngleLabelOverlay[];
   objectLabelOverlays: ObjectLabelOverlay[];
   textLabelOverlays: TextLabelOverlay[];
+  selectedTextLabelId: string | null;
 };
 
 export function CanvasLabelsLayer({
@@ -15,6 +16,7 @@ export function CanvasLabelsLayer({
   angleLabelOverlays,
   objectLabelOverlays,
   textLabelOverlays,
+  selectedTextLabelId,
 }: CanvasLabelsLayerProps) {
   return (
     <div className="labelsLayer" aria-hidden ref={labelsLayerRef}>
@@ -65,10 +67,11 @@ export function CanvasLabelsLayer({
       {textLabelOverlays.map((label) => (
         <div
           key={label.id}
-          className="pointLabel tex"
+          className={label.id === selectedTextLabelId ? "pointLabel tex selectedTextLabel" : "pointLabel tex"}
           data-text-label-id={label.id}
           style={{
-            transform: `translate(${label.x}px, ${label.y}px) rotate(${label.rotationDeg}deg)`,
+            transform: `translate(${label.x}px, ${label.y}px) translate(-50%, -50%) rotate(${label.rotationDeg}deg)`,
+            transformOrigin: "center center",
             fontSize: `${Math.max(8, label.textSize)}px`,
             color: label.textColor,
           }}

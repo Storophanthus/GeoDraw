@@ -929,6 +929,199 @@ function testLineSectorArcIntersectionTracksBoundary(): void {
   }
 }
 
+function testLineSectorArcOnlyWithSideIntersectionsPresent(): void {
+  const scene: SceneModel = {
+    points: [
+      freePoint("o", "O", 0, 0),
+      freePoint("b", "B", Math.sqrt(3), 1),
+      freePoint("c", "C", 1, Math.sqrt(3)),
+      freePoint("u", "U", 1.6, -3),
+      freePoint("v", "V", 1.6, 3),
+      {
+        id: "f",
+        kind: "intersectionPoint",
+        name: "F",
+        captionTex: "F",
+        visible: true,
+        showLabel: "name",
+        objA: { type: "line", id: "l1" },
+        objB: { type: "angle", id: "a1" },
+        preferredWorld: { x: 1.5, y: 1.2 },
+        style: pointStyle,
+      },
+      {
+        id: "g",
+        kind: "lineLikeIntersectionPoint",
+        name: "G",
+        captionTex: "G",
+        visible: true,
+        showLabel: "name",
+        objA: { type: "line", id: "l1" },
+        objB: { type: "segment", id: "sOB" },
+        preferredWorld: { x: 1.6, y: 0.9 },
+        style: pointStyle,
+      },
+      {
+        id: "h",
+        kind: "lineLikeIntersectionPoint",
+        name: "H",
+        captionTex: "H",
+        visible: true,
+        showLabel: "name",
+        objA: { type: "line", id: "l1" },
+        objB: { type: "segment", id: "sOC" },
+        preferredWorld: { x: 0.7, y: 1.2 },
+        style: pointStyle,
+      },
+    ],
+    numbers: [],
+    polygons: [],
+    lines: [{ id: "l1", kind: "twoPoint", aId: "u", bId: "v", visible: true, style: lineStyle }],
+    segments: [
+      { id: "sOB", aId: "o", bId: "b", visible: true, showLabel: false, style: lineStyle },
+      { id: "sOC", aId: "o", bId: "c", visible: true, showLabel: false, style: lineStyle },
+    ],
+    circles: [],
+    angles: [
+      {
+        id: "a1",
+        kind: "sector",
+        aId: "b",
+        bId: "o",
+        cId: "c",
+        visible: true,
+        style: {
+          strokeColor: "#334155",
+          strokeWidth: 1.5,
+          strokeOpacity: 1,
+          textColor: "#0f172a",
+          textSize: 16,
+          fillEnabled: true,
+          fillColor: "#60a5fa",
+          fillOpacity: 0.15,
+          markStyle: "arc",
+          markSymbol: "none",
+          arcMultiplicity: 1,
+          markPos: 0.5,
+          markSize: 4,
+          markColor: "#000000",
+          arcRadius: 5,
+          labelText: "",
+          labelPosWorld: { x: 0, y: 0 },
+          showLabel: false,
+          showValue: false,
+        },
+      },
+    ],
+  };
+
+  const isDefined = (id: string): boolean => {
+    const p = requirePoint(scene, id);
+    return Boolean(getPointWorldPos(p, scene));
+  };
+
+  // Case 1: F on arc, G on OB, H absent.
+  beginSceneEvalTick(scene);
+  if (!isDefined("f")) throw new Error("Expected F defined for case 1.");
+  if (!isDefined("g")) throw new Error("Expected G defined for case 1.");
+  if (isDefined("h")) throw new Error("Expected H undefined for case 1.");
+  const f1 = getWorldOrThrow(scene, "f");
+  if (Math.abs(Math.hypot(f1.x, f1.y) - 2) > 1e-5) {
+    throw new Error("Expected F to lie on sector arc radius in case 1.");
+  }
+  endSceneEvalTick(scene);
+
+  // Case 2: F on arc, H on OC, G absent.
+  setFreePoint(scene, "u", { x: -3, y: 1.2 });
+  setFreePoint(scene, "v", { x: 3, y: 1.2 });
+  beginSceneEvalTick(scene);
+  if (!isDefined("f")) throw new Error("Expected F defined for case 2.");
+  if (isDefined("g")) throw new Error("Expected G undefined for case 2.");
+  if (!isDefined("h")) throw new Error("Expected H defined for case 2.");
+  const f2 = getWorldOrThrow(scene, "f");
+  if (Math.abs(Math.hypot(f2.x, f2.y) - 2) > 1e-5) {
+    throw new Error("Expected F to lie on sector arc radius in case 2.");
+  }
+  endSceneEvalTick(scene);
+
+  // Case 3: Line intersects both radial sides but misses visible arc -> F absent.
+  setFreePoint(scene, "u", { x: 0.8, y: -3 });
+  setFreePoint(scene, "v", { x: 0.8, y: 3 });
+  beginSceneEvalTick(scene);
+  if (isDefined("f")) throw new Error("Expected F undefined for case 3.");
+  if (!isDefined("g")) throw new Error("Expected G defined for case 3.");
+  if (!isDefined("h")) throw new Error("Expected H defined for case 3.");
+  endSceneEvalTick(scene);
+}
+
+function testPlainAngleIsNotIntersectableLocus(): void {
+  const scene: SceneModel = {
+    points: [
+      freePoint("o", "O", 0, 0),
+      freePoint("a", "A", 2, 0),
+      freePoint("c", "C", 0, 2),
+      freePoint("u", "U", -3, 1),
+      freePoint("v", "V", 3, 1),
+      {
+        id: "i",
+        kind: "intersectionPoint",
+        name: "I",
+        captionTex: "I",
+        visible: true,
+        showLabel: "name",
+        objA: { type: "line", id: "l1" },
+        objB: { type: "angle", id: "a1" },
+        preferredWorld: { x: 1, y: 1 },
+        style: pointStyle,
+      },
+    ],
+    numbers: [],
+    polygons: [],
+    lines: [{ id: "l1", kind: "twoPoint", aId: "u", bId: "v", visible: true, style: lineStyle }],
+    segments: [],
+    circles: [],
+    angles: [
+      {
+        id: "a1",
+        kind: "angle",
+        aId: "a",
+        bId: "o",
+        cId: "c",
+        visible: true,
+        style: {
+          strokeColor: "#334155",
+          strokeWidth: 1.5,
+          strokeOpacity: 1,
+          textColor: "#0f172a",
+          textSize: 16,
+          fillEnabled: false,
+          fillColor: "#60a5fa",
+          fillOpacity: 0.15,
+          markStyle: "arc",
+          markSymbol: "none",
+          arcMultiplicity: 1,
+          markPos: 0.5,
+          markSize: 4,
+          markColor: "#000000",
+          arcRadius: 40,
+          labelText: "",
+          labelPosWorld: { x: 0, y: 0 },
+          showLabel: false,
+          showValue: false,
+        },
+      },
+    ],
+  };
+
+  beginSceneEvalTick(scene);
+  const point = requirePoint(scene, "i");
+  const world = getPointWorldPos(point, scene);
+  endSceneEvalTick(scene);
+  if (world) {
+    throw new Error("Plain angle should not act as an intersectable geometric locus.");
+  }
+}
+
 testCircleLinePairOwnership();
 testCircleLineSingletonAvoidsOccupiedRoot();
 testCircleCircleSingletonAvoidsOccupiedRootFromPointOnCircle();
@@ -941,4 +1134,6 @@ testCircleSegmentSemanticBranchPersistenceUnderDrag();
 testCircleCircleSemanticBranchPersistenceUnderDrag();
 testLineLikeSemanticIntersectionTracksGeometryUnderDrag();
 testLineSectorArcIntersectionTracksBoundary();
+testLineSectorArcOnlyWithSideIntersectionsPresent();
+testPlainAngleIsNotIntersectableLocus();
 console.log("✓ intersection ownership regression tests passed");

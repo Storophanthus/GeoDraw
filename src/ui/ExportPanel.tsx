@@ -30,10 +30,10 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [jsonText, setJsonText] = useState("");
   const [jsonCopied, setJsonCopied] = useState(false);
   const [includeWorldInJson, setIncludeWorldInJson] = useState(false);
-  const [exportUseCurrentView, setExportUseCurrentView] = useState(false);
+  const [exportUseCurrentView, setExportUseCurrentView] = useState(true);
   const [exportUseClipSelection, setExportUseClipSelection] = useState(false);
-  const [exportEfficient, setExportEfficient] = useState(false);
-  const [exportEmitTkzSetup, setExportEmitTkzSetup] = useState(true);
+  const [exportEfficient, setExportEfficient] = useState(true);
+  const [exportEmitTkzSetupManual, setExportEmitTkzSetupManual] = useState<boolean | null>(null);
   const [exportLabelGlow, setExportLabelGlow] = useState(true);
   const [exportGlobalScale, setExportGlobalScale] = useState("1");
   const [exportPointScale, setExportPointScale] = useState("1");
@@ -54,6 +54,11 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       "--gd-scene-bg": canvasTheme.backgroundColor,
     };
   }, [uiColorProfileId, uiCssOverrides, colorProfileId, canvasThemeOverrides]);
+  const hasVisibleLineObject = useMemo(
+    () => scene.lines.some((line) => line.visible),
+    [scene.lines]
+  );
+  const exportEmitTkzSetup = exportEmitTkzSetupManual ?? hasVisibleLineObject;
 
   const clipSig = exportClipWorld
     ? exportClipWorld.kind === "rect"
@@ -231,7 +236,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             <input
               type="checkbox"
               checked={exportEmitTkzSetup}
-              onChange={(e) => setExportEmitTkzSetup(e.target.checked)}
+              onChange={(e) => setExportEmitTkzSetupManual(e.target.checked)}
             />
             Emit tkz setup (Init/Clip/SetUpLine)
           </label>

@@ -144,6 +144,19 @@ assert(
   "Angle inside filled polygon should be selectable over polygon fill."
 );
 
+const clickOnSectorBoundary = camMath.worldToScreen({ x: 2, y: 0.8 }, camera, vp);
+const boundaryTopHit = hitTestTopObject(scene, camera, vp, clickOnSectorBoundary, {
+  pointTolPx: 12,
+  angleTolPx: 20,
+  segmentTolPx: 10,
+  lineTolPx: 10,
+  circleTolPx: 10,
+});
+assert(
+  boundaryTopHit?.type === "segment" && boundaryTopHit.id === "sBC",
+  "Sector boundary segment should win selection over overlapping sector fill."
+);
+
 const moveDecision = decideMovePointerDown({
   hitLabelId: null,
   hitAngleLabelId: null,
@@ -153,12 +166,133 @@ const moveDecision = decideMovePointerDown({
   hitLineId: null,
   hitCircleId: null,
   hitAngleId: "aSector",
+  sceneSegments: scene.segments,
+  sceneAngles: scene.angles,
   scenePoints: scene.points,
 });
 assert(
   moveDecision.selectedObject?.type === "angle" && moveDecision.selectedObject.id === "aSector",
   "Move selection should prioritize angle over polygon when both are hit."
 );
+
+const boundaryMoveDecision = decideMovePointerDown({
+  hitLabelId: null,
+  hitAngleLabelId: null,
+  hitPointId: null,
+  hitSegmentId: "sBC",
+  hitPolygonId: null,
+  hitLineId: null,
+  hitCircleId: null,
+  hitAngleId: "aSector",
+  sceneSegments: scene.segments,
+  sceneAngles: scene.angles,
+  scenePoints: scene.points,
+});
+assert(
+  boundaryMoveDecision.selectedObject?.type === "segment" && boundaryMoveDecision.selectedObject.id === "sBC",
+  "Move selection should prioritize sector boundary segment over overlapping sector."
+);
+
+{
+  // Regression: a segment crossing a sector interior (e.g. semicircle diameter/chord)
+  // must remain selectable over the sector fill.
+  const semiScene: SceneModel = {
+    points: [
+      {
+        id: "pO",
+        kind: "free",
+        name: "O",
+        captionTex: "O",
+        visible: true,
+        showLabel: "name",
+        locked: false,
+        auxiliary: false,
+        position: { x: 0, y: 0 },
+        style: { ...defaultPointStyle, labelOffsetPx: { ...defaultPointStyle.labelOffsetPx } },
+      },
+      {
+        id: "pA",
+        kind: "free",
+        name: "A",
+        captionTex: "A",
+        visible: true,
+        showLabel: "name",
+        locked: false,
+        auxiliary: false,
+        position: { x: -3, y: 0 },
+        style: { ...defaultPointStyle, labelOffsetPx: { ...defaultPointStyle.labelOffsetPx } },
+      },
+      {
+        id: "pB",
+        kind: "free",
+        name: "B",
+        captionTex: "B",
+        visible: true,
+        showLabel: "name",
+        locked: false,
+        auxiliary: false,
+        position: { x: 3, y: 0 },
+        style: { ...defaultPointStyle, labelOffsetPx: { ...defaultPointStyle.labelOffsetPx } },
+      },
+    ],
+    vectors: [],
+    numbers: [],
+    lines: [],
+    circles: [],
+    segments: [
+      {
+        id: "sAB",
+        aId: "pA",
+        bId: "pB",
+        visible: true,
+        showLabel: false,
+        style: { ...defaultSegmentStyle },
+      },
+    ],
+    polygons: [],
+    angles: [
+      {
+        id: "sectorSemi",
+        kind: "sector",
+        aId: "pA",
+        bId: "pO",
+        cId: "pB",
+        visible: true,
+        style: { ...defaultAngleStyle, labelPosWorld: { ...defaultAngleStyle.labelPosWorld } },
+      },
+    ],
+  };
+  const clickOnDiameter = camMath.worldToScreen({ x: 0.2, y: 0.01 }, camera, vp);
+  const semiTopHit = hitTestTopObject(semiScene, camera, vp, clickOnDiameter, {
+    pointTolPx: 12,
+    angleTolPx: 20,
+    segmentTolPx: 10,
+    lineTolPx: 10,
+    circleTolPx: 10,
+  });
+  assert(
+    semiTopHit?.type === "segment" && semiTopHit.id === "sAB",
+    "Semicircle diameter/chord segment should be selectable over sector fill."
+  );
+
+  const semiMoveDecision = decideMovePointerDown({
+    hitLabelId: null,
+    hitAngleLabelId: null,
+    hitPointId: null,
+    hitSegmentId: "sAB",
+    hitPolygonId: null,
+    hitLineId: null,
+    hitCircleId: null,
+    hitAngleId: "sectorSemi",
+    sceneSegments: semiScene.segments,
+    sceneAngles: semiScene.angles,
+    scenePoints: semiScene.points,
+  });
+  assert(
+    semiMoveDecision.selectedObject?.type === "segment" && semiMoveDecision.selectedObject.id === "sAB",
+    "Move selection should prioritize semicircle diameter/chord segment over sector."
+  );
+}
 
 const sceneNoAngle: SceneModel = {
   ...scene,

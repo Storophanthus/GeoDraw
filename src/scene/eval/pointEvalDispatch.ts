@@ -164,6 +164,7 @@ function evalPointOnCircle(
 ): Vec2 | null {
   return evalPointOnCirclePoint(point, scene, ctx, {
     getCircleWorldGeometryWithCtx: ops.getCircleWorldGeometryById,
+    getPointWorldById: ops.getPointWorldById,
   });
 }
 

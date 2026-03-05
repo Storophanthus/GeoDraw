@@ -821,21 +821,55 @@ export function drawPendingPreview(
   if (pendingSelection.tool === "tangent_line") {
     let through: Vec2 | null = null;
     let circleId: string | null = null;
+    let directCircleGeom: { center: Vec2; radius: number } | null = null;
+
+    const resolveAuxCircleIdFromSectorSnap = (): string | null => {
+      if (hoverSnap?.kind !== "onSectorArc" || !hoverSnap.sectorCenterId || !hoverSnap.sectorStartId) return null;
+      const existing = scene.circles.find(
+        (circle) =>
+          circle.kind === "twoPoint"
+          && circle.centerId === hoverSnap.sectorCenterId
+          && circle.throughId === hoverSnap.sectorStartId
+          && circle.visible === false
+      );
+      return existing?.id ?? null;
+    };
+
+    const resolveSectorGeomFromSnap = (): { center: Vec2; radius: number } | null => {
+      if (hoverSnap?.kind !== "onSectorArc" || !hoverSnap.sectorCenterId || !hoverSnap.sectorStartId) return null;
+      const centerPoint = scene.points.find((point) => point.id === hoverSnap.sectorCenterId);
+      const startPoint = scene.points.find((point) => point.id === hoverSnap.sectorStartId);
+      if (!centerPoint || !startPoint) return null;
+      const center = getPointWorldPos(centerPoint, scene);
+      const start = getPointWorldPos(startPoint, scene);
+      if (!center || !start) return null;
+      const radius = Math.hypot(start.x - center.x, start.y - center.y);
+      if (!Number.isFinite(radius) || radius <= 1e-12) return null;
+      return { center, radius };
+    };
 
     if (pendingSelection.first.type === "point") {
       const throughPoint = scene.points.find((p) => p.id === pendingSelection.first.id);
       through = throughPoint ? getPointWorldPos(throughPoint, scene) : null;
+      const auxCircleId = resolveAuxCircleIdFromSectorSnap();
       circleId =
         hoverSnap?.kind === "onCircle" && hoverSnap.circleId
           ? hoverSnap.circleId
-          : hoveredHit?.type === "circle"
-            ? hoveredHit.id
-            : null;
+          : auxCircleId;
+      if (!circleId) {
+        directCircleGeom = resolveSectorGeomFromSnap();
+      }
+      if (!circleId && !directCircleGeom && hoveredHit?.type === "circle") {
+        circleId = hoveredHit.id;
+      }
     } else {
+      const auxCircleId = resolveAuxCircleIdFromSectorSnap();
       const hoveredCircleId =
         hoverSnap?.kind === "onCircle" && hoverSnap.circleId
           ? hoverSnap.circleId
-          : hoveredHit?.type === "circle"
+          : auxCircleId
+            ? auxCircleId
+            : hoveredHit?.type === "circle"
             ? hoveredHit.id
             : null;
       if (hoveredCircleId && hoveredCircleId !== pendingSelection.first.id) {
@@ -901,17 +935,18 @@ export function drawPendingPreview(
       }
     }
 
-    if (!through || !circleId) {
+    if (!through || (!circleId && !directCircleGeom)) {
       ctx.restore();
       return;
     }
 
-    const circle = scene.circles.find((c) => c.id === circleId);
-    if (!circle) {
-      ctx.restore();
-      return;
-    }
-    const geom = getCircleWorldGeometry(circle, scene);
+    const geom = (() => {
+      if (directCircleGeom) return directCircleGeom;
+      if (!circleId) return null;
+      const circle = scene.circles.find((c) => c.id === circleId);
+      if (!circle) return null;
+      return getCircleWorldGeometry(circle, scene);
+    })();
     if (!geom) {
       ctx.restore();
       return;

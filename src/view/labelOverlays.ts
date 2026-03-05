@@ -58,7 +58,8 @@ export type TextLabelOverlay = {
   rotationDeg: number;
 };
 
-const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.5;
+// Keep free text-label size visually closer to exported TikZ font size.
+const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.8;
 
 function escapeHtml(value: string): string {
   return value

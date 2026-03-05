@@ -547,6 +547,13 @@ input[type="range"] {
   font-size: 0.95em;
 }
 
+.pointLabel.selectedTextLabel {
+  border-radius: 4px;
+  outline: 1px solid color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 70%, white);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 20%, transparent);
+}
+
 .toolButtonWrap {
   position: relative;
   display: flex;

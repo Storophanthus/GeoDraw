@@ -245,7 +245,7 @@ export function findBestSnap(
         budgetExceeded = true;
         break;
       }
-      const intersections = lineSectorBoundaryIntersections(line, sector);
+      const intersections = lineSectorArcIntersections(line, sector);
       for (const p of intersections) {
         pushIntersectionCandidate(p, line.ref, sector.ref, screen, camera, vp, tolerancePx, candidates);
       }
@@ -375,7 +375,7 @@ function pointOnSectorArc(p: Vec2, sector: SectorLike): boolean {
   return d <= sweep + eps;
 }
 
-function lineSectorBoundaryIntersections(line: LineLike, sector: SectorLike): Vec2[] {
+function lineSectorArcIntersections(line: LineLike, sector: SectorLike): Vec2[] {
   const out: Vec2[] = [];
   const pushUnique = (p: Vec2) => {
     const eps = 1e-6;
@@ -390,27 +390,6 @@ function lineSectorBoundaryIntersections(line: LineLike, sector: SectorLike): Ve
     if (!lineLikeContainsPoint(line, p) || !pointOnSectorArc(p, sector)) continue;
     pushUnique(p);
   }
-
-  const startPoint = {
-    x: sector.center.x + sector.radius * Math.cos(sector.start),
-    y: sector.center.y + sector.radius * Math.sin(sector.start),
-  };
-  const endAngle = sector.start + sector.sweep;
-  const endPoint = {
-    x: sector.center.x + sector.radius * Math.cos(endAngle),
-    y: sector.center.y + sector.radius * Math.sin(endAngle),
-  };
-
-  const sideStartHit = lineLineIntersection(line.a, line.b, sector.center, startPoint);
-  if (sideStartHit && lineLikeContainsPoint(line, sideStartHit) && pointWithinSegmentDomain(sideStartHit, sector.center, startPoint)) {
-    pushUnique(sideStartHit);
-  }
-
-  const sideEndHit = lineLineIntersection(line.a, line.b, sector.center, endPoint);
-  if (sideEndHit && lineLikeContainsPoint(line, sideEndHit) && pointWithinSegmentDomain(sideEndHit, sector.center, endPoint)) {
-    pushUnique(sideEndHit);
-  }
-
   return out;
 }
 

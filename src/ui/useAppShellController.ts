@@ -12,9 +12,14 @@ const COLLAPSED_W = 40;
 
 export function useAppShellController(): WorkspaceShellProps {
   const activeTool = useGeoStore((store) => store.activeTool);
+  const selectedObject = useGeoStore((store) => store.selectedObject);
+  const textLabels = useGeoStore((store) => store.scene.textLabels ?? []);
   const setActiveTool = useGeoStore((store) => store.setActiveTool);
   const deleteSelectedObject = useGeoStore((store) => store.deleteSelectedObject);
   const clearCopyStyle = useGeoStore((store) => store.clearCopyStyle);
+  const createTextLabel = useGeoStore((store) => store.createTextLabel);
+  const updateSelectedTextLabelFields = useGeoStore((store) => store.updateSelectedTextLabelFields);
+  const updateSelectedTextLabelStyle = useGeoStore((store) => store.updateSelectedTextLabelStyle);
   const undo = useGeoStore((store) => store.undo);
   const redo = useGeoStore((store) => store.redo);
   const canUndo = useGeoStore((store) => store.canUndo);
@@ -36,12 +41,25 @@ export function useAppShellController(): WorkspaceShellProps {
 
   useGlobalCanvasHotkeys({
     activeTool,
+    selectedObject,
+    textLabels,
     onSetMoveTool: () => setActiveTool("move"),
     onClearCopyStyle: clearCopyStyle,
     onDeleteSelectedObject: deleteSelectedObject,
     onUndo: undo,
     onRedo: redo,
     onFitView: doFitView,
+    onPasteTextLabel: (payload, world) => {
+      createTextLabel(world);
+      updateSelectedTextLabelFields({
+        text: payload.text,
+        contentMode: payload.contentMode ?? "static",
+        numberId: payload.numberId,
+        expr: payload.expr,
+        visible: payload.visible,
+      });
+      updateSelectedTextLabelStyle({ ...payload.style });
+    },
   });
 
   const { startResize } = useSidebarResize({

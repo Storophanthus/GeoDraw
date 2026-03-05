@@ -142,6 +142,7 @@ export function CanvasView() {
   const moveAngleLabelTo = useGeoStore((store) => store.moveAngleLabelTo);
   const moveObjectLabelTo = useGeoStore((store) => store.moveObjectLabelTo);
   const moveTextLabelTo = useGeoStore((store) => store.moveTextLabelTo);
+  const moveTextLabelByWorldDelta = useGeoStore((store) => store.moveTextLabelByWorldDelta);
   const enableObjectLabel = useGeoStore((store) => store.enableObjectLabel);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
@@ -402,7 +403,7 @@ export function CanvasView() {
     return findBestSnap(hoverScreen, camera, vp, scene, POINT_HIT_TOLERANCE_PX, SNAP_OP_BUDGET_PER_FRAME);
   }, [hoverScreen, scene, snapDisabled]);
 
-  const hoveredTargetValid = isValidTarget(activeTool, pendingSelection, hoveredHit);
+  const hoveredTargetValid = isValidTarget(activeTool, pendingSelection, hoveredHit, hoverSnap);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -545,6 +546,7 @@ export function CanvasView() {
       moveAngleLabelTo,
       moveObjectLabelTo,
       moveTextLabelTo,
+      moveTextLabelByWorldDelta,
       setHoverScreen,
       setSnapDisabled,
       setCursorWorld,
@@ -564,6 +566,7 @@ export function CanvasView() {
         angleLabelOverlays={angleLabelOverlays}
         objectLabelOverlays={objectLabelOverlays}
         textLabelOverlays={textLabelOverlays}
+        selectedTextLabelId={selectedObject?.type === "textLabel" ? selectedObject.id : null}
       />
     </div>
   );

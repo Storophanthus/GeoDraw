@@ -96,6 +96,10 @@ function normalizeAngleMark(mark: AngleMark): AngleMark {
     markPos: Number.isFinite(mark.markPos) ? clampUnit(mark.markPos) : 0.5,
     markSize: Number.isFinite(mark.markSize) ? Math.max(0.1, mark.markSize) : 4,
     markColor: mark.markColor,
+    distribution: mark.distribution === "multi" ? "multi" : "single",
+    startPos: Number.isFinite(mark.startPos) ? clampUnit(mark.startPos as number) : undefined,
+    endPos: Number.isFinite(mark.endPos) ? clampUnit(mark.endPos as number) : undefined,
+    step: Number.isFinite(mark.step) ? Math.max(0.001, Math.min(1, mark.step as number)) : undefined,
   };
 }
 
@@ -121,5 +125,32 @@ export function resolveAngleMarks(style: AngleStyle): AngleMark[] {
     if (!normalized.enabled) continue;
     out.push(normalized);
   }
+  return out;
+}
+
+export function collectAngleMarkPositions(
+  mark: Pick<AngleMark, "distribution" | "markPos" | "startPos" | "endPos" | "step">,
+  fallbackPos = 0.5
+): number[] {
+  const distribution = mark.distribution ?? "single";
+  if (distribution !== "multi") {
+    const pos = Number.isFinite(mark.markPos) ? (mark.markPos as number) : fallbackPos;
+    return [clampUnit(pos)];
+  }
+  let start = Number.isFinite(mark.startPos) ? clampUnit(mark.startPos as number) : 0.45;
+  let end = Number.isFinite(mark.endPos) ? clampUnit(mark.endPos as number) : 0.55;
+  if (end < start) {
+    const t = start;
+    start = end;
+    end = t;
+  }
+  const step = Number.isFinite(mark.step) ? Math.max(0.001, Math.min(1, mark.step as number)) : 0.05;
+  const out: number[] = [];
+  for (let i = 0; i < 500; i += 1) {
+    const t = start + i * step;
+    if (t > end + 1e-9) break;
+    out.push(clampUnit(roundDecimal(t, 12)));
+  }
+  if (out.length === 0) out.push(clampUnit(Number.isFinite(mark.markPos) ? (mark.markPos as number) : fallbackPos));
   return out;
 }

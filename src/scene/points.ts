@@ -39,6 +39,7 @@ export type { NumberExpressionEvalResult } from "./eval/numericExpression";
 export type { AngleExpressionEvalResult } from "./eval/expressionEval";
 export type { SceneEvalStats } from "./eval/evalContext";
 export {
+  collectAngleMarkPositions,
   collectSegmentMarkPositions,
   resolveAngleMarks,
   resolveSegmentMarkAnchorPos,
@@ -164,6 +165,10 @@ export type AngleMark = {
   markPos: number;
   markSize: number;
   markColor?: string;
+  distribution?: "single" | "multi";
+  startPos?: number;
+  endPos?: number;
+  step?: number;
 };
 
 export type AngleStyle = {
@@ -276,6 +281,9 @@ export type PointOnCircle = {
   auxiliary?: boolean;
   circleId: string;
   t: number;
+  // Optional sector ownership for arc-clamped dragging.
+  // When set, drag updates keep this point on the referenced sector arc.
+  sectorArcId?: string;
   style: PointStyle;
 };
 

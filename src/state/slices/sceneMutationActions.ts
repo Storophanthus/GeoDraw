@@ -33,6 +33,7 @@ export function createSceneMutationActions({
   | "moveAngleLabelTo"
   | "moveObjectLabelTo"
   | "moveTextLabelTo"
+  | "moveTextLabelByWorldDelta"
   | "enableObjectLabel"
   | "updateSelectedPointStyle"
   | "updateSelectedPointFields"
@@ -255,6 +256,31 @@ export function createSceneMutationActions({
             ...prev.scene,
             textLabels: (prev.scene.textLabels ?? []).map((label) =>
               label.id === id ? { ...label, positionWorld: { x: world.x, y: world.y } } : label
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: `moveTextLabelTo:${id}` }
+      );
+    },
+
+    moveTextLabelByWorldDelta(id, deltaWorld) {
+      if (!Number.isFinite(deltaWorld.x) || !Number.isFinite(deltaWorld.y)) return;
+      if (Math.abs(deltaWorld.x) <= 1e-12 && Math.abs(deltaWorld.y) <= 1e-12) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels: (prev.scene.textLabels ?? []).map((label) =>
+              label.id === id
+                ? {
+                    ...label,
+                    positionWorld: {
+                      x: label.positionWorld.x + deltaWorld.x,
+                      y: label.positionWorld.y + deltaWorld.y,
+                    },
+                  }
+                : label
             ),
           },
         }),
@@ -1217,10 +1243,43 @@ function movePointToWorldInScene(
     const geom = getCircleWorldGeometry(circle, scene);
     if (!geom) return point;
     const pr = projectPointToCircle(world, geom.center, geom.radius);
-    return { ...point, t: pr.t };
+    const nextT = clampPointOnCircleToSectorArc(pr.t, point, scene, geom.center);
+    return { ...point, t: nextT };
   }
 
   return point;
+}
+
+function clampPointOnCircleToSectorArc(
+  t: number,
+  point: SceneModel["points"][number],
+  scene: SceneModel,
+  circleCenter: Vec2
+): number {
+  if (point.kind !== "pointOnCircle" || !point.sectorArcId) return t;
+  const sector = scene.angles.find((angle) => angle.id === point.sectorArcId && angle.kind === "sector");
+  if (!sector) return t;
+  const centerWorld = getPointWorldById(scene, sector.bId);
+  const startWorld = getPointWorldById(scene, sector.aId);
+  const endWorld = getPointWorldById(scene, sector.cId);
+  if (!centerWorld || !startWorld || !endWorld) return t;
+  // Ensure the sector still shares the same supporting circle center.
+  if (Math.hypot(centerWorld.x - circleCenter.x, centerWorld.y - circleCenter.y) > 1e-6) return t;
+  const start = Math.atan2(startWorld.y - centerWorld.y, startWorld.x - centerWorld.x);
+  const end = Math.atan2(endWorld.y - centerWorld.y, endWorld.x - centerWorld.x);
+  const sweep = normalizeAngleRad(end - start);
+  if (!Number.isFinite(sweep)) return t;
+  const rel = normalizeAngleRad(t - start);
+  const clampedRel = Math.max(0, Math.min(rel, sweep));
+  return start + clampedRel;
+}
+
+function normalizeAngleRad(value: number): number {
+  const full = Math.PI * 2;
+  let out = value;
+  while (out < 0) out += full;
+  while (out >= full) out -= full;
+  return out;
 }
 
 function circleStyleFromLineStyle(style: LineStyle): CircleStyle {

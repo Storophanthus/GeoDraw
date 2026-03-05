@@ -32,6 +32,7 @@ type DragUpdateOps = {
     world: Vec2
   ) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
+  moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   screenToWorld: (screen: Vec2) => Vec2;
   screenDeltaToWorldDelta: (delta: Vec2) => Vec2;
 };
@@ -95,9 +96,10 @@ export function applyBufferedDragUpdate(
   }
 
   if (st.mode === "drag-text-label" && st.pointId) {
-    const textLabelScreen = buffers.getAngleLabelScreen();
-    if (textLabelScreen) {
-      ops.moveTextLabelTo(st.pointId, ops.screenToWorld(textLabelScreen));
+    const panDelta = buffers.getPanDelta();
+    if (panDelta.x !== 0 || panDelta.y !== 0) {
+      ops.moveTextLabelByWorldDelta(st.pointId, ops.screenDeltaToWorldDelta(panDelta));
+      buffers.setPanDelta({ x: 0, y: 0 });
     }
     return;
   }
@@ -162,7 +164,11 @@ export function bufferDragForMode(
   }
 
   if (st.mode === "drag-text-label" && st.pointId) {
-    buffers.setAngleLabelScreen(screen);
+    const panDelta = buffers.getPanDelta();
+    buffers.setPanDelta({
+      x: panDelta.x + dx,
+      y: panDelta.y + dy,
+    });
     return true;
   }
 

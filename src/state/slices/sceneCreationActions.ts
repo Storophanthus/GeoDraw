@@ -345,7 +345,7 @@ export function createSceneCreationActions(
       return createdId;
     },
 
-    createPointOnCircle(circleId, t) {
+    createPointOnCircle(circleId, t, options) {
       let createdId: string | null = null;
       ctx.setState((prev) => {
         const circle = prev.scene.circles.find((item) => item.id === circleId);
@@ -370,6 +370,7 @@ export function createSceneCreationActions(
                 auxiliary: false,
                 circleId,
                 t,
+                sectorArcId: typeof options?.sectorArcId === "string" ? options.sectorArcId : undefined,
                 style: {
                   ...prev.pointDefaults,
                   labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
@@ -593,6 +594,13 @@ export function createSceneCreationActions(
     createIntersectionPoint(objA, objB, preferredWorld) {
       let createdId: string | null = null;
       ctx.setState((prev) => {
+        const angleA = objA.type === "angle" ? prev.scene.angles.find((angle) => angle.id === objA.id) : null;
+        const angleB = objB.type === "angle" ? prev.scene.angles.find((angle) => angle.id === objB.id) : null;
+        // Plain angle marks are not geometric loci; only sector arcs are intersectable.
+        if ((angleA && angleA.kind !== "sector") || (angleB && angleB.kind !== "sector")) {
+          return prev;
+        }
+
         const existingId = ctx.findExistingIntersectionPointId(prev, objA, objB, preferredWorld);
         if (existingId) {
           createdId = existingId;

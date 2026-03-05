@@ -337,7 +337,7 @@ export type GeoActions = {
   createRegularPolygon: (aId: string, bId: string, sides: number, direction: AngleFixedDirection) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
-  createPointOnCircle: (circleId: string, t: number) => string | null;
+  createPointOnCircle: (circleId: string, t: number, options?: { sectorArcId?: string }) => string | null;
   createPointByRotation: (
     centerId: string,
     basePointId: string,
@@ -360,6 +360,7 @@ export type GeoActions = {
   moveAngleLabelTo: (id: string, world: Vec2) => void;
   moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon" | "angle"; id: string }, world: Vec2) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
+  moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
 
   setPointDefaults: (next: Partial<PointStyle>) => void;

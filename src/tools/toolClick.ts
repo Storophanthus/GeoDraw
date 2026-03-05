@@ -44,7 +44,7 @@ export type ToolClickIO = {
   createMidpointFromSegment: (segId: string) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
-  createPointOnCircle: (circleId: string, t: number) => string | null;
+  createPointOnCircle: (circleId: string, t: number, options?: { sectorArcId?: string }) => string | null;
   createPointByRotation: (
     centerId: string,
     basePointId: string,
@@ -99,6 +99,27 @@ export function handleToolClick(
   const maybeSnapWorldToGrid = (world: Vec2): Vec2 =>
     io.gridSnapEnabled && !hits.shiftKey ? io.snapWorldToGrid(world) : world;
 
+  const resolveCircleIdFromSectorSnap = (snap: SnapCandidate | null): string | null => {
+    if (snap?.kind !== "onSectorArc" || !snap.sectorCenterId || !snap.sectorStartId) return null;
+    return io.createAuxiliaryCircle(snap.sectorCenterId, snap.sectorStartId);
+  };
+
+  const resolveCircleIdFromHits = (): string | null => {
+    if (hits.snap?.kind === "onCircle" && hits.snap.circleId) return hits.snap.circleId;
+    const sectorCircleId = resolveCircleIdFromSectorSnap(hits.snap);
+    if (sectorCircleId) return sectorCircleId;
+    if (hits.hitObject?.type === "circle") return hits.hitObject.id;
+    return null;
+  };
+
+  const resolveLineLikeRefFromHits = (): LineLikeObjectRef | null => {
+    if (hits.snap?.kind === "onLine" && hits.snap.lineId) return { type: "line", id: hits.snap.lineId };
+    if (hits.snap?.kind === "onSegment" && hits.snap.segId) return { type: "segment", id: hits.snap.segId };
+    if (hits.hitObject?.type === "line") return { type: "line", id: hits.hitObject.id };
+    if (hits.hitObject?.type === "segment") return { type: "segment", id: hits.hitObject.id };
+    return null;
+  };
+
   const createPointFromSectorArcSnap = (snap: SnapCandidate): string | null => {
     if (
       snap.kind !== "onSectorArc"
@@ -121,7 +142,7 @@ export function handleToolClick(
     const centerWorld = io.getPointWorldById(snap.sectorCenterId);
     if (supportCircleId && centerWorld) {
       const t = Math.atan2(snap.world.y - centerWorld.y, snap.world.x - centerWorld.x);
-      const created = io.createPointOnCircle(supportCircleId, t);
+      const created = io.createPointOnCircle(supportCircleId, t, { sectorArcId: snap.sectorId });
       if (created) return created;
     }
     return io.createPointByRotation(
@@ -639,6 +660,16 @@ export function handleToolClick(
       return;
     }
 
+    const sectorCenterId =
+      !hits.shiftKey && hits.snap?.kind === "onSectorArc" && hits.snap.sectorCenterId
+        ? hits.snap.sectorCenterId
+        : null;
+    if (sectorCenterId) {
+      io.setSelectedObject({ type: "point", id: sectorCenterId });
+      io.clearPendingSelection();
+      return;
+    }
+
     if (hits.hitObject?.type === "circle") {
       const centerId = io.createCircleCenterPoint(hits.hitObject.id);
       if (!centerId) return;
@@ -652,11 +683,7 @@ export function handleToolClick(
   }
 
   if (activeTool === "perp_line") {
-    const hitLineLikeRef = hits.hitObject?.type === "line"
-      ? ({ type: "line", id: hits.hitObject.id } as const)
-      : hits.hitObject?.type === "segment"
-        ? ({ type: "segment", id: hits.hitObject.id } as const)
-        : null;
+    const hitLineLikeRef = resolveLineLikeRefFromHits();
 
     if (!pendingSelection || pendingSelection.tool !== "perp_line") {
       if (hits.hitPointId) {
@@ -685,11 +712,7 @@ export function handleToolClick(
   }
 
   if (activeTool === "parallel_line") {
-    const hitLineLikeRef = hits.hitObject?.type === "line"
-      ? ({ type: "line", id: hits.hitObject.id } as const)
-      : hits.hitObject?.type === "segment"
-        ? ({ type: "segment", id: hits.hitObject.id } as const)
-        : null;
+    const hitLineLikeRef = resolveLineLikeRefFromHits();
 
     if (!pendingSelection || pendingSelection.tool !== "parallel_line") {
       if (hits.hitPointId) {
@@ -718,12 +741,7 @@ export function handleToolClick(
   }
 
   if (activeTool === "tangent_line") {
-    const hitCircleId =
-      hits.snap?.kind === "onCircle" && hits.snap.circleId
-        ? hits.snap.circleId
-        : hits.hitObject?.type === "circle"
-          ? hits.hitObject.id
-          : null;
+    const hitCircleId = resolveCircleIdFromHits();
 
     if (!pendingSelection || pendingSelection.tool !== "tangent_line") {
       if (hits.hitPointId) {
@@ -804,9 +822,13 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
 export function isValidTarget(
   activeTool: ActiveTool,
   pendingSelection: PendingSelection,
-  hoveredHit: { type: "point" | "segment" | "line2p" | "circle" | "polygon" | "angle"; id: string } | null
+  hoveredHit: { type: "point" | "segment" | "line2p" | "circle" | "polygon" | "angle"; id: string } | null,
+  hoverSnap: SnapCandidate | null = null
 ): boolean {
-  if (!hoveredHit) return false;
+  const hasSectorArcSnap = hoverSnap?.kind === "onSectorArc";
+  if (!hoveredHit) {
+    return (activeTool === "tangent_line" || activeTool === "midpoint") && hasSectorArcSnap;
+  }
 
   if (activeTool === "segment") return hoveredHit.type === "point";
   if (activeTool === "line2p") return hoveredHit.type === "point";
@@ -898,17 +920,17 @@ export function isValidTarget(
   }
   if (activeTool === "tangent_line") {
     if (!pendingSelection || pendingSelection.tool !== "tangent_line") {
-      return hoveredHit.type === "point" || hoveredHit.type === "circle";
+      return hoveredHit.type === "point" || hoveredHit.type === "circle" || hasSectorArcSnap;
     }
     if (pendingSelection.first.type === "point") {
-      return hoveredHit.type === "circle";
+      return hoveredHit.type === "circle" || hasSectorArcSnap;
     }
-    return hoveredHit.type === "point" || hoveredHit.type === "circle";
+    return hoveredHit.type === "point" || hoveredHit.type === "circle" || hasSectorArcSnap;
   }
 
   if (activeTool === "midpoint") {
     if (pendingSelection?.tool === "midpoint") return hoveredHit.type === "point";
-    return hoveredHit.type === "segment" || hoveredHit.type === "point" || hoveredHit.type === "circle";
+    return hoveredHit.type === "segment" || hoveredHit.type === "point" || hoveredHit.type === "circle" || hasSectorArcSnap;
   }
 
   return false;

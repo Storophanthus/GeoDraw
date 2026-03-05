@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { type AngleMark } from "../../scene/points";
+import { MarkSymbolPicker } from "./MarkSymbolPicker";
 
 export const DEFAULT_ANGLE_MARK: AngleMark = {
     enabled: true,
@@ -179,23 +180,17 @@ export function AngleMarkControl({
                     </div>
                     <div className="controlRow">
                         <label className="controlLabel">Bar Symbol</label>
-                        <select
-                            className="selectInput"
-                            value={selectedAngleMark.markSymbol ?? "none"}
-                            onChange={(e) => {
+                        <MarkSymbolPicker
+                            value={(selectedAngleMark.markSymbol ?? "none") as "none" | "|" | "||" | "|||"}
+                            onChange={(markSymbol) => {
                                 const nextMarks = [...resolvedAngleMarks];
                                 nextMarks[selectedAngleMarkIndex] = {
                                     ...selectedAngleMark,
-                                    markSymbol: e.target.value as "none" | "|" | "||" | "|||",
+                                    markSymbol,
                                 };
                                 commitAngleMarks(nextMarks);
                             }}
-                        >
-                            <option value="none">None</option>
-                            <option value="|">|</option>
-                            <option value="||">||</option>
-                            <option value="|||">|||</option>
-                        </select>
+                        />
                     </div>
                     <div className="controlRow">
                         <label className="controlLabel">Mark Position</label>

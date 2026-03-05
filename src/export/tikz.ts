@@ -2,6 +2,7 @@ import { circleCircleIntersections, distance, lineCircleIntersectionBranches } f
 import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import { normalizeSceneIntegrity } from "../domain/sceneIntegrity";
 import {
+  collectAngleMarkPositions,
   collectSegmentMarkPositions,
   computeOrientedAngleRad,
   type AngleMarkSymbol,
@@ -1552,14 +1553,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   for (const point of scene.points) {
     const pointWorld = getPointWorldPosCached(scene, point.id);
-    // Hidden undefined points (e.g. intersections on vanished tangents) should not
-    // poison export. Visible undefined points fail closed to avoid silent data loss.
-    if (!pointWorld) {
-      if (point.visible) {
-        throw new Error(`Cannot export visible undefined point ${point.name}: ${point.id}`);
-      }
-      continue;
-    }
+    // Dynamic intersections can legitimately become undefined under drag.
+    // Skip undefined points (even visible ones) and let remaining defined
+    // geometry export normally.
+    if (!pointWorld) continue;
     resolvePoint(point.id);
   }
 
@@ -1812,9 +1809,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       });
       const sectorRadius = distance(aWorld, bWorld);
       const sectorStart = Math.atan2(aWorld.y - bWorld.y, aWorld.x - bWorld.x);
+      const sectorArcPath = arcPathExprFromWorld(bWorld, sectorRadius, sectorStart, theta, `(${aName})`);
       const sectorArrowOverlay = pathArrowOverlayToTikz(
         angle.style.arcArrowMarks ?? angle.style.arcArrowMark,
-        arcPathExprFromWorld(bWorld, sectorRadius, sectorStart, theta, `(${aName})`),
+        sectorArcPath,
         {
           strokeColor: angle.style.strokeColor,
           strokeWidth: angle.style.strokeWidth,
@@ -1835,6 +1833,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       );
       if (sectorArrowOverlay) {
         drawOverlays.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
+      }
+      const sectorMarkOverlay = sectorMarksToTikz(
+        angle.style,
+        sectorArcPath,
+        {
+          strokeColor: angle.style.strokeColor,
+          strokeWidth: angle.style.strokeWidth,
+          opacity: angle.style.strokeOpacity,
+        },
+        options
+      );
+      if (sectorMarkOverlay) {
+        drawOverlays.push({ kind: "DrawRaw", tex: sectorMarkOverlay });
       }
       continue;
     }
@@ -2024,7 +2035,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const text = label.style.useTex ? displayText : wrapPlainTextForMathMode(displayText);
     // Free text labels are emitted as raw TikZ nodes (\node), which are not affected
     // by tikzpicture scale. Fold final export geometry scale into these labels only.
-    const fontPt = Math.max(1, Math.min(72, label.style.textSize * coordScale));
+    // Calibration factor keeps exported free-text labels visually aligned with canvas size.
+    const textLabelFontScale = 0.82;
+    const fontPt = Math.max(1, Math.min(72, label.style.textSize * coordScale * textLabelFontScale));
     const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
     const rotationDeg =
       typeof label.style.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
@@ -3621,6 +3634,57 @@ function pathArrowOverlayToTikz(
   }
 
   return results.length > 0 ? results.join("\n") : null;
+}
+
+function sectorMarksToTikz(
+  style: SceneModel["angles"][number]["style"],
+  pathExpr: string,
+  base: { strokeColor: string; strokeWidth: number; opacity: number },
+  options: TikzExportOptions
+): string | null {
+  const marks = resolveAngleMarks(style);
+  if (marks.length === 0) return null;
+  const lineWidthPt = strokeWidthToTikzPt(base.strokeWidth, options);
+  const overlays: string[] = [];
+  for (let i = 0; i < marks.length; i += 1) {
+    const mark = marks[i];
+    const markCommand = sectorMarkSymbolCommandToTikz(
+      mark.markSymbol,
+      Math.max(0.2, (mark.markSize ?? 1.2) * CANVAS_PX_TO_TIKZ_PT),
+      rgbColorExpr(mark.markColor ?? style.markColor ?? base.strokeColor),
+      lineWidthPt,
+      normalizedOpacity(base.opacity)
+    );
+    if (!markCommand) continue;
+    const positions = collectAngleMarkPositions(mark, style.markPos ?? 0.5);
+    if (positions.length === 0) continue;
+    const markEntries = positions
+      .map((pos) => `mark=at position ${fmt(clamp01(pos))} with {${markCommand}}`)
+      .join(",");
+    overlays.push(`\\path[postaction=decorate,decoration={markings,${markEntries}}] ${pathExpr};`);
+  }
+  return overlays.length > 0 ? overlays.join("\n") : null;
+}
+
+function sectorMarkSymbolCommandToTikz(
+  symbol: AngleMarkSymbol,
+  sizePt: number,
+  colorExpr: string,
+  lineWidthPt: number,
+  opacity: number
+): string | null {
+  const count = symbol === "|" ? 1 : symbol === "||" ? 2 : symbol === "|||" ? 3 : 0;
+  if (count === 0) return null;
+  const tickHalf = Math.max(0.2, sizePt * 2.2);
+  const gap = Math.max(0.2, sizePt * 0.85);
+  const offsets = count === 1 ? [0] : count === 2 ? [-gap * 0.5, gap * 0.5] : [-gap, 0, gap];
+  const drawOpts = [`color=${colorExpr}`, `line width=${fmt(Math.max(0.1, lineWidthPt))}pt`, "line cap=round"];
+  if (opacity < 0.999) drawOpts.push(`opacity=${fmt(opacity)}`);
+  return offsets
+    .map((offset) => {
+      return `\\draw[${drawOpts.join(", ")}] (${fmt(offset)}pt,${fmt(-tickHalf)}pt) -- (${fmt(offset)}pt,${fmt(tickHalf)}pt);`;
+    })
+    .join("");
 }
 
 function computePathArrowPairDelta(

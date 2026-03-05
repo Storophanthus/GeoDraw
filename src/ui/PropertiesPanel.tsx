@@ -373,9 +373,9 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
       )}
       {selectedAngle && (
         <div className="toolInfo">
-          <div className="subSectionTitle">Angle</div>
+          <div className="subSectionTitle">{selectedAngle.kind === "sector" ? "Sector" : "Angle"}</div>
           <div className="detailRow">
-            <span className="detailLabel">Value</span>
+            <span className="detailLabel">{selectedAngle.kind === "sector" ? "Sweep" : "Value"}</span>
             <span>{selectedAngleDegrees === null ? "undefined" : `${selectedAngleDegrees}°`}</span>
           </div>
         </div>
