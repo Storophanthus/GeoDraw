@@ -213,6 +213,23 @@ input[type="range"] {
   height: 100%;
 }
 
+.canvasStackDropActive::after {
+  content: "Drop .geodraw or .json to open";
+  position: absolute;
+  inset: 18px;
+  border: 2px dashed var(--gd-ui-accent, #8a5a2b);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--gd-ui-accent-bg, #ecd8b4) 36%, transparent);
+  color: var(--gd-ui-text-strong, #2e271f);
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 70;
+}
+
 .canvasTopActions {
   position: absolute;
   top: 10px;
@@ -1985,6 +2002,39 @@ body.sidebar-resizing * {
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
+}
+
+.pdfPreviewContextMenu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--gd-ui-border-panel, #d7dfe8);
+  border-radius: 10px;
+  background: var(--gd-ui-surface, #fff);
+  box-shadow: 0 8px 24px var(--gd-ui-shadow-strong, rgba(15, 23, 42, 0.2));
+  padding: 6px;
+}
+
+.pdfPreviewContextMenuItem {
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gd-ui-text, #334155);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.pdfPreviewContextMenuItem:hover,
+.pdfPreviewContextMenuItem:focus-visible {
+  background: var(--gd-ui-surface-soft, #f8fafc);
+  color: var(--gd-ui-text-strong, #0f172a);
+  outline: none;
 }
 
 .previewCodePane .previewEditorArea {
