@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -105,7 +106,10 @@ fn compile_tex_document(tex_path: &Path, work_dir: &Path) -> Result<CompileRunRe
                 engine: run.binary,
             });
         }
-        return Err(format!("TeX compilation failed.\n\n{}", run.log));
+        let lowered = run.log.to_lowercase();
+        if !lowered.contains("pdflatex: command not found") {
+            return Err(format!("TeX compilation failed.\n\n{}", run.log));
+        }
     }
 
     let pdflatex_args = vec![
@@ -167,15 +171,52 @@ fn run_command(
     args: &[String],
     work_dir: &Path,
 ) -> Result<RunAttempt, std::io::Error> {
-    let output = Command::new(binary)
-        .args(args)
-        .current_dir(work_dir)
-        .output()?;
+    let mut command = Command::new(binary);
+    command.args(args).current_dir(work_dir);
+    augment_command_path(&mut command, binary);
+    let output = command.output()?;
     Ok(RunAttempt {
         binary: binary.to_string(),
         ok: output.status.success(),
         log: build_process_log(binary, args, &output),
     })
+}
+
+fn augment_command_path(command: &mut Command, binary: &str) {
+    let mut entries: Vec<PathBuf> = Vec::new();
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+
+    let mut push_entry = |path: PathBuf| {
+        if path.as_os_str().is_empty() {
+            return;
+        }
+        if seen.insert(path.clone()) {
+            entries.push(path);
+        }
+    };
+
+    if let Some(parent) = Path::new(binary).parent() {
+        if !parent.as_os_str().is_empty() {
+            push_entry(parent.to_path_buf());
+        }
+    }
+
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for path in std::env::split_paths(&path_var) {
+            push_entry(path);
+        }
+    }
+
+    for extra in ["/Library/TeX/texbin", "/usr/texbin"] {
+        let extra_path = PathBuf::from(extra);
+        if extra_path.exists() {
+            push_entry(extra_path);
+        }
+    }
+
+    if let Ok(joined) = std::env::join_paths(entries) {
+        command.env("PATH", joined);
+    }
 }
 
 fn build_process_log(binary: &str, args: &[String], output: &Output) -> String {
