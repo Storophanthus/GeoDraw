@@ -40,6 +40,42 @@ For desktop app development:
 npm run tauri
 ```
 
+## Windows Setup
+
+### Option A: Try instantly (web)
+
+- Open: `https://storophanthus.github.io/GeoDraw/`
+
+### Option B: Run desktop app (Tauri)
+
+Install prerequisites:
+
+1. Node.js LTS
+2. Rust (stable, MSVC toolchain)
+3. Visual Studio Build Tools (Desktop development with C++)
+
+Then run:
+
+```bash
+npm ci
+npm run tauri
+```
+
+### TeX compiler on Windows (for PDF Preview compile)
+
+GeoDraw desktop currently looks for `latexmk`/`pdflatex` on `PATH` (plus macOS fixed paths).  
+On Windows, install MiKTeX or TeX Live and ensure binaries are available on `PATH`.
+
+Check in PowerShell:
+
+```powershell
+where.exe latexmk
+where.exe pdflatex
+```
+
+If both commands return paths, GeoDraw should be able to compile TikZ previews.
+If not, add your TeX `bin` folder to PATH and restart the app/terminal.
+
 ## Web Deployment (GitHub Pages)
 
 This repo now includes automatic deployment to GitHub Pages via:
