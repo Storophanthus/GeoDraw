@@ -3,6 +3,8 @@ import {
     Copy,
     Hash,
     Layers,
+    Lock,
+    LockOpen,
     Type as TypeIcon,
 } from "lucide-react";
 import type { SceneModel } from "../scene/points";
@@ -49,6 +51,7 @@ function tabForSelectedObject(selected: SelectedObject | null, scene?: SceneMode
 
 export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: ObjectBrowserProps) {
     const [activeTab, setActiveTab] = useState<TabId>("all");
+    const [tabPinned, setTabPinned] = useState(false);
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
     const objectRowRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
     const lastSelectionKeyRef = useRef<string | null>(null);
@@ -66,13 +69,14 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
     const setDependencyGlowEnabled = useGeoStore((store) => store.setDependencyGlowEnabled);
 
     useEffect(() => {
+        if (tabPinned) return;
         const selectionKey = selectedObject ? `${selectedObject.type}:${selectedObject.id}` : null;
         if (selectionKey === lastSelectionKeyRef.current) return;
         lastSelectionKeyRef.current = selectionKey;
         const targetTab = tabForSelectedObject(selectedObject, scene);
         if (!targetTab) return;
         setActiveTab((prev) => (prev === targetTab ? prev : targetTab));
-    }, [selectedObject, scene]);
+    }, [selectedObject, scene, tabPinned]);
 
     useEffect(() => {
         if (!selectedObject) return;
@@ -475,6 +479,16 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                         <tab.icon size={18} strokeWidth={2} />
                     </button>
                 ))}
+                <button
+                    type="button"
+                    className={tabPinned ? "objectBrowserTab objectBrowserTabPin active" : "objectBrowserTab objectBrowserTabPin"}
+                    title={tabPinned ? "Unpin tab (resume auto-follow)" : "Pin current tab (pause auto-follow)"}
+                    aria-label={tabPinned ? "Unpin current object tab" : "Pin current object tab"}
+                    aria-pressed={tabPinned}
+                    onClick={() => setTabPinned((prev) => !prev)}
+                >
+                    {tabPinned ? <Lock size={16} strokeWidth={2.1} /> : <LockOpen size={16} strokeWidth={2.1} />}
+                </button>
             </div>
 
             <div className="objectListScrollArea">
