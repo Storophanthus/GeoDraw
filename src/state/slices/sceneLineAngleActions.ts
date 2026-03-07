@@ -5,6 +5,7 @@ import {
   evaluateAngleExpressionDegrees,
   getLineWorldAnchors,
   getPointWorldPos,
+  isRightAngle,
   nextLabelFromIndex,
 } from "../../scene/points";
 import type { SceneModel } from "../../scene/points";
@@ -20,6 +21,18 @@ import type { GeoActions, GeoState } from "./storeTypes";
 type SceneLineAngleContext = {
   setState: (updater: (prev: GeoState) => GeoState, options?: SetStateOptions) => void;
 };
+
+const ANGLE_LABEL_MIN_DIST = 0.35;
+const ANGLE_LABEL_OFFSET = 0.4;
+const NON_RIGHT_ANGLE_LABEL_DIST_SCALE = 0.65;
+const RIGHT_ANGLE_LABEL_DIST_SCALE = 0.35;
+const RIGHT_ANGLE_APPROX_EPS = 1e-2;
+
+function defaultAngleLabelDist(arcRadius: number, rightLike: boolean): number {
+  const base = Math.max(ANGLE_LABEL_MIN_DIST, arcRadius - ANGLE_LABEL_OFFSET);
+  const scale = rightLike ? RIGHT_ANGLE_LABEL_DIST_SCALE : NON_RIGHT_ANGLE_LABEL_DIST_SCALE;
+  return Math.max(ANGLE_LABEL_MIN_DIST, base * scale);
+}
 
 export function createSceneLineAngleActions(
   ctx: SceneLineAngleContext
@@ -419,10 +432,11 @@ export function createSceneLineAngleActions(
         const theta = computeOrientedAngleRad(wa, wb, wc);
         if (theta === null) return prev;
         const isRightExact = isRightExactByProvenance(prev.scene, aId, bId, cId);
+        const isRightLike = isRightExact || isRightAngle(wa, wb, wc, RIGHT_ANGLE_APPROX_EPS);
         const start = Math.atan2(wa.y - wb.y, wa.x - wb.x);
         const mid = start + theta * 0.5;
         const dir = { x: Math.cos(mid), y: Math.sin(mid) };
-        const labelDist = Math.max(0.35, prev.angleDefaults.arcRadius - 0.4);
+        const labelDist = defaultAngleLabelDist(prev.angleDefaults.arcRadius, isRightLike);
         const labelPosWorld = { x: wb.x + dir.x * labelDist, y: wb.y + dir.y * labelDist };
         const markStyle =
           isRightExact && prev.angleDefaults.markStyle === "arc" ? "rightSquare" : prev.angleDefaults.markStyle;
@@ -613,7 +627,8 @@ export function createSceneLineAngleActions(
         if (oriented === null) return prev;
         const start = Math.atan2(angleAWorld.y - wv.y, angleAWorld.x - wv.x);
         const mid = start + oriented * 0.5;
-        const labelDist = Math.max(0.35, prev.angleDefaults.arcRadius - 0.4);
+        const isRightLike = isRightAngle(angleAWorld, wv, angleCWorld, RIGHT_ANGLE_APPROX_EPS);
+        const labelDist = defaultAngleLabelDist(prev.angleDefaults.arcRadius, isRightLike);
         const labelPosWorld = { x: wv.x + Math.cos(mid) * labelDist, y: wv.y + Math.sin(mid) * labelDist };
         const angleAId = direction === "CCW" ? basePointId : pointId;
         const angleCId = direction === "CCW" ? pointId : basePointId;
