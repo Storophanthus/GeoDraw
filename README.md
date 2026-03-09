@@ -12,6 +12,16 @@ This repository contains the app core: geometry engine, scene/state model, const
 - TikZ/tkz-euclide export with preview window, editable `tikzpicture`, optional preamble, and compiler log.
 - Desktop runtime via Tauri with file operations and PDF compilation flow.
 
+## Recent Feature Highlights
+
+- Inversion transform tool for line/circle inversion about a selected circle.
+- Transform-generated objects keep source styling (color, stroke, labels, marks/arrows) for parity workflows.
+- Object Browser linking for batch edits/deletes on same-type objects, including `Shift + ArrowUp/ArrowDown` link expansion.
+- Line properties now include `Convert to Segment` (single and linked-multi), which hides eligible source lines and creates matching segments.
+- Command bar additions: `Circumcenter(A,B,C)`, `Perimeter(...)`, `Inradius(A,B,C)`, `Circumradius(A,B,C)`.
+- Canvas drag-and-drop open for `.geodraw`/`.json` snapshots.
+- TikZ preview PDF pane supports right-click save as PDF/SVG/PNG.
+
 ## Documentation
 
 - User manual (LaTeX source): `docs/user-manual.tex`

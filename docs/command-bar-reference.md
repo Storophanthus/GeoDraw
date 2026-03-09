@@ -10,9 +10,16 @@
   - `asin(1)`
   - `sind(30)`
   - `atan2d(4,3)`
+  - `Perimeter(A,B,C)`
+  - `Inradius(A,B,C)`
+  - `Circumradius(A,B,C)`
+  - `Perimeter(c_1)`
 - Supported constants:
   - `pi`, `Pi`, `PI`, `e`, `tau`, `ans`
 - Supported functions:
+  - `Distance`
+  - `Area`, `Perimeter`
+  - `Inradius`, `Circumradius`
   - `sin`, `cos`, `tan`
   - `Sin`, `Cos`, `Tan`
   - `sind`, `cosd`, `tand`
@@ -29,6 +36,9 @@ Notes:
 - `atan2(y,x)` uses the standard `(y, x)` argument order.
 - `atan2d(y,x)` uses the same `(y, x)` argument order and returns degrees.
 - `ans` is the last numeric expression result.
+- Geometry scalar functions are case-sensitive (`Distance`, `Area`, `Perimeter`, `Inradius`, `Circumradius`).
+- `Perimeter(x)` with 1 argument accepts a circle/polygon alias; `Perimeter(A,B,C)` returns triangle perimeter.
+- `Area(x)` expects 1 circle/polygon argument.
 
 ## Constructors
 - `Point(x,y)`
@@ -37,6 +47,7 @@ Notes:
 - `Incenter(A,B,C)`
 - `Orthocenter(A,B,C)` (alias: `Ortho(A,B,C)`)
 - `Centroid(A,B,C)`
+- `Circumcenter(A,B,C)`
 - `Translate(P,A,B)`
 - `Rotate(P,O,expr[,CW|CCW])`
 - `Dilate(P,O,k)`
@@ -70,6 +81,7 @@ Notes:
   - `I = Incenter(A,B,C)`
   - `H = Orthocenter(A,B,C)`
   - `G = Centroid(A,B,C)`
+  - `O = Circumcenter(A,B,C)`
   - `T = Translate(A,B,C)`
   - `R = Rotate(A,O,30,CW)`
   - `D = Dilate(A,O,2)`

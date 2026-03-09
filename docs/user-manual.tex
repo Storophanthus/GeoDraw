@@ -81,6 +81,7 @@ The window is divided into:
   \item \textbf{Open}: load \texttt{.geodraw} or \texttt{.json} snapshot.
   \item \textbf{Save}: overwrite current file if already opened/saved once.
   \item \textbf{Save As}: choose new name/location.
+  \item You can also drag and drop a \texttt{.geodraw}/\texttt{.json} file onto the canvas to open it.
 \end{itemize}
 
 \subsection{Supported file types}
@@ -103,6 +104,7 @@ The window is divided into:
   \item \texttt{Ctrl/Cmd + Shift + Z} or \texttt{Ctrl/Cmd + Y}: Redo
   \item \texttt{Shift + F}: Fit View
   \item \texttt{Delete}/\texttt{Backspace}: delete selected object
+  \item \texttt{Shift + ArrowUp}/\texttt{Shift + ArrowDown} (Object Browser): extend linked selection to previous/next object of the same type
   \item \texttt{Esc}: cancel Copy Style mode / clear pending selections
 \end{itemize}
 
@@ -137,7 +139,9 @@ Long-press or right-click a group button to open its flyout tools.
   \item \gdicon{screenshots/tools/rotate.png} \textbf{Rotate}: rotate object around selected center.
   \item \gdicon{screenshots/tools/reflect.png} \textbf{Reflect}: reflect object across line/segment/point.
   \item \gdicon{screenshots/tools/dilate.png} \textbf{Dilate}: scale object from selected center.
+  \item \textbf{Invert}: invert a source line/circle with respect to a selected inversion circle.
 \end{itemize}
+All transform tools preserve source styling on the transformed image (stroke/fill/marks/arrows/labels).
 
 \subsection{Lines Group}
 \begin{itemize}[leftmargin=1.5em]
@@ -182,13 +186,25 @@ Long-press or right-click a group button to open its flyout tools.
 
 \subsection{Object Browser}
 \begin{itemize}[leftmargin=1.5em]
-  \item Tabs: All, Points, Lines, Circles, Angles, Numbers.
+  \item Tabs: All, Points, Lines, Shapes, Angles, Labels, Numbers.
+  \item Auto-follow: selected object switches to its tab automatically.
+  \item Pin button (lock icon): freeze current tab and disable auto-follow until unpinned.
   \item Click row to select object.
+  \item Link button (chain icon): link/unlink object for batch style/delete operations.
+  \item Linking is type-restricted: linked objects must be the same type (point with point, line with line, etc.).
+  \item \texttt{Shift + ArrowUp}/\texttt{Shift + ArrowDown}: add previous/next same-type row to linked selection.
   \item Use the row checkbox (right side) to toggle object visibility.
 \end{itemize}
 
 \section{Properties Panel}
 When an object is selected, the panel shows editable properties.
+
+\subsection{Linked object editing}
+\begin{itemize}[leftmargin=1.5em]
+  \item Link multiple same-type objects from Object Browser.
+  \item For linked objects, style/field edits in the Properties panel apply to all linked objects of that type.
+  \item The delete action becomes \textbf{Delete All} and removes the linked selection.
+\end{itemize}
 
 \subsection{Point properties}
 \begin{itemize}[leftmargin=1.5em]
@@ -201,6 +217,8 @@ When an object is selected, the panel shows editable properties.
 \begin{itemize}[leftmargin=1.5em]
   \item Stroke color, width, dash, opacity.
   \item Segment marks (\texttt{|}, \texttt{||}, \texttt{|||}, etc.) and arrow marks (end/mid).
+  \item \textbf{Convert to Segment} (line only): hide source \texttt{Line(A,B)} and create \texttt{Segment(A,B)} with matching style/label fields.
+  \item If multiple lines are linked, conversion applies to all linked convertible lines.
 \end{itemize}
 
 \subsection{Arrow controls}
@@ -263,11 +281,11 @@ Command Bar supports expression evaluation, object creation commands, and assign
 
 \subsection{Supported construction commands}
 \begin{itemize}[leftmargin=1.5em]
-  \item \textbf{Point/transform}: \texttt{Point(x,y)}, \texttt{Midpoint(A,B)}, \texttt{Midpoint(s)}, \texttt{Incenter(A,B,C)}, \texttt{Orthocenter(A,B,C)} (\texttt{Ortho}), \texttt{Centroid(A,B,C)}, \texttt{Translate(P,A,B)}, \texttt{Rotate(P,O,expr[,CW|CCW])}, \texttt{Dilate(P,O,k)}, \texttt{Reflect(P,l|s|O)}.
+  \item \textbf{Point/transform}: \texttt{Point(x,y)}, \texttt{Midpoint(A,B)}, \texttt{Midpoint(s)}, \texttt{Incenter(A,B,C)}, \texttt{Orthocenter(A,B,C)} (\texttt{Ortho}), \texttt{Centroid(A,B,C)}, \texttt{Circumcenter(A,B,C)}, \texttt{Translate(P,A,B)}, \texttt{Rotate(P,O,expr[,CW|CCW])}, \texttt{Dilate(P,O,k)}, \texttt{Reflect(P,l|s|O)}.
   \item \textbf{Line/segment}: \texttt{Line(A,B)}, \texttt{Line(x1,y1,x2,y2)}, \texttt{Perpendicular(P,l)}, \texttt{Parallel(P,l)}, \texttt{Tangent(P,c)}, \texttt{AngleBisector(A,B,C)}, \texttt{Segment(A,B)}.
   \item \textbf{Angle/polygon}: \texttt{Angle(A,B,C)}, \texttt{AngleFixed(V,A,expr[,CW|CCW])}, \texttt{Sector(O,A,B)}, \texttt{Polygon(A,B,C,...)}, \texttt{RegularPolygon(A,B,n[,CW|CCW])}.
   \item \textbf{Circle}: \texttt{Circle(x,y,r)}, \texttt{Circle(O,A)}, \texttt{Circle(O,r)}, \texttt{Circle3P(A,B,C)} (alias: \texttt{CircleThreePoint(A,B,C)}).
-  \item \textbf{Numeric query}: \texttt{Distance(...)} returns a scalar value (no object created).
+  \item \textbf{Numeric query}: \texttt{Distance(...)}, \texttt{Area(...)}, \texttt{Perimeter(...)}, \texttt{Inradius(A,B,C)}, \texttt{Circumradius(A,B,C)} return scalar values (no object created).
 \end{itemize}
 
 \subsection{Assignments}
@@ -310,6 +328,7 @@ Press \textbf{Preview} \gdicon{screenshots/icons/pdf-preview.png} in Export to o
   \item \textbf{Optional Preamble} section for custom preamble lines (for example \texttt{\textbackslash pagecolor\{...\}}).
   \item Find/replace tools with case-match option.
   \item \textbf{Update PDF} recompiles, and \textbf{Copy Edited TikZ} copies the edited code.
+  \item Right-click inside PDF preview to save snapshot as \textbf{PDF}, \textbf{SVG}, or \textbf{PNG}.
   \item Compiler log panel is available for diagnostics when compilation fails.
 \end{itemize}
 \gdshot{screenshots/tikz-preview-window.png}{0.95\linewidth}{TikZ Preview window with PDF pane, code editor, and compiler log.}
