@@ -92,6 +92,7 @@ export function PropertiesPanel({
   const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
   const updateLineFieldsByIds = useGeoStore((store) => store.updateLineFieldsByIds);
   const convertSelectedLineToSegment = useGeoStore((store) => store.convertSelectedLineToSegment);
+  const convertLinesToSegmentsByIds = useGeoStore((store) => store.convertLinesToSegmentsByIds);
   const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
   const updateCircleFieldsByIds = useGeoStore((store) => store.updateCircleFieldsByIds);
   const updateSelectedPolygonFields = useGeoStore((store) => store.updateSelectedPolygonFields);
@@ -222,10 +223,6 @@ export function PropertiesPanel({
     () => (selectedAngle ? resolveAngleRightStatus(scene, selectedAngle) : "none"),
     [scene, selectedAngle]
   );
-  const canConvertSelectedLineToSegment = useMemo(
-    () => Boolean(selectedLine && (!selectedLine.kind || selectedLine.kind === "twoPoint")),
-    [selectedLine]
-  );
   const selectedStyleAsDefault = useMemo(() => {
     if (selectedPoint) return pointStyleEqual(pointDefaults, selectedPoint.style);
     if (selectedSegment) return lineStyleEqual(segmentDefaults, selectedSegment.style);
@@ -300,6 +297,22 @@ export function PropertiesPanel({
   );
   const linkedSameTypeIds = useMemo(() => linkedSameType.map((obj) => obj.id), [linkedSameType]);
   const hasLinkedSelection = linkedSameTypeIds.length > 1;
+  const linkedConvertibleLineCount = useMemo(() => {
+    if (selectedObject?.type !== "line") return 0;
+    const lineById = new Map(scene.lines.map((line) => [line.id, line]));
+    let count = 0;
+    for (let i = 0; i < linkedSameTypeIds.length; i += 1) {
+      const line = lineById.get(linkedSameTypeIds[i]);
+      if (!line) continue;
+      if (!line.kind || line.kind === "twoPoint") count += 1;
+    }
+    return count;
+  }, [linkedSameTypeIds, scene.lines, selectedObject]);
+  const canConvertSelectedLineToSegment = useMemo(() => {
+    if (selectedObject?.type !== "line") return false;
+    if (hasLinkedSelection) return linkedConvertibleLineCount > 0;
+    return Boolean(selectedLine && (!selectedLine.kind || selectedLine.kind === "twoPoint"));
+  }, [hasLinkedSelection, linkedConvertibleLineCount, selectedLine, selectedObject]);
   const handleDeleteFromProperties = () => {
     if (!hasLinkedSelection) {
       deleteSelectedObject();
@@ -394,6 +407,23 @@ export function PropertiesPanel({
       return;
     }
     updateSelectedTextLabelStyle(next);
+  };
+  const handleConvertSelectedLineToSegment = () => {
+    if (selectedObject?.type === "line" && hasLinkedSelection) {
+      const createdIds = convertLinesToSegmentsByIds(linkedSameTypeIds);
+      if (createdIds.length === 0) {
+        setMultiSelectedObjects([]);
+        return;
+      }
+      setMultiSelectedObjects(createdIds.map((id) => ({ type: "segment", id })));
+      return;
+    }
+    const createdId = convertSelectedLineToSegment();
+    if (!createdId) {
+      setMultiSelectedObjects([]);
+      return;
+    }
+    setMultiSelectedObjects([{ type: "segment", id: createdId }]);
   };
 
   const [nameInput, setNameInput] = useState("");
@@ -572,7 +602,7 @@ export function PropertiesPanel({
         updateSelectedSegmentFields={handleUpdateSelectedSegmentFields}
         updateSelectedLineFields={handleUpdateSelectedLineFields}
         canConvertSelectedLineToSegment={canConvertSelectedLineToSegment}
-        convertSelectedLineToSegment={convertSelectedLineToSegment}
+        convertSelectedLineToSegment={handleConvertSelectedLineToSegment}
         updateSelectedCircleFields={handleUpdateSelectedCircleFields}
         updateSelectedPolygonFields={handleUpdateSelectedPolygonFields}
         setSelectedPolygonOwnedSegmentsVisible={setSelectedPolygonOwnedSegmentsVisible}

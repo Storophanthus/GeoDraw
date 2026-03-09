@@ -420,6 +420,7 @@ export type GeoActions = {
     next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
   ) => void;
   convertSelectedLineToSegment: () => string | null;
+  convertLinesToSegmentsByIds: (ids: string[]) => string[];
   updateLineFieldsByIds: (
     ids: string[],
     next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>

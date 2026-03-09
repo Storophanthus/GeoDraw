@@ -53,6 +53,7 @@ export function createSceneMutationActions({
   | "updateSegmentFieldsByIds"
   | "updateSelectedLineFields"
   | "convertSelectedLineToSegment"
+  | "convertLinesToSegmentsByIds"
   | "updateLineFieldsByIds"
   | "updateSelectedCircleFields"
   | "updateCircleFieldsByIds"
@@ -844,6 +845,67 @@ export function createSceneMutationActions({
         registerSegmentPair(createdSegmentId, createdSegmentAId, createdSegmentBId);
       }
       return createdSegmentId;
+    },
+
+    convertLinesToSegmentsByIds(ids) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return [];
+      const createdSegmentIds: string[] = [];
+      const createdSegmentPairs: Array<{ id: string; aId: string; bId: string }> = [];
+      setState((prev) => {
+        const pointIdSet = new Set(prev.scene.points.map((point) => point.id));
+        let nextSegmentId = prev.nextSegmentId;
+        const newSegments: SceneModel["segments"] = [];
+        const nextLines = prev.scene.lines.map((line) => {
+          if (!idSet.has(line.id)) return line;
+          if (!("aId" in line) || !("bId" in line)) return line;
+          if (line.aId === line.bId) return line;
+          if (!pointIdSet.has(line.aId) || !pointIdSet.has(line.bId)) return line;
+
+          const segmentId = `s_${nextSegmentId}`;
+          nextSegmentId += 1;
+          createdSegmentIds.push(segmentId);
+          createdSegmentPairs.push({ id: segmentId, aId: line.aId, bId: line.bId });
+
+          newSegments.push(
+            ensureSegmentLabelFields(
+              {
+                id: segmentId,
+                aId: line.aId,
+                bId: line.bId,
+                visible: true,
+                showLabel: Boolean(line.showLabel),
+                labelText: line.labelText,
+                labelPosWorld: line.labelPosWorld ? { ...line.labelPosWorld } : undefined,
+                style: { ...line.style },
+              },
+              prev.scene
+            )
+          );
+
+          return line.visible ? { ...line, visible: false } : line;
+        });
+
+        if (newSegments.length === 0) return prev;
+        const firstCreatedId = createdSegmentIds[0];
+        const lastCreatedId = createdSegmentIds[createdSegmentIds.length - 1];
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            lines: nextLines,
+            segments: [...prev.scene.segments, ...newSegments],
+          },
+          selectedObject: { type: "segment", id: firstCreatedId },
+          recentCreatedObject: { type: "segment", id: lastCreatedId },
+          nextSegmentId,
+        };
+      });
+      for (let i = 0; i < createdSegmentPairs.length; i += 1) {
+        const pair = createdSegmentPairs[i];
+        registerSegmentPair(pair.id, pair.aId, pair.bId);
+      }
+      return createdSegmentIds;
     },
 
     updateLineFieldsByIds(ids, next) {
