@@ -34,6 +34,7 @@ import {
   IconRotate,
   IconReflect,
   IconDilate,
+  IconInvert,
 } from "./icons";
 
 type IconProps = {
@@ -56,6 +57,7 @@ export const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   rotate: { icon: IconRotate, tooltip: "Rotate Object", ariaLabel: "Rotate tool" },
   reflect: { icon: IconReflect, tooltip: "Reflect Object", ariaLabel: "Reflect tool" },
   dilate: { icon: IconDilate, tooltip: "Dilate Object", ariaLabel: "Dilate tool" },
+  invert: { icon: IconInvert, tooltip: "Invert Line/Circle", ariaLabel: "Invert tool" },
   copyStyle: { icon: Paintbrush, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
   label: { icon: Type, tooltip: "Label Tool", ariaLabel: "Label tool" },
   export_clip_rect: { icon: Crop, tooltip: "Export Clip Rectangle", ariaLabel: "Export clip rectangle tool" },
@@ -83,7 +85,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "lines", label: "LINES", tools: ["segment", "line2p", "perp_line", "parallel_line", "tangent_line", "angle_bisector"] },
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "SHAPES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon", "regular_polygon"] },
-  { id: "transform", label: "TRANSFORM", tools: ["translate", "rotate", "reflect", "dilate"] },
+  { id: "transform", label: "TRANSFORM", tools: ["translate", "rotate", "reflect", "dilate", "invert"] },
   { id: "styles", label: "STYLES", tools: ["copyStyle", "label"] },
 ];
 
@@ -275,4 +277,3 @@ function getGroupIdForTool(tool: ActiveTool): ToolGroupId | null {
   }
   return null;
 }
-

@@ -95,6 +95,17 @@ export const IconDilate = createIcon(() => (
     </>
 ), "IconDilate");
 
+export const IconInvert = createIcon(() => (
+    <>
+        <circle cx="12" cy="12" r="8.5" strokeWidth={2} />
+        <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+        <circle cx="6" cy="12" r="2.2" fill="currentColor" stroke="none" />
+        <circle cx="18" cy="12" r="2.2" fill="currentColor" stroke="none" />
+        <path d="M8.5 6.8 Q12 4.4 15.5 6.8" strokeWidth={2} />
+        <path d="M8.5 17.2 Q12 19.6 15.5 17.2" strokeWidth={2} />
+    </>
+), "IconInvert");
+
 export const IconLine = createIcon(() => (
     <>
         <line x1="3" y1="21" x2="21" y2="3" strokeWidth={2} />

@@ -15,7 +15,9 @@ export type ArrowHeadPlacement = {
 export { clamp01 };
 
 export function resolveArrowTipStyle(tip: ArrowTipStyle | undefined): ArrowTipStyle {
-  return tip === "Latex" || tip === "Triangle" || tip === "Stealth" ? tip : "Stealth";
+  return tip === "Latex" || tip === "Triangle" || tip === "Stealth" || tip === "Dot" || tip === "OpenDot"
+    ? tip
+    : "Stealth";
 }
 
 export function collectArrowPositions(
@@ -140,7 +142,7 @@ export function isSupportedArrowDirection(direction: unknown): direction is Arro
 }
 
 export function isSupportedArrowTipStyle(tip: unknown): tip is ArrowTipStyle {
-  return tip === "Stealth" || tip === "Latex" || tip === "Triangle";
+  return tip === "Stealth" || tip === "Latex" || tip === "Triangle" || tip === "Dot" || tip === "OpenDot";
 }
 
 function drawArrowHead(
@@ -152,6 +154,18 @@ function drawArrowHead(
   tipStyle: ArrowTipStyle,
   widthScale: number
 ): void {
+  if (tipStyle === "Dot" || tipStyle === "OpenDot") {
+    const radius = Math.max(1.2, headSize * 0.11 * Math.max(0.5, widthScale));
+    ctx.beginPath();
+    ctx.arc(tip.x, tip.y, radius, 0, Math.PI * 2);
+    if (tipStyle === "Dot") {
+      ctx.fill();
+    } else {
+      ctx.stroke();
+    }
+    return;
+  }
+
   const profile =
     tipStyle === "Latex"
       ? { lengthMul: 0.95, wingMul: 0.34, notchMul: 0 }

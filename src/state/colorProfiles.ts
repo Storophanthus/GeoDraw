@@ -495,7 +495,7 @@ export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneSt
         enabled: false,
         mark: "none",
         pos: 0.5,
-        sizePt: 4,
+        sizePt: 8,
         color: palette.marking,
       },
       segmentArrowMark: {

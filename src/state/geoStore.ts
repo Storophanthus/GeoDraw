@@ -908,7 +908,7 @@ export const commandBarApi = {
     return pointId;
   },
   createTriangleCenterPointWithLabel(
-    centerKind: "incenter" | "orthocenter" | "centroid",
+    centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter",
     aId: string,
     bId: string,
     cId: string,

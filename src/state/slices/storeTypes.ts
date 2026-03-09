@@ -31,6 +31,7 @@ export type ActiveTool =
   | "rotate"
   | "reflect"
   | "dilate"
+  | "invert"
   | "copyStyle"
   | "label"
   | "midpoint"
@@ -71,7 +72,7 @@ export type HoveredHit =
   | { type: "angle"; id: string }
   | null;
 
-export type TransformToolMode = "translate" | "rotate" | "dilate" | "reflect";
+export type TransformToolMode = "translate" | "rotate" | "dilate" | "reflect" | "invert";
 
 export type TransformableObjectRef = {
   type: "point" | "segment" | "line" | "circle" | "polygon" | "angle";
@@ -132,6 +133,11 @@ export type PendingSelection =
   }
   | {
     tool: "dilate";
+    step: 2;
+    source: TransformableObjectRef;
+  }
+  | {
+    tool: "invert";
     step: 2;
     source: TransformableObjectRef;
   }
@@ -388,25 +394,56 @@ export type GeoActions = {
   updateSelectedPointFields: (
     next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>
   ) => void;
+  updatePointStyleByIds: (ids: string[], next: Partial<PointStyle>) => void;
+  updatePointFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>
+  ) => void;
   updateSelectedSegmentStyle: (next: Partial<LineStyle>) => void;
+  updateSegmentStyleByIds: (ids: string[], next: Partial<LineStyle>) => void;
   updateSelectedLineStyle: (next: Partial<LineStyle>) => void;
+  updateLineStyleByIds: (ids: string[], next: Partial<LineStyle>) => void;
   updateSelectedCircleStyle: (next: Partial<CircleStyle>) => void;
+  updateCircleStyleByIds: (ids: string[], next: Partial<CircleStyle>) => void;
   updateSelectedPolygonStyle: (next: Partial<PolygonStyle>) => void;
+  updatePolygonStyleByIds: (ids: string[], next: Partial<PolygonStyle>) => void;
   updateSelectedAngleStyle: (next: Partial<AngleStyle>) => void;
+  updateAngleStyleByIds: (ids: string[], next: Partial<AngleStyle>) => void;
   updateSelectedSegmentFields: (
+    next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+  ) => void;
+  updateSegmentFieldsByIds: (
+    ids: string[],
     next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
   ) => void;
   updateSelectedLineFields: (
     next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
   ) => void;
+  convertSelectedLineToSegment: () => string | null;
+  updateLineFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+  ) => void;
   updateSelectedCircleFields: (
+    next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+  ) => void;
+  updateCircleFieldsByIds: (
+    ids: string[],
     next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
   ) => void;
   updateSelectedPolygonFields: (
     next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
   ) => void;
+  updatePolygonFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+  ) => void;
   setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
   updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;
+  updateAngleFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<SceneModel["angles"][number], "visible">>
+  ) => void;
   updateSelectedNumberDefinition: (next: SceneNumberDefinition) => void;
   updateSelectedTextLabelFields: (
     next: Partial<
@@ -414,15 +451,22 @@ export type GeoActions = {
     >
   ) => void;
   updateSelectedTextLabelStyle: (next: Partial<SceneTextLabelStyle>) => void;
+  updateTextLabelStyleByIds: (ids: string[], next: Partial<SceneTextLabelStyle>) => void;
   setObjectVisibility: (
     obj: Exclude<SelectedObject, null>,
+    visible: boolean
+  ) => void;
+  setObjectsVisibility: (
+    objects: Array<Exclude<SelectedObject, null>>,
     visible: boolean
   ) => void;
 
   renameSelectedPoint: (nextNameRaw: string) => RenameResult;
   deleteSelectedObject: () => void;
+  deleteObjects: (objects: Array<Exclude<SelectedObject, null>>) => void;
   setCopyStyleSource: (obj: Exclude<SelectedObject, null>) => void;
   applyCopyStyleTo: (obj: Exclude<SelectedObject, null>) => void;
+  applyCopyStyleToMany: (objects: Array<Exclude<SelectedObject, null>>) => void;
   clearCopyStyle: () => void;
   undo: () => void;
   redo: () => void;

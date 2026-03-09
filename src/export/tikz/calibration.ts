@@ -12,7 +12,14 @@ export const TIKZ_EXPORT_CALIBRATION = {
   pointInnerSepFixedPt: null,
   // Segment mark calibration.
   segmentMarkSizeScale: 5 / 8,
+  // Additional shape-class tuning on top of segmentMarkSizeScale.
+  // Round marks (o/oo/dot) were exporting too large.
+  segmentMarkRoundSizeScale: 0.5,
+  // Non-round marks (|, ||, x, z, ...) were exporting too small.
+  segmentMarkNonRoundSizeScale: 2,
   segmentMarkLineWidthScale: 1 / 2.2,
+  // Dot/OpenDot path marks (circle/arc overlays) were exporting too large.
+  pathDotMarkSizeScale: 0.5,
   // Angle export calibration.
   angleLabelFontScale: 9 / 16,
   angleArcSizeScale: 1,

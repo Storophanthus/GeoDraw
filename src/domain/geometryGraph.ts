@@ -220,11 +220,22 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
 }
 
 export function collectCascadeDelete(scene: SceneModel, selected: Exclude<SelectedObject, null>): Set<NodeKey> {
+  return collectCascadeDeleteMany(scene, [selected]);
+}
+
+export function collectCascadeDeleteMany(
+  scene: SceneModel,
+  selectedList: Array<Exclude<SelectedObject, null>>
+): Set<NodeKey> {
+  if (selectedList.length === 0) return new Set<NodeKey>();
   const graph = buildDependencyGraph(scene);
   const segmentById = new Map(scene.segments.map((s) => [s.id, s]));
-  const start = selectedToKey(selected);
   const deleted = new Set<NodeKey>();
-  const queue: NodeKey[] = [start];
+  const queue: NodeKey[] = [];
+  for (let i = 0; i < selectedList.length; i += 1) {
+    const start = selectedToKey(selectedList[i]);
+    if (!deleted.has(start)) queue.push(start);
+  }
   while (queue.length > 0) {
     const cur = queue.shift()!;
     if (deleted.has(cur)) continue;

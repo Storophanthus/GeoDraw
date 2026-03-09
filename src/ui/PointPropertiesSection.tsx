@@ -33,6 +33,7 @@ type PointPropertiesSectionProps = {
   ) => void;
   updateSelectedPointStyle: (style: Partial<ScenePoint["style"]>) => void;
   deleteSelectedObject: () => void;
+  deleteLabel?: string;
 };
 
 export function PointPropertiesSection({
@@ -51,6 +52,7 @@ export function PointPropertiesSection({
   updateSelectedPointFields,
   updateSelectedPointStyle,
   deleteSelectedObject,
+  deleteLabel = "Delete",
 }: PointPropertiesSectionProps) {
   return (
     <>
@@ -256,7 +258,7 @@ export function PointPropertiesSection({
       </div>
 
       <button className="deleteButton" onClick={deleteSelectedObject}>
-        Delete
+        {deleteLabel}
       </button>
     </>
   );
@@ -270,10 +272,10 @@ function ShapeGlyph({ shape }: { shape: PointShape }) {
         className={cls}
         style={{
           display: "inline-block",
-          width: "12px",
-          height: "12px",
+          width: "15px",
+          height: "15px",
           borderRadius: "50%",
-          border: "2px solid currentColor",
+          border: "2.2px solid currentColor",
           boxSizing: "border-box",
         }}
       />
@@ -285,8 +287,8 @@ function ShapeGlyph({ shape }: { shape: PointShape }) {
         className={cls}
         style={{
           display: "inline-block",
-          width: "12px",
-          height: "12px",
+          width: "15px",
+          height: "15px",
           borderRadius: "50%",
           backgroundColor: "currentColor",
         }}

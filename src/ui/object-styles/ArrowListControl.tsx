@@ -13,6 +13,8 @@ const ARROW_TIP_OPTIONS: Array<{ value: ArrowTipStyle; label: string }> = [
     { value: "Stealth", label: "─➤" },
     { value: "Latex", label: "─❯" },
     { value: "Triangle", label: "─▶" },
+    { value: "Dot", label: "─●" },
+    { value: "OpenDot", label: "─○" },
 ];
 
 export const DEFAULT_PATH_ARROW_UI = 1.0;
@@ -558,5 +560,7 @@ function ArrowTipGlyph({ tip }: { tip: ArrowTipStyle }) {
     if (tip === "Stealth") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─➤</span>;
     if (tip === "Latex") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─❯</span>;
     if (tip === "Triangle") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─▶</span>;
+    if (tip === "Dot") return <span style={{ fontSize: "18px", fontWeight: "bold", lineHeight: 1 }}>─●</span>;
+    if (tip === "OpenDot") return <span style={{ fontSize: "18px", fontWeight: "bold", lineHeight: 1 }}>─○</span>;
     return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─➤</span>;
 }

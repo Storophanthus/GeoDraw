@@ -85,7 +85,7 @@ export type LineStyle = {
 
 export type ArrowDirection = "->" | "<-" | "<->" | ">-<";
 
-export type ArrowTipStyle = "Stealth" | "Latex" | "Triangle";
+export type ArrowTipStyle = "Stealth" | "Latex" | "Triangle" | "Dot" | "OpenDot";
 
 export type PathArrowMark = {
   enabled: boolean;
@@ -107,7 +107,7 @@ export type SegmentArrowMark = PathArrowMark & {
   mode: "end" | "mid";
 };
 
-export type SegmentMarkSymbol = "none" | "|" | "||" | "|||" | "s" | "s|" | "s||" | "x" | "o" | "oo" | "z";
+export type SegmentMarkSymbol = "none" | "|" | "||" | "|||" | "s" | "s|" | "s||" | "x" | "o" | "oo" | "z" | "dot";
 
 export type SegmentMark = {
   enabled: boolean;
@@ -366,7 +366,7 @@ export type CircleCenterPoint = {
   style: PointStyle;
 };
 
-export type TriangleCenterKind = "incenter" | "orthocenter" | "centroid";
+export type TriangleCenterKind = "incenter" | "orthocenter" | "centroid" | "circumcenter";
 
 export type TriangleCenterPoint = {
   id: string;

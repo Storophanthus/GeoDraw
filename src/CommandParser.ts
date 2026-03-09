@@ -36,7 +36,7 @@ export type Command =
   | { type: "CreatePointXY"; x: number; y: number }
   | { type: "CreateMidpointByPoints"; aId: string; bId: string }
   | { type: "CreateMidpointBySegment"; segId: string }
-  | { type: "CreateTriangleCenterPoint"; centerKind: "incenter" | "orthocenter" | "centroid"; aId: string; bId: string; cId: string }
+  | { type: "CreateTriangleCenterPoint"; centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter"; aId: string; bId: string; cId: string }
   | { type: "CreatePointByTranslation"; pointId: string; fromId: string; toId: string }
   | { type: "CreatePointByRotation"; pointId: string; centerId: string; angleDeg: number; angleExpr: string; direction: "CCW" | "CW" }
   | { type: "CreatePointByDilation"; pointId: string; centerId: string; factorExpr: string }
@@ -101,6 +101,15 @@ function buildParserScalarFunctionAdapters(ctx: ParseContext): ScalarFunctionRun
         return { ok: false, error: "Distance(...) arguments are invalid" };
       }
       return resolveDistanceArg(node, ctx);
+    },
+    resolvePointArg: (argExprRaw) => {
+      let node: MathNode;
+      try {
+        node = math.parse(argExprRaw);
+      } catch {
+        return { ok: false, error: "Point arguments are invalid" };
+      }
+      return resolvePointArg(node, ctx);
     },
     evaluateMeasureArg: (fnName, argExprRaw) => evaluateMeasureArg(fnName, argExprRaw, ctx),
   };
@@ -364,6 +373,16 @@ function resolveDistanceArg(node: MathNode, ctx: ParseContext): { ok: true; valu
   return { ok: true, value: { kind: "point", x: pointOrScalar.value.x, y: pointOrScalar.value.y } };
 }
 
+function resolvePointArg(node: MathNode, ctx: ParseContext): { ok: true; value: { x: number; y: number } } | { ok: false; error: string } {
+  const unwrapped = unwrapParenthesisNode(node);
+  const pointOrScalar = evalPointExpressionNode(unwrapped, ctx);
+  if (!pointOrScalar.ok) return { ok: false, error: pointOrScalar.error };
+  if (pointOrScalar.value.kind !== "point") {
+    return { ok: false, error: "Expected point argument" };
+  }
+  return { ok: true, value: { x: pointOrScalar.value.x, y: pointOrScalar.value.y } };
+}
+
 function parseDistanceNumeric(args: string[], ctx: ParseContext): EvalResult {
   if (args.length !== 2) return { ok: false, error: "Distance(...) expects 2 arguments" };
   let leftNode: MathNode;
@@ -466,7 +485,7 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return err("Midpoint expects Midpoint(A,B) or Midpoint(s)");
   }
 
-  if (name === "Incenter" || name === "Ortho" || name === "Orthocenter" || name === "Centroid") {
+  if (name === "Incenter" || name === "Ortho" || name === "Orthocenter" || name === "Centroid" || name === "Circumcenter") {
     if (args.length !== 3) return err(`${name}(A,B,C) expects 3 point labels`);
     const aLabel = asIdentifier(args[0]);
     const bLabel = asIdentifier(args[1]);
@@ -479,7 +498,13 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     const c = resolvePointIdentifier(cLabel, ctx);
     if (!c.ok) return err(c.message);
     const centerKind =
-      name === "Incenter" ? "incenter" : name === "Centroid" ? "centroid" : "orthocenter";
+      name === "Incenter"
+        ? "incenter"
+        : name === "Centroid"
+          ? "centroid"
+          : name === "Circumcenter"
+            ? "circumcenter"
+            : "orthocenter";
     return {
       kind: "cmd",
       cmd: { type: "CreateTriangleCenterPoint", centerKind, aId: a.id, bId: b.id, cId: c.id },

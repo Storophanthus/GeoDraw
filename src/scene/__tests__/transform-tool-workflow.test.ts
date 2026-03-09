@@ -31,6 +31,7 @@ function makeHarness(activeTool: ActiveTool): {
     translate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; fromId: string; toId: string }>;
     rotate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; angleExpr: string; direction: "CCW" | "CW" }>;
     dilate: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; factorExpr: string }>;
+    invert: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; inversionCircleId: string }>;
     reflect: Array<{
       source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string };
       axis: { type: "line" | "segment" | "point"; id: string };
@@ -42,6 +43,7 @@ function makeHarness(activeTool: ActiveTool): {
     translate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; fromId: string; toId: string }>,
     rotate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; angleExpr: string; direction: "CCW" | "CW" }>,
     dilate: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; centerId: string; factorExpr: string }>,
+    invert: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; inversionCircleId: string }>,
     reflect: [] as Array<{
       source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string };
       axis: { type: "line" | "segment" | "point"; id: string };
@@ -148,6 +150,10 @@ function makeHarness(activeTool: ActiveTool): {
     transformObjectByReflection(source, axis) {
       logs.reflect.push({ source, axis });
       return "obj_r";
+    },
+    transformObjectByInversion(source, inversionCircleId) {
+      logs.invert.push({ source, inversionCircleId });
+      return "obj_inv";
     },
     createIntersectionPoint() {
       return null;
@@ -278,6 +284,22 @@ function makeHarness(activeTool: ActiveTool): {
     "Dilate should call transformObjectByDilation(circle, O, factorExpr)."
   );
   assert(h.getPending() === null, "Dilate should clear pending state.");
+}
+
+{
+  const h = makeHarness("invert");
+  h.click({ hitObject: { type: "line", id: "lAB" } });
+  const step2 = h.getPending();
+  assert(!!step2 && step2.tool === "invert" && step2.step === 2 && step2.source.id === "lAB", "Invert step 1 should pick source line/circle.");
+  h.click({ hitObject: { type: "circle", id: "c_inv" } });
+  assert(h.logs.invert.length === 1, "Invert should invoke object transform once.");
+  assert(
+    h.logs.invert[0].source.type === "line" &&
+      h.logs.invert[0].source.id === "lAB" &&
+      h.logs.invert[0].inversionCircleId === "c_inv",
+    "Invert should call transformObjectByInversion(line, inversionCircle)."
+  );
+  assert(h.getPending() === null, "Invert should clear pending state.");
 }
 
 {

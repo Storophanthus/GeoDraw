@@ -33,10 +33,13 @@ type ObjectStyleSectionsProps = {
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
   updateSelectedSegmentFields: (fields: Partial<Pick<SceneSegment, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+  canConvertSelectedLineToSegment: boolean;
+  convertSelectedLineToSegment: () => void;
   updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
   deleteSelectedObject: () => void;
+  deleteLabel?: string;
 };
 
 export function ObjectStyleSections({
@@ -55,10 +58,13 @@ export function ObjectStyleSections({
   updateSelectedAngleStyle,
   updateSelectedSegmentFields,
   updateSelectedLineFields,
+  canConvertSelectedLineToSegment,
+  convertSelectedLineToSegment,
   updateSelectedCircleFields,
   updateSelectedPolygonFields,
   setSelectedPolygonOwnedSegmentsVisible,
   deleteSelectedObject,
+  deleteLabel = "Delete",
 }: ObjectStyleSectionsProps) {
   return (
     <>
@@ -75,6 +81,8 @@ export function ObjectStyleSections({
           selectedLine={selectedLine}
           updateSelectedLineStyle={updateSelectedLineStyle}
           updateSelectedLineFields={updateSelectedLineFields}
+          canConvertToSegment={canConvertSelectedLineToSegment}
+          convertSelectedLineToSegment={convertSelectedLineToSegment}
         />
       )}
 
@@ -102,6 +110,7 @@ export function ObjectStyleSections({
           selectedAngleRightStatus={selectedAngleRightStatus}
           updateSelectedAngleStyle={updateSelectedAngleStyle}
           deleteSelectedObject={deleteSelectedObject}
+          deleteLabel={deleteLabel}
         />
       )}
 
@@ -110,6 +119,7 @@ export function ObjectStyleSections({
           selectedSector={selectedAngle}
           updateSelectedAngleStyle={updateSelectedAngleStyle}
           deleteSelectedObject={deleteSelectedObject}
+          deleteLabel={deleteLabel}
         />
       )}
     </>

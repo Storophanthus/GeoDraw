@@ -34,7 +34,7 @@ export type AngleFixedToolState = { angleExpr: string; direction: "CCW" | "CW" }
 export type CircleFixedToolState = { radius: string };
 export type RegularPolygonToolState = { sides: number; direction: "CCW" | "CW" };
 export type TransformToolState = {
-  mode: "translate" | "rotate" | "dilate" | "reflect";
+  mode: "translate" | "rotate" | "dilate" | "reflect" | "invert";
   angleExpr: string;
   direction: "CCW" | "CW";
   factorExpr: string;

@@ -11,6 +11,7 @@ type TextLabelStyleSectionProps = {
     updateSelectedTextLabelFields: (patch: Partial<TextLabel>) => void;
     updateSelectedTextLabelStyle: (patch: Partial<TextLabel["style"]>) => void;
     deleteSelectedObject: () => void;
+    deleteLabel?: string;
 };
 
 export function TextLabelStyleSection({
@@ -21,6 +22,7 @@ export function TextLabelStyleSection({
     updateSelectedTextLabelFields,
     updateSelectedTextLabelStyle,
     deleteSelectedObject,
+    deleteLabel = "Delete",
 }: TextLabelStyleSectionProps) {
     return (
         <div className="toolInfo">
@@ -194,7 +196,7 @@ export function TextLabelStyleSection({
             </div>
 
             <button className="deleteButton" onClick={deleteSelectedObject}>
-                Delete
+                {deleteLabel}
             </button>
         </div>
     );

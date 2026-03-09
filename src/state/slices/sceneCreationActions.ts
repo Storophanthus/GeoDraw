@@ -422,8 +422,8 @@ export function createSceneCreationActions(
                 direction,
                 radiusMode: "keep",
                 style: {
-                  ...prev.pointDefaults,
-                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                  ...base.style,
+                  labelOffsetPx: { ...base.style.labelOffsetPx },
                 },
               },
             ],
@@ -478,8 +478,8 @@ export function createSceneCreationActions(
                 fromId,
                 toId,
                 style: {
-                  ...prev.pointDefaults,
-                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                  ...point.style,
+                  labelOffsetPx: { ...point.style.labelOffsetPx },
                 },
               },
             ],
@@ -529,8 +529,8 @@ export function createSceneCreationActions(
                 factor: evaluated.value,
                 factorExpr: expr,
                 style: {
-                  ...prev.pointDefaults,
-                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                  ...point.style,
+                  labelOffsetPx: { ...point.style.labelOffsetPx },
                 },
               },
             ],
@@ -577,8 +577,8 @@ export function createSceneCreationActions(
                 pointId,
                 axis,
                 style: {
-                  ...prev.pointDefaults,
-                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                  ...point.style,
+                  labelOffsetPx: { ...point.style.labelOffsetPx },
                 },
               },
             ],

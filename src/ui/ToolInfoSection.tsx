@@ -57,6 +57,7 @@ export function ToolInfoSection({
   const reflectPending = pendingSelection && pendingSelection.tool === "reflect" ? pendingSelection : null;
   const rotatePending = pendingSelection && pendingSelection.tool === "rotate" ? pendingSelection : null;
   const dilatePending = pendingSelection && pendingSelection.tool === "dilate" ? pendingSelection : null;
+  const invertPending = pendingSelection && pendingSelection.tool === "invert" ? pendingSelection : null;
 
   return (
     <>
@@ -263,6 +264,17 @@ export function ToolInfoSection({
               ? "Step 1: click source object."
               : "Step 2: click center point O."}
           </div>
+        </div>
+      )}
+      {activeTool === "invert" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Invert Object</div>
+          <div className="statusText">
+            {!invertPending
+              ? "Step 1: click source line or circle."
+              : "Step 2: click inversion circle."}
+          </div>
+          <div className="statusText">Inversion currently applies to lines/circles only.</div>
         </div>
       )}
       {activeTool === "export_clip" && (

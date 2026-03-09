@@ -5,16 +5,30 @@ type LineStyleSectionProps = {
     selectedLine: SceneLine;
     updateSelectedLineStyle: (style: Partial<LineStyle>) => void;
     updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+    canConvertToSegment: boolean;
+    convertSelectedLineToSegment: () => void;
 };
 
 export function LineStyleSection({
     selectedLine,
     updateSelectedLineStyle,
     updateSelectedLineFields,
+    canConvertToSegment,
+    convertSelectedLineToSegment,
 }: LineStyleSectionProps) {
     return (
         <div className="cosmeticsBlock">
             <div className="subSectionTitle">Line Style</div>
+            <button
+                type="button"
+                className="actionButton secondary"
+                style={{ width: "100%", marginBottom: "8px" }}
+                onClick={convertSelectedLineToSegment}
+                disabled={!canConvertToSegment}
+                title={canConvertToSegment ? "Hide this line and create segment AB with same style" : "Available for Line(A,B) only"}
+            >
+                Convert to Segment
+            </button>
             <label className="checkboxRow">
                 <input
                     type="checkbox"

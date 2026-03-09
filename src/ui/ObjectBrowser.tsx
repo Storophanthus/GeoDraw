@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
     Copy,
     Hash,
+    Link2,
     Layers,
     Lock,
     LockOpen,
@@ -18,9 +19,43 @@ type ObjectBrowserProps = {
     scene: SceneModel;
     selectedObject: SelectedObject | null;
     setSelectedObject: (obj: SelectedObject) => void;
+    multiSelectedObjects: Array<Exclude<SelectedObject, null>>;
+    setMultiSelectedObjects: (next: Array<Exclude<SelectedObject, null>>) => void;
 };
 
 type TabId = "all" | "points" | "lines" | "circles" | "angles" | "text" | "numbers";
+type SelectedObjectRef = Exclude<SelectedObject, null>;
+
+function selectedObjectKey(obj: SelectedObjectRef): string {
+    return `${obj.type}:${obj.id}`;
+}
+
+function objectFromRowKey(key: string): SelectedObjectRef | null {
+    const sep = key.indexOf(":");
+    if (sep <= 0 || sep >= key.length - 1) return null;
+    const type = key.slice(0, sep);
+    const id = key.slice(sep + 1);
+    if (
+        type !== "point" &&
+        type !== "segment" &&
+        type !== "line" &&
+        type !== "circle" &&
+        type !== "polygon" &&
+        type !== "angle" &&
+        type !== "textLabel" &&
+        type !== "number"
+    ) {
+        return null;
+    }
+    return { type, id };
+}
+
+function isTextInputLike(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    return target.isContentEditable;
+}
 
 function tabForSelectedObject(selected: SelectedObject | null, scene?: SceneModel): TabId | null {
     if (!selected) return null;
@@ -49,7 +84,13 @@ function tabForSelectedObject(selected: SelectedObject | null, scene?: SceneMode
     }
 }
 
-export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: ObjectBrowserProps) {
+export function ObjectBrowser({
+    scene,
+    selectedObject,
+    setSelectedObject,
+    multiSelectedObjects,
+    setMultiSelectedObjects,
+}: ObjectBrowserProps) {
     const [activeTab, setActiveTab] = useState<TabId>("all");
     const [tabPinned, setTabPinned] = useState(false);
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -67,6 +108,10 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
     const setAxesEnabled = useGeoStore((store) => store.setAxesEnabled);
     const setGridSnapEnabled = useGeoStore((store) => store.setGridSnapEnabled);
     const setDependencyGlowEnabled = useGeoStore((store) => store.setDependencyGlowEnabled);
+    const multiSelectedKeySet = useMemo(
+        () => new Set(multiSelectedObjects.map((obj) => selectedObjectKey(obj))),
+        [multiSelectedObjects]
+    );
 
     useEffect(() => {
         if (tabPinned) return;
@@ -95,6 +140,24 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         },
         []
     );
+
+    const focusObjectRow = (key: string) => {
+        const row = objectRowRefs.current.get(key);
+        if (!row) return;
+        row.focus();
+        row.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+
+    const getOrderedRowKeys = useCallback((): string[] => {
+        return Array.from(objectRowRefs.current.entries())
+            .sort((a, b) => {
+                const da = a[1].getBoundingClientRect();
+                const db = b[1].getBoundingClientRect();
+                if (Math.abs(da.top - db.top) > 0.5) return da.top - db.top;
+                return da.left - db.left;
+            })
+            .map(([key]) => key);
+    }, []);
 
     const pointNameById = useMemo(() => new Map(scene.points.map((p) => [p.id, p.name])), [scene.points]);
     const lineById = useMemo(() => new Map(scene.lines.map((l) => [l.id, l])), [scene.lines]);
@@ -153,21 +216,127 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         return alias ? `${alias} = ${commandText}` : commandText;
     };
 
+    const toggleBatchSelection = (obj: SelectedObjectRef) => {
+        const key = selectedObjectKey(obj);
+        if (multiSelectedKeySet.has(key)) {
+            const next = multiSelectedObjects.filter((item) => selectedObjectKey(item) !== key);
+            setMultiSelectedObjects(next.length === 0 && selectedObject ? [selectedObject] : next);
+            return;
+        }
+        const linkedType = multiSelectedObjects[0]?.type ?? selectedObject?.type ?? obj.type;
+        if (linkedType !== obj.type) {
+            setSelectedObject(obj);
+            setMultiSelectedObjects([obj]);
+            return;
+        }
+        const next = [...multiSelectedObjects, obj];
+        if (selectedObject && !next.some((item) => selectedObjectKey(item) === selectedObjectKey(selectedObject))) {
+            next.unshift(selectedObject);
+        }
+        setMultiSelectedObjects(next);
+    };
+
+    const selectObject = (obj: SelectedObjectRef) => {
+        setSelectedObject(obj);
+        const key = selectedObjectKey(obj);
+        if (multiSelectedKeySet.size === 0 || multiSelectedKeySet.has(key)) return;
+        setMultiSelectedObjects([obj]);
+    };
+
+    const extendLinkedSelectionByArrow = useCallback((direction: 1 | -1, currentKey: string) => {
+        const current = objectFromRowKey(currentKey);
+        if (!current) return false;
+        const orderedKeys = getOrderedRowKeys();
+        const curIdx = orderedKeys.indexOf(currentKey);
+        if (curIdx < 0) return false;
+        let nextIdx = curIdx + direction;
+        while (nextIdx >= 0 && nextIdx < orderedKeys.length) {
+            const candidate = objectFromRowKey(orderedKeys[nextIdx]);
+            if (candidate && candidate.type === current.type) break;
+            nextIdx += direction;
+        }
+        if (nextIdx < 0 || nextIdx >= orderedKeys.length) return false;
+        const nextObj = objectFromRowKey(orderedKeys[nextIdx]);
+        if (!nextObj) return false;
+
+        const nextLinked = multiSelectedObjects.filter((item) => item.type === current.type);
+        if (!nextLinked.some((item) => selectedObjectKey(item) === selectedObjectKey(current))) {
+            nextLinked.unshift(current);
+        }
+        if (!nextLinked.some((item) => selectedObjectKey(item) === selectedObjectKey(nextObj))) {
+            nextLinked.push(nextObj);
+        }
+        setMultiSelectedObjects(nextLinked);
+        setSelectedObject(nextObj);
+        focusObjectRow(orderedKeys[nextIdx]);
+        return true;
+    }, [focusObjectRow, getOrderedRowKeys, multiSelectedObjects, setMultiSelectedObjects, setSelectedObject]);
+
+    const handleRowKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>, currentKey: string) => {
+        if (!e.shiftKey) return;
+        const isUp = e.key === "ArrowUp" || e.key === "Up";
+        const isDown = e.key === "ArrowDown" || e.key === "Down";
+        if (!isUp && !isDown) return;
+        const changed = extendLinkedSelectionByArrow(isDown ? 1 : -1, currentKey);
+        if (!changed) return;
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    useEffect(() => {
+        const onWindowKeyDown = (e: KeyboardEvent) => {
+            if (!e.shiftKey) return;
+            const isUp = e.key === "ArrowUp" || e.key === "Up";
+            const isDown = e.key === "ArrowDown" || e.key === "Down";
+            if (!isUp && !isDown) return;
+            if (isTextInputLike(e.target)) return;
+            if (!selectedObject) return;
+            const currentKey = `${selectedObject.type}:${selectedObject.id}`;
+            const changed = extendLinkedSelectionByArrow(isDown ? 1 : -1, currentKey);
+            if (!changed) return;
+            e.preventDefault();
+            e.stopPropagation();
+        };
+        window.addEventListener("keydown", onWindowKeyDown);
+        return () => window.removeEventListener("keydown", onWindowKeyDown);
+    }, [extendLinkedSelectionByArrow, selectedObject]);
+
     const renderObjectRow = (
         key: string,
+        active: boolean,
         selected: boolean,
         onSelect: () => void,
+        onToggleSelected: () => void,
         visible: boolean,
         onToggleVisible: (next: boolean) => void,
         title: string,
         commandText: string
     ) => (
-        <button key={key} ref={bindObjectRowRef(key)} className={selected ? "objectItem active" : "objectItem"} onClick={onSelect}>
+        <button
+            key={key}
+            ref={bindObjectRowRef(key)}
+            className={`objectItem${active ? " active" : ""}${selected ? " selected" : ""}`}
+            onClick={onSelect}
+            onKeyDown={(e) => handleRowKeyDown(e, key)}
+        >
             <div className="objectItemText">
                 <span className="objectItemLabel">{title}</span>
                 <span className="objectItemCommand" title={commandText}>{commandText}</span>
             </div>
             <div className="objectItemActions">
+                <button
+                    type="button"
+                    className={selected ? "objectLinkToggle active" : "objectLinkToggle"}
+                    title={selected ? "Unlink from batch styling/deletion" : "Link for batch styling/deletion"}
+                    aria-label={selected ? "Unlink from batch styling/deletion" : "Link for batch styling/deletion"}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleSelected();
+                    }}
+                >
+                    <Link2 size={12} strokeWidth={2.1} />
+                </button>
                 <button
                     type="button"
                     className="objectCommandCopy"
@@ -235,7 +404,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     renderObjectRow(
                         `point:${point.id}`,
                         selectedObject?.type === "point" && selectedObject.id === point.id,
-                        () => setSelectedObject({ type: "point", id: point.id }),
+                        multiSelectedKeySet.has(`point:${point.id}`),
+                        () => selectObject({ type: "point", id: point.id }),
+                        () => toggleBatchSelection({ type: "point", id: point.id }),
                         point.visible,
                         (next) => setObjectVisibility({ type: "point", id: point.id }, next),
                         `Point ${point.name}`,
@@ -313,7 +484,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     renderObjectRow(
                         `segment:${segment.id}`,
                         selectedObject?.type === "segment" && selectedObject.id === segment.id,
-                        () => setSelectedObject({ type: "segment", id: segment.id }),
+                        multiSelectedKeySet.has(`segment:${segment.id}`),
+                        () => selectObject({ type: "segment", id: segment.id }),
+                        () => toggleBatchSelection({ type: "segment", id: segment.id }),
                         segment.visible,
                         (next) => setObjectVisibility({ type: "segment", id: segment.id }, next),
                         `Segment ${pointLabel(segment.aId)}${pointLabel(segment.bId)}`,
@@ -325,7 +498,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     renderObjectRow(
                         `line:${line.id}`,
                         selectedObject?.type === "line" && selectedObject.id === line.id,
-                        () => setSelectedObject({ type: "line", id: line.id }),
+                        multiSelectedKeySet.has(`line:${line.id}`),
+                        () => selectObject({ type: "line", id: line.id }),
+                        () => toggleBatchSelection({ type: "line", id: line.id }),
                         line.visible,
                         (next) => setObjectVisibility({ type: "line", id: line.id }, next),
                         line.kind === "twoPoint" ? `Line ${pointLabel(line.aId)}${pointLabel(line.bId)}` : `Line ${line.id}`,
@@ -337,7 +512,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     renderObjectRow(
                         `circle:${circle.id}`,
                         selectedObject?.type === "circle" && selectedObject.id === circle.id,
-                        () => setSelectedObject({ type: "circle", id: circle.id }),
+                        multiSelectedKeySet.has(`circle:${circle.id}`),
+                        () => selectObject({ type: "circle", id: circle.id }),
+                        () => toggleBatchSelection({ type: "circle", id: circle.id }),
                         circle.visible,
                         (next) => setObjectVisibility({ type: "circle", id: circle.id }, next),
                         `Circle ${circle.id}`,
@@ -349,7 +526,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     renderObjectRow(
                         `polygon:${polygon.id}`,
                         selectedObject?.type === "polygon" && selectedObject.id === polygon.id,
-                        () => setSelectedObject({ type: "polygon", id: polygon.id }),
+                        multiSelectedKeySet.has(`polygon:${polygon.id}`),
+                        () => selectObject({ type: "polygon", id: polygon.id }),
+                        () => toggleBatchSelection({ type: "polygon", id: polygon.id }),
                         polygon.visible,
                         (next) => setObjectVisibility({ type: "polygon", id: polygon.id }, next),
                         `Polygon ${polygon.id}`,
@@ -361,7 +540,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     renderObjectRow(
                         `angle:${angle.id}`,
                         selectedObject?.type === "angle" && selectedObject.id === angle.id,
-                        () => setSelectedObject({ type: "angle", id: angle.id }),
+                        multiSelectedKeySet.has(`angle:${angle.id}`),
+                        () => selectObject({ type: "angle", id: angle.id }),
+                        () => toggleBatchSelection({ type: "angle", id: angle.id }),
                         angle.visible,
                         (next) => setObjectVisibility({ type: "angle", id: angle.id }, next),
                         `Sector ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`,
@@ -373,7 +554,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     renderObjectRow(
                         `angle:${angle.id}`,
                         selectedObject?.type === "angle" && selectedObject.id === angle.id,
-                        () => setSelectedObject({ type: "angle", id: angle.id }),
+                        multiSelectedKeySet.has(`angle:${angle.id}`),
+                        () => selectObject({ type: "angle", id: angle.id }),
+                        () => toggleBatchSelection({ type: "angle", id: angle.id }),
                         angle.visible,
                         (next) => setObjectVisibility({ type: "angle", id: angle.id }, next),
                         `Angle ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`,
@@ -385,7 +568,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     renderObjectRow(
                         `textLabel:${label.id}`,
                         selectedObject?.type === "textLabel" && selectedObject.id === label.id,
-                        () => setSelectedObject({ type: "textLabel", id: label.id }),
+                        multiSelectedKeySet.has(`textLabel:${label.id}`),
+                        () => selectObject({ type: "textLabel", id: label.id }),
+                        () => toggleBatchSelection({ type: "textLabel", id: label.id }),
                         label.visible,
                         (next) => setObjectVisibility({ type: "textLabel", id: label.id }, next),
                         `Label ${label.name}`,
@@ -397,7 +582,9 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     renderObjectRow(
                         `number:${num.id}`,
                         selectedObject?.type === "number" && selectedObject.id === num.id,
-                        () => setSelectedObject({ type: "number", id: num.id }),
+                        multiSelectedKeySet.has(`number:${num.id}`),
+                        () => selectObject({ type: "number", id: num.id }),
+                        () => toggleBatchSelection({ type: "number", id: num.id }),
                         num.visible,
                         (next) => setObjectVisibility({ type: "number", id: num.id }, next),
                         `Number ${num.name}`,
@@ -409,7 +596,15 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                 ))}
             </>
         );
-    }, [activeTab, scene, selectedObject, setSelectedObject, setObjectVisibility]);
+    }, [
+        activeTab,
+        multiSelectedKeySet,
+        multiSelectedObjects,
+        scene,
+        setMultiSelectedObjects,
+        setObjectVisibility,
+        setSelectedObject,
+    ]);
 
     const isEmpty =
         (activeTab === "all" &&
@@ -427,6 +622,7 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
         (activeTab === "angles" && !scene.angles.some((angle) => angle.kind !== "sector")) ||
         (activeTab === "text" && (scene.textLabels?.length ?? 0) === 0) ||
         (activeTab === "numbers" && scene.numbers.length === 0);
+    const multiSelectionCount = multiSelectedObjects.length;
 
     return (
         <div className="objectBrowser">
@@ -467,6 +663,18 @@ export function ObjectBrowser({ scene, selectedObject, setSelectedObject }: Obje
                     </label>
                 </div>
             </div>
+            {multiSelectionCount > 1 && (
+                <div className="objectMultiSelectSummary">
+                    <span>{multiSelectionCount} selected</span>
+                    <button
+                        type="button"
+                        className="objectMultiSelectClear"
+                        onClick={() => setMultiSelectedObjects(selectedObject ? [selectedObject] : [])}
+                    >
+                        Clear extras
+                    </button>
+                </div>
+            )}
 
             <div className="objectBrowserTabs">
                 {tabs.map((tab) => (

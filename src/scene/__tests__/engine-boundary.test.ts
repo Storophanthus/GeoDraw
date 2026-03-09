@@ -181,6 +181,9 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     transformObjectByReflection() {
       return null;
     },
+    transformObjectByInversion() {
+      return null;
+    },
     createIntersectionPoint() {
       return null;
     },

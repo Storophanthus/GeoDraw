@@ -16,6 +16,7 @@ type AngleStyleSectionProps = {
   selectedAngleRightStatus: "none" | "exact" | "approx";
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
   deleteSelectedObject: () => void;
+  deleteLabel?: string;
 };
 
 export function AngleStyleSection({
@@ -23,6 +24,7 @@ export function AngleStyleSection({
   selectedAngleRightStatus,
   updateSelectedAngleStyle,
   deleteSelectedObject,
+  deleteLabel = "Delete",
 }: AngleStyleSectionProps) {
   if (selectedAngle.kind === "sector") return null;
 
@@ -277,7 +279,7 @@ export function AngleStyleSection({
         />
       </div>
       <button className="deleteButton" onClick={deleteSelectedObject}>
-        Delete
+        {deleteLabel}
       </button>
     </div>
   );

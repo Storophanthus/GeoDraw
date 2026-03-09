@@ -17,7 +17,7 @@ export type SnapshotPointDefinition =
   | { kind: "pointOnSegment"; segId: string; u: number }
   | { kind: "pointOnCircle"; circleId: string; t: number }
   | { kind: "circleCenter"; circleId: string }
-  | { kind: "triangleCenter"; centerKind: "incenter" | "orthocenter" | "centroid"; aId: string; bId: string; cId: string }
+  | { kind: "triangleCenter"; centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter"; aId: string; bId: string; cId: string }
   | { kind: "pointByTranslation"; pointId: string; fromId: string; toId: string; vectorId?: string }
   | { kind: "pointByDilation"; pointId: string; centerId: string; factor?: number; factorExpr?: string }
   | { kind: "pointByReflection"; pointId: string; axis: { type: "line" | "segment" | "point"; id: string } }

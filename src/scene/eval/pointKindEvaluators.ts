@@ -10,6 +10,7 @@ import {
   evalPointOnLine,
   evalPointOnSegment,
   evalTriangleCentroid,
+  evalTriangleCircumcenter,
   evalTriangleIncenter,
   evalTriangleOrthocenter,
 } from "./pointGeometryEval";
@@ -333,5 +334,6 @@ export function evalTriangleCenterPointPoint(
   ctx.stats.allocationsEstimate += 1;
   if (point.centerKind === "centroid") return evalTriangleCentroid(a, b, c);
   if (point.centerKind === "incenter") return evalTriangleIncenter(a, b, c);
+  if (point.centerKind === "circumcenter") return evalTriangleCircumcenter(a, b, c);
   return evalTriangleOrthocenter(a, b, c);
 }

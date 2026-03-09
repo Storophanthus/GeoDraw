@@ -122,6 +122,9 @@ const io: ConstructClickIo = {
   transformObjectByReflection() {
     return null;
   },
+  transformObjectByInversion() {
+    return null;
+  },
   createIntersectionPoint() {
     return null;
   },

@@ -188,6 +188,9 @@ function runScenario(activeTool: ActiveTool): void {
     transformObjectByReflection() {
       return null;
     },
+    transformObjectByInversion() {
+      return null;
+    },
     createIntersectionPoint() {
       return null;
     },
@@ -418,6 +421,9 @@ runScenario("line2p");
       return null;
     },
     transformObjectByReflection() {
+      return null;
+    },
+    transformObjectByInversion() {
       return null;
     },
     createIntersectionPoint() {
@@ -659,6 +665,9 @@ runScenario("line2p");
     transformObjectByReflection() {
       return null;
     },
+    transformObjectByInversion() {
+      return null;
+    },
     createIntersectionPoint() {
       return null;
     },
@@ -871,6 +880,9 @@ runScenario("line2p");
       return null;
     },
     transformObjectByReflection() {
+      return null;
+    },
+    transformObjectByInversion() {
       return null;
     },
     createIntersectionPoint() {
@@ -1109,6 +1121,9 @@ runScenario("line2p");
     transformObjectByReflection() {
       return null;
     },
+    transformObjectByInversion() {
+      return null;
+    },
     createIntersectionPoint() {
       return null;
     },
@@ -1320,6 +1335,9 @@ runScenario("line2p");
       return null;
     },
     transformObjectByReflection() {
+      return null;
+    },
+    transformObjectByInversion() {
       return null;
     },
     createIntersectionPoint() {
@@ -1549,6 +1567,9 @@ runScenario("line2p");
       return null;
     },
     transformObjectByReflection() {
+      return null;
+    },
+    transformObjectByInversion() {
       return null;
     },
     createIntersectionPoint() {

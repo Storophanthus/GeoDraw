@@ -18,6 +18,7 @@ import {
   SceneModel,
   ScenePoint,
   SegmentArrowMark,
+  type SegmentMarkSymbol,
   type PathArrowMark,
 } from "../scene/points";
 import {
@@ -59,7 +60,10 @@ export type TikzExportOptions = {
   pointInnerSepFixedPt?: number;
   pointInnerSepScale?: number;
   segmentMarkSizeScale?: number;
+  segmentMarkRoundSizeScale?: number;
+  segmentMarkNonRoundSizeScale?: number;
   segmentMarkLineWidthScale?: number;
+  pathDotMarkSizeScale?: number;
   angleLabelFontScale?: number;
   angleArcStrokeScale?: number;
   angleArcSizeScale?: number;
@@ -105,7 +109,7 @@ export type TikzCommand =
     secondName: string;
   }
   | { kind: "DefAngleBisectorLine"; auxName: string; a: string; b: string; c: string }
-  | { kind: "DefTriangleCenterPoint"; name: string; centerKind: "incenter" | "orthocenter" | "centroid"; a: string; b: string; c: string }
+  | { kind: "DefTriangleCenterPoint"; name: string; centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter"; a: string; b: string; c: string }
   | { kind: "DefCircleCircumCenter"; centerName: string; a: string; b: string; c: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
   | { kind: "DefMidPoint"; name: string; a: string; b: string }
@@ -1609,7 +1613,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       {
         pathLengthWorld: segmentLengthWorld,
         screenPxPerWorld: arrowMetricPxPerWorld,
-      }
+      },
+      options.pathDotMarkSizeScale
     );
     if (arrowOverlay) {
       if (arrowOverlay.kind === "tkz") {
@@ -1740,7 +1745,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         screenPxPerWorld: arrowMetricPxPerWorld,
       },
       undefined, // arcDef undefined -> Use markings (Decoration)
-      { bend: true } // Circle arrows use bend
+      { bend: true }, // Circle arrows use bend
+      options.pathDotMarkSizeScale
     );
     if (circleArrowOverlay) {
       drawOverlays.push({ kind: "DrawRaw", tex: circleArrowOverlay });
@@ -1829,7 +1835,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           startRad: sectorStart,
           sweepRad: theta,
         },
-        { flex: true } // Keep angle arrows using flex
+        { flex: true }, // Keep angle arrows using flex
+        options.pathDotMarkSizeScale
       );
       if (sectorArrowOverlay) {
         drawOverlays.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
@@ -1900,7 +1907,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           startRad: angleStart,
           sweepRad: theta,
         },
-        { flex: true } // Keep angle arrows using flex
+        { flex: true }, // Keep angle arrows using flex
+        options.pathDotMarkSizeScale
       );
       if (arcArrowOverlay) {
         drawOverlays.push({ kind: "DrawRaw", tex: arcArrowOverlay });
@@ -3174,16 +3182,20 @@ function segmentMarkStyleBaseToTikz(
   options: TikzExportOptions
 ): string | null {
   if (!mark?.enabled || mark.mark === "none") return null;
-  const allowedMarks = new Set(["|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"]);
-  if (!allowedMarks.has(mark.mark)) {
+  const tikzMark = mapSegmentMarkSymbolToTikz(mark.mark);
+  if (!tikzMark) {
     throw new Error(`Unsupported SegmentMark: mark=${String(mark.mark)}`);
   }
   if (!Number.isFinite(mark.sizePt) || mark.sizePt <= 0) {
     throw new Error("Unsupported SegmentMark: sizePt");
   }
   const sizeScale = clampPositive(options.segmentMarkSizeScale ?? 1, 0.01, 100);
+  const roundSizeScale = clampPositive(options.segmentMarkRoundSizeScale ?? 1, 0.01, 100);
+  const nonRoundSizeScale = clampPositive(options.segmentMarkNonRoundSizeScale ?? 1, 0.01, 100);
+  const symbolScale = isRoundSegmentMarkSymbol(mark.mark) ? roundSizeScale : nonRoundSizeScale;
+  const symbolSpecificScale = segmentMarkSymbolExportScale(mark.mark);
   const widthScale = clampPositive(options.segmentMarkLineWidthScale ?? 1, 0.01, 100);
-  const opts: string[] = [`mark=${mark.mark}`, `size=${fmt(mark.sizePt * sizeScale)}pt`];
+  const opts: string[] = [`mark=${tikzMark}`, `size=${fmt(mark.sizePt * sizeScale * symbolScale * symbolSpecificScale)}pt`];
   opts.push(`color=${rgbColorExpr(mark.color ?? segmentStrokeColor)}`);
   const opacity = clamp01(segmentOpacity);
   if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
@@ -3196,6 +3208,21 @@ function segmentMarkStyleBaseToTikz(
     opts.push(`line width=${fmt(strokeWidthToTikzPt(segmentStrokeWidth, options))}pt`);
   }
   return opts.join(", ");
+}
+
+function mapSegmentMarkSymbolToTikz(mark: SegmentMarkSymbol): string | null {
+  if (mark === "none") return null;
+  if (mark === "dot") return "*";
+  return mark;
+}
+
+function isRoundSegmentMarkSymbol(mark: SegmentMarkSymbol): boolean {
+  return mark === "o" || mark === "oo" || mark === "dot";
+}
+
+function segmentMarkSymbolExportScale(mark: SegmentMarkSymbol): number {
+  if (mark === "oo") return 2;
+  return 1;
 }
 
 function segmentMarkToTikz(
@@ -3264,7 +3291,8 @@ function segmentArrowsToTikz(
     segmentStrokeWidthPt: number;
     segmentStrokeCarrierKey: string | null;
   },
-  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number }
+  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number },
+  dotSizeScale?: number
 ): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
   const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
   if (arrows.length === 0) return null;
@@ -3274,13 +3302,37 @@ function segmentArrowsToTikz(
   const rawTexs: string[] = [];
 
   for (const effectiveArrow of effectiveArrows) {
+    const tip = resolveArrowTipName(effectiveArrow.tip, "SegmentArrowMark");
+    if (isDotArrowTip(tip)) {
+      const dotOverlays = segmentDotArrowOverlaysToTikz(
+        effectiveArrow,
+        tip,
+        aName,
+        bName,
+        {
+          strokeColor: base.strokeColor,
+          strokeWidth: base.strokeWidth,
+          opacity: base.opacity,
+        },
+        metrics,
+        dotSizeScale
+      );
+      if (dotOverlays.length > 0) {
+        rawTexs.push(...dotOverlays);
+      }
+      continue;
+    }
+
     if (effectiveArrow.mode === "mid") {
       const midOverlay = pathArrowOverlayToTikz(
         effectiveArrow,
         `(${aName}) -- (${bName})`,
         base,
         effectiveArrow.pos ?? 0.5,
-        metrics as { pathLengthWorld: number; screenPxPerWorld: number }
+        metrics as { pathLengthWorld: number; screenPxPerWorld: number },
+        undefined,
+        undefined,
+        dotSizeScale
       );
       if (midOverlay) {
         rawTexs.push(midOverlay);
@@ -3290,7 +3342,6 @@ function segmentArrowsToTikz(
 
     // End arrow logic
     ensureSupportedArrowDirection(effectiveArrow.direction, "SegmentArrowMark");
-    const tip = resolveArrowTipName(effectiveArrow.tip, "SegmentArrowMark");
     const arrowColor = rgbColorExpr(effectiveArrow.color ?? base.strokeColor);
     const opacity = normalizedOpacity(base.opacity);
     const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
@@ -3367,6 +3418,70 @@ function segmentArrowsToTikz(
 
   if (rawTexs.length === 0) return null;
   return { kind: "raw", tex: rawTexs.join("\n") };
+}
+
+function segmentDotArrowOverlaysToTikz(
+  arrow: SegmentArrowMark,
+  tip: "Dot" | "OpenDot",
+  aName: string,
+  bName: string,
+  base: { strokeColor: string; strokeWidth: number; opacity: number },
+  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number },
+  dotSizeScale?: number
+): string[] {
+  const pathExpr = `(${aName}) -- (${bName})`;
+  const overlays: string[] = [];
+  const pushDotOverlay = (pos: number) => {
+    const overlay = pathArrowOverlayToTikz(
+      {
+        enabled: true,
+        direction: "->",
+        tip,
+        distribution: "single",
+        pos: clamp01(pos),
+        sizeScale: arrow.sizeScale,
+        color: arrow.color,
+        lineWidthPt: arrow.lineWidthPt,
+        pairGapPx: arrow.pairGapPx,
+        arrowLength: arrow.arrowLength,
+      },
+      pathExpr,
+      base,
+      clamp01(pos),
+      metrics,
+      undefined,
+      undefined,
+      dotSizeScale
+    );
+    if (overlay) overlays.push(overlay);
+  };
+
+  if (arrow.mode === "end") {
+    if (arrow.direction === "->") {
+      pushDotOverlay(1);
+      return overlays;
+    }
+    if (arrow.direction === "<-") {
+      pushDotOverlay(0);
+      return overlays;
+    }
+    pushDotOverlay(0);
+    pushDotOverlay(1);
+    return overlays;
+  }
+
+  const midOverlay = pathArrowOverlayToTikz(
+    arrow,
+    pathExpr,
+    base,
+    arrow.pos ?? 0.5,
+    metrics,
+    undefined,
+    undefined,
+    dotSizeScale
+  );
+  if (midOverlay) overlays.push(midOverlay);
+  return overlays;
 }
 
 function normalizeLegacyEndpointMidArrow(arrow: SegmentArrowMark): SegmentArrowMark {
@@ -3525,7 +3640,8 @@ function pathArrowOverlayToTikz(
   fallbackPos: number,
   metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number },
   arcDef?: { center: { x: number; y: number }; radius: number; startRad: number; sweepRad: number },
-  arrowTipOptions?: { bend?: boolean; flex?: boolean }
+  arrowTipOptions?: { bend?: boolean; flex?: boolean },
+  dotSizeScale?: number
 ): string | null {
   const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
   const results: string[] = [];
@@ -3534,6 +3650,7 @@ function pathArrowOverlayToTikz(
     if (!arrow?.enabled) continue;
     ensureSupportedArrowDirection(arrow.direction, "PathArrowMark");
     const tip = resolveArrowTipName(arrow.tip, "PathArrowMark");
+    const isDotTip = isDotArrowTip(tip);
     const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
     const opacity = normalizedOpacity(base.opacity);
     const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
@@ -3541,39 +3658,63 @@ function pathArrowOverlayToTikz(
     // User snippet requires scale=0.75 for arcs/paths.
     const effectiveScale = clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.75;
     const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
+    const resolvedDotSizeScale = clampPositive(dotSizeScale ?? 1, 0.05, 20);
 
     // Bending fix: Use scale=1.0 for the arrow command so TikZ bending calculations
     // see the true physical size relative to the path. Bake the scale into dimensions.
     const arrowScaleCommand = 1.0;
-
-    const tipMetrics = resolvePathArrowTipMetricsPx(tip, 1.0, arrowWidthUi, "PathArrowMark", arrow.arrowLength);
-    const tipSpec = resolveArrowTipSpec(
-      tip,
-      tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
-      tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
-      { ...arrowTipOptions, opacity: arcDef ? opacity : undefined }
-    );
-
-    // Standard opts for Markings (Deco)
-    const arrowOptsMarking = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScaleCommand)}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
-      }`;
-
-    // Opts for Constructive Path (Flex)
-    const arrowOptsConstructive = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(
-      arrowScaleCommand
-    )},draw opacity=0`;
-
-    const forwardCmd = `\\arrow[${arrowOptsMarking}]{${tipSpec}}`;
-    const reverseCmd = `\\arrowreversed[${arrowOptsMarking}]{${tipSpec}}`;
-    const pairDelta = computePathArrowPairDelta(
-      tipMetrics.pairSeparationPx * effectiveScale,
-      metrics?.pathLengthWorld,
-      metrics?.screenPxPerWorld,
-      arrow.pairGapPx
-    );
-    const positions = collectPathArrowPositions(arrow, fallbackPos);
     const marks: string[] = [];
     const paths: string[] = [];
+    let pairDelta = 0;
+    let markerCmd = "";
+    let forwardCmd = "";
+    let reverseCmd = "";
+    let tipSpec = "";
+    let arrowOptsConstructive = "";
+
+    if (isDotTip) {
+      const dotMetrics = resolvePathDotMarkMetricsPx(arrowWidthUi, effectiveScale * resolvedDotSizeScale, arrow.arrowLength);
+      markerCmd = dotMarkCommandToTikz(
+        tip,
+        arrowColor,
+        opacity,
+        dotMetrics.radiusPx * CANVAS_PX_TO_TIKZ_PT,
+        dotMetrics.strokePx * CANVAS_PX_TO_TIKZ_PT
+      );
+      pairDelta = computePathArrowPairDelta(
+        dotMetrics.pairSeparationPx,
+        metrics?.pathLengthWorld,
+        metrics?.screenPxPerWorld,
+        arrow.pairGapPx
+      );
+    } else {
+      const tipMetrics = resolvePathArrowTipMetricsPx(tip, 1.0, arrowWidthUi, "PathArrowMark", arrow.arrowLength);
+      tipSpec = resolveArrowTipSpec(
+        tip,
+        tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
+        tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
+        { ...arrowTipOptions, opacity: arcDef ? opacity : undefined }
+      );
+
+      // Standard opts for Markings (Deco)
+      const arrowOptsMarking = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScaleCommand)}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
+        }`;
+
+      // Opts for Constructive Path (Flex)
+      arrowOptsConstructive = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(
+        arrowScaleCommand
+      )},draw opacity=0`;
+
+      forwardCmd = `\\arrow[${arrowOptsMarking}]{${tipSpec}}`;
+      reverseCmd = `\\arrowreversed[${arrowOptsMarking}]{${tipSpec}}`;
+      pairDelta = computePathArrowPairDelta(
+        tipMetrics.pairSeparationPx * effectiveScale,
+        metrics?.pathLengthWorld,
+        metrics?.screenPxPerWorld,
+        arrow.pairGapPx
+      );
+    }
+    const positions = collectPathArrowPositions(arrow, fallbackPos);
 
     const addMark = (pos: number, command: string) => {
       marks.push(`mark=at position ${fmt(clamp01(pos))} with {${command}}`);
@@ -3599,6 +3740,15 @@ function pathArrowOverlayToTikz(
 
     for (let i = 0; i < positions.length; i += 1) {
       const p = positions[i];
+      if (isDotTip) {
+        if (arrow.direction === "->" || arrow.direction === "<-") {
+          addMark(p, markerCmd);
+        } else {
+          addMark(p - pairDelta, markerCmd);
+          addMark(p + pairDelta, markerCmd);
+        }
+        continue;
+      }
       if (arrow.direction === "->") {
         if (arcDef) addConstructivePath(p, false);
         else addMark(p, forwardCmd);
@@ -3624,7 +3774,7 @@ function pathArrowOverlayToTikz(
       }
     }
 
-    if (arcDef) {
+    if (arcDef && !isDotTip) {
       results.push(paths.join("\n"));
     } else if (marks.length > 0) {
       const opts: string[] = ["postaction=decorate", `decoration={markings,${marks.join(",")}}`];
@@ -3746,12 +3896,18 @@ function ensureSupportedArrowDirection(
   throw new Error(`Unsupported ${context}: direction=${String(direction)}`);
 }
 
+type ResolvedArrowTipName = "Stealth" | "Latex" | "Triangle" | "Dot" | "OpenDot";
+
+function isDotArrowTip(tip: ResolvedArrowTipName): tip is "Dot" | "OpenDot" {
+  return tip === "Dot" || tip === "OpenDot";
+}
+
 function resolveArrowTipName(
   tip: unknown,
   context: "SegmentArrowMark" | "PathArrowMark"
-): "Stealth" | "Latex" | "Triangle" {
+): ResolvedArrowTipName {
   if (tip === undefined || tip === null || tip === "") return "Stealth";
-  if (tip === "Stealth" || tip === "Latex" || tip === "Triangle") return tip;
+  if (tip === "Stealth" || tip === "Latex" || tip === "Triangle" || tip === "Dot" || tip === "OpenDot") return tip;
   throw new Error(`Unsupported ${context}: tip=${String(tip)}`);
 }
 
@@ -3816,6 +3972,36 @@ function resolvePathArrowTipMetricsPx(
 
   const pairSeparationPx = Math.max(3, Math.max(baseSize * 0.9, baseSize * 0.65 * widthScale));
   return { lengthPx, widthPx, pairSeparationPx };
+}
+
+function resolvePathDotMarkMetricsPx(
+  widthUi: number,
+  effectiveScale: number,
+  arrowLength: number | undefined
+): { radiusPx: number; strokePx: number; pairSeparationPx: number } {
+  const widthScale = Math.sqrt(Math.max(0.2, Math.min(12, widthUi)));
+  const lengthScale = Math.max(0.2, Math.min(4, arrowLength ?? 1.0));
+  const radiusPx = Math.max(1.2, 2.2 * effectiveScale * widthScale * lengthScale);
+  const strokePx = Math.max(0.8, 0.8 * effectiveScale * widthScale);
+  const pairSeparationPx = Math.max(3, radiusPx * 3.2);
+  return { radiusPx, strokePx, pairSeparationPx };
+}
+
+function dotMarkCommandToTikz(
+  tip: "Dot" | "OpenDot",
+  colorExpr: string,
+  opacity: number,
+  radiusPt: number,
+  strokePt: number
+): string {
+  if (tip === "Dot") {
+    const fillOpts = [`color=${colorExpr}`];
+    if (opacity < 0.999) fillOpts.push(`opacity=${fmt(opacity)}`);
+    return `\\fill[${fillOpts.join(", ")}] (0pt,0pt) circle[radius=${fmt(Math.max(0.3, radiusPt))}pt];`;
+  }
+  const drawOpts = [`color=${colorExpr}`, `line width=${fmt(Math.max(0.1, strokePt))}pt`];
+  if (opacity < 0.999) drawOpts.push(`opacity=${fmt(opacity)}`);
+  return `\\draw[${drawOpts.join(", ")}] (0pt,0pt) circle[radius=${fmt(Math.max(0.3, radiusPt))}pt];`;
 }
 
 function resolveArrowSourceWidth(_lineWidthPt: unknown, baseStrokeWidth: unknown): number {

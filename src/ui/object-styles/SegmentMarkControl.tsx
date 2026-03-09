@@ -3,13 +3,13 @@ import { Copy, Plus, Trash2 } from "lucide-react";
 import { useClickAway } from "react-use";
 import { type SegmentMark } from "../../scene/points";
 
-export const SEGMENT_MARK_OPTIONS = ["none", "|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"] as const;
+export const SEGMENT_MARK_OPTIONS = ["none", "|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z", "dot"] as const;
 
 export const DEFAULT_SEGMENT_MARK: SegmentMark = {
     enabled: true,
     mark: "|",
     pos: 0.5,
-    sizePt: 4,
+    sizePt: 8,
     distribution: "single",
     startPos: 0.45,
     endPos: 0.55,
@@ -448,8 +448,59 @@ function MarkGlyph({ mark }: { mark: string }) {
     if (mark === "s|") return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>~|</span>;
     if (mark === "s||") return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>~||</span>;
     if (mark === "x") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>×</span>;
-    if (mark === "o") return <span style={{ fontSize: "12px", fontWeight: "bold", fontFamily: "monospace" }}>o</span>;
-    if (mark === "oo") return <span style={{ fontSize: "12px", fontWeight: "bold", fontFamily: "monospace" }}>oo</span>;
+    if (mark === "o") {
+        return (
+            <span
+                style={{
+                    display: "inline-block",
+                    width: "13px",
+                    height: "13px",
+                    borderRadius: "50%",
+                    border: "2px solid currentColor",
+                    boxSizing: "border-box",
+                }}
+            />
+        );
+    }
+    if (mark === "oo") {
+        return (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
+                <span
+                    style={{
+                        display: "inline-block",
+                        width: "11px",
+                        height: "11px",
+                        borderRadius: "50%",
+                        border: "1.8px solid currentColor",
+                        boxSizing: "border-box",
+                    }}
+                />
+                <span
+                    style={{
+                        display: "inline-block",
+                        width: "11px",
+                        height: "11px",
+                        borderRadius: "50%",
+                        border: "1.8px solid currentColor",
+                        boxSizing: "border-box",
+                    }}
+                />
+            </span>
+        );
+    }
     if (mark === "z") return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>z</span>;
+    if (mark === "dot") {
+        return (
+            <span
+                style={{
+                    display: "inline-block",
+                    width: "12px",
+                    height: "12px",
+                    borderRadius: "50%",
+                    backgroundColor: "currentColor",
+                }}
+            />
+        );
+    }
     return <span style={{ fontSize: "14px", fontWeight: "bold", fontFamily: "monospace" }}>{mark}</span>;
 }

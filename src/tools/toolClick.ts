@@ -64,6 +64,7 @@ export type ToolClickIO = {
   ) => string | null;
   transformObjectByDilation: (source: TransformableObjectRef, centerId: string, factorExpr: string) => string | null;
   transformObjectByReflection: (source: TransformableObjectRef, axis: ReflectionObjectRef) => string | null;
+  transformObjectByInversion: (source: TransformableObjectRef, inversionCircleId: string) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
@@ -74,7 +75,7 @@ export type ToolClickIO = {
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
   regularPolygonTool: { sides: number; direction: "CCW" | "CW" };
   transformTool: {
-    mode: "translate" | "rotate" | "dilate" | "reflect";
+    mode: "translate" | "rotate" | "dilate" | "reflect" | "invert";
     angleExpr: string;
     direction: "CCW" | "CW";
     factorExpr: string;
@@ -247,11 +248,12 @@ export function handleToolClick(
     return;
   }
 
-  if (activeTool === "translate" || activeTool === "rotate" || activeTool === "dilate" || activeTool === "reflect") {
+  if (activeTool === "translate" || activeTool === "rotate" || activeTool === "dilate" || activeTool === "reflect" || activeTool === "invert") {
     const pendingTranslate = pendingSelection && pendingSelection.tool === "translate" ? pendingSelection : null;
     const pendingRotate = pendingSelection && pendingSelection.tool === "rotate" ? pendingSelection : null;
     const pendingDilate = pendingSelection && pendingSelection.tool === "dilate" ? pendingSelection : null;
     const pendingReflect = pendingSelection && pendingSelection.tool === "reflect" ? pendingSelection : null;
+    const pendingInvert = pendingSelection && pendingSelection.tool === "invert" ? pendingSelection : null;
     const resolveTransformSource = (): TransformableObjectRef | null => {
       if (!hits.hitObject) return null;
       if (hits.hitObject.type === "point") return { type: "point", id: hits.hitObject.id };
@@ -273,6 +275,11 @@ export function handleToolClick(
       if (hits.hitPointId) return { type: "point", id: hits.hitPointId };
       if (hits.hitObject?.type === "point") return { type: "point", id: hits.hitObject.id };
       return resolveLineLikeTarget();
+    };
+    const resolveInversionCircleId = (): string | null => {
+      if (hits.snap?.kind === "onCircle" && hits.snap.circleId) return hits.snap.circleId;
+      if (hits.hitObject?.type === "circle") return hits.hitObject.id;
+      return null;
     };
 
     if (activeTool === "translate") {
@@ -343,20 +350,41 @@ export function handleToolClick(
       return;
     }
 
-    if (!pendingReflect) {
-      const source = resolveTransformSource();
-      if (!source) return;
-      io.setPendingSelection({
-        tool: "reflect",
-        step: 2,
-        source,
-      });
-      return;
+    if (activeTool === "reflect") {
+      if (!pendingReflect) {
+        const source = resolveTransformSource();
+        if (!source) return;
+        io.setPendingSelection({
+          tool: "reflect",
+          step: 2,
+          source,
+        });
+        return;
+      }
+      if (pendingReflect.step === 2) {
+        const axis = resolveReflectionTarget();
+        if (!axis) return;
+        const created = io.transformObjectByReflection(pendingReflect.source, axis);
+        if (!created) return;
+        io.clearPendingSelection();
+        return;
+      }
     }
-    if (pendingReflect.step === 2) {
-      const axis = resolveReflectionTarget();
-      if (!axis) return;
-      const created = io.transformObjectByReflection(pendingReflect.source, axis);
+
+    if (activeTool === "invert") {
+      if (!pendingInvert) {
+        const source = resolveTransformSource();
+        if (!source || (source.type !== "line" && source.type !== "circle")) return;
+        io.setPendingSelection({
+          tool: "invert",
+          step: 2,
+          source,
+        });
+        return;
+      }
+      const inversionCircleId = resolveInversionCircleId();
+      if (!inversionCircleId) return;
+      const created = io.transformObjectByInversion(pendingInvert.source, inversionCircleId);
       if (!created) return;
       io.clearPendingSelection();
       return;
@@ -792,6 +820,10 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     if (!pendingSelection || pendingSelection.tool !== "reflect") return false;
     return false;
   }
+  if (activeTool === "invert") {
+    if (!pendingSelection || pendingSelection.tool !== "invert") return false;
+    return false;
+  }
   if (activeTool === "perp_line" || activeTool === "parallel_line") {
     if (!pendingSelection || (pendingSelection.tool !== "perp_line" && pendingSelection.tool !== "parallel_line")) return true;
     return pendingSelection.first.type === "lineLike";
@@ -888,6 +920,12 @@ export function isValidTarget(
       );
     }
     return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
+  }
+  if (activeTool === "invert") {
+    if (!pendingSelection || pendingSelection.tool !== "invert") {
+      return hoveredHit.type === "line2p" || hoveredHit.type === "circle";
+    }
+    return hoveredHit.type === "circle";
   }
   if (activeTool === "angle_bisector") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";

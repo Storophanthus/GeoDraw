@@ -430,6 +430,7 @@ function describePointConstruction(
     const c = pointLabel(point.cId, pointNameById);
     if (point.centerKind === "incenter") return `Incenter of triangle ${a}${b}${c}.`;
     if (point.centerKind === "centroid") return `Centroid of triangle ${a}${b}${c}.`;
+    if (point.centerKind === "circumcenter") return `Circumcenter of triangle ${a}${b}${c}.`;
     return `Orthocenter of triangle ${a}${b}${c}.`;
   }
   if (point.kind === "lineLikeIntersectionPoint") {

@@ -1020,6 +1020,19 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "segment-mark-dot-multi.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\foreach \\gdPos in {")) {
+      throw new Error("Expected segment dot multi-mark fixture to emit foreach compact segment mark output.");
+    }
+    if (!tikz.includes("mark=*")) {
+      throw new Error("Expected segment dot multi-mark fixture to map dot mark to TikZ mark=*.");
+    }
+    if (!tikz.includes("{0.2,0.35,0.5}")) {
+      throw new Error("Expected segment dot multi-mark fixture to include positions 0.2,0.35,0.5.");
+    }
+  }
+
   if (fileName === "segment-mark-multi-fine-step.json") {
     if (exportError) throw exportError;
     if (!tikz.includes("\\foreach \\gdPos in {")) {
@@ -1312,6 +1325,22 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "circle-arrow-dot-multi.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("postaction=decorate")) {
+      throw new Error("Expected circle dot-arrow fixture to emit decoration-based overlay.");
+    }
+    if (!tikz.includes("\\fill[") || !tikz.includes("circle[radius=")) {
+      throw new Error("Expected circle dot-arrow fixture to emit filled dot marker commands.");
+    }
+    if (!tikz.includes("\\draw[") || !tikz.includes("circle[radius=")) {
+      throw new Error("Expected circle dot-arrow fixture to emit open-dot marker commands.");
+    }
+    if (tikz.includes("\\arrow[")) {
+      throw new Error("Expected circle dot-arrow fixture to avoid arrowhead commands.");
+    }
+  }
+
   if (fileName === "sector-arrow-basic.json") {
     if (exportError) throw exportError;
     if (!tikz.includes("\\tkzDrawSector")) {
@@ -1346,6 +1375,12 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     const hasConstructiveArrowLib = tikz.includes("\\usetikzlibrary{arrows.meta,bending}");
     if (!hasMarkingArrowLib && !hasConstructiveArrowLib) {
       throw new Error("Expected arrow fixtures to emit an arrows.meta (+ optional markings/bending) library line.");
+    }
+  }
+
+  if (fileName === "circle-arrow-dot-multi.json") {
+    if (!tikz.includes("\\usetikzlibrary{decorations.markings")) {
+      throw new Error("Expected circle dot-arrow fixture to include decorations.markings library.");
     }
   }
 

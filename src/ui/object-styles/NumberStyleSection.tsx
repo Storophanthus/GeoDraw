@@ -6,6 +6,7 @@ type NumberStyleSectionProps = {
     selectedNumberValue: number | null;
     updateSelectedNumberDefinition: (def: SceneModel["numbers"][number]["definition"]) => void;
     deleteSelectedObject: () => void;
+    deleteLabel?: string;
 };
 
 export function NumberStyleSection({
@@ -13,6 +14,7 @@ export function NumberStyleSection({
     selectedNumberValue,
     updateSelectedNumberDefinition,
     deleteSelectedObject,
+    deleteLabel = "Delete",
 }: NumberStyleSectionProps) {
     return (
         <div className="toolInfo">
@@ -105,7 +107,7 @@ export function NumberStyleSection({
                 );
             })()}
             <button className="deleteButton" onClick={deleteSelectedObject}>
-                Delete
+                {deleteLabel}
             </button>
         </div>
     );

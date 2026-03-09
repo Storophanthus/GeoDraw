@@ -31,12 +31,14 @@ type SectorStyleSectionProps = {
   selectedSector: SceneAngle;
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
   deleteSelectedObject: () => void;
+  deleteLabel?: string;
 };
 
 export function SectorStyleSection({
   selectedSector,
   updateSelectedAngleStyle,
   deleteSelectedObject,
+  deleteLabel = "Delete",
 }: SectorStyleSectionProps) {
   if (selectedSector.kind !== "sector") return null;
 
@@ -625,7 +627,7 @@ export function SectorStyleSection({
         />
       </div>
       <button className="deleteButton" onClick={deleteSelectedObject}>
-        Delete
+        {deleteLabel}
       </button>
     </div>
   );
