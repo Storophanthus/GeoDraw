@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save as tauriSave } from "@tauri-apps/plugin-dialog";
-import { writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { create, writeTextFile } from "@tauri-apps/plugin-fs";
 import {
   GlobalWorkerOptions,
   getDocument,
@@ -372,8 +372,9 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       }
 
       setPdfRenderError("");
+      const previewBytes = pdfData.slice();
       const loadingTask = getDocument({
-        data: pdfData,
+        data: previewBytes,
         // WKWebView/Tauri WebView can throw DataCloneError ("The object can not be cloned")
         // when PDF.js tries OffscreenCanvas/ImageDecoder worker paths.
         isOffscreenCanvasSupported: false,
@@ -456,7 +457,20 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+    // WebKit can resolve the download asynchronously; immediate revocation can yield 0-byte files.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  const writeBinaryFileWithDialog = async (path: string, bytes: Uint8Array) => {
+    const file = await create(normalizeTauriPath(path));
+    try {
+      const written = await file.write(bytes);
+      if (written !== bytes.length) {
+        throw new Error(`Incomplete write: expected ${bytes.length} bytes, wrote ${written}.`);
+      }
+    } finally {
+      await file.close();
+    }
   };
 
   const saveBytesWithDialog = async (
@@ -470,7 +484,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
         filters: [{ name: filterName, extensions: [extension] }],
       });
       if (!path) return;
-      await writeFile(normalizeTauriPath(path), bytes);
+      await writeBinaryFileWithDialog(path, bytes);
       return;
     }
     const mime = extension === "pdf" ? "application/pdf" : "image/png";
@@ -510,7 +524,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     setPdfContextMenu(null);
     if (!pdfData) return;
     try {
-      await saveBytesWithDialog(pdfData, "pdf", "PDF");
+      await saveBytesWithDialog(pdfData.slice(), "pdf", "PDF");
     } catch (err) {
       setError(`Failed to save PDF: ${extractErrorMessage(err)}`);
     }
