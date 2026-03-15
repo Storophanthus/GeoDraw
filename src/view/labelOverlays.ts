@@ -1,12 +1,22 @@
 import katex from "katex";
 import type { Vec2 } from "../geo/vec2";
-import { resolveTextLabelDisplayText, type SceneModel, type ScenePoint } from "../scene/points";
+import {
+  resolveTextLabelAlignment,
+  resolveTextLabelBoxWidthPx,
+  resolveTextLabelBoxHeightPx,
+  resolveTextLabelDisplayText,
+  resolveTextLabelRenderMode,
+  type SceneModel,
+  type ScenePoint,
+  type TextLabelRenderMode,
+} from "../scene/points";
 import {
   defaultObjectLabelPosWorld,
   defaultObjectLabelText,
   isFiniteLabelPosWorld,
   resolveObjectLabelText,
 } from "../scene/objectLabels";
+import { parseTextLabelRichText } from "../text/textLabelRichText";
 import type { Camera, Viewport } from "./camera";
 import { camera as camMath } from "./camera";
 
@@ -56,10 +66,14 @@ export type TextLabelOverlay = {
   textSize: number;
   textColor: string;
   rotationDeg: number;
+  renderMode: TextLabelRenderMode;
+  textAlign: "left" | "center" | "right";
+  boxWidthPx: number | null;
+  boxHeightPx: number | null;
 };
 
 // Keep free text-label size visually closer to exported TikZ font size.
-const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.8;
+export const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.8;
 
 function escapeHtml(value: string): string {
   return value
@@ -68,6 +82,79 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function renderMixedTextLabelHtml(source: string, liveOpenMath = false): string {
+  const segments = parseTextLabelRichText(source, { liveOpenMath });
+  if (segments.length === 0) return '<span class="gdTextLabelMixed"></span>';
+  const html = segments
+    .map((segment) => {
+      if (segment.kind === "text") {
+        return escapeHtml(segment.content).replace(/\n/g, "<br/>");
+      }
+      if (segment.kind === "inlineMath") {
+        const html = katex.renderToString(segment.content || "\\,", {
+          throwOnError: false,
+          displayMode: false,
+          strict: "ignore",
+        });
+        return `<span class="${segment.open ? "gdTextLabelInlineMath active" : "gdTextLabelInlineMath"}">${html}</span>`;
+      }
+      return `<span class="${segment.open ? "gdTextLabelDisplayMath active" : "gdTextLabelDisplayMath"}">${katex.renderToString(segment.content || "\\,", {
+        throwOnError: false,
+        displayMode: true,
+        strict: "ignore",
+      })}</span>`;
+    })
+    .join("");
+  return `<span class="gdTextLabelMixed">${html}</span>`;
+}
+
+export function renderEditableMixedTextLabelHtml(source: string, activeOffset?: number): string {
+  const segments = parseTextLabelRichText(source, { liveOpenMath: true });
+  if (segments.length === 0) return '<span class="gdTextLabelMixed editor"></span>';
+  const html = segments
+    .map((segment) => {
+      if (segment.kind === "text") {
+        return escapeHtml(segment.content).replace(/\n/g, "<br/>");
+      }
+      const raw = escapeHtml(source.slice(segment.sourceStart, segment.sourceEnd)).replace(/\n/g, "<br/>");
+      const isActive =
+        typeof activeOffset === "number" && activeOffset >= segment.activeStart && activeOffset <= segment.activeEnd;
+      if (isActive || segment.open) {
+        const className = segment.kind === "inlineMath" ? "gdTextLabelInlineMath" : "gdTextLabelDisplayMath";
+        return `<span class="${className} active">${raw}</span>`;
+      }
+      const rendered = katex.renderToString(segment.content || "\\,", {
+        throwOnError: false,
+        displayMode: segment.kind === "displayMath",
+        strict: "ignore",
+      });
+      if (segment.kind === "displayMath") {
+        return `<span class="gdEditableMathWrap display"><span class="gdEditableMathSource">${raw}</span><span class="gdEditableMathRender display">${rendered}</span></span>`;
+      }
+      return `<span class="gdEditableMathWrap"><span class="gdEditableMathSource">${raw}</span><span class="gdEditableMathRender">${rendered}</span></span>`;
+    })
+    .join("");
+  return `<span class="gdTextLabelMixed editor">${html}</span>`;
+}
+
+export function renderTextLabelHtml(
+  source: string,
+  renderMode: TextLabelRenderMode,
+  options: { liveOpenMath?: boolean } = {}
+): string {
+  if (renderMode === "tex") {
+    return katex.renderToString(source || "\\text{}", {
+      throwOnError: false,
+      displayMode: false,
+      strict: "ignore",
+    });
+  }
+  if (renderMode === "mixed") {
+    return renderMixedTextLabelHtml(source, options.liveOpenMath);
+  }
+  return `<span>${escapeHtml(source).replace(/\n/g, "<br/>")}</span>`;
 }
 
 export function getAngleTextRenderSize(rawTextSize: number): number {
@@ -275,13 +362,8 @@ export function createTextLabelOverlays(
     if (!label.visible) continue;
     const screen = camMath.worldToScreen(label.positionWorld, camera, vp);
     const displayText = resolveTextLabelDisplayText(label, scene);
-    const html = label.style.useTex
-      ? katex.renderToString(displayText || "\\text{}", {
-          throwOnError: false,
-          displayMode: false,
-          strict: "ignore",
-        })
-      : `<span>${escapeHtml(displayText).replace(/\n/g, "<br/>")}</span>`;
+    const renderMode = resolveTextLabelRenderMode(label.style);
+    const html = renderTextLabelHtml(displayText, renderMode);
     overlays.push({
       id: label.id,
       x: screen.x,
@@ -293,6 +375,10 @@ export function createTextLabelOverlays(
         typeof label.style.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
           ? label.style.rotationDeg
           : 0,
+      renderMode,
+      textAlign: resolveTextLabelAlignment(label.style),
+      boxWidthPx: resolveTextLabelBoxWidthPx(label.style),
+      boxHeightPx: resolveTextLabelBoxHeightPx(label.style),
     });
   }
   return overlays;

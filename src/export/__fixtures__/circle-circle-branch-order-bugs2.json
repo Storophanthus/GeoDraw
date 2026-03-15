@@ -1,0 +1,108 @@
+{
+  "points": [
+    {
+      "id": "p_1",
+      "kind": "free",
+      "name": "A",
+      "captionTex": "A",
+      "visible": true,
+      "showLabel": "name",
+      "position": { "x": 2.9937727616490224, "y": 4.263166269711493 }
+    },
+    {
+      "id": "p_2",
+      "kind": "free",
+      "name": "B",
+      "captionTex": "B",
+      "visible": true,
+      "showLabel": "name",
+      "position": { "x": 5.513427290651587, "y": 1.4183677782388506 }
+    },
+    {
+      "id": "p_3",
+      "kind": "free",
+      "name": "C",
+      "captionTex": "C",
+      "visible": true,
+      "showLabel": "name",
+      "position": { "x": 4.901220703125002, "y": -0.8847656250000003 }
+    },
+    {
+      "id": "p_4",
+      "kind": "pointOnCircle",
+      "name": "D",
+      "captionTex": "D",
+      "visible": true,
+      "showLabel": "name",
+      "circleId": "c_1",
+      "t": -1.6847932453083205
+    },
+    {
+      "id": "p_5",
+      "kind": "circleCircleIntersectionPoint",
+      "name": "E",
+      "captionTex": "E",
+      "visible": true,
+      "showLabel": "name",
+      "circleAId": "c_1",
+      "circleBId": "c_2",
+      "branchIndex": 1
+    },
+    {
+      "id": "p_6",
+      "kind": "circleCircleIntersectionPoint",
+      "name": "F",
+      "captionTex": "F",
+      "visible": true,
+      "showLabel": "name",
+      "circleAId": "c_1",
+      "circleBId": "c_3",
+      "branchIndex": 0
+    },
+    {
+      "id": "p_8",
+      "kind": "lineLikeIntersectionPoint",
+      "name": "H",
+      "captionTex": "H",
+      "visible": true,
+      "showLabel": "name",
+      "objA": { "type": "segment", "id": "s_9" },
+      "objB": { "type": "segment", "id": "s_10" },
+      "preferredWorld": { "x": 0.4144738616467496, "y": 1.693613405501131 }
+    }
+  ],
+  "segments": [
+    { "id": "s_9", "aId": "p_4", "bId": "p_6", "visible": true },
+    { "id": "s_10", "aId": "p_1", "bId": "p_5", "visible": true }
+  ],
+  "lines": [],
+  "circles": [
+    {
+      "id": "c_1",
+      "kind": "threePoint",
+      "aId": "p_1",
+      "bId": "p_2",
+      "cId": "p_3",
+      "visible": true
+    },
+    {
+      "id": "c_2",
+      "kind": "fixedRadius",
+      "centerId": "p_4",
+      "radius": 3.897642793859643,
+      "radiusExpr": "Distance(A,B)",
+      "visible": false
+    },
+    {
+      "id": "c_3",
+      "kind": "fixedRadius",
+      "centerId": "p_1",
+      "radius": 4.218920472348051,
+      "radiusExpr": "Distance(C,D)",
+      "visible": false
+    }
+  ],
+  "polygons": [],
+  "angles": [],
+  "numbers": []
+}

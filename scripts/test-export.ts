@@ -16,6 +16,7 @@ import type {
   ScenePoint,
   ScenePolygon,
   SceneSegment,
+  SceneTextLabel,
   ShowLabelMode,
 } from "../src/scene/points.ts";
 import { getPointWorldPos } from "../src/scene/points.ts";
@@ -63,6 +64,15 @@ const defaultPolygonStyle: PolygonStyle = {
   fillOpacity: 0.2,
 };
 
+const defaultTextLabelStyle: SceneTextLabel["style"] = {
+  textColor: "#111111",
+  textSize: 12,
+  useTex: true,
+  textMode: "tex",
+  boxWidthPx: 220,
+  rotationDeg: 0,
+};
+
 async function main(): Promise<void> {
   const files = (await readdir(fixtureDir))
     .filter((name) => name.endsWith(".json"))
@@ -107,6 +117,7 @@ function hydrateScene(raw: {
   circles?: Array<Record<string, unknown>>;
   polygons?: Array<Record<string, unknown>>;
   angles?: Array<Record<string, unknown>>;
+  textLabels?: Array<Record<string, unknown>>;
 }): SceneModel {
   const points = (raw.points ?? []).map(hydratePoint);
   const numbers = (raw.numbers ?? []).map(hydrateNumber);
@@ -115,7 +126,8 @@ function hydrateScene(raw: {
   const circles = (raw.circles ?? []).map(hydrateCircle);
   const polygons = (raw.polygons ?? []).map(hydratePolygon);
   const angles = (raw.angles ?? []).map(hydrateAngle);
-  return { points, numbers, lines, segments, circles, polygons, angles };
+  const textLabels = (raw.textLabels ?? []).map(hydrateTextLabel);
+  return { points, numbers, lines, segments, circles, polygons, angles, textLabels };
 }
 
 function hydratePoint(raw: Record<string, unknown>): ScenePoint {
@@ -416,6 +428,31 @@ function hydrateNumber(raw: Record<string, unknown>): SceneNumber {
   };
 }
 
+function hydrateTextLabel(raw: Record<string, unknown>): SceneTextLabel {
+  const style = (raw.style as SceneTextLabel["style"] | undefined) ?? defaultTextLabelStyle;
+  const positionWorld = isVec2Like(raw.positionWorld) ? raw.positionWorld : { x: 0, y: 0 };
+  return {
+    id: String(raw.id),
+    name: String(raw.name ?? raw.id),
+    text: String(raw.text ?? ""),
+    toolKind: raw.toolKind === "textbox" ? "textbox" : "label",
+    contentMode:
+      raw.contentMode === "number" ? "number" : raw.contentMode === "expression" ? "expression" : "static",
+    numberId: typeof raw.numberId === "string" ? raw.numberId : undefined,
+    expr: typeof raw.expr === "string" ? raw.expr : undefined,
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    positionWorld,
+    style: {
+      textColor: style.textColor,
+      textSize: style.textSize,
+      useTex: Boolean(style.useTex),
+      textMode: style.textMode,
+      boxWidthPx: style.boxWidthPx,
+      rotationDeg: style.rotationDeg ?? 0,
+    },
+  };
+}
+
 function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene: SceneModel, exportError: Error | null): void {
   if (fileName === "object-labels-basic.json") {
     if (exportError) throw exportError;
@@ -468,6 +505,32 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("\\tkzDrawLine")) {
       throw new Error("Expected tangent fixture to draw tangent line.");
+    }
+  }
+
+  if (fileName === "circle-circle-branch-order-bugs2.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterCC(?:\[[^\]]*\])?\([^)]*\)\([^)]*\)\s*\\tkzGetPoints\{tkzInterCC_\d+_other\}\{E\}/.test(tikz)) {
+      throw new Error("Expected bugs2 fixture to swap the first circle-circle intersection so E maps to tkz second point.");
+    }
+    if (!/\\tkzInterCC(?:\[[^\]]*\])?\([^)]*\)\([^)]*\)\s*\\tkzGetPoints\{F\}\{tkzInterCC_\d+_other\}/.test(tikz)) {
+      throw new Error("Expected bugs2 fixture to keep F on tkz first point without swapping.");
+    }
+    if (!tikz.includes("\\tkzInterLL(D,F)(A,E) \\tkzGetPoint{H}")) {
+      throw new Error("Expected bugs2 fixture to keep H constructed from the exported DF and AE segments.");
+    }
+  }
+
+  if (fileName === "text-label-modes.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\fontsize{12.19pt}{14.628pt}\\selectfont")) {
+      throw new Error("Expected free text label export to keep size 12 near 12.19pt instead of scaling with the viewport.");
+    }
+    if (!tikz.includes("Plain text \\\\ $\\displaystyle x^2+y^2=1$ \\\\ tail")) {
+      throw new Error("Expected mixed textbox export to emit centered multi-line TikZ text with display math.");
+    }
+    if (!tikz.includes("text width=122.222222222222pt")) {
+      throw new Error("Expected mixed textbox export to preserve textbox wrap width in TikZ.");
     }
   }
 

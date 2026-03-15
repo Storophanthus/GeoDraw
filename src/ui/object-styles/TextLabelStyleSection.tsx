@@ -1,4 +1,4 @@
-import type { SceneModel } from "../../scene/points";
+import { resolveTextLabelRenderMode, type SceneModel } from "../../scene/points";
 import { formatRoundedDisplay } from "../displayFormat";
 
 type TextLabel = NonNullable<SceneModel["textLabels"]>[number];
@@ -24,6 +24,7 @@ export function TextLabelStyleSection({
     deleteSelectedObject,
     deleteLabel = "Delete",
 }: TextLabelStyleSectionProps) {
+    const renderMode = resolveTextLabelRenderMode(selectedTextLabel.style);
     return (
         <div className="toolInfo">
             <div className="subSectionTitle">Text Label</div>
@@ -43,7 +44,7 @@ export function TextLabelStyleSection({
             <div className="fieldBlock">
                 <label className="fieldLabel">Text</label>
                 <textarea
-                    className="renameInput"
+                    className="renameInput textLabelTextareaInput"
                     value={selectedTextLabel.text}
                     rows={3}
                     disabled={selectedTextLabel.contentMode === "number" || selectedTextLabel.contentMode === "expression"}
@@ -123,14 +124,33 @@ export function TextLabelStyleSection({
                 </>
             )}
 
-            <label className="checkboxRow">
-                <input
-                    type="checkbox"
-                    checked={selectedTextLabel.style.useTex}
-                    onChange={(e) => updateSelectedTextLabelStyle({ useTex: e.target.checked })}
-                />
-                Render as TeX
-            </label>
+            <div className="controlRow">
+                <label className="controlLabel">Render</label>
+                <select
+                    className="selectInput"
+                    value={renderMode}
+                    onChange={(e) => {
+                        const nextMode = e.target.value === "mixed" ? "mixed" : e.target.value === "plain" ? "plain" : "tex";
+                        updateSelectedTextLabelStyle({
+                            useTex: nextMode === "tex",
+                            textMode: nextMode,
+                        });
+                        updateSelectedTextLabelFields({
+                            toolKind: nextMode === "mixed" ? "textbox" : "label",
+                        });
+                    }}
+                >
+                    <option value="tex">TeX</option>
+                    <option value="plain">Plain Text</option>
+                    <option value="mixed">Textbox</option>
+                </select>
+            </div>
+
+            {renderMode === "mixed" && (
+                <div className="statusText">
+                    Use <code>$...$</code> for inline math and <code>\[...\]</code> for centered display math.
+                </div>
+            )}
 
             <label className="checkboxRow">
                 <input
@@ -193,6 +213,22 @@ export function TextLabelStyleSection({
                     value={selectedTextLabel.style.rotationDeg ?? 0}
                     onChange={(e) => updateSelectedTextLabelStyle({ rotationDeg: Number(e.target.value) })}
                 />
+            </div>
+
+            <div className="controlRow">
+                <label className="controlLabel">Align</label>
+                <select
+                    className="selectInput"
+                    value={selectedTextLabel.style.textAlign ?? (renderMode === "mixed" ? "left" : "center")}
+                    onChange={(e) => {
+                        const nextAlign = e.target.value === "right" ? "right" : e.target.value === "center" ? "center" : "left";
+                        updateSelectedTextLabelStyle({ textAlign: nextAlign });
+                    }}
+                >
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                </select>
             </div>
 
             <button className="deleteButton" onClick={deleteSelectedObject}>

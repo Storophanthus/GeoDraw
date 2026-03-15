@@ -23,8 +23,9 @@ function styleOptions(style?: string): string {
   return style ? `[${style}]` : "";
 }
 
-function renderLabelText(ctx: TikzRendererContext, text: string, useGlow?: boolean): string {
+function renderLabelText(ctx: TikzRendererContext, text: string, useGlow?: boolean, textMode: "math" | "raw" = "math"): string {
   const escaped = ctx.capabilities.escapeTikzText(text);
+  if (textMode === "raw") return escaped;
   return useGlow ? `\\gdLabelGlow{$${escaped}$}` : `$${escaped}$`;
 }
 
@@ -55,7 +56,7 @@ function createTkzDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayerBa
     },
     emitLabelAt: (cmd) => {
       const opts = cmd.options ? `[${cmd.options}]` : "";
-      return [`\\node${opts} at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${renderLabelText(ctx, cmd.text, cmd.useGlow)}};`];
+      return [`\\node${opts} at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${renderLabelText(ctx, cmd.text, cmd.useGlow, cmd.textMode)}};`];
     },
   };
 }
@@ -77,7 +78,7 @@ function createPlainDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayer
     },
     emitLabelAt: (cmd) => {
       const opts = cmd.options ? `[${cmd.options}]` : "";
-      return [`\\node${opts} at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${renderLabelText(ctx, cmd.text, cmd.useGlow)}};`];
+      return [`\\node${opts} at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${renderLabelText(ctx, cmd.text, cmd.useGlow, cmd.textMode)}};`];
     },
   };
 }

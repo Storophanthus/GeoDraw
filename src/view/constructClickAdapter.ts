@@ -71,7 +71,11 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
   const snappedHitPointId = snappedScreen ? hitTestPointId(snappedScreen, resolvedPoints, camera, vp, tolerances.point) : null;
 
   let snap =
-    !pointerEvent.shiftKey && activeTool !== "move" && activeTool !== "copyStyle" && activeTool !== "label"
+    !pointerEvent.shiftKey &&
+    activeTool !== "move" &&
+    activeTool !== "copyStyle" &&
+    activeTool !== "label" &&
+    activeTool !== "textbox"
       ? findBestSnap(screen, camera, vp, scene, tolerances.point)
       : null;
   // Grid-snapped point lookup is only a fallback when geometry snapping found nothing.

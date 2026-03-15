@@ -67,13 +67,22 @@ export function CanvasLabelsLayer({
       {textLabelOverlays.map((label) => (
         <div
           key={label.id}
-          className={label.id === selectedTextLabelId ? "pointLabel tex selectedTextLabel" : "pointLabel tex"}
+          className={[
+            "pointLabel",
+            label.renderMode === "tex" ? "tex" : label.renderMode === "mixed" ? "mixed" : "plain",
+            label.id === selectedTextLabelId ? "selectedTextLabel" : "",
+          ].filter(Boolean).join(" ")}
           data-text-label-id={label.id}
           style={{
             transform: `translate(${label.x}px, ${label.y}px) translate(-50%, -50%) rotate(${label.rotationDeg}deg)`,
             transformOrigin: "center center",
             fontSize: `${Math.max(8, label.textSize)}px`,
             color: label.textColor,
+            width: label.boxWidthPx ? `${label.boxWidthPx}px` : undefined,
+            minHeight: label.boxHeightPx ? `${label.boxHeightPx}px` : undefined,
+            padding: label.boxWidthPx || label.boxHeightPx ? "10px 12px" : undefined,
+            boxSizing: label.boxWidthPx || label.boxHeightPx ? "border-box" : undefined,
+            textAlign: label.textAlign,
           }}
           dangerouslySetInnerHTML={{ __html: label.html }}
         />

@@ -191,7 +191,7 @@ export function computeCanvasCursor(
     return "grab";
   }
 
-  if (activeTool === "label") {
+  if (activeTool === "label" || activeTool === "textbox") {
     if (mode === "drag-label" || mode === "drag-angle-label" || mode === "drag-object-label" || mode === "drag-text-label") {
       return "grabbing";
     }

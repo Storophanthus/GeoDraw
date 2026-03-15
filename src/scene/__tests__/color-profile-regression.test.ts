@@ -3,10 +3,12 @@ import { applyProfileColorsToDefaults, recolorSceneForProfile } from "../../stat
 import {
   defaultAngleStyle,
   defaultCircleStyle,
+  defaultLabelToolStyle,
   defaultLineStyle,
   defaultPointStyle,
   defaultPolygonStyle,
   defaultSegmentStyle,
+  defaultTextboxToolStyle,
 } from "../../state/slices/sceneSlice";
 
 function fail(message: string): never {
@@ -25,6 +27,8 @@ const defaults = applyProfileColorsToDefaults(
     circleDefaults: { ...defaultCircleStyle },
     polygonDefaults: { ...defaultPolygonStyle },
     angleDefaults: { ...defaultAngleStyle, labelPosWorld: { ...defaultAngleStyle.labelPosWorld } },
+    labelToolDefaults: { ...defaultLabelToolStyle },
+    textboxToolDefaults: { ...defaultTextboxToolStyle },
   },
   "grayscale_white_dot"
 );
@@ -35,6 +39,7 @@ assert(defaults.segmentDefaults.strokeColor === "#000000", "profile should updat
 assert(defaults.segmentDefaults.strokeWidth === defaultSegmentStyle.strokeWidth, "profile should preserve default segment stroke width");
 assert(defaults.angleDefaults.fillColor === "#bfbfbf", "profile should update default angle fill color");
 assert(defaults.angleDefaults.strokeWidth === defaultAngleStyle.strokeWidth, "profile should preserve default angle stroke width");
+assert(defaults.textboxToolDefaults.boxWidthPx === 220, "profile should preserve default textbox width");
 
 const scene: SceneModel = {
   points: [

@@ -13,7 +13,10 @@ import {
   getCircleWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
+  resolveTextLabelAlignment,
+  resolveTextLabelBoxWidthPx,
   resolveTextLabelDisplayText,
+  resolveTextLabelRenderMode,
   type GeometryObjectRef,
   SceneModel,
   ScenePoint,
@@ -27,6 +30,7 @@ import {
   isFiniteLabelPosWorld,
   resolveObjectLabelText,
 } from "../scene/objectLabels";
+import { parseTextLabelRichText } from "../text/textLabelRichText";
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
 import type { TikzRendererCapabilities } from "./tikz/renderCapabilities";
@@ -133,7 +137,9 @@ export type TikzCommand =
   | { kind: "DrawPoints"; style: string; points: string[] }
   | { kind: "LabelPoints"; points: string[] }
   | { kind: "LabelPoint"; name: string; text: string; options?: string; useGlow?: boolean }
-  | { kind: "LabelAt"; x: number; y: number; text: string; options?: string; useGlow?: boolean };
+  | { kind: "LabelAt"; x: number; y: number; text: string; options?: string; useGlow?: boolean; textMode?: "math" | "raw" };
+
+const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.8;
 
 type PointStyleDef = {
   styleName: string;
@@ -1281,7 +1287,6 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const cBThroughName = ensureCircleThroughName(cB.id);
       const cAGeom = circleGeomById(cA.id);
       const cBGeom = circleGeomById(cB.id);
-      const cAThrough = { x: cAGeom.center.x + cAGeom.radius, y: cAGeom.center.y };
       let branch: 0 | 1 = point.branchIndex;
       let commonName: string | undefined;
       if (point.excludePointId) {
@@ -1317,16 +1322,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         if (!commonName) {
           const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
           if (roots.length === 2) {
-            const other = distance(roots[0], targetWorld) > distance(roots[1], targetWorld) ? roots[0] : roots[1];
-            const angleA_t = computeOrientedAngleRad(cAGeom.center, cAThrough, targetWorld);
-            const angleA_o = computeOrientedAngleRad(cAGeom.center, cAThrough, other);
-            if (angleA_t !== null && angleA_o !== null) {
-              const o1 = cAGeom.center;
-              const o2 = cBGeom.center;
-              const a_t = computeOrientedAngleRad(targetWorld, o1, o2);
-              if (a_t !== null) {
-                swap = a_t <= 0;
-              }
+            const o1 = cAGeom.center;
+            const o2 = cBGeom.center;
+            const a_t = computeOrientedAngleRad(o1, targetWorld, o2);
+            if (a_t !== null) {
+              swap = a_t >= Math.PI;
             }
           }
         }
@@ -1441,9 +1441,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
               if (roots.length === 2) {
                 const o1 = cAGeom.center;
                 const o2 = cBGeom.center;
-                const a_t = computeOrientedAngleRad(targetWorld, o1, o2);
+                const a_t = computeOrientedAngleRad(o1, targetWorld, o2);
                 if (a_t !== null) {
-                  swap = a_t <= 0;
+                  swap = a_t >= Math.PI;
                 }
               }
             }
@@ -2040,12 +2040,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   for (const label of scene.textLabels ?? []) {
     if (!label.visible) continue;
     const displayText = resolveTextLabelDisplayText(label, scene);
-    const text = label.style.useTex ? displayText : wrapPlainTextForMathMode(displayText);
-    // Free text labels are emitted as raw TikZ nodes (\node), which are not affected
-    // by tikzpicture scale. Fold final export geometry scale into these labels only.
-    // Calibration factor keeps exported free-text labels visually aligned with canvas size.
-    const textLabelFontScale = 0.82;
-    const fontPt = Math.max(1, Math.min(72, label.style.textSize * coordScale * textLabelFontScale));
+    const renderMode = resolveTextLabelRenderMode(label.style);
+    const boxWidthPx = resolveTextLabelBoxWidthPx(label.style);
+    const textAlign = resolveTextLabelAlignment(label.style);
+    const text =
+      renderMode === "tex"
+        ? displayText
+        : renderMode === "mixed"
+          ? buildMixedTextLabelNodeText(displayText)
+          : buildPlainTextLabelNodeText(displayText);
+    const fontPt = Math.max(1, Math.min(72, label.style.textSize + 0.19));
     const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
     const rotationDeg =
       typeof label.style.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
@@ -2058,10 +2062,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       text,
       options: [
         "anchor=center",
+        `align=${textAlign}`,
         `text=${rgbColorExpr(label.style.textColor)}`,
         `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
+        ...(boxWidthPx && renderMode !== "tex"
+          ? [`text width=${fmt(boxWidthPx / TEXT_LABEL_CANVAS_SIZE_SCALE)}pt`]
+          : []),
         ...(Math.abs(rotationDeg) > 1e-9 ? [`rotate=${fmt(rotationDeg)}`] : []),
       ].join(", "),
+      textMode: renderMode === "tex" ? "math" : "raw",
       useGlow: false,
     });
   }
@@ -4607,9 +4616,9 @@ function escapeTikzText(value: string): string {
   return value;
 }
 
-function wrapPlainTextForMathMode(value: string): string {
-  const escaped = value
-    .replace(/\\/g, "\\textbackslash ")
+function escapeTikzPlainText(value: string): string {
+  return value
+    .replace(/\\/g, "\\textbackslash{}")
     .replace(/\{/g, "\\{")
     .replace(/\}/g, "\\}")
     .replace(/\$/g, "\\$")
@@ -4619,7 +4628,49 @@ function wrapPlainTextForMathMode(value: string): string {
     .replace(/_/g, "\\_")
     .replace(/\^/g, "\\^{}")
     .replace(/~/g, "\\~{}");
-  return `\\mbox{${escaped}}`;
+}
+
+function buildPlainTextLabelNodeText(value: string): string {
+  const lines = value.split("\n").map((line) => escapeTikzPlainText(line));
+  if (lines.length === 0 || lines.every((line) => line.length === 0)) return "\\mbox{}";
+  return lines.join(" \\\\ ");
+}
+
+function buildMixedTextLabelNodeText(value: string): string {
+  const segments = parseTextLabelRichText(value);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  const pushCurrentLine = (force = false) => {
+    if (!force && currentLine.length === 0) return;
+    lines.push(currentLine);
+    currentLine = "";
+  };
+
+  for (let i = 0; i < segments.length; i += 1) {
+    const segment = segments[i];
+    if (segment.kind === "text") {
+      const textLines = segment.content.split("\n");
+      for (let j = 0; j < textLines.length; j += 1) {
+        if (currentLine.length === 0 && lines.length > 0 && j === 0 && textLines[j].length === 0) {
+          continue;
+        }
+        currentLine += escapeTikzPlainText(textLines[j]);
+        if (j < textLines.length - 1) pushCurrentLine(true);
+      }
+      continue;
+    }
+    if (segment.kind === "inlineMath") {
+      currentLine += `$${segment.content || "\\,"}$`;
+      continue;
+    }
+    pushCurrentLine();
+    lines.push(`$\\displaystyle ${segment.content || "\\,"}$`);
+  }
+
+  pushCurrentLine(lines.length === 0);
+  if (lines.length === 0) return "\\mbox{}";
+  return lines.join(" \\\\ ");
 }
 
 function clamp01(v: number): number {

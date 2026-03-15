@@ -1,5 +1,5 @@
 import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
-import type { ShowLabelMode, TriangleCenterKind } from "../../scene/points";
+import type { ShowLabelMode, TextLabelToolKind, TriangleCenterKind } from "../../scene/points";
 import {
   defaultLineLabelPosWorld,
   defaultLineLabelText,
@@ -93,12 +93,14 @@ export function createSceneCoreActions(
       return createdId;
     },
 
-    createTextLabel(world) {
+    createTextLabel(world, preset = "label") {
       let createdId = "";
       ctx.setState((prev) => {
         if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return prev;
         const name = nextUnusedTextLabelName(prev);
         const id = `txt_${prev.nextTextLabelId}`;
+        const toolKind: TextLabelToolKind = preset === "textbox" ? "textbox" : "label";
+        const defaultStyle = toolKind === "textbox" ? prev.textboxToolDefaults : prev.labelToolDefaults;
         createdId = id;
         return {
           ...prev,
@@ -109,15 +111,13 @@ export function createSceneCoreActions(
               {
                 id,
                 name,
-                text: name,
+                text: toolKind === "textbox" ? "" : name,
+                toolKind,
                 contentMode: "static",
                 visible: true,
                 positionWorld: { x: world.x, y: world.y },
                 style: {
-                  textColor: prev.pointDefaults.labelColor,
-                  textSize: 12,
-                  useTex: true,
-                  rotationDeg: 0,
+                  ...defaultStyle,
                 },
               },
             ],

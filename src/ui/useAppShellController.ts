@@ -50,9 +50,10 @@ export function useAppShellController(): WorkspaceShellProps {
     onRedo: redo,
     onFitView: doFitView,
     onPasteTextLabel: (payload, world) => {
-      createTextLabel(world);
+      createTextLabel(world, payload.toolKind === "textbox" ? "textbox" : "label");
       updateSelectedTextLabelFields({
         text: payload.text,
+        toolKind: payload.toolKind,
         contentMode: payload.contentMode ?? "static",
         numberId: payload.numberId,
         expr: payload.expr,

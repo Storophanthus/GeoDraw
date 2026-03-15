@@ -22,6 +22,8 @@ export function createUiActions(
   | "setCircleDefaults"
   | "setPolygonDefaults"
   | "setAngleDefaults"
+  | "setLabelToolDefaults"
+  | "setTextboxToolDefaults"
   | "setAngleFixedTool"
   | "setCircleFixedTool"
   | "setRegularPolygonTool"
@@ -99,6 +101,26 @@ export function createUiActions(
       }));
     },
 
+    setLabelToolDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        labelToolDefaults: {
+          ...prev.labelToolDefaults,
+          ...next,
+        },
+      }));
+    },
+
+    setTextboxToolDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        textboxToolDefaults: {
+          ...prev.textboxToolDefaults,
+          ...next,
+        },
+      }));
+    },
+
     setAngleFixedTool(next) {
       ctx.setState((prev) => ({
         ...prev,
@@ -170,13 +192,15 @@ export function createUiActions(
           {
             pointDefaults: prev.pointDefaults,
             segmentDefaults: prev.segmentDefaults,
-            lineDefaults: prev.lineDefaults,
-            circleDefaults: prev.circleDefaults,
-            polygonDefaults: prev.polygonDefaults,
-            angleDefaults: prev.angleDefaults,
-          } satisfies SceneStyleDefaults,
-          profileId
-        );
+              lineDefaults: prev.lineDefaults,
+              circleDefaults: prev.circleDefaults,
+              polygonDefaults: prev.polygonDefaults,
+              angleDefaults: prev.angleDefaults,
+              labelToolDefaults: prev.labelToolDefaults,
+              textboxToolDefaults: prev.textboxToolDefaults,
+            } satisfies SceneStyleDefaults,
+            profileId
+          );
         return {
           ...prev,
           colorProfileId: profileId,
@@ -188,6 +212,8 @@ export function createUiActions(
           circleDefaults: nextDefaults.circleDefaults,
           polygonDefaults: nextDefaults.polygonDefaults,
           angleDefaults: nextDefaults.angleDefaults,
+          labelToolDefaults: nextDefaults.labelToolDefaults,
+          textboxToolDefaults: nextDefaults.textboxToolDefaults,
         };
       });
     },
@@ -258,6 +284,8 @@ export function createUiActions(
                 circleDefaults: prev.circleDefaults,
                 polygonDefaults: prev.polygonDefaults,
                 angleDefaults: prev.angleDefaults,
+                labelToolDefaults: prev.labelToolDefaults,
+                textboxToolDefaults: prev.textboxToolDefaults,
               } satisfies SceneStyleDefaults,
               nextColorProfileId
             )
@@ -268,6 +296,8 @@ export function createUiActions(
               circleDefaults: prev.circleDefaults,
               polygonDefaults: prev.polygonDefaults,
               angleDefaults: prev.angleDefaults,
+              labelToolDefaults: prev.labelToolDefaults,
+              textboxToolDefaults: prev.textboxToolDefaults,
             };
 
           const pointDefaults = next.pointDefaults
@@ -294,6 +324,12 @@ export function createUiActions(
               labelPosWorld: { ...next.angleDefaults.labelPosWorld },
             }
             : baseDefaults.angleDefaults;
+          const labelToolDefaults = next.labelToolDefaults
+            ? { ...next.labelToolDefaults }
+            : baseDefaults.labelToolDefaults;
+          const textboxToolDefaults = next.textboxToolDefaults
+            ? { ...next.textboxToolDefaults }
+            : baseDefaults.textboxToolDefaults;
           const canvasThemeOverrides = next.canvasThemeOverrides
             ? { ...next.canvasThemeOverrides }
             : prev.canvasThemeOverrides;
@@ -316,6 +352,8 @@ export function createUiActions(
             circleDefaults,
             polygonDefaults,
             angleDefaults,
+            labelToolDefaults,
+            textboxToolDefaults,
             angleFixedTool: next.angleFixedTool ? { ...next.angleFixedTool } : prev.angleFixedTool,
             circleFixedTool: next.circleFixedTool ? { ...next.circleFixedTool } : prev.circleFixedTool,
             regularPolygonTool: next.regularPolygonTool ? { ...next.regularPolygonTool } : prev.regularPolygonTool,

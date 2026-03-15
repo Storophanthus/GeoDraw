@@ -82,6 +82,7 @@ type CreatePointerHandlersDeps = {
       | { type: "textLabel"; id: string }
       | null
   ) => void;
+  beginTextLabelEditing?: (id: string) => boolean;
   resolveHits: (screen: Vec2, e: PointerEvent) => PointerHits;
   decideMovePointerDown: (hits: PointerHits) => MoveDecision;
   onToolClickRelease: (screen: Vec2, e: PointerEvent, hits: PointerHits) => void;
@@ -90,6 +91,7 @@ type CreatePointerHandlersDeps = {
 export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
   let hoverRafId: number | null = null;
   let pendingHover: { screen: Vec2; shiftKey: boolean } | null = null;
+  let lastTextLabelClick: { id: string; atMs: number } | null = null;
 
   const flushHoverUpdate = () => {
     hoverRafId = null;
@@ -138,7 +140,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pointId = decision.pointId;
       objectType = decision.dragObjectType;
       deps.setSelectedObject(decision.selectedObject);
-    } else if (deps.activeTool === "label") {
+    } else if (deps.activeTool === "label" || deps.activeTool === "textbox") {
       const decision = deps.decideMovePointerDown(hits);
       if (
         decision.mode === "drag-label"
@@ -228,6 +230,17 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
     if (st.mode === "tool-click" && !st.moved) {
       const screen = deps.readScreen(e);
       deps.onToolClickRelease(screen, e, deps.resolveHits(screen, e));
+    }
+    if (deps.activeTool === "move" && st.mode === "drag-text-label" && !st.moved && st.pointId) {
+      const now = performance.now();
+      if (lastTextLabelClick && lastTextLabelClick.id === st.pointId && now - lastTextLabelClick.atMs <= 420) {
+        deps.beginTextLabelEditing?.(st.pointId);
+        lastTextLabelClick = null;
+      } else {
+        lastTextLabelClick = { id: st.pointId, atMs: now };
+      }
+    } else if (!st.moved) {
+      lastTextLabelClick = null;
     }
 
     deps.pointerRef.current = {

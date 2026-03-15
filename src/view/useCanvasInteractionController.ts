@@ -73,6 +73,7 @@ type InteractionActions = {
   setCursorWorld: (value: Vec2 | null) => void;
   setHoveredHit: (hit: HoveredHit) => void;
   setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null) => void;
+  beginTextLabelEditing?: (id: string) => boolean;
   clearPendingSelection: () => void;
   zoomAtScreenPoint: (vp: Viewport, screen: Vec2, zoomFactor: number) => void;
 };
@@ -91,6 +92,7 @@ type InteractionDeps = {
   resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>;
   resolvedAngles: ResolvedAngle[];
   hoveredHit: HoveredHit;
+  selectedObject: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null;
   pointLabelOffsetPx: Vec2;
   angleFixedTool: AngleFixedToolState;
   circleFixedTool: CircleFixedToolState;
@@ -117,6 +119,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     resolvedPoints,
     resolvedAngles,
     hoveredHit,
+    selectedObject,
     pointLabelOffsetPx,
     angleFixedTool,
     circleFixedTool,
@@ -229,6 +232,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       setCursorWorldFromScreen: (screen) => actions.setCursorWorld(camMath.screenToWorld(screen, camera, vp)),
       setHoveredHit: actions.setHoveredHit,
       setSelectedObject: actions.setSelectedObject,
+      beginTextLabelEditing: actions.beginTextLabelEditing,
       resolveHits: (screen, e) => ({
         hitTextLabelId: hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current),
         hitPointId: engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
@@ -281,6 +285,15 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     });
 
     const onDoubleClick = (e: MouseEvent) => {
+      if (activeTool === "move") {
+        const hitTextLabelId =
+          hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current) ??
+          (selectedObject?.type === "textLabel" ? selectedObject.id : null);
+        if (hitTextLabelId) {
+          e.preventDefault();
+          return;
+        }
+      }
       if (!shouldCancelOnCanvasDoubleClick(activeTool, pendingSelection)) return;
       e.preventDefault();
       if (pendingSelection) {
@@ -323,6 +336,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     actions,
     clickEpsilonPx,
     hoveredHit,
+    selectedObject,
     pendingSelection,
     pointLabelOffsetPx,
     resolvedPoints,

@@ -6,6 +6,7 @@ import type {
   PointStyle,
   PolygonStyle,
   SceneModel,
+  SceneTextLabelStyle,
 } from "../scene/points";
 
 export type ColorProfileId = "classic" | "grayscale_white_dot" | "beige_light" | "dark_mode";
@@ -49,6 +50,8 @@ export type SceneStyleDefaults = {
   circleDefaults: CircleStyle;
   polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
+  labelToolDefaults: SceneTextLabelStyle;
+  textboxToolDefaults: SceneTextLabelStyle;
 };
 
 export const DEFAULT_COLOR_PROFILE_ID: ColorProfileId = "beige_light";
@@ -587,6 +590,23 @@ export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneSt
         color: palette.arrow,
       },
     },
+    labelToolDefaults: {
+      textColor: palette.pointLabel,
+      textSize: 12,
+      useTex: true,
+      textMode: "tex",
+      textAlign: "center",
+      rotationDeg: 0,
+    },
+    textboxToolDefaults: {
+      textColor: palette.pointLabel,
+      textSize: 12,
+      useTex: false,
+      textMode: "mixed",
+      textAlign: "left",
+      boxWidthPx: 220,
+      rotationDeg: 0,
+    },
   };
 }
 
@@ -655,6 +675,14 @@ export function applyProfileColorsToDefaults(defaults: SceneStyleDefaults, profi
         ? { ...defaults.angleDefaults.arcArrowMark, color: palette.arrow }
         : defaults.angleDefaults.arcArrowMark,
       arcArrowMarks: defaults.angleDefaults.arcArrowMarks?.map((arrow) => ({ ...arrow, color: palette.arrow })),
+    },
+    labelToolDefaults: {
+      ...defaults.labelToolDefaults,
+      textColor: palette.pointLabel,
+    },
+    textboxToolDefaults: {
+      ...defaults.textboxToolDefaults,
+      textColor: palette.pointLabel,
     },
   };
 }

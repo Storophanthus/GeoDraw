@@ -1,4 +1,4 @@
-import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneModel } from "../../scene/points";
+import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneModel, SceneTextLabelStyle } from "../../scene/points";
 import type { ActiveTool, GeoState, SelectedObject } from "./storeTypes";
 import type { CanvasColorTheme, ColorProfileId } from "../colorProfiles";
 
@@ -32,6 +32,8 @@ export type HistorySnapshot = {
   circleDefaults: CircleStyle;
   polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
+  labelToolDefaults: SceneTextLabelStyle;
+  textboxToolDefaults: SceneTextLabelStyle;
   angleFixedTool: GeoState["angleFixedTool"];
   circleFixedTool: GeoState["circleFixedTool"];
   transformTool?: GeoState["transformTool"];
@@ -79,6 +81,8 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     circleDefaults: prev.circleDefaults,
     polygonDefaults: prev.polygonDefaults,
     angleDefaults: prev.angleDefaults,
+    labelToolDefaults: prev.labelToolDefaults,
+    textboxToolDefaults: prev.textboxToolDefaults,
     angleFixedTool: prev.angleFixedTool,
     circleFixedTool: prev.circleFixedTool,
     transformTool: prev.transformTool,
@@ -110,7 +114,9 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.lineDefaults !== next.lineDefaults ||
     prev.circleDefaults !== next.circleDefaults ||
     prev.polygonDefaults !== next.polygonDefaults ||
-    prev.angleDefaults !== next.angleDefaults
+    prev.angleDefaults !== next.angleDefaults ||
+    prev.labelToolDefaults !== next.labelToolDefaults ||
+    prev.textboxToolDefaults !== next.textboxToolDefaults
     || prev.exportClipWorld !== next.exportClipWorld
   );
 }

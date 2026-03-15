@@ -109,6 +109,8 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     circleDefaults: snapshot.circleDefaults ?? prev.circleDefaults,
     polygonDefaults: snapshot.polygonDefaults ?? prev.polygonDefaults,
     angleDefaults: snapshot.angleDefaults ?? prev.angleDefaults,
+    labelToolDefaults: snapshot.labelToolDefaults ?? prev.labelToolDefaults,
+    textboxToolDefaults: snapshot.textboxToolDefaults ?? prev.textboxToolDefaults,
     angleFixedTool: snapshot.angleFixedTool ?? prev.angleFixedTool,
     circleFixedTool: snapshot.circleFixedTool ?? prev.circleFixedTool,
     transformTool: snapshot.transformTool ?? prev.transformTool,

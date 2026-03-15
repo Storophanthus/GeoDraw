@@ -1,5 +1,5 @@
 import type { Vec2 } from "../geo/vec2";
-import type { GeometryObjectRef, LineLikeObjectRef, ReflectionObjectRef } from "../scene/points";
+import type { GeometryObjectRef, LineLikeObjectRef, ReflectionObjectRef, TextLabelToolKind } from "../scene/points";
 import type { ActiveTool, PendingSelection, TransformableObjectRef } from "../state/geoStore";
 import type { ExportClipWorld } from "../state/slices/storeTypes";
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
@@ -19,7 +19,7 @@ export type ToolClickIO = {
   setPendingSelection: (next: PendingSelection) => void;
   clearPendingSelection: () => void;
   createFreePoint: (world: Vec2) => string;
-  createTextLabel: (world: Vec2) => string;
+  createTextLabel: (world: Vec2, preset?: TextLabelToolKind) => string;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
   createPolygon: (pointIds: string[]) => string | null;
@@ -244,6 +244,18 @@ export function handleToolClick(
     const snapWorld = !hits.shiftKey ? hits.snap?.world ?? null : null;
     const world = snapWorld ?? maybeSnapWorldToGrid(camMath.screenToWorld(screen, io.camera, io.vp));
     const id = io.createTextLabel(world);
+    io.setSelectedObject({ type: "textLabel", id });
+    return;
+  }
+
+  if (activeTool === "textbox") {
+    if (hits.hitTextLabelId) {
+      io.setSelectedObject({ type: "textLabel", id: hits.hitTextLabelId });
+      return;
+    }
+    const snapWorld = !hits.shiftKey ? hits.snap?.world ?? null : null;
+    const world = snapWorld ?? maybeSnapWorldToGrid(camMath.screenToWorld(screen, io.camera, io.vp));
+    const id = io.createTextLabel(world, "textbox");
     io.setSelectedObject({ type: "textLabel", id });
     return;
   }
@@ -935,7 +947,7 @@ export function isValidTarget(
     return hoveredHit.type === "point";
   }
   if (activeTool === "export_clip" || activeTool === "export_clip_rect") return false;
-  if (activeTool === "label") {
+  if (activeTool === "label" || activeTool === "textbox") {
     return false;
   }
   if (activeTool === "perp_line") {

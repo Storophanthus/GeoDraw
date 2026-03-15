@@ -1,4 +1,4 @@
-import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle } from "../../scene/points";
+import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneTextLabelStyle } from "../../scene/points";
 import {
   buildDefaultStylesForProfile,
   DEFAULT_COLOR_PROFILE_ID,
@@ -12,6 +12,8 @@ export const defaultLineStyle: LineStyle = profileDefaults.lineDefaults;
 export const defaultCircleStyle: CircleStyle = profileDefaults.circleDefaults;
 export const defaultPolygonStyle: PolygonStyle = profileDefaults.polygonDefaults;
 export const defaultAngleStyle: AngleStyle = profileDefaults.angleDefaults;
+export const defaultLabelToolStyle: SceneTextLabelStyle = profileDefaults.labelToolDefaults;
+export const defaultTextboxToolStyle: SceneTextLabelStyle = profileDefaults.textboxToolDefaults;
 
 export function createSceneSliceState() {
   return {
@@ -41,5 +43,7 @@ export function createSceneSliceState() {
     circleDefaults: defaultCircleStyle,
     polygonDefaults: defaultPolygonStyle,
     angleDefaults: defaultAngleStyle,
+    labelToolDefaults: defaultLabelToolStyle,
+    textboxToolDefaults: defaultTextboxToolStyle,
   };
 }

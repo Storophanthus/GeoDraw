@@ -750,10 +750,18 @@ export type SceneNumber = {
   definition: SceneNumberDefinition;
 };
 
+export type TextLabelRenderMode = "tex" | "plain" | "mixed";
+export type TextLabelToolKind = "label" | "textbox";
+export type TextLabelAlignment = "left" | "center" | "right";
+
 export type SceneTextLabelStyle = {
   textColor: string;
   textSize: number;
   useTex: boolean;
+  textMode?: TextLabelRenderMode;
+  textAlign?: TextLabelAlignment;
+  boxWidthPx?: number;
+  boxHeightPx?: number;
   rotationDeg?: number;
 };
 
@@ -761,6 +769,7 @@ export type SceneTextLabel = {
   id: string;
   name: string;
   text: string;
+  toolKind?: TextLabelToolKind;
   contentMode?: "static" | "number" | "expression";
   numberId?: string;
   expr?: string;
@@ -856,6 +865,35 @@ export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel)
     evalNumberById,
     updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneEvalState.sceneLastEvalStats),
   });
+}
+
+export function resolveTextLabelRenderMode(style: SceneTextLabelStyle): TextLabelRenderMode {
+  if (style.textMode === "plain" || style.textMode === "mixed" || style.textMode === "tex") {
+    return style.textMode;
+  }
+  return style.useTex ? "tex" : "plain";
+}
+
+export function resolveTextLabelAlignment(style: SceneTextLabelStyle): TextLabelAlignment {
+  if (style.textAlign === "left" || style.textAlign === "center" || style.textAlign === "right") {
+    return style.textAlign;
+  }
+  return resolveTextLabelRenderMode(style) === "mixed" ? "left" : "center";
+}
+
+export function resolveTextLabelBoxWidthPx(style: SceneTextLabelStyle): number | null {
+  if (typeof style.boxWidthPx !== "number" || !Number.isFinite(style.boxWidthPx)) return null;
+  return Math.max(80, Math.min(960, style.boxWidthPx));
+}
+
+export function resolveTextLabelBoxHeightPx(style: SceneTextLabelStyle): number | null {
+  if (typeof style.boxHeightPx !== "number" || !Number.isFinite(style.boxHeightPx)) return null;
+  return Math.max(56, Math.min(640, style.boxHeightPx));
+}
+
+export function resolveTextLabelToolKind(label: SceneTextLabel): TextLabelToolKind {
+  if (label.toolKind === "textbox" || label.toolKind === "label") return label.toolKind;
+  return resolveTextLabelRenderMode(label.style) === "mixed" ? "textbox" : "label";
 }
 
 export function resolveTextLabelDisplayText(label: SceneTextLabel, scene: SceneModel): string {

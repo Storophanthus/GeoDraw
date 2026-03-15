@@ -146,10 +146,30 @@ function normalizeTextLabels(
           ? Math.max(8, Math.min(96, label.style.textSize))
           : 12;
       const useTex = Boolean(label.style?.useTex);
+      const textMode =
+        label.style?.textMode === "plain" || label.style?.textMode === "mixed" || label.style?.textMode === "tex"
+          ? label.style.textMode
+          : useTex
+            ? "tex"
+            : "plain";
+      const textAlign =
+        label.style?.textAlign === "left" || label.style?.textAlign === "center" || label.style?.textAlign === "right"
+          ? label.style.textAlign
+          : textMode === "mixed"
+            ? "left"
+            : "center";
       const rotationDeg =
         typeof label.style?.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
           ? Math.max(-3600, Math.min(3600, label.style.rotationDeg))
           : 0;
+      const boxWidthPx =
+        typeof label.style?.boxWidthPx === "number" && Number.isFinite(label.style.boxWidthPx)
+          ? Math.max(80, Math.min(960, label.style.boxWidthPx))
+          : undefined;
+      const boxHeightPx =
+        typeof label.style?.boxHeightPx === "number" && Number.isFinite(label.style.boxHeightPx)
+          ? Math.max(56, Math.min(640, label.style.boxHeightPx))
+          : undefined;
       const x = Number.isFinite(label.positionWorld?.x) ? label.positionWorld.x : 0;
       const y = Number.isFinite(label.positionWorld?.y) ? label.positionWorld.y : 0;
       const contentMode =
@@ -166,6 +186,12 @@ function normalizeTextLabels(
         ...label,
         name: typeof label.name === "string" ? label.name : label.id,
         text: typeof label.text === "string" ? label.text : "",
+        toolKind:
+          label.toolKind === "textbox" || label.toolKind === "label"
+            ? label.toolKind
+            : textMode === "mixed"
+              ? "textbox"
+              : "label",
         contentMode,
         numberId,
         expr,
@@ -174,7 +200,11 @@ function normalizeTextLabels(
         style: {
           textColor,
           textSize,
-          useTex,
+          useTex: textMode === "tex",
+          textMode,
+          textAlign,
+          boxWidthPx,
+          boxHeightPx,
           rotationDeg,
         },
       };

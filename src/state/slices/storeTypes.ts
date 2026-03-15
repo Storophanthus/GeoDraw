@@ -13,6 +13,7 @@ import type {
   ScenePoint,
   SceneTextLabelStyle,
   ShowLabelMode,
+  TextLabelToolKind,
   TriangleCenterKind,
 } from "../../scene/points";
 import type { Camera, Viewport } from "../../view/camera";
@@ -34,6 +35,7 @@ export type ActiveTool =
   | "invert"
   | "copyStyle"
   | "label"
+  | "textbox"
   | "midpoint"
   | "segment"
   | "line2p"
@@ -249,6 +251,8 @@ export type GeoState = {
   circleDefaults: CircleStyle;
   polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
+  labelToolDefaults: SceneTextLabelStyle;
+  textboxToolDefaults: SceneTextLabelStyle;
   angleFixedTool: {
     angleExpr: string;
     direction: AngleFixedDirection;
@@ -297,6 +301,8 @@ export type AppPreferencesState = Pick<
   | "circleDefaults"
   | "polygonDefaults"
   | "angleDefaults"
+  | "labelToolDefaults"
+  | "textboxToolDefaults"
   | "angleFixedTool"
   | "circleFixedTool"
   | "regularPolygonTool"
@@ -358,7 +364,7 @@ export type GeoActions = {
   createTriangleCenterPoint: (centerKind: TriangleCenterKind, aId: string, bId: string, cId: string) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createNumber: (definition: SceneNumberDefinition, preferredName?: string) => string | null;
-  createTextLabel: (world: Vec2) => string;
+  createTextLabel: (world: Vec2, preset?: TextLabelToolKind) => string;
 
   movePointTo: (id: string, world: Vec2) => void;
   movePolygonByWorldDelta: (id: string, deltaWorld: Vec2) => void;
@@ -375,6 +381,8 @@ export type GeoActions = {
   setCircleDefaults: (next: Partial<CircleStyle>) => void;
   setPolygonDefaults: (next: Partial<PolygonStyle>) => void;
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
+  setLabelToolDefaults: (next: Partial<SceneTextLabelStyle>) => void;
+  setTextboxToolDefaults: (next: Partial<SceneTextLabelStyle>) => void;
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
   setCircleFixedTool: (next: Partial<GeoState["circleFixedTool"]>) => void;
   setRegularPolygonTool: (next: Partial<GeoState["regularPolygonTool"]>) => void;
@@ -448,7 +456,13 @@ export type GeoActions = {
   updateSelectedNumberDefinition: (next: SceneNumberDefinition) => void;
   updateSelectedTextLabelFields: (
     next: Partial<
-      Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld" | "contentMode" | "numberId" | "expr">
+      Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld" | "contentMode" | "numberId" | "expr" | "toolKind">
+    >
+  ) => void;
+  updateTextLabelFieldsByIds: (
+    ids: string[],
+    next: Partial<
+      Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld" | "contentMode" | "numberId" | "expr" | "toolKind">
     >
   ) => void;
   updateSelectedTextLabelStyle: (next: Partial<SceneTextLabelStyle>) => void;

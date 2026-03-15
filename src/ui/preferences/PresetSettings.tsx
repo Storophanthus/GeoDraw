@@ -21,6 +21,8 @@ export function PresetSettings() {
     const circleDefaults = useGeoStore((state) => state.circleDefaults);
     const polygonDefaults = useGeoStore((state) => state.polygonDefaults);
     const angleDefaults = useGeoStore((state) => state.angleDefaults);
+    const labelToolDefaults = useGeoStore((state) => state.labelToolDefaults);
+    const textboxToolDefaults = useGeoStore((state) => state.textboxToolDefaults);
     const angleFixedTool = useGeoStore((state) => state.angleFixedTool);
     const circleFixedTool = useGeoStore((state) => state.circleFixedTool);
     const regularPolygonTool = useGeoStore((state) => state.regularPolygonTool);
@@ -44,6 +46,8 @@ export function PresetSettings() {
                 circleDefaults,
                 polygonDefaults,
                 angleDefaults,
+                labelToolDefaults,
+                textboxToolDefaults,
                 angleFixedTool,
                 circleFixedTool,
                 regularPolygonTool,
@@ -62,6 +66,8 @@ export function PresetSettings() {
             circleDefaults,
             polygonDefaults,
             angleDefaults,
+            labelToolDefaults,
+            textboxToolDefaults,
             angleFixedTool,
             circleFixedTool,
             regularPolygonTool,

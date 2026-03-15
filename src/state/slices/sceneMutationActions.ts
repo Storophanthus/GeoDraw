@@ -64,6 +64,7 @@ export function createSceneMutationActions({
   | "updateAngleFieldsByIds"
   | "updateSelectedNumberDefinition"
   | "updateSelectedTextLabelFields"
+  | "updateTextLabelFieldsByIds"
   | "updateSelectedTextLabelStyle"
   | "updateTextLabelStyleByIds"
   | "setObjectVisibility"
@@ -1098,21 +1099,57 @@ export function createSceneMutationActions({
     updateSelectedTextLabelFields(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "textLabel") return prev;
+        let changed = false;
+        const textLabels = (prev.scene.textLabels ?? []).map((label) => {
+          if (label.id !== prev.selectedObject!.id) return label;
+          const positionWorld = next.positionWorld
+            ? { x: next.positionWorld.x, y: next.positionWorld.y }
+            : label.positionWorld;
+          const nextLabel = {
+            ...label,
+            ...next,
+            positionWorld,
+          };
+          if (JSON.stringify(nextLabel) === JSON.stringify(label)) return label;
+          changed = true;
+          return nextLabel;
+        });
+        if (!changed) return prev;
         return {
           ...prev,
           scene: {
             ...prev.scene,
-            textLabels: (prev.scene.textLabels ?? []).map((label) =>
-              label.id === prev.selectedObject!.id
-                ? {
-                    ...label,
-                    ...next,
-                    positionWorld: next.positionWorld
-                      ? { x: next.positionWorld.x, y: next.positionWorld.y }
-                      : label.positionWorld,
-                  }
-                : label
-            ),
+            textLabels,
+          },
+        };
+      });
+    },
+
+    updateTextLabelFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const textLabels = (prev.scene.textLabels ?? []).map((label) => {
+          if (!idSet.has(label.id)) return label;
+          const positionWorld = next.positionWorld
+            ? { x: next.positionWorld.x, y: next.positionWorld.y }
+            : label.positionWorld;
+          const nextLabel = {
+            ...label,
+            ...next,
+            positionWorld,
+          };
+          if (JSON.stringify(nextLabel) === JSON.stringify(label)) return label;
+          changed = true;
+          return nextLabel;
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels,
           },
         };
       });
@@ -1121,21 +1158,26 @@ export function createSceneMutationActions({
     updateSelectedTextLabelStyle(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "textLabel") return prev;
+        let changed = false;
+        const textLabels = (prev.scene.textLabels ?? []).map((label) => {
+          if (label.id !== prev.selectedObject!.id) return label;
+          const nextStyle = {
+            ...label.style,
+            ...next,
+          };
+          if (JSON.stringify(nextStyle) === JSON.stringify(label.style)) return label;
+          changed = true;
+          return {
+            ...label,
+            style: nextStyle,
+          };
+        });
+        if (!changed) return prev;
         return {
           ...prev,
           scene: {
             ...prev.scene,
-            textLabels: (prev.scene.textLabels ?? []).map((label) =>
-              label.id === prev.selectedObject!.id
-                ? {
-                    ...label,
-                    style: {
-                      ...label.style,
-                      ...next,
-                    },
-                  }
-                : label
-            ),
+            textLabels,
           },
         };
       });
@@ -1148,13 +1190,15 @@ export function createSceneMutationActions({
         let changed = false;
         const textLabels = (prev.scene.textLabels ?? []).map((label) => {
           if (!idSet.has(label.id)) return label;
+          const nextStyle = {
+            ...label.style,
+            ...next,
+          };
+          if (JSON.stringify(nextStyle) === JSON.stringify(label.style)) return label;
           changed = true;
           return {
             ...label,
-            style: {
-              ...label.style,
-              ...next,
-            },
+            style: nextStyle,
           };
         });
         if (!changed) return prev;

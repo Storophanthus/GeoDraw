@@ -42,6 +42,16 @@ type IconProps = {
   strokeWidth?: number;
 };
 
+function IconTextbox({ size = 18, strokeWidth = 1.8 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M7 9h10" />
+      <path d="M7 13h6" />
+    </svg>
+  );
+}
+
 export type ToolDef = {
   icon: ComponentType<IconProps>;
   tooltip: string;
@@ -60,6 +70,7 @@ export const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   invert: { icon: IconInvert, tooltip: "Invert Line/Circle", ariaLabel: "Invert tool" },
   copyStyle: { icon: Paintbrush, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
   label: { icon: Type, tooltip: "Label Tool", ariaLabel: "Label tool" },
+  textbox: { icon: IconTextbox, tooltip: "Textbox Tool", ariaLabel: "Textbox tool" },
   export_clip_rect: { icon: Crop, tooltip: "Export Clip Rectangle", ariaLabel: "Export clip rectangle tool" },
   export_clip: { icon: Scissors, tooltip: "Export Clip Polygon", ariaLabel: "Export clip polygon tool" },
   midpoint: { icon: IconMidpoint, tooltip: "Midpoint (M)", ariaLabel: "Midpoint tool" },
@@ -86,7 +97,7 @@ const TOOL_GROUPS: Array<{ id: ToolGroupId; label: string; tools: ActiveTool[] }
   { id: "angle", label: "ANGLE", tools: ["angle", "angle_fixed"] },
   { id: "circles", label: "SHAPES", tools: ["circle_cp", "circle_3p", "circle_fixed", "sector", "polygon", "regular_polygon"] },
   { id: "transform", label: "TRANSFORM", tools: ["translate", "rotate", "reflect", "dilate", "invert"] },
-  { id: "styles", label: "STYLES", tools: ["copyStyle", "label"] },
+  { id: "styles", label: "STYLES", tools: ["copyStyle", "label", "textbox"] },
 ];
 
 type ToolPaletteProps = {

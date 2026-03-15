@@ -7,6 +7,7 @@ import type { Vec2 } from "../geo/vec2";
 
 type TextLabelClipboardPayload = {
   text: string;
+  toolKind?: "label" | "textbox";
   contentMode?: "static" | "number" | "expression";
   numberId?: string;
   expr?: string;
@@ -15,6 +16,7 @@ type TextLabelClipboardPayload = {
     textColor: string;
     textSize: number;
     useTex: boolean;
+    textMode?: "tex" | "plain" | "mixed";
     rotationDeg?: number;
   };
 };
@@ -87,6 +89,7 @@ export function useGlobalCanvasHotkeys({
         copiedTextLabelRef.current = {
           payload: {
             text: label.text,
+            toolKind: label.toolKind,
             contentMode: label.contentMode ?? "static",
             numberId: label.numberId,
             expr: label.expr,

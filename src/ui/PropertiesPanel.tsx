@@ -10,6 +10,7 @@ import {
   getLineWorldAnchors,
   getNumberValue,
   getPointWorldPos,
+  resolveTextLabelToolKind,
 } from "../scene/points";
 import { selectConstructionDescription } from "../state/selectors/constructionDescription";
 import { useGeoStore } from "../state/geoStore";
@@ -25,6 +26,7 @@ import {
   lineStyleEqual,
   pointStyleEqual,
   polygonStyleEqual,
+  textLabelStyleEqual,
 } from "./object-styles/styleComparisons";
 import type { SelectedObject } from "../state/slices/storeTypes";
 
@@ -56,6 +58,8 @@ export function PropertiesPanel({
   const circleDefaults = useGeoStore((store) => store.circleDefaults);
   const polygonDefaults = useGeoStore((store) => store.polygonDefaults);
   const angleDefaults = useGeoStore((store) => store.angleDefaults);
+  const labelToolDefaults = useGeoStore((store) => store.labelToolDefaults);
+  const textboxToolDefaults = useGeoStore((store) => store.textboxToolDefaults);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
   const regularPolygonTool = useGeoStore((store) => store.regularPolygonTool);
@@ -67,6 +71,8 @@ export function PropertiesPanel({
   const setCircleDefaults = useGeoStore((store) => store.setCircleDefaults);
   const setPolygonDefaults = useGeoStore((store) => store.setPolygonDefaults);
   const setAngleDefaults = useGeoStore((store) => store.setAngleDefaults);
+  const setLabelToolDefaults = useGeoStore((store) => store.setLabelToolDefaults);
+  const setTextboxToolDefaults = useGeoStore((store) => store.setTextboxToolDefaults);
   const setAngleFixedTool = useGeoStore((store) => store.setAngleFixedTool);
   const setCircleFixedTool = useGeoStore((store) => store.setCircleFixedTool);
   const setRegularPolygonTool = useGeoStore((store) => store.setRegularPolygonTool);
@@ -100,6 +106,7 @@ export function PropertiesPanel({
   const setSelectedPolygonOwnedSegmentsVisible = useGeoStore((store) => store.setSelectedPolygonOwnedSegmentsVisible);
   const updateSelectedNumberDefinition = useGeoStore((store) => store.updateSelectedNumberDefinition);
   const updateSelectedTextLabelFields = useGeoStore((store) => store.updateSelectedTextLabelFields);
+  const updateTextLabelFieldsByIds = useGeoStore((store) => store.updateTextLabelFieldsByIds);
   const updateSelectedTextLabelStyle = useGeoStore((store) => store.updateSelectedTextLabelStyle);
   const updateTextLabelStyleByIds = useGeoStore((store) => store.updateTextLabelStyleByIds);
   const createNumber = useGeoStore((store) => store.createNumber);
@@ -210,15 +217,16 @@ export function PropertiesPanel({
     () => evaluateAngleExpressionDegrees(scene, transformTool.angleExpr),
     [scene, transformTool.angleExpr]
   );
-  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "polygon" | "angle" | null>(() => {
+  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | null>(() => {
     if (selectedPoint) return "point";
     if (selectedSegment) return "segment";
     if (selectedLine) return "line";
     if (selectedCircle) return "circle";
     if (selectedPolygon) return "polygon";
     if (selectedAngle) return "angle";
+    if (selectedTextLabel) return "textLabel";
     return null;
-  }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedPolygon, selectedSegment]);
+  }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedPolygon, selectedSegment, selectedTextLabel]);
   const selectedAngleRightStatus = useMemo<"none" | "approx" | "exact">(
     () => (selectedAngle ? resolveAngleRightStatus(scene, selectedAngle) : "none"),
     [scene, selectedAngle]
@@ -230,10 +238,15 @@ export function PropertiesPanel({
     if (selectedCircle) return circleStyleEqual(circleDefaults, selectedCircle.style);
     if (selectedPolygon) return polygonStyleEqual(polygonDefaults, selectedPolygon.style);
     if (selectedAngle) return angleStyleEqual(angleDefaults, selectedAngle.style);
+    if (selectedTextLabel) {
+      const defaults = resolveTextLabelToolKind(selectedTextLabel) === "textbox" ? textboxToolDefaults : labelToolDefaults;
+      return textLabelStyleEqual(defaults, selectedTextLabel.style);
+    }
     return false;
   }, [
     angleDefaults,
     circleDefaults,
+    labelToolDefaults,
     lineDefaults,
     pointDefaults,
     polygonDefaults,
@@ -244,6 +257,8 @@ export function PropertiesPanel({
     selectedPoint,
     selectedPolygon,
     selectedSegment,
+    selectedTextLabel,
+    textboxToolDefaults,
   ]);
   const handleMakeStyleDefaultChange = (checked: boolean) => {
     if (!checked || !selectedStyleKind) return;
@@ -275,6 +290,14 @@ export function PropertiesPanel({
         ...selectedAngle.style,
         labelPosWorld: { ...angleDefaults.labelPosWorld },
       });
+      return;
+    }
+    if (selectedStyleKind === "textLabel" && selectedTextLabel) {
+      if (resolveTextLabelToolKind(selectedTextLabel) === "textbox") {
+        setTextboxToolDefaults({ ...selectedTextLabel.style });
+      } else {
+        setLabelToolDefaults({ ...selectedTextLabel.style });
+      }
     }
   };
 
@@ -400,6 +423,13 @@ export function PropertiesPanel({
       return;
     }
     updateSelectedAngleStyle(next);
+  };
+  const handleUpdateSelectedTextLabelFields = (next: Parameters<typeof updateSelectedTextLabelFields>[0]) => {
+    if (selectedObject?.type === "textLabel" && hasLinkedSelection) {
+      updateTextLabelFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedTextLabelFields(next);
   };
   const handleUpdateSelectedTextLabelStyle = (next: Parameters<typeof updateSelectedTextLabelStyle>[0]) => {
     if (selectedObject?.type === "textLabel" && hasLinkedSelection) {
@@ -567,7 +597,7 @@ export function PropertiesPanel({
           scene={scene}
           selectedTextLabelBoundNumberValue={selectedTextLabelBoundNumberValue}
           selectedTextLabelExprValue={selectedTextLabelExprValue}
-          updateSelectedTextLabelFields={updateSelectedTextLabelFields}
+          updateSelectedTextLabelFields={handleUpdateSelectedTextLabelFields}
           updateSelectedTextLabelStyle={handleUpdateSelectedTextLabelStyle}
           deleteSelectedObject={handleDeleteFromProperties}
           deleteLabel={deleteButtonLabel}

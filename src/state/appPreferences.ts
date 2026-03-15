@@ -15,6 +15,8 @@ type ConstructionPreferencesState = Pick<
   | "circleDefaults"
   | "polygonDefaults"
   | "angleDefaults"
+  | "labelToolDefaults"
+  | "textboxToolDefaults"
   | "angleFixedTool"
   | "circleFixedTool"
   | "regularPolygonTool"
@@ -123,6 +125,8 @@ export function captureConstructionPreferences(state: ConstructionPreferencesSta
     circleDefaults: state.circleDefaults,
     polygonDefaults: state.polygonDefaults,
     angleDefaults: state.angleDefaults,
+    labelToolDefaults: state.labelToolDefaults,
+    textboxToolDefaults: state.textboxToolDefaults,
     angleFixedTool: state.angleFixedTool,
     circleFixedTool: state.circleFixedTool,
     regularPolygonTool: state.regularPolygonTool,
@@ -161,6 +165,8 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
     !isRecord(value.circleDefaults) ||
     !isRecord(value.polygonDefaults) ||
     !isRecord(value.angleDefaults) ||
+    (value.labelToolDefaults !== undefined && !isRecord(value.labelToolDefaults)) ||
+    (value.textboxToolDefaults !== undefined && !isRecord(value.textboxToolDefaults)) ||
     !isRecord(value.angleFixedTool) ||
     !isRecord(value.circleFixedTool) ||
     !isRecord(value.regularPolygonTool) ||
@@ -189,6 +195,8 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
     circleDefaults: value.circleDefaults as ConstructionPreferencesState["circleDefaults"],
     polygonDefaults: value.polygonDefaults as ConstructionPreferencesState["polygonDefaults"],
     angleDefaults: value.angleDefaults as ConstructionPreferencesState["angleDefaults"],
+    labelToolDefaults: value.labelToolDefaults as ConstructionPreferencesState["labelToolDefaults"],
+    textboxToolDefaults: value.textboxToolDefaults as ConstructionPreferencesState["textboxToolDefaults"],
     angleFixedTool: value.angleFixedTool as ConstructionPreferencesState["angleFixedTool"],
     circleFixedTool: value.circleFixedTool as ConstructionPreferencesState["circleFixedTool"],
     regularPolygonTool: value.regularPolygonTool as ConstructionPreferencesState["regularPolygonTool"],

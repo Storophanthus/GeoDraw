@@ -73,6 +73,12 @@ export function ToolInfoSection({
           Label: click object to show/select label, then drag label anchor to reposition.
         </div>
       )}
+      {activeTool === "textbox" && (
+        <div className="toolInfo">
+          <div>Textbox: click the canvas to place and type directly.</div>
+          <div className="statusText">Plain text stays plain. Use <code>$...$</code> for inline math and <code>\[...\]</code> for centered display math.</div>
+        </div>
+      )}
       {activeTool === "angle_fixed" && (
         <div className="toolInfo">
           <div className="subSectionTitle">Fixed Angle Tool</div>
