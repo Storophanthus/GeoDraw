@@ -270,7 +270,10 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           regularPolygonTool,
           transformTool,
           tolerances,
-          io: constructClickIo,
+          io: {
+            ...constructClickIo,
+            beginTextLabelEditing: actions.beginTextLabelEditing,
+          },
         }),
     });
 
@@ -286,11 +289,10 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
 
     const onDoubleClick = (e: MouseEvent) => {
       if (activeTool === "move") {
-        const hitTextLabelId =
-          hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current) ??
-          (selectedObject?.type === "textLabel" ? selectedObject.id : null);
+        const hitTextLabelId = hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current);
         if (hitTextLabelId) {
           e.preventDefault();
+          actions.beginTextLabelEditing?.(hitTextLabelId);
           return;
         }
       }

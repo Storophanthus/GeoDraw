@@ -5,18 +5,13 @@ import type { Vec2 } from "../geo/vec2";
 import {
   beginSceneEvalTick,
   endSceneEvalTick,
-  resolveTextLabelAlignment,
-  resolveTextLabelBoxHeightPx,
   getPointWorldPos,
-  resolveTextLabelBoxWidthPx,
-  resolveTextLabelRenderMode,
-  resolveTextLabelToolKind,
   type ScenePoint,
 } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
 import type { HistorySnapshot } from "../state/slices/historySlice";
 import { getCanvasColorTheme, getUiCssVariables } from "../state/colorProfiles";
-import { camera as camMath, type Viewport } from "./camera";
+import type { Viewport } from "./camera";
 import type { ConstructClickIo } from "./constructClickAdapter";
 import { findBestSnap, type SnapCandidate } from "./snapEngine";
 import {
@@ -30,7 +25,7 @@ import { CanvasLabelsLayer } from "./CanvasLabelsLayer";
 import { renderCanvasFrame } from "./renderFrame";
 import { useCanvasInteractionController, type PointerState } from "./useCanvasInteractionController";
 import { isValidTarget } from "../tools/toolClick";
-import { CanvasTextEditor } from "../text-editor/CanvasTextEditor";
+import { CanvasTextEditor, useTextboxToolController } from "../textbox-tool";
 import {
   applyDilationToObject,
   applyInversionToObject,
@@ -71,72 +66,6 @@ function parsePositiveNumber(raw: string, fallback: number): number {
   return value;
 }
 
-function rotateScreenVector(x: number, y: number, rotationDeg: number): Vec2 {
-  const radians = (rotationDeg * Math.PI) / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  return {
-    x: x * cos - y * sin,
-    y: x * sin + y * cos,
-  };
-}
-
-function computeTextBoxTopLeftScreen(centerScreen: Vec2, widthPx: number, heightPx: number, rotationDeg: number): Vec2 {
-  const offset = rotateScreenVector(-widthPx / 2, -heightPx / 2, rotationDeg);
-  return {
-    x: centerScreen.x + offset.x,
-    y: centerScreen.y + offset.y,
-  };
-}
-
-function computeTextBoxCenterScreen(topLeftScreen: Vec2, widthPx: number, heightPx: number, rotationDeg: number): Vec2 {
-  const offset = rotateScreenVector(widthPx / 2, heightPx / 2, rotationDeg);
-  return {
-    x: topLeftScreen.x + offset.x,
-    y: topLeftScreen.y + offset.y,
-  };
-}
-
-function clampEditingTextBoxRect(
-  topLeftScreen: Vec2,
-  widthPx: number,
-  heightPx: number,
-  vp: Viewport
-): { topLeftScreen: Vec2; widthPx: number; heightPx: number } {
-  const marginPx = 8;
-  const maxWidth = Math.max(80, vp.widthPx - marginPx * 2);
-  const maxHeight = Math.max(56, vp.heightPx - marginPx * 2);
-  const clampedWidth = Math.max(80, Math.min(maxWidth, widthPx));
-  const clampedHeight = Math.max(56, Math.min(maxHeight, heightPx));
-  const maxX = Math.max(marginPx, vp.widthPx - marginPx - clampedWidth);
-  const maxY = Math.max(marginPx, vp.heightPx - marginPx - clampedHeight);
-  return {
-    topLeftScreen: {
-      x: Math.min(maxX, Math.max(marginPx, topLeftScreen.x)),
-      y: Math.min(maxY, Math.max(marginPx, topLeftScreen.y)),
-    },
-    widthPx: clampedWidth,
-    heightPx: clampedHeight,
-  };
-}
-
-function focusEditableElementToEnd(element: HTMLElement | null): void {
-  if (!element) return;
-  element.focus();
-  if (element instanceof HTMLTextAreaElement) {
-    const caret = element.value.length;
-    element.setSelectionRange(caret, caret);
-    return;
-  }
-  const selection = window.getSelection();
-  if (!selection) return;
-  const range = document.createRange();
-  range.selectNodeContents(element);
-  range.collapse(false);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
 export function CanvasView() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const labelsLayerRef = useRef<HTMLDivElement | null>(null);
@@ -158,16 +87,6 @@ export function CanvasView() {
   const dragPointScreenRef = useRef<Vec2 | null>(null);
   const dragPointIdRef = useRef<string | null>(null);
   const dragAngleLabelScreenRef = useRef<Vec2 | null>(null);
-  const editorRef = useRef<HTMLElement | null>(null);
-  const textboxResizeStateRef = useRef<{
-    startClientX: number;
-    startClientY: number;
-    startWidth: number;
-    startMinHeight: number;
-  } | null>(null);
-  const textboxResizeActiveRef = useRef(false);
-  const lastOpenedTextboxIdRef = useRef<string | null>(null);
-  const lastTextboxSelectionEditRef = useRef<string | null>(null);
 
   const camera = useGeoStore((store) => store.camera);
   const activeTool = useGeoStore((store) => store.activeTool);
@@ -253,14 +172,6 @@ export function CanvasView() {
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
   const [snapDisabled, setSnapDisabled] = useState(false);
   const [dropTargetActive, setDropTargetActive] = useState(false);
-  const [editingTextLabelId, setEditingTextLabelId] = useState<string | null>(null);
-  const [editingTextLabelValue, setEditingTextLabelValue] = useState("");
-  const [editingTextLabelOriginalValue, setEditingTextLabelOriginalValue] = useState("");
-  const [editingTextLabelIsNew, setEditingTextLabelIsNew] = useState(false);
-  const [editingTextLabelWidthPx, setEditingTextLabelWidthPx] = useState<number | null>(null);
-  const [editingTextLabelMinHeightPx, setEditingTextLabelMinHeightPx] = useState<number>(56);
-  const [editingTextLabelResizeActive, setEditingTextLabelResizeActive] = useState(false);
-  const [editingTextLabelTopLeftScreen, setEditingTextLabelTopLeftScreen] = useState<Vec2 | null>(null);
   const isTauriRuntime = useMemo(
     () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as object),
     []
@@ -548,28 +459,18 @@ export function CanvasView() {
     () => createTextLabelOverlays(scene, camera, vp),
     [scene, camera, vp]
   );
-  const editingTextLabelOverlay = useMemo(
-    () => (editingTextLabelId ? textLabelOverlays.find((label) => label.id === editingTextLabelId) ?? null : null),
-    [editingTextLabelId, textLabelOverlays]
-  );
-  const editingTextLabel = useMemo(
-    () => (editingTextLabelId ? (scene.textLabels ?? []).find((label) => label.id === editingTextLabelId) ?? null : null),
-    [editingTextLabelId, scene.textLabels]
-  );
-  const editingTextLabelRenderMode = useMemo(
-    () => (editingTextLabel ? resolveTextLabelRenderMode(editingTextLabel.style) : "plain"),
-    [editingTextLabel]
-  );
-  const editingTextLabelWidth = useMemo(() => {
-    if (typeof editingTextLabelWidthPx === "number" && Number.isFinite(editingTextLabelWidthPx)) {
-      return Math.max(80, Math.min(960, editingTextLabelWidthPx));
-    }
-    return editingTextLabelOverlay?.boxWidthPx ?? null;
-  }, [editingTextLabelOverlay?.boxWidthPx, editingTextLabelWidthPx]);
-  const visibleTextLabelOverlays = useMemo(
-    () => (editingTextLabelId ? textLabelOverlays.filter((label) => label.id !== editingTextLabelId) : textLabelOverlays),
-    [editingTextLabelId, textLabelOverlays]
-  );
+  const textboxTool = useTextboxToolController({
+    activeTool,
+    scene,
+    camera,
+    vp,
+    recentCreatedObject,
+    textLabelOverlays,
+    setSelectedObject,
+    updateTextLabelFieldsByIds,
+    updateTextLabelStyleByIds,
+    deleteSelectedObject,
+  });
 
   const hoverSnap: SnapCandidate | null = useMemo(() => {
     if (!hoverScreen) return null;
@@ -578,245 +479,6 @@ export function CanvasView() {
   }, [hoverScreen, scene, snapDisabled]);
 
   const hoveredTargetValid = isValidTarget(activeTool, pendingSelection, hoveredHit, hoverSnap);
-
-  const clearTextLabelEditor = useCallback(() => {
-    setEditingTextLabelId(null);
-    setEditingTextLabelValue("");
-    setEditingTextLabelOriginalValue("");
-    setEditingTextLabelIsNew(false);
-    setEditingTextLabelWidthPx(null);
-    setEditingTextLabelMinHeightPx(56);
-    setEditingTextLabelTopLeftScreen(null);
-  }, []);
-
-  const beginTextboxEditing = useCallback(
-    (labelId: string, isNew: boolean) => {
-      const label = (scene.textLabels ?? []).find((item) => item.id === labelId);
-      if (!label) return;
-      const widthPx = resolveTextLabelBoxWidthPx(label.style) ?? 220;
-      const heightPx = resolveTextLabelBoxHeightPx(label.style) ?? 56;
-      const rotationDeg =
-        typeof label.style.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg) ? label.style.rotationDeg : 0;
-      const centerScreen = camMath.worldToScreen(label.positionWorld, camera, vp);
-      const clampedRect = clampEditingTextBoxRect(
-        computeTextBoxTopLeftScreen(centerScreen, widthPx, heightPx, rotationDeg),
-        widthPx,
-        heightPx,
-        vp
-      );
-      lastTextboxSelectionEditRef.current = labelId;
-      setSelectedObject({ type: "textLabel", id: labelId });
-      setEditingTextLabelId(labelId);
-      setEditingTextLabelValue(label.text);
-      setEditingTextLabelOriginalValue(label.text);
-      setEditingTextLabelIsNew(isNew);
-      setEditingTextLabelWidthPx(clampedRect.widthPx);
-      setEditingTextLabelMinHeightPx(clampedRect.heightPx);
-      setEditingTextLabelTopLeftScreen(clampedRect.topLeftScreen);
-    },
-    [camera, scene.textLabels, setSelectedObject, vp]
-  );
-
-  const beginTextboxEditingFromCanvas = useCallback(
-    (labelId: string): boolean => {
-      const label = (scene.textLabels ?? []).find((item) => item.id === labelId);
-      if (!label) return false;
-      if (resolveTextLabelToolKind(label) !== "textbox") return false;
-      beginTextboxEditing(labelId, false);
-      return true;
-    },
-    [beginTextboxEditing, scene.textLabels]
-  );
-
-  const cancelTextboxEditing = useCallback(() => {
-    if (editingTextLabelId && editingTextLabelIsNew && editingTextLabelOriginalValue.length === 0) {
-      setSelectedObject({ type: "textLabel", id: editingTextLabelId });
-      deleteSelectedObject();
-    }
-    clearTextLabelEditor();
-  }, [
-    clearTextLabelEditor,
-    deleteSelectedObject,
-    editingTextLabelId,
-    editingTextLabelIsNew,
-    editingTextLabelOriginalValue.length,
-    setSelectedObject,
-  ]);
-
-  const commitTextboxEditing = useCallback(() => {
-    if (!editingTextLabelId) return;
-    setSelectedObject({ type: "textLabel", id: editingTextLabelId });
-    if (editingTextLabelIsNew && editingTextLabelValue.length === 0) {
-      deleteSelectedObject();
-      clearTextLabelEditor();
-      return;
-    }
-    const rotationDeg = editingTextLabelOverlay?.rotationDeg ?? 0;
-    const finalWidthPx = editingTextLabelWidth ?? 220;
-    const finalHeightPx = editingTextLabelMinHeightPx;
-    const positionWorld = editingTextLabelTopLeftScreen
-      ? camMath.screenToWorld(
-          computeTextBoxCenterScreen(editingTextLabelTopLeftScreen, finalWidthPx, finalHeightPx, rotationDeg),
-          camera,
-          vp
-        )
-      : undefined;
-    updateTextLabelFieldsByIds([editingTextLabelId], {
-      text: editingTextLabelValue,
-      contentMode: "static",
-      toolKind: "textbox",
-      positionWorld,
-    });
-    updateTextLabelStyleByIds([editingTextLabelId], {
-      boxWidthPx: editingTextLabelWidth ?? undefined,
-      boxHeightPx: editingTextLabelMinHeightPx,
-    });
-    clearTextLabelEditor();
-  }, [
-    clearTextLabelEditor,
-    deleteSelectedObject,
-    editingTextLabelId,
-    editingTextLabelIsNew,
-    editingTextLabelOverlay?.rotationDeg,
-    editingTextLabelTopLeftScreen,
-    editingTextLabelValue,
-    editingTextLabelWidth,
-    editingTextLabelMinHeightPx,
-    camera,
-    setSelectedObject,
-    updateTextLabelFieldsByIds,
-    updateTextLabelStyleByIds,
-    vp,
-  ]);
-
-  useEffect(() => {
-    if (activeTool !== "textbox") return;
-    if (!recentCreatedObject || recentCreatedObject.type !== "textLabel") return;
-    if (recentCreatedObject.id === lastOpenedTextboxIdRef.current) return;
-    const label = (scene.textLabels ?? []).find((item) => item.id === recentCreatedObject.id);
-    if (!label || resolveTextLabelToolKind(label) !== "textbox") return;
-    lastOpenedTextboxIdRef.current = recentCreatedObject.id;
-    beginTextboxEditing(recentCreatedObject.id, true);
-  }, [activeTool, beginTextboxEditing, recentCreatedObject, scene.textLabels]);
-
-  useEffect(() => {
-    if (activeTool !== "textbox") {
-      lastTextboxSelectionEditRef.current = null;
-      return;
-    }
-    if (!selectedObject || selectedObject.type !== "textLabel") {
-      lastTextboxSelectionEditRef.current = null;
-      return;
-    }
-    if (recentCreatedObject?.type === "textLabel" && recentCreatedObject.id === selectedObject.id) return;
-    const label = (scene.textLabels ?? []).find((item) => item.id === selectedObject.id);
-    if (!label || resolveTextLabelToolKind(label) !== "textbox") return;
-    if (editingTextLabelId === selectedObject.id) return;
-    if (lastTextboxSelectionEditRef.current === selectedObject.id) return;
-    beginTextboxEditing(selectedObject.id, false);
-  }, [activeTool, beginTextboxEditing, editingTextLabelId, recentCreatedObject, scene.textLabels, selectedObject]);
-
-  useEffect(() => {
-    if (!editingTextLabelId) return;
-    const exists = (scene.textLabels ?? []).some((label) => label.id === editingTextLabelId);
-    if (!exists) clearTextLabelEditor();
-  }, [clearTextLabelEditor, editingTextLabelId, scene.textLabels]);
-
-  useEffect(() => {
-    if (!editingTextLabelId || activeTool === "textbox") return;
-    commitTextboxEditing();
-  }, [activeTool, commitTextboxEditing, editingTextLabelId]);
-
-  useEffect(() => {
-    if (!editingTextLabelId) return;
-    const editor = editorRef.current;
-    if (!editor) return;
-    window.requestAnimationFrame(() => {
-      focusEditableElementToEnd(editorRef.current);
-    });
-  }, [editingTextLabelId]);
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    if (!(editor instanceof HTMLTextAreaElement)) return;
-    editor.style.height = "0px";
-    editor.style.height = `${Math.max(editingTextLabelMinHeightPx, editor.scrollHeight)}px`;
-  }, [editingTextLabelMinHeightPx, editingTextLabelValue, editingTextLabelOverlay?.textSize, editingTextLabelWidth]);
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    if (!(editor instanceof HTMLTextAreaElement)) return;
-    const ro = new ResizeObserver(() => {
-      const nextWidth = Math.round(editor.getBoundingClientRect().width);
-      if (nextWidth <= 0) return;
-      setEditingTextLabelWidthPx((prev) => (prev !== nextWidth ? nextWidth : prev));
-    });
-    ro.observe(editor);
-    return () => ro.disconnect();
-  }, [editingTextLabelId]);
-
-  useEffect(() => {
-    if (!editingTextLabelResizeActive) return;
-    const handlePointerMove = (event: PointerEvent) => {
-      const resizeState = textboxResizeStateRef.current;
-      if (!resizeState) return;
-      const deltaX = event.clientX - resizeState.startClientX;
-      const deltaY = event.clientY - resizeState.startClientY;
-      const nextWidth = resizeState.startWidth + deltaX;
-      const nextMinHeight = resizeState.startMinHeight + deltaY;
-      const clampedRect = clampEditingTextBoxRect(
-        editingTextLabelTopLeftScreen ?? { x: 8, y: 8 },
-        Math.round(nextWidth),
-        Math.round(nextMinHeight),
-        vp
-      );
-      setEditingTextLabelWidthPx(clampedRect.widthPx);
-      setEditingTextLabelMinHeightPx(clampedRect.heightPx);
-      if (editingTextLabelTopLeftScreen) {
-        setEditingTextLabelTopLeftScreen(clampedRect.topLeftScreen);
-      }
-    };
-    const handlePointerUp = () => {
-      textboxResizeStateRef.current = null;
-      textboxResizeActiveRef.current = false;
-      setEditingTextLabelResizeActive(false);
-      window.requestAnimationFrame(() => {
-        focusEditableElementToEnd(editorRef.current);
-      });
-    };
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-    };
-  }, [editingTextLabelResizeActive, editingTextLabelTopLeftScreen, vp]);
-
-  useEffect(() => {
-    if (!editingTextLabelId || !editingTextLabelTopLeftScreen) return;
-    const clampedRect = clampEditingTextBoxRect(
-      editingTextLabelTopLeftScreen,
-      editingTextLabelWidth ?? 220,
-      editingTextLabelMinHeightPx,
-      vp
-    );
-    const topLeftChanged =
-      Math.abs(clampedRect.topLeftScreen.x - editingTextLabelTopLeftScreen.x) > 0.5 ||
-      Math.abs(clampedRect.topLeftScreen.y - editingTextLabelTopLeftScreen.y) > 0.5;
-    if (topLeftChanged) {
-      setEditingTextLabelTopLeftScreen(clampedRect.topLeftScreen);
-    }
-    if ((editingTextLabelWidth ?? 220) !== clampedRect.widthPx) {
-      setEditingTextLabelWidthPx(clampedRect.widthPx);
-    }
-    if (editingTextLabelMinHeightPx !== clampedRect.heightPx) {
-      setEditingTextLabelMinHeightPx(clampedRect.heightPx);
-    }
-  }, [editingTextLabelId, editingTextLabelMinHeightPx, editingTextLabelTopLeftScreen, editingTextLabelWidth, vp]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -966,7 +628,7 @@ export function CanvasView() {
       setCursorWorld,
       setHoveredHit,
       setSelectedObject,
-      beginTextLabelEditing: beginTextboxEditingFromCanvas,
+      beginTextLabelEditing: textboxTool.beginTextLabelEditing,
       clearPendingSelection,
       zoomAtScreenPoint,
     },
@@ -1100,47 +762,26 @@ export function CanvasView() {
         labelOverlays={labelOverlays}
         angleLabelOverlays={angleLabelOverlays}
         objectLabelOverlays={objectLabelOverlays}
-        textLabelOverlays={visibleTextLabelOverlays}
+        textLabelOverlays={textboxTool.visibleTextLabelOverlays}
         selectedTextLabelId={selectedObject?.type === "textLabel" ? selectedObject.id : null}
       />
-      {editingTextLabelOverlay && (
+      {textboxTool.editorSession && (
         <CanvasTextEditor
-          sessionKey={editingTextLabelOverlay.id}
-          editorRef={editorRef}
-          value={editingTextLabelValue}
-          renderMode={editingTextLabelRenderMode}
-          textColor={editingTextLabelOverlay.textColor}
-          fontSizePx={Math.max(8, editingTextLabelOverlay.textSize)}
-          minHeightPx={editingTextLabelMinHeightPx}
-          resizeActive={editingTextLabelResizeActive}
-          shouldIgnoreBlur={() => textboxResizeActiveRef.current}
-          sourceStyle={{
-            textAlign: resolveTextLabelAlignment(editingTextLabel?.style ?? { textColor: "#111111", textSize: 12, useTex: false }),
-          }}
-          onChangeValue={setEditingTextLabelValue}
-          onCommit={commitTextboxEditing}
-          onCancel={cancelTextboxEditing}
-          onResizeStart={(clientX, clientY) => {
-            textboxResizeStateRef.current = {
-              startClientX: clientX,
-              startClientY: clientY,
-              startWidth: editingTextLabelWidth ?? 220,
-              startMinHeight: editingTextLabelMinHeightPx,
-            };
-            textboxResizeActiveRef.current = true;
-            setEditingTextLabelResizeActive(true);
-          }}
-          shellStyle={{
-            left: 0,
-            top: 0,
-            width: editingTextLabelWidth ? `${editingTextLabelWidth}px` : undefined,
-            transform: editingTextLabelTopLeftScreen
-              ? `translate(${editingTextLabelTopLeftScreen.x}px, ${editingTextLabelTopLeftScreen.y}px) rotate(${editingTextLabelOverlay.rotationDeg}deg)`
-              : `translate(${editingTextLabelOverlay.x}px, ${editingTextLabelOverlay.y}px) translate(-50%, -50%) rotate(${editingTextLabelOverlay.rotationDeg}deg)`,
-            transformOrigin: editingTextLabelTopLeftScreen ? "top left" : "center center",
-            fontSize: `${Math.max(8, editingTextLabelOverlay.textSize)}px`,
-            color: editingTextLabelOverlay.textColor,
-          }}
+          sessionKey={textboxTool.editorSession.id}
+          editorRef={textboxTool.editorRef}
+          value={textboxTool.editorSession.value}
+          renderMode={textboxTool.editorSession.renderMode}
+          textColor={textboxTool.editorSession.overlay.textColor}
+          fontSizePx={Math.max(8, textboxTool.editorSession.overlay.textSize)}
+          minHeightPx={textboxTool.editorSession.minHeightPx}
+          resizeActive={textboxTool.editorSession.resizeActive}
+          shouldIgnoreBlur={textboxTool.editorSession.shouldIgnoreBlur}
+          sourceStyle={textboxTool.editorSession.sourceStyle}
+          onChangeValue={textboxTool.editorSession.setValue}
+          onCommit={textboxTool.editorSession.commit}
+          onCancel={textboxTool.editorSession.cancel}
+          onResizeStart={textboxTool.editorSession.onResizeStart}
+          shellStyle={textboxTool.editorSession.shellStyle}
         />
       )}
     </div>

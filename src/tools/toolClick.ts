@@ -72,6 +72,7 @@ export type ToolClickIO = {
   setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string }) => void;
   applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string }) => void;
   enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
+  beginTextLabelEditing?: (id: string) => boolean;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
   regularPolygonTool: { sides: number; direction: "CCW" | "CW" };
   transformTool: {
@@ -251,6 +252,7 @@ export function handleToolClick(
   if (activeTool === "textbox") {
     if (hits.hitTextLabelId) {
       io.setSelectedObject({ type: "textLabel", id: hits.hitTextLabelId });
+      io.beginTextLabelEditing?.(hits.hitTextLabelId);
       return;
     }
     const snapWorld = !hits.shiftKey ? hits.snap?.world ?? null : null;
