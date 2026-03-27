@@ -1,5 +1,6 @@
 import * as React from "react";
 import { type AngleMark, type AngleStyle, type SceneAngle } from "../../scene/points";
+import { StyleSectionHeader } from "../StyleSectionHeader";
 import { AngleMarkControl, DEFAULT_ANGLE_MARK } from "./AngleMarkControl";
 
 const FILL_PATTERN_OPTIONS = [
@@ -14,6 +15,8 @@ const FILL_PATTERN_OPTIONS = [
 type AngleStyleSectionProps = {
   selectedAngle: SceneAngle;
   selectedAngleRightStatus: "none" | "exact" | "approx";
+  selectedStyleAsDefault: boolean;
+  onMakeStyleDefaultChange: (checked: boolean) => void;
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
   deleteSelectedObject: () => void;
   deleteLabel?: string;
@@ -22,6 +25,8 @@ type AngleStyleSectionProps = {
 export function AngleStyleSection({
   selectedAngle,
   selectedAngleRightStatus,
+  selectedStyleAsDefault,
+  onMakeStyleDefaultChange,
   updateSelectedAngleStyle,
   deleteSelectedObject,
   deleteLabel = "Delete",
@@ -72,7 +77,11 @@ export function AngleStyleSection({
 
   return (
     <div className="cosmeticsBlock">
-      <div className="subSectionTitle">Angle Style</div>
+      <StyleSectionHeader
+        title="Angle Style"
+        selectedStyleAsDefault={selectedStyleAsDefault}
+        onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+      />
       <label className="checkboxRow">
         <input
           type="checkbox"

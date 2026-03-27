@@ -1,8 +1,11 @@
 
 import { type LineStyle, type SceneLine } from "../../scene/points";
+import { StyleSectionHeader } from "../StyleSectionHeader";
 
 type LineStyleSectionProps = {
     selectedLine: SceneLine;
+    selectedStyleAsDefault: boolean;
+    onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedLineStyle: (style: Partial<LineStyle>) => void;
     updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
     canConvertToSegment: boolean;
@@ -11,6 +14,8 @@ type LineStyleSectionProps = {
 
 export function LineStyleSection({
     selectedLine,
+    selectedStyleAsDefault,
+    onMakeStyleDefaultChange,
     updateSelectedLineStyle,
     updateSelectedLineFields,
     canConvertToSegment,
@@ -18,7 +23,11 @@ export function LineStyleSection({
 }: LineStyleSectionProps) {
     return (
         <div className="cosmeticsBlock">
-            <div className="subSectionTitle">Line Style</div>
+            <StyleSectionHeader
+                title="Line Style"
+                selectedStyleAsDefault={selectedStyleAsDefault}
+                onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+            />
             <button
                 type="button"
                 className="actionButton secondary"

@@ -4,6 +4,7 @@ import type { ActiveTool } from "../state/geoStore";
 import type { SceneModel } from "../scene/points";
 import type { SelectedObject } from "../state/slices/storeTypes";
 import type { Vec2 } from "../geo/vec2";
+import { resolveRecentToolShortcut, shouldTrackRecentNonMoveTool } from "./toolHotkeyState";
 
 type TextLabelClipboardPayload = {
   text: string;
@@ -25,6 +26,7 @@ type GlobalHotkeysOptions = {
   activeTool: ActiveTool;
   selectedObject: SelectedObject;
   textLabels: NonNullable<SceneModel["textLabels"]>;
+  onSelectTool: (tool: ActiveTool) => void;
   onSetMoveTool: () => void;
   onClearCopyStyle: () => void;
   onDeleteSelectedObject: () => void;
@@ -38,6 +40,7 @@ export function useGlobalCanvasHotkeys({
   activeTool,
   selectedObject,
   textLabels,
+  onSelectTool,
   onSetMoveTool,
   onClearCopyStyle,
   onDeleteSelectedObject,
@@ -51,6 +54,12 @@ export function useGlobalCanvasHotkeys({
     origin: Vec2;
     pasteCount: number;
   } | null>(null);
+  const recentNonMoveToolRef = useRef<ActiveTool | null>(null);
+
+  useEffect(() => {
+    if (!shouldTrackRecentNonMoveTool(activeTool)) return;
+    recentNonMoveToolRef.current = activeTool;
+  }, [activeTool]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -60,10 +69,20 @@ export function useGlobalCanvasHotkeys({
         tagName === "INPUT" || tagName === "TEXTAREA" || target?.isContentEditable === true;
       if (isTextInput) return;
 
-      if (e.key === "Escape" && activeTool === "copyStyle") {
+      if (e.key === "Escape") {
         e.preventDefault();
-        onClearCopyStyle();
+        if (activeTool === "copyStyle") {
+          onClearCopyStyle();
+        }
         onSetMoveTool();
+        return;
+      }
+
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key === "Tab") {
+        const nextTool = resolveRecentToolShortcut(activeTool, recentNonMoveToolRef.current);
+        if (!nextTool || nextTool === activeTool) return;
+        e.preventDefault();
+        onSelectTool(nextTool);
         return;
       }
 
@@ -133,6 +152,7 @@ export function useGlobalCanvasHotkeys({
     activeTool,
     selectedObject,
     textLabels,
+    onSelectTool,
     onClearCopyStyle,
     onDeleteSelectedObject,
     onFitView,

@@ -6,6 +6,7 @@ import { IconSidebarPanelLeft, IconSidebarPanelRight } from "./icons";
 import { ObjectBrowser } from "./ObjectBrowser";
 import { PropertiesPanel } from "./PropertiesPanel";
 import type { SelectedObject } from "../state/slices/storeTypes";
+import { CircleHelp } from "lucide-react";
 
 type RightTab = "algebra" | "export";
 
@@ -17,6 +18,17 @@ type RightSidebarProps = {
 };
 
 type SelectedObjectRef = Exclude<SelectedObject, null>;
+
+const HELP_ROWS = [
+  { combo: "Esc", description: "Back to Select / Move" },
+  { combo: "Tab", description: "Toggle Select and recent tool" },
+  { combo: "Delete", description: "Delete selection" },
+  { combo: "Cmd/Ctrl + Z", description: "Undo" },
+  { combo: "Cmd/Ctrl + Y", description: "Redo" },
+  { combo: "Shift + F", description: "Fit view" },
+  { combo: "Shift + Up / Down", description: "Extend linked Object Browser selection" },
+  { combo: "Double Click", description: "Edit textbox in Select tool" },
+] as const;
 
 function selectedObjectKey(obj: SelectedObjectRef): string {
   return `${obj.type}:${obj.id}`;
@@ -58,6 +70,7 @@ export function RightSidebar({
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
   const [rightTab, setRightTab] = useState<RightTab>("algebra");
   const [multiSelectedObjects, setMultiSelectedObjects] = useState<SelectedObjectRef[]>([]);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     setMultiSelectedObjects((prev) => {
@@ -71,6 +84,23 @@ export function RightSidebar({
       return sameSelection(prev, next) ? prev : next;
     });
   }, [scene, selectedObject]);
+
+  useEffect(() => {
+    if (rightCollapsed) {
+      setHelpOpen(false);
+    }
+  }, [rightCollapsed]);
+
+  useEffect(() => {
+    if (!helpOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setHelpOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [helpOpen]);
 
   const handleBrowserSelect = (obj: SelectedObject) => {
     setSelectedObject(obj);
@@ -101,10 +131,33 @@ export function RightSidebar({
       ) : (
         <>
           <div className="rightTopRow">
+            <button
+              type="button"
+              className={helpOpen ? "sidebarToggleButton active" : "sidebarToggleButton"}
+              aria-label="Show shortcut help"
+              aria-expanded={helpOpen}
+              onClick={() => setHelpOpen((prev) => !prev)}
+            >
+              <CircleHelp size={16} strokeWidth={2} />
+            </button>
             <button className="sidebarToggleButton" onClick={() => setRightCollapsed(true)} aria-label="Collapse right sidebar">
               <IconSidebarPanelRight size={16} strokeWidth={2} />
             </button>
           </div>
+
+          {helpOpen && (
+            <section className="sidebarHelpCard" aria-label="Shortcut help">
+              <div className="sidebarHelpTitle">Quick Help</div>
+              <div className="sidebarHelpList">
+                {HELP_ROWS.map((item) => (
+                  <div key={`${item.combo}-${item.description}`} className="sidebarHelpRow">
+                    <kbd className="sidebarHelpKey">{item.combo}</kbd>
+                    <span className="sidebarHelpText">{item.description}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="sidebarSection">
             <div className="rightTabs" role="tablist" aria-label="Right panel tabs">

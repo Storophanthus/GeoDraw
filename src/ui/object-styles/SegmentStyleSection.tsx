@@ -1,16 +1,21 @@
 import * as React from "react";
 import { type LineStyle, type SceneSegment, type SegmentArrowMark, type SegmentMark } from "../../scene/points";
+import { StyleSectionHeader } from "../StyleSectionHeader";
 import { ArrowListControl, DEFAULT_SEGMENT_ARROW_MARK } from "./ArrowListControl";
 import { DEFAULT_SEGMENT_MARK, SegmentMarkControl } from "./SegmentMarkControl";
 
 type SegmentStyleSectionProps = {
     selectedSegment: SceneSegment;
+    selectedStyleAsDefault: boolean;
+    onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedSegmentStyle: (style: Partial<LineStyle>) => void;
     updateSelectedSegmentFields: (fields: Partial<Pick<SceneSegment, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
 };
 
 export function SegmentStyleSection({
     selectedSegment,
+    selectedStyleAsDefault,
+    onMakeStyleDefaultChange,
     updateSelectedSegmentStyle,
     updateSelectedSegmentFields,
 }: SegmentStyleSectionProps) {
@@ -46,7 +51,11 @@ export function SegmentStyleSection({
 
     return (
         <div className="cosmeticsBlock">
-            <div className="subSectionTitle">Segment Style</div>
+            <StyleSectionHeader
+                title="Segment Style"
+                selectedStyleAsDefault={selectedStyleAsDefault}
+                onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+            />
             <label className="checkboxRow">
                 <input
                     type="checkbox"

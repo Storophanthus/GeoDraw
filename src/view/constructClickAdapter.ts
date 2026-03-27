@@ -54,8 +54,16 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     io,
   } = params;
 
+  const constructionPointTolerance =
+    activeTool !== "move" &&
+    activeTool !== "copyStyle" &&
+    activeTool !== "label" &&
+    activeTool !== "textbox"
+      ? tolerances.point + 4
+      : tolerances.point;
+
   const hitObject = hitTestTopObject(scene, camera, vp, screen, {
-    pointTolPx: tolerances.point,
+    pointTolPx: constructionPointTolerance,
     angleTolPx: tolerances.angle,
     segmentTolPx: tolerances.segment,
     lineTolPx: tolerances.line,
@@ -67,8 +75,10 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
       ? io.snapWorldToGrid(cursorWorld)
       : null;
   const snappedScreen = snappedWorld ? camMath.worldToScreen(snappedWorld, camera, vp) : null;
-  const rawHitPointId = hitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point);
-  const snappedHitPointId = snappedScreen ? hitTestPointId(snappedScreen, resolvedPoints, camera, vp, tolerances.point) : null;
+  const rawHitPointId = hitTestPointId(screen, resolvedPoints, camera, vp, constructionPointTolerance);
+  const snappedHitPointId = snappedScreen
+    ? hitTestPointId(snappedScreen, resolvedPoints, camera, vp, constructionPointTolerance)
+    : null;
 
   let snap =
     !pointerEvent.shiftKey &&
@@ -76,7 +86,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     activeTool !== "copyStyle" &&
     activeTool !== "label" &&
     activeTool !== "textbox"
-      ? findBestSnap(screen, camera, vp, scene, tolerances.point)
+      ? findBestSnap(screen, camera, vp, scene, constructionPointTolerance)
       : null;
   // Grid-snapped point lookup is only a fallback when geometry snapping found nothing.
   // Otherwise it can steal clicks from on-line/on-circle snapping workflows.

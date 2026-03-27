@@ -38,6 +38,8 @@ type ObjectStyleSectionsProps = {
   updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
+  selectedStyleAsDefault: boolean;
+  onMakeStyleDefaultChange: (checked: boolean) => void;
   deleteSelectedObject: () => void;
   deleteLabel?: string;
 };
@@ -63,6 +65,8 @@ export function ObjectStyleSections({
   updateSelectedCircleFields,
   updateSelectedPolygonFields,
   setSelectedPolygonOwnedSegmentsVisible,
+  selectedStyleAsDefault,
+  onMakeStyleDefaultChange,
   deleteSelectedObject,
   deleteLabel = "Delete",
 }: ObjectStyleSectionsProps) {
@@ -71,6 +75,8 @@ export function ObjectStyleSections({
       {!selectedPointPresent && !selectedAngle && selectedSegment && (
         <SegmentStyleSection
           selectedSegment={selectedSegment}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedSegmentStyle={updateSelectedSegmentStyle}
           updateSelectedSegmentFields={updateSelectedSegmentFields}
         />
@@ -79,6 +85,8 @@ export function ObjectStyleSections({
       {!selectedPointPresent && !selectedAngle && selectedLine && (
         <LineStyleSection
           selectedLine={selectedLine}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedLineStyle={updateSelectedLineStyle}
           updateSelectedLineFields={updateSelectedLineFields}
           canConvertToSegment={canConvertSelectedLineToSegment}
@@ -90,6 +98,8 @@ export function ObjectStyleSections({
         <PolygonStyleSection
           selectedPolygon={selectedPolygon}
           selectedPolygonOwnedEdgesVisible={selectedPolygonOwnedEdgesVisible}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedPolygonStyle={updateSelectedPolygonStyle}
           updateSelectedPolygonFields={updateSelectedPolygonFields}
           setSelectedPolygonOwnedSegmentsVisible={setSelectedPolygonOwnedSegmentsVisible}
@@ -99,6 +109,8 @@ export function ObjectStyleSections({
       {!selectedPointPresent && !selectedAngle && !selectedPolygon && selectedCircle && (
         <CircleStyleSection
           selectedCircle={selectedCircle}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedCircleStyle={updateSelectedCircleStyle}
           updateSelectedCircleFields={updateSelectedCircleFields}
         />
@@ -108,6 +120,8 @@ export function ObjectStyleSections({
         <AngleStyleSection
           selectedAngle={selectedAngle}
           selectedAngleRightStatus={selectedAngleRightStatus}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedAngleStyle={updateSelectedAngleStyle}
           deleteSelectedObject={deleteSelectedObject}
           deleteLabel={deleteLabel}
@@ -117,6 +131,8 @@ export function ObjectStyleSections({
       {!selectedPointPresent && selectedAngle && selectedAngle.kind === "sector" && (
         <SectorStyleSection
           selectedSector={selectedAngle}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedAngleStyle={updateSelectedAngleStyle}
           deleteSelectedObject={deleteSelectedObject}
           deleteLabel={deleteLabel}

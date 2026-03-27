@@ -30,6 +30,14 @@ import {
   isFiniteLabelPosWorld,
   resolveObjectLabelText,
 } from "../scene/objectLabels";
+import {
+  ANGLE_LABEL_MAX_DIST,
+  ANGLE_LABEL_MIN_DIST,
+  RIGHT_ANGLE_LABEL_MAX_DIST,
+  angleBisectorRad,
+  clampAngleLabelDist,
+  shortestAngleDiffRad,
+} from "../scene/angleLabelPlacement";
 import { parseTextLabelRichText } from "../text/textLabelRichText";
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
@@ -1917,7 +1925,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (angle.style.showLabel || angle.style.showValue) {
       const labelText = buildAngleLabelTex(angle.style.labelText, angle.style.showLabel, angle.style.showValue, theta);
       if (labelText) {
-        const labelStyle = angleLabelStyleToTikz(angle.style, bWorld, options);
+        const labelStyle = angleLabelStyleToTikz(angle, aWorld, bWorld, cWorld, options, rightStatus !== "none");
         drawLabelsLayer.push({ kind: "LabelAngle", a: aName, b: bName, c: cName, text: labelText, style: labelStyle });
       }
     }
@@ -4235,26 +4243,45 @@ function rightSquareFillStyleToTikz(style: SceneModel["angles"][number]["style"]
 }
 
 function angleLabelStyleToTikz(
-  style: SceneModel["angles"][number]["style"],
+  angle: SceneModel["angles"][number],
+  aWorld: { x: number; y: number },
   vertexWorld: { x: number; y: number },
-  options: TikzExportOptions
+  cWorld: { x: number; y: number },
+  options: TikzExportOptions,
+  rightLike: boolean
 ): string {
-  const dx = style.labelPosWorld.x - vertexWorld.x;
-  const dy = style.labelPosWorld.y - vertexWorld.y;
-  const dist = Math.hypot(dx, dy);
-  if (!Number.isFinite(dist) || dist <= 1e-9) {
+  const dx = angle.style.labelPosWorld.x - vertexWorld.x;
+  const dy = angle.style.labelPosWorld.y - vertexWorld.y;
+  const currentDist = Math.hypot(dx, dy);
+  const currentAngleRad = Math.atan2(dy, dx);
+  let dist = currentDist;
+  let angleRad = currentAngleRad;
+  if (angle.kind !== "sector") {
+    const bisectorRad = angleBisectorRad(aWorld, vertexWorld, cWorld);
+    const autoDist = clampAngleLabelDist(nonSectorAngleRadiusWorldFromStyle(angle.style, options) * 0.62, rightLike);
+    const sensibleMaxDist = rightLike ? RIGHT_ANGLE_LABEL_MAX_DIST : ANGLE_LABEL_MAX_DIST;
+    if (!Number.isFinite(dist) || dist < ANGLE_LABEL_MIN_DIST || dist > sensibleMaxDist) {
+      dist = autoDist;
+    }
+    if (bisectorRad !== null && Number.isFinite(bisectorRad)) {
+      if (!Number.isFinite(angleRad) || Math.abs(shortestAngleDiffRad(angleRad, bisectorRad)) > (8 * Math.PI) / 180) {
+        angleRad = bisectorRad;
+      }
+    }
+  }
+  if (!Number.isFinite(dist) || dist <= 1e-9 || !Number.isFinite(angleRad)) {
     throw new Error("Unsupported Angle style: labelPosWorld is invalid.");
   }
-  const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const angleDeg = (angleRad * 180) / Math.PI;
   const labelFontScale = clampPositive(options.angleLabelFontScale ?? 1, 0.01, 100);
-  const fontPt = Math.max(6, Math.min(72, style.textSize * labelFontScale));
+  const fontPt = Math.max(6, Math.min(72, angle.style.textSize * labelFontScale));
   // Keep angle-label baseline spacing at 3/4 of the previous "original" export
   // profile (12pt -> 16.2pt), so 9pt maps to 12.15pt.
   const lineHeightPt = Math.max(6, fontPt * 1.35);
   return [
     `dist=${fmt(dist)}`,
     `angle=${fmt(angleDeg)}`,
-    `text=${rgbColorExpr(style.textColor)}`,
+    `text=${rgbColorExpr(angle.style.textColor)}`,
     `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(lineHeightPt)}pt}\\selectfont`,
   ].join(", ");
 }

@@ -1,5 +1,6 @@
 
 import { type CircleStyle, type SceneCircle } from "../../scene/points";
+import { StyleSectionHeader } from "../StyleSectionHeader";
 import { ArrowListControl } from "./ArrowListControl";
 
 const FILL_PATTERN_OPTIONS = [
@@ -13,12 +14,16 @@ const FILL_PATTERN_OPTIONS = [
 
 type CircleStyleSectionProps = {
     selectedCircle: SceneCircle;
+    selectedStyleAsDefault: boolean;
+    onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
     updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
 };
 
 export function CircleStyleSection({
     selectedCircle,
+    selectedStyleAsDefault,
+    onMakeStyleDefaultChange,
     updateSelectedCircleStyle,
     updateSelectedCircleFields,
 }: CircleStyleSectionProps) {
@@ -26,7 +31,11 @@ export function CircleStyleSection({
 
     return (
         <div className="cosmeticsBlock">
-            <div className="subSectionTitle">Circle Style</div>
+            <StyleSectionHeader
+                title="Circle Style"
+                selectedStyleAsDefault={selectedStyleAsDefault}
+                onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+            />
             <label className="checkboxRow">
                 <input
                     type="checkbox"

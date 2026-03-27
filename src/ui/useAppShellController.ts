@@ -43,6 +43,7 @@ export function useAppShellController(): WorkspaceShellProps {
     activeTool,
     selectedObject,
     textLabels,
+    onSelectTool: setActiveTool,
     onSetMoveTool: () => setActiveTool("move"),
     onClearCopyStyle: clearCopyStyle,
     onDeleteSelectedObject: deleteSelectedObject,

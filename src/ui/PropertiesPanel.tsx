@@ -597,23 +597,13 @@ export function PropertiesPanel({
           scene={scene}
           selectedTextLabelBoundNumberValue={selectedTextLabelBoundNumberValue}
           selectedTextLabelExprValue={selectedTextLabelExprValue}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={handleMakeStyleDefaultChange}
           updateSelectedTextLabelFields={handleUpdateSelectedTextLabelFields}
           updateSelectedTextLabelStyle={handleUpdateSelectedTextLabelStyle}
           deleteSelectedObject={handleDeleteFromProperties}
           deleteLabel={deleteButtonLabel}
         />
-      )}
-      {!selectedPoint && selectedStyleKind && (
-        <div className="cosmeticsBlock">
-          <label className="checkboxRow">
-            <input
-              type="checkbox"
-              checked={selectedStyleAsDefault}
-              onChange={(e) => handleMakeStyleDefaultChange(e.target.checked)}
-            />
-            Make this default for this object
-          </label>
-        </div>
       )}
       <ObjectStyleSections
         selectedPointPresent={Boolean(selectedPoint)}
@@ -636,6 +626,8 @@ export function PropertiesPanel({
         updateSelectedCircleFields={handleUpdateSelectedCircleFields}
         updateSelectedPolygonFields={handleUpdateSelectedPolygonFields}
         setSelectedPolygonOwnedSegmentsVisible={setSelectedPolygonOwnedSegmentsVisible}
+        selectedStyleAsDefault={selectedStyleAsDefault}
+        onMakeStyleDefaultChange={handleMakeStyleDefaultChange}
         deleteSelectedObject={handleDeleteFromProperties}
         deleteLabel={deleteButtonLabel}
       />

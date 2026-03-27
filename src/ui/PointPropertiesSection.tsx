@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import type { Vec2 } from "../geo/vec2";
 import type { PointShape, ScenePoint } from "../scene/points";
 import { formatRoundedDisplay } from "./displayFormat";
+import { StyleSectionHeader } from "./StyleSectionHeader";
 
 const SHAPES: PointShape[] = [
   "circle",
@@ -131,16 +132,12 @@ export function PointPropertiesSection({
 
       {renameError && <div className="errorText">{renameError}</div>}
 
-      <div className="cosmeticsBlock">
-        <label className="checkboxRow" style={{ marginTop: 0 }}>
-          <input
-            type="checkbox"
-            checked={selectedStyleAsDefault}
-            onChange={(e) => onMakeStyleDefaultChange(e.target.checked)}
-          />
-          Make this default for this object
-        </label>
-        <div className="subSectionTitle">Point Style</div>
+      <div className="cosmeticsBlock pointStyleBlock">
+        <StyleSectionHeader
+          title="Point Style"
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+        />
 
         <div className="fieldBlock" ref={shapePickerRef}>
           <label className="fieldLabel">Shape</label>

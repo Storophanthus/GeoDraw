@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { type AngleMark, type AngleMarkSymbol, type AngleStyle, type PathArrowMark, type SceneAngle } from "../../scene/points";
+import { StyleSectionHeader } from "../StyleSectionHeader";
 import { ArrowListControl, DEFAULT_PATH_ARROW_MARK } from "./ArrowListControl";
 import { MarkSymbolPicker } from "./MarkSymbolPicker";
 
@@ -29,6 +30,8 @@ const SECTOR_BAR_SYMBOLS: AngleMarkSymbol[] = ["|", "||", "|||"];
 
 type SectorStyleSectionProps = {
   selectedSector: SceneAngle;
+  selectedStyleAsDefault: boolean;
+  onMakeStyleDefaultChange: (checked: boolean) => void;
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
   deleteSelectedObject: () => void;
   deleteLabel?: string;
@@ -36,6 +39,8 @@ type SectorStyleSectionProps = {
 
 export function SectorStyleSection({
   selectedSector,
+  selectedStyleAsDefault,
+  onMakeStyleDefaultChange,
   updateSelectedAngleStyle,
   deleteSelectedObject,
   deleteLabel = "Delete",
@@ -101,7 +106,11 @@ export function SectorStyleSection({
 
   return (
     <div className="cosmeticsBlock">
-      <div className="subSectionTitle">Sector Style</div>
+      <StyleSectionHeader
+        title="Sector Style"
+        selectedStyleAsDefault={selectedStyleAsDefault}
+        onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+      />
       <label className="checkboxRow">
         <input
           type="checkbox"

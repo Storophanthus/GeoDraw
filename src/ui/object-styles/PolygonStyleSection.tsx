@@ -1,5 +1,6 @@
 
 import { type ScenePolygon } from "../../scene/points";
+import { StyleSectionHeader } from "../StyleSectionHeader";
 
 const FILL_PATTERN_OPTIONS = [
     { value: "", label: "None" },
@@ -13,6 +14,8 @@ const FILL_PATTERN_OPTIONS = [
 type PolygonStyleSectionProps = {
     selectedPolygon: ScenePolygon;
     selectedPolygonOwnedEdgesVisible: boolean;
+    selectedStyleAsDefault: boolean;
+    onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedPolygonStyle: (style: Partial<ScenePolygon["style"]>) => void;
     updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
     setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
@@ -21,6 +24,8 @@ type PolygonStyleSectionProps = {
 export function PolygonStyleSection({
     selectedPolygon,
     selectedPolygonOwnedEdgesVisible,
+    selectedStyleAsDefault,
+    onMakeStyleDefaultChange,
     updateSelectedPolygonStyle,
     updateSelectedPolygonFields,
     setSelectedPolygonOwnedSegmentsVisible,
@@ -29,7 +34,11 @@ export function PolygonStyleSection({
 
     return (
         <div className="cosmeticsBlock">
-            <div className="subSectionTitle">Polygon Style</div>
+            <StyleSectionHeader
+                title="Polygon Style"
+                selectedStyleAsDefault={selectedStyleAsDefault}
+                onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+            />
             <label className="checkboxRow">
                 <input
                     type="checkbox"

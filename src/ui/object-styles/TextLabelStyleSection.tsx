@@ -1,5 +1,6 @@
 import { resolveTextLabelRenderMode, type SceneModel } from "../../scene/points";
 import { formatRoundedDisplay } from "../displayFormat";
+import { StyleSectionHeader } from "../StyleSectionHeader";
 
 type TextLabel = NonNullable<SceneModel["textLabels"]>[number];
 
@@ -8,6 +9,8 @@ type TextLabelStyleSectionProps = {
     scene: SceneModel;
     selectedTextLabelBoundNumberValue: number | null;
     selectedTextLabelExprValue: number | null;
+    selectedStyleAsDefault: boolean;
+    onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedTextLabelFields: (patch: Partial<TextLabel>) => void;
     updateSelectedTextLabelStyle: (patch: Partial<TextLabel["style"]>) => void;
     deleteSelectedObject: () => void;
@@ -19,6 +22,8 @@ export function TextLabelStyleSection({
     scene,
     selectedTextLabelBoundNumberValue,
     selectedTextLabelExprValue,
+    selectedStyleAsDefault,
+    onMakeStyleDefaultChange,
     updateSelectedTextLabelFields,
     updateSelectedTextLabelStyle,
     deleteSelectedObject,
@@ -27,7 +32,11 @@ export function TextLabelStyleSection({
     const renderMode = resolveTextLabelRenderMode(selectedTextLabel.style);
     return (
         <div className="toolInfo">
-            <div className="subSectionTitle">Text Label</div>
+            <StyleSectionHeader
+                title="Text Label"
+                selectedStyleAsDefault={selectedStyleAsDefault}
+                onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+            />
             <div className="statusText">
                 Position: ({formatRoundedDisplay(selectedTextLabel.positionWorld.x, 3)}, {formatRoundedDisplay(selectedTextLabel.positionWorld.y, 3)})
             </div>

@@ -249,6 +249,165 @@ runScenario("segment");
 runScenario("line2p");
 
 {
+  let pending: unknown = null;
+  let freePointCreates = 0;
+
+  const io: ConstructClickIo = {
+    setPendingSelection(next) {
+      pending = next;
+    },
+    clearPendingSelection() {
+      pending = null;
+    },
+    createFreePoint() {
+      freePointCreates += 1;
+      return "p_new";
+    },
+    createTextLabel() {
+      return "txt_new";
+    },
+    createSegment() {
+      return null;
+    },
+    createLine() {
+      return null;
+    },
+    createPolygon() {
+      return null;
+    },
+    createRegularPolygon() {
+      return null;
+    },
+    createCircle() {
+      return null;
+    },
+    createAuxiliaryCircle() {
+      return null;
+    },
+    createCircleThreePoint() {
+      return null;
+    },
+    createPerpendicularLine() {
+      return null;
+    },
+    createParallelLine() {
+      return null;
+    },
+    createTangentLines() {
+      return [];
+    },
+    createCircleTangentLines() {
+      return [];
+    },
+    createAngleBisectorLine() {
+      return null;
+    },
+    createAngle() {
+      return null;
+    },
+    createSector() {
+      return null;
+    },
+    createAngleFixed() {
+      return null;
+    },
+    createMidpointFromPoints() {
+      return null;
+    },
+    createMidpointFromSegment() {
+      return null;
+    },
+    createPointOnLine() {
+      return null;
+    },
+    createPointOnSegment() {
+      return null;
+    },
+    createPointOnCircle() {
+      return null;
+    },
+    createPointByRotation() {
+      return null;
+    },
+    createPointByTranslation() {
+      return null;
+    },
+    createPointByDilation() {
+      return null;
+    },
+    createPointByReflection() {
+      return null;
+    },
+    transformObjectByTranslation() {
+      return null;
+    },
+    transformObjectByRotation() {
+      return null;
+    },
+    transformObjectByDilation() {
+      return null;
+    },
+    transformObjectByReflection() {
+      return null;
+    },
+    transformObjectByInversion() {
+      return null;
+    },
+    createIntersectionPoint() {
+      return null;
+    },
+    createCircleCenterPoint() {
+      return null;
+    },
+    setExportClipWorld() {},
+    setSelectedObject() {},
+    setCopyStyleSource() {},
+    applyCopyStyleTo() {},
+    enableObjectLabel() {},
+    getPointWorldById(id) {
+      return id === "pB" ? { x: 2, y: 3 } : null;
+    },
+    gridSnapEnabled: false,
+    snapWorldToGrid() {
+      return { x: 2, y: 3 };
+    },
+  };
+
+  runConstructClickAdapter({
+    // B resolves to (600, 0). This is 14px away: outside the old 12px point hit,
+    // but inside the widened construction reuse tolerance.
+    screen: { x: 614, y: 0 },
+    pointerEvent: { shiftKey: false } as PointerEvent,
+    activeTool: "segment",
+    pendingSelection: null,
+    copyStyleSource: null,
+    scene,
+    resolvedPoints,
+    camera,
+    vp,
+    angleFixedTool: { angleExpr: "45", direction: "CCW" },
+    regularPolygonTool: { sides: 5, direction: "CCW" },
+    transformTool: { mode: "translate", angleExpr: "90", direction: "CCW", factorExpr: "2" },
+    tolerances: {
+      point: 12,
+      angle: 20,
+      segment: 10,
+      line: 10,
+      circle: 10,
+    },
+    io,
+  });
+
+  const pendingValue = pending as { tool?: string; first?: { type?: string; id?: string } } | null;
+  assert(freePointCreates === 0, "segment: near-miss click should still reuse the existing point");
+  assert(pendingValue?.tool === "segment", "segment: near-miss click should start the segment workflow");
+  assert(
+    Boolean(pendingValue && pendingValue.first?.type === "point" && pendingValue.first?.id === "pB"),
+    "segment: near-miss click should choose point B instead of creating a new point"
+  );
+}
+
+{
   // Regression: when geometry snap finds "onCircle", grid fallback must not overwrite it
   // with a snapped point candidate.
   const circleScene: SceneModel = {
