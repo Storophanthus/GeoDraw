@@ -22,6 +22,7 @@ export function createUiActions(
   | "setCircleDefaults"
   | "setPolygonDefaults"
   | "setAngleDefaults"
+  | "setObjectLabelDefaults"
   | "setLabelToolDefaults"
   | "setTextboxToolDefaults"
   | "setAngleFixedTool"
@@ -96,6 +97,16 @@ export function createUiActions(
         ...prev,
         angleDefaults: {
           ...prev.angleDefaults,
+          ...next,
+        },
+      }));
+    },
+
+    setObjectLabelDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        objectLabelDefaults: {
+          ...prev.objectLabelDefaults,
           ...next,
         },
       }));
@@ -194,10 +205,10 @@ export function createUiActions(
             segmentDefaults: prev.segmentDefaults,
               lineDefaults: prev.lineDefaults,
               circleDefaults: prev.circleDefaults,
-              polygonDefaults: prev.polygonDefaults,
-              angleDefaults: prev.angleDefaults,
-              labelToolDefaults: prev.labelToolDefaults,
-              textboxToolDefaults: prev.textboxToolDefaults,
+            polygonDefaults: prev.polygonDefaults,
+            angleDefaults: prev.angleDefaults,
+            labelToolDefaults: prev.labelToolDefaults,
+            textboxToolDefaults: prev.textboxToolDefaults,
             } satisfies SceneStyleDefaults,
             profileId
           );
@@ -212,6 +223,7 @@ export function createUiActions(
           circleDefaults: nextDefaults.circleDefaults,
           polygonDefaults: nextDefaults.polygonDefaults,
           angleDefaults: nextDefaults.angleDefaults,
+          objectLabelDefaults: prev.objectLabelDefaults,
           labelToolDefaults: nextDefaults.labelToolDefaults,
           textboxToolDefaults: nextDefaults.textboxToolDefaults,
         };
@@ -352,6 +364,7 @@ export function createUiActions(
             circleDefaults,
             polygonDefaults,
             angleDefaults,
+            objectLabelDefaults: next.objectLabelDefaults ? { ...next.objectLabelDefaults } : prev.objectLabelDefaults,
             labelToolDefaults,
             textboxToolDefaults,
             angleFixedTool: next.angleFixedTool ? { ...next.angleFixedTool } : prev.angleFixedTool,

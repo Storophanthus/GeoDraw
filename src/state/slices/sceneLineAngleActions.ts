@@ -77,13 +77,14 @@ export function createSceneLineAngleActions(
         const anchors = getLineWorldAnchors(tempLine, prev.scene);
         if (!anchors) return prev;
         id = `l_${prev.nextLineId}`;
+        const showLabel = prev.objectLabelDefaults.line;
         const lineForLabel = {
           id,
           kind: "perpendicular" as const,
           throughId,
           base,
           visible: true,
-          showLabel: false,
+          showLabel,
           style: prev.lineDefaults,
         };
         return {
@@ -98,7 +99,7 @@ export function createSceneLineAngleActions(
                 throughId,
                 base,
                 visible: true,
-                showLabel: false,
+                showLabel,
                 labelText: defaultLineLabelText(lineForLabel, prev.scene),
                 labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
                 style: { ...prev.lineDefaults },
@@ -135,13 +136,14 @@ export function createSceneLineAngleActions(
         const anchors = getLineWorldAnchors(tempLine, prev.scene);
         if (!anchors) return prev;
         id = `l_${prev.nextLineId}`;
+        const showLabel = prev.objectLabelDefaults.line;
         const lineForLabel = {
           id,
           kind: "parallel" as const,
           throughId,
           base,
           visible: true,
-          showLabel: false,
+          showLabel,
           style: prev.lineDefaults,
         };
         return {
@@ -156,7 +158,7 @@ export function createSceneLineAngleActions(
                 throughId,
                 base,
                 visible: true,
-                showLabel: false,
+                showLabel,
                 labelText: defaultLineLabelText(lineForLabel, prev.scene),
                 labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
                 style: { ...prev.lineDefaults },
@@ -203,6 +205,7 @@ export function createSceneLineAngleActions(
 
         const nextLines = [...prev.scene.lines];
         let nextLineId = prev.nextLineId;
+        const showLabel = prev.objectLabelDefaults.line;
 
         const id0 = `l_${nextLineId++}`;
         const line0ForLabel = {
@@ -212,7 +215,7 @@ export function createSceneLineAngleActions(
           circleId,
           branchIndex: 0 as const,
           visible: true,
-          showLabel: false,
+          showLabel,
           style: prev.lineDefaults,
         };
         nextLines.push({
@@ -222,7 +225,7 @@ export function createSceneLineAngleActions(
           circleId,
           branchIndex: 0,
           visible: true,
-          showLabel: false,
+          showLabel,
           labelText: defaultLineLabelText(line0ForLabel, prev.scene),
           labelPosWorld: defaultLineLabelPosWorld(line0ForLabel, prev.scene) ?? undefined,
           style: { ...prev.lineDefaults },
@@ -242,7 +245,7 @@ export function createSceneLineAngleActions(
               circleId,
               branchIndex: 1 as const,
               visible: true,
-              showLabel: false,
+              showLabel,
               style: prev.lineDefaults,
             };
             nextLines.push({
@@ -252,7 +255,7 @@ export function createSceneLineAngleActions(
               circleId,
               branchIndex: 1,
               visible: true,
-              showLabel: false,
+              showLabel,
               labelText: defaultLineLabelText(line1ForLabel, prev.scene),
               labelPosWorld: defaultLineLabelPosWorld(line1ForLabel, prev.scene) ?? undefined,
               style: { ...prev.lineDefaults },
@@ -283,6 +286,7 @@ export function createSceneLineAngleActions(
 
         const nextLines = [...prev.scene.lines];
         let nextLineId = prev.nextLineId;
+        const showLabel = prev.objectLabelDefaults.line;
         const signatures = new Set<string>();
         const candidates: Array<{ family: "outer" | "inner"; branchIndex: 0 | 1 }> = [
           { family: "outer", branchIndex: 0 },
@@ -318,7 +322,7 @@ export function createSceneLineAngleActions(
             family: candidate.family,
             branchIndex: candidate.branchIndex,
             visible: true,
-            showLabel: false,
+            showLabel,
             style: prev.lineDefaults,
           };
           nextLines.push({
@@ -329,7 +333,7 @@ export function createSceneLineAngleActions(
             family: candidate.family,
             branchIndex: candidate.branchIndex,
             visible: true,
-            showLabel: false,
+            showLabel,
             labelText: defaultLineLabelText(lineForLabel, prev.scene),
             labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
             style: { ...prev.lineDefaults },
@@ -370,6 +374,7 @@ export function createSceneLineAngleActions(
         const anchors = getLineWorldAnchors(tempLine, prev.scene);
         if (!anchors) return prev;
         id = `l_${prev.nextLineId}`;
+        const showLabel = prev.objectLabelDefaults.line;
         const lineForLabel = {
           id,
           kind: "angleBisector" as const,
@@ -377,7 +382,7 @@ export function createSceneLineAngleActions(
           bId,
           cId,
           visible: true,
-          showLabel: false,
+          showLabel,
           style: prev.lineDefaults,
         };
         return {
@@ -393,7 +398,7 @@ export function createSceneLineAngleActions(
                 bId,
                 cId,
                 visible: true,
-                showLabel: false,
+                showLabel,
                 labelText: defaultLineLabelText(lineForLabel, prev.scene),
                 labelPosWorld: defaultLineLabelPosWorld(lineForLabel, prev.scene) ?? undefined,
                 style: { ...prev.lineDefaults },
@@ -519,7 +524,7 @@ export function createSceneLineAngleActions(
             bId,
             ownedBySectorIds: [id],
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
             style: prev.segmentDefaults,
           };
           newSegments.push({
@@ -528,7 +533,7 @@ export function createSceneLineAngleActions(
             bId,
             ownedBySectorIds: [id],
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
             labelText: defaultSegmentLabelText(segForLabel, prev.scene),
             labelPosWorld: defaultSegmentLabelPosWorld(segForLabel, prev.scene) ?? undefined,
             style: { ...prev.segmentDefaults },
@@ -636,7 +641,7 @@ export function createSceneLineAngleActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name",
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 centerId: vertexId,
@@ -659,7 +664,7 @@ export function createSceneLineAngleActions(
                 aId: vertexId,
                 bId: pointId,
                 visible: true,
-                showLabel: false,
+                showLabel: prev.objectLabelDefaults.line,
                 style: { ...prev.lineDefaults },
               },
             ],

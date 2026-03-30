@@ -573,7 +573,7 @@ export const commandBarApi = {
             bId,
             ownedByPolygonIds: [polygonId],
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
             style: { ...prev.segmentDefaults },
           });
           currentEdgeIndexByKey.set(key, newSegments.length - 1);
@@ -692,7 +692,7 @@ export const commandBarApi = {
               bId,
               ownedBySectorIds: [angleId],
               visible: true,
-              showLabel: false,
+              showLabel: prev.objectLabelDefaults.segment,
               style: { ...prev.segmentDefaults },
             });
             edgeIndexByKey.set(key, newSegments.length - 1);
@@ -757,7 +757,7 @@ export const commandBarApi = {
               name,
               captionTex: name,
               visible: true,
-              showLabel: "name",
+              showLabel: prev.objectLabelDefaults.point,
               locked: false,
               auxiliary: false,
               position: { x, y },

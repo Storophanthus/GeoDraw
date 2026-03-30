@@ -58,6 +58,7 @@ export function PropertiesPanel({
   const circleDefaults = useGeoStore((store) => store.circleDefaults);
   const polygonDefaults = useGeoStore((store) => store.polygonDefaults);
   const angleDefaults = useGeoStore((store) => store.angleDefaults);
+  const objectLabelDefaults = useGeoStore((store) => store.objectLabelDefaults);
   const labelToolDefaults = useGeoStore((store) => store.labelToolDefaults);
   const textboxToolDefaults = useGeoStore((store) => store.textboxToolDefaults);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
@@ -71,6 +72,7 @@ export function PropertiesPanel({
   const setCircleDefaults = useGeoStore((store) => store.setCircleDefaults);
   const setPolygonDefaults = useGeoStore((store) => store.setPolygonDefaults);
   const setAngleDefaults = useGeoStore((store) => store.setAngleDefaults);
+  const setObjectLabelDefaults = useGeoStore((store) => store.setObjectLabelDefaults);
   const setLabelToolDefaults = useGeoStore((store) => store.setLabelToolDefaults);
   const setTextboxToolDefaults = useGeoStore((store) => store.setTextboxToolDefaults);
   const setAngleFixedTool = useGeoStore((store) => store.setAngleFixedTool);
@@ -232,11 +234,11 @@ export function PropertiesPanel({
     [scene, selectedAngle]
   );
   const selectedStyleAsDefault = useMemo(() => {
-    if (selectedPoint) return pointStyleEqual(pointDefaults, selectedPoint.style);
-    if (selectedSegment) return lineStyleEqual(segmentDefaults, selectedSegment.style);
-    if (selectedLine) return lineStyleEqual(lineDefaults, selectedLine.style);
-    if (selectedCircle) return circleStyleEqual(circleDefaults, selectedCircle.style);
-    if (selectedPolygon) return polygonStyleEqual(polygonDefaults, selectedPolygon.style);
+    if (selectedPoint) return pointStyleEqual(pointDefaults, selectedPoint.style) && selectedPoint.showLabel === objectLabelDefaults.point;
+    if (selectedSegment) return lineStyleEqual(segmentDefaults, selectedSegment.style) && Boolean(selectedSegment.showLabel) === objectLabelDefaults.segment;
+    if (selectedLine) return lineStyleEqual(lineDefaults, selectedLine.style) && Boolean(selectedLine.showLabel) === objectLabelDefaults.line;
+    if (selectedCircle) return circleStyleEqual(circleDefaults, selectedCircle.style) && Boolean(selectedCircle.showLabel) === objectLabelDefaults.circle;
+    if (selectedPolygon) return polygonStyleEqual(polygonDefaults, selectedPolygon.style) && Boolean(selectedPolygon.showLabel) === objectLabelDefaults.polygon;
     if (selectedAngle) return angleStyleEqual(angleDefaults, selectedAngle.style);
     if (selectedTextLabel) {
       const defaults = resolveTextLabelToolKind(selectedTextLabel) === "textbox" ? textboxToolDefaults : labelToolDefaults;
@@ -248,6 +250,7 @@ export function PropertiesPanel({
     circleDefaults,
     labelToolDefaults,
     lineDefaults,
+    objectLabelDefaults,
     pointDefaults,
     polygonDefaults,
     segmentDefaults,
@@ -267,22 +270,27 @@ export function PropertiesPanel({
         ...selectedPoint.style,
         labelOffsetPx: { ...selectedPoint.style.labelOffsetPx },
       });
+      setObjectLabelDefaults({ point: selectedPoint.showLabel });
       return;
     }
     if (selectedStyleKind === "segment" && selectedSegment) {
       setSegmentDefaults({ ...selectedSegment.style });
+      setObjectLabelDefaults({ segment: Boolean(selectedSegment.showLabel) });
       return;
     }
     if (selectedStyleKind === "line" && selectedLine) {
       setLineDefaults({ ...selectedLine.style });
+      setObjectLabelDefaults({ line: Boolean(selectedLine.showLabel) });
       return;
     }
     if (selectedStyleKind === "circle" && selectedCircle) {
       setCircleDefaults({ ...selectedCircle.style });
+      setObjectLabelDefaults({ circle: Boolean(selectedCircle.showLabel) });
       return;
     }
     if (selectedStyleKind === "polygon" && selectedPolygon) {
       setPolygonDefaults({ ...selectedPolygon.style });
+      setObjectLabelDefaults({ polygon: Boolean(selectedPolygon.showLabel) });
       return;
     }
     if (selectedStyleKind === "angle" && selectedAngle) {

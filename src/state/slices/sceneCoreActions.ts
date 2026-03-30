@@ -1,5 +1,5 @@
 import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
-import type { ShowLabelMode, TextLabelToolKind, TriangleCenterKind } from "../../scene/points";
+import type { TextLabelToolKind, TriangleCenterKind } from "../../scene/points";
 import {
   defaultLineLabelPosWorld,
   defaultLineLabelText,
@@ -74,7 +74,7 @@ export function createSceneCoreActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 position: world,
@@ -154,7 +154,7 @@ export function createSceneCoreActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: true,
                 auxiliary: true,
                 aId,
@@ -196,7 +196,7 @@ export function createSceneCoreActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: true,
                 auxiliary: true,
                 segId,
@@ -223,15 +223,16 @@ export function createSceneCoreActions(
         const b = prev.scene.points.find((p) => p.id === bId);
         if (!a || !b) return prev;
         id = `s_${prev.nextSegmentId}`;
+        const showLabel = prev.objectLabelDefaults.segment;
         const newSegment = {
           id,
           aId,
           bId,
           visible: true,
-          showLabel: false,
-          labelText: defaultSegmentLabelText({ id, aId, bId, visible: true, showLabel: false, style: prev.segmentDefaults }, prev.scene),
+          showLabel,
+          labelText: defaultSegmentLabelText({ id, aId, bId, visible: true, showLabel, style: prev.segmentDefaults }, prev.scene),
           labelPosWorld:
-            defaultSegmentLabelPosWorld({ id, aId, bId, visible: true, showLabel: false, style: prev.segmentDefaults }, prev.scene) ?? undefined,
+            defaultSegmentLabelPosWorld({ id, aId, bId, visible: true, showLabel, style: prev.segmentDefaults }, prev.scene) ?? undefined,
           style: { ...prev.segmentDefaults },
         };
         return {
@@ -260,20 +261,21 @@ export function createSceneCoreActions(
         const b = prev.scene.points.find((p) => p.id === bId);
         if (!a || !b) return prev;
         id = `l_${prev.nextLineId}`;
+        const showLabel = prev.objectLabelDefaults.line;
         const newLine = {
           id,
           kind: "twoPoint" as const,
           aId,
           bId,
           visible: true,
-          showLabel: false,
+          showLabel,
           labelText: defaultLineLabelText(
-            { id, kind: "twoPoint", aId, bId, visible: true, showLabel: false, style: prev.lineDefaults },
+            { id, kind: "twoPoint", aId, bId, visible: true, showLabel, style: prev.lineDefaults },
             prev.scene
           ),
           labelPosWorld:
             defaultLineLabelPosWorld(
-              { id, kind: "twoPoint", aId, bId, visible: true, showLabel: false, style: prev.lineDefaults },
+              { id, kind: "twoPoint", aId, bId, visible: true, showLabel, style: prev.lineDefaults },
               prev.scene
             ) ?? undefined,
           style: { ...prev.lineDefaults },
@@ -339,7 +341,7 @@ export function createSceneCoreActions(
             aId,
             bId,
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
             ownedByPolygonIds: [polygonId],
             style: prev.segmentDefaults,
           };
@@ -349,7 +351,7 @@ export function createSceneCoreActions(
             bId,
             ownedByPolygonIds: [polygonId],
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
             labelText: defaultSegmentLabelText(segForLabel, prev.scene),
             labelPosWorld: defaultSegmentLabelPosWorld(segForLabel, prev.scene) ?? undefined,
             style: { ...prev.segmentDefaults },
@@ -359,15 +361,16 @@ export function createSceneCoreActions(
         }
 
         id = polygonId;
+        const showLabel = prev.objectLabelDefaults.polygon;
         const newPolygon = {
           id,
           pointIds: uniqueIds,
           visible: true,
-          showLabel: false,
-          labelText: defaultPolygonLabelText({ id, pointIds: uniqueIds, visible: true, showLabel: false, style: prev.polygonDefaults }, prev.scene),
+          showLabel,
+          labelText: defaultPolygonLabelText({ id, pointIds: uniqueIds, visible: true, showLabel, style: prev.polygonDefaults }, prev.scene),
           labelPosWorld:
             defaultPolygonLabelPosWorld(
-              { id, pointIds: uniqueIds, visible: true, showLabel: false, style: prev.polygonDefaults },
+              { id, pointIds: uniqueIds, visible: true, showLabel, style: prev.polygonDefaults },
               prev.scene
             ) ?? undefined,
           style: { ...prev.polygonDefaults },
@@ -440,7 +443,7 @@ export function createSceneCoreActions(
             name,
             captionTex: name,
             visible: true,
-            showLabel: "name",
+            showLabel: prev.objectLabelDefaults.point,
             locked: true,
             auxiliary: true,
             centerId,
@@ -491,7 +494,7 @@ export function createSceneCoreActions(
             aId: pa,
             bId: pb,
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
             ownedByPolygonIds: [polygonId],
             style: prev.segmentDefaults,
           };
@@ -501,7 +504,7 @@ export function createSceneCoreActions(
             bId: pb,
             ownedByPolygonIds: [polygonId],
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
             labelText: defaultSegmentLabelText(segForLabel, sceneWithNewPoints),
             labelPosWorld: defaultSegmentLabelPosWorld(segForLabel, sceneWithNewPoints) ?? undefined,
             style: { ...prev.segmentDefaults },
@@ -515,7 +518,7 @@ export function createSceneCoreActions(
           id: polygonId,
           pointIds,
           visible: true,
-          showLabel: false,
+          showLabel: prev.objectLabelDefaults.polygon,
           style: prev.polygonDefaults,
         };
         return {
@@ -530,7 +533,7 @@ export function createSceneCoreActions(
                 id: polygonId,
                 pointIds,
                 visible: true,
-                showLabel: false,
+                showLabel: prev.objectLabelDefaults.polygon,
                 labelText: defaultPolygonLabelText(polygonForLabel, sceneWithNewPoints),
                 labelPosWorld: defaultPolygonLabelPosWorld(polygonForLabel, sceneWithNewPoints) ?? undefined,
                 style: { ...prev.polygonDefaults },
@@ -593,7 +596,7 @@ export function createSceneCoreActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: true,
                 auxiliary: true,
                 circleId,
@@ -635,7 +638,7 @@ export function createSceneCoreActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: true,
                 auxiliary: true,
                 centerKind: centerKind as TriangleCenterKind,

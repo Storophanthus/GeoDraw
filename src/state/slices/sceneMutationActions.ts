@@ -1267,7 +1267,8 @@ export function createSceneMutationActions({
               polygonStyle: null,
               angleStyle: null,
               textLabelStyle: null,
-              showLabel: point.showLabel,
+              pointShowLabel: point.showLabel,
+              objectShowLabel: null,
             },
           };
         }
@@ -1285,7 +1286,8 @@ export function createSceneMutationActions({
               polygonStyle: polygonStyleFromLineStyle(segment.style),
               angleStyle: angleStyleFromLineStyle(segment.style),
               textLabelStyle: null,
-              showLabel: null,
+              pointShowLabel: null,
+              objectShowLabel: Boolean(segment.showLabel),
             },
           };
         }
@@ -1303,7 +1305,8 @@ export function createSceneMutationActions({
               polygonStyle: polygonStyleFromCircleStyle(circle.style),
               angleStyle: angleStyleFromCircleStyle(circle.style),
               textLabelStyle: null,
-              showLabel: null,
+              pointShowLabel: null,
+              objectShowLabel: Boolean(circle.showLabel),
             },
           };
         }
@@ -1321,7 +1324,8 @@ export function createSceneMutationActions({
               polygonStyle: { ...polygon.style },
               angleStyle: angleStyleFromCircleStyle(circleStyleFromPolygonStyle(polygon.style)),
               textLabelStyle: null,
-              showLabel: null,
+              pointShowLabel: null,
+              objectShowLabel: Boolean(polygon.showLabel),
             },
           };
         }
@@ -1365,7 +1369,8 @@ export function createSceneMutationActions({
                 labelPosWorld: { ...angle.style.labelPosWorld },
               },
               textLabelStyle: null,
-              showLabel: null,
+              pointShowLabel: null,
+              objectShowLabel: null,
             },
           };
         }
@@ -1383,7 +1388,8 @@ export function createSceneMutationActions({
               polygonStyle: null,
               angleStyle: null,
               textLabelStyle: { ...textLabel.style },
-              showLabel: null,
+              pointShowLabel: null,
+              objectShowLabel: null,
             },
           };
         }
@@ -1402,7 +1408,8 @@ export function createSceneMutationActions({
             polygonStyle: polygonStyleFromLineStyle(line.style),
             angleStyle: angleStyleFromLineStyle(line.style),
             textLabelStyle: null,
-            showLabel: null,
+            pointShowLabel: null,
+            objectShowLabel: Boolean(line.showLabel),
           },
         };
       }, { history: "skip" });
@@ -1482,7 +1489,8 @@ function emptyCopyStyle(): GeoState["copyStyle"] {
     polygonStyle: null,
     angleStyle: null,
     textLabelStyle: null,
-    showLabel: null,
+    pointShowLabel: null,
+    objectShowLabel: null,
   };
 }
 
@@ -1639,7 +1647,7 @@ function applyCopyStyleToScene(
       changed = true;
       return {
         ...point,
-        showLabel: copyStyle.showLabel ?? point.showLabel,
+        showLabel: copyStyle.pointShowLabel ?? point.showLabel,
         style: {
           ...point.style,
           ...sourcePointStyle,
@@ -1661,7 +1669,11 @@ function applyCopyStyleToScene(
     const segments = scene.segments.map((segment) => {
       if (segment.id !== obj.id) return segment;
       changed = true;
-      return { ...segment, style: { ...segment.style, ...sourceLineStyle } };
+      return {
+        ...segment,
+        showLabel: copyStyle.objectShowLabel ?? segment.showLabel,
+        style: { ...segment.style, ...sourceLineStyle },
+      };
     });
     return changed ? { ...scene, segments } : scene;
   }
@@ -1677,7 +1689,11 @@ function applyCopyStyleToScene(
     const circles = scene.circles.map((circle) => {
       if (circle.id !== obj.id) return circle;
       changed = true;
-      return { ...circle, style: { ...circle.style, ...sourceCircleStyle } };
+      return {
+        ...circle,
+        showLabel: copyStyle.objectShowLabel ?? circle.showLabel,
+        style: { ...circle.style, ...sourceCircleStyle },
+      };
     });
     return changed ? { ...scene, circles } : scene;
   }
@@ -1692,7 +1708,11 @@ function applyCopyStyleToScene(
     const polygons = scene.polygons.map((polygon) => {
       if (polygon.id !== obj.id) return polygon;
       changed = true;
-      return { ...polygon, style: { ...polygon.style, ...sourcePolygonStyle } };
+      return {
+        ...polygon,
+        showLabel: copyStyle.objectShowLabel ?? polygon.showLabel,
+        style: { ...polygon.style, ...sourcePolygonStyle },
+      };
     });
     return changed ? { ...scene, polygons } : scene;
   }
@@ -1732,7 +1752,11 @@ function applyCopyStyleToScene(
   const lines = scene.lines.map((line) => {
     if (line.id !== obj.id) return line;
     changed = true;
-    return { ...line, style: { ...line.style, ...sourceLineStyle } };
+    return {
+      ...line,
+      showLabel: copyStyle.objectShowLabel ?? line.showLabel,
+      style: { ...line.style, ...sourceLineStyle },
+    };
   });
   return changed ? { ...scene, lines } : scene;
 }

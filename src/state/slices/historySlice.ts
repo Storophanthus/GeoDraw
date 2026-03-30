@@ -1,5 +1,5 @@
 import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneModel, SceneTextLabelStyle } from "../../scene/points";
-import type { ActiveTool, GeoState, SelectedObject } from "./storeTypes";
+import type { ActiveTool, GeoState, ObjectLabelDefaults, SelectedObject } from "./storeTypes";
 import type { CanvasColorTheme, ColorProfileId } from "../colorProfiles";
 
 export type SetStateOptions = {
@@ -32,6 +32,7 @@ export type HistorySnapshot = {
   circleDefaults: CircleStyle;
   polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
+  objectLabelDefaults: ObjectLabelDefaults;
   labelToolDefaults: SceneTextLabelStyle;
   textboxToolDefaults: SceneTextLabelStyle;
   angleFixedTool: GeoState["angleFixedTool"];
@@ -81,6 +82,7 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     circleDefaults: prev.circleDefaults,
     polygonDefaults: prev.polygonDefaults,
     angleDefaults: prev.angleDefaults,
+    objectLabelDefaults: prev.objectLabelDefaults,
     labelToolDefaults: prev.labelToolDefaults,
     textboxToolDefaults: prev.textboxToolDefaults,
     angleFixedTool: prev.angleFixedTool,
@@ -115,6 +117,7 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.circleDefaults !== next.circleDefaults ||
     prev.polygonDefaults !== next.polygonDefaults ||
     prev.angleDefaults !== next.angleDefaults ||
+    prev.objectLabelDefaults !== next.objectLabelDefaults ||
     prev.labelToolDefaults !== next.labelToolDefaults ||
     prev.textboxToolDefaults !== next.textboxToolDefaults
     || prev.exportClipWorld !== next.exportClipWorld

@@ -15,6 +15,7 @@ type ConstructionPreferencesState = Pick<
   | "circleDefaults"
   | "polygonDefaults"
   | "angleDefaults"
+  | "objectLabelDefaults"
   | "labelToolDefaults"
   | "textboxToolDefaults"
   | "angleFixedTool"
@@ -105,6 +106,20 @@ function normalizeCanvasThemeOverrides(raw: unknown): ConstructionPreferencesSta
   return out;
 }
 
+function normalizeObjectLabelDefaults(raw: unknown): ConstructionPreferencesState["objectLabelDefaults"] {
+  if (!isRecord(raw)) {
+    return { point: "name", segment: false, line: false, circle: false, polygon: false };
+  }
+  const point = raw.point === "none" || raw.point === "caption" ? raw.point : "name";
+  return {
+    point,
+    segment: typeof raw.segment === "boolean" ? raw.segment : false,
+    line: typeof raw.line === "boolean" ? raw.line : false,
+    circle: typeof raw.circle === "boolean" ? raw.circle : false,
+    polygon: typeof raw.polygon === "boolean" ? raw.polygon : false,
+  };
+}
+
 export function captureUiPreferences(state: UiPreferencesState): UiPreferencesState {
   return {
     uiColorProfileId: state.uiColorProfileId,
@@ -125,6 +140,7 @@ export function captureConstructionPreferences(state: ConstructionPreferencesSta
     circleDefaults: state.circleDefaults,
     polygonDefaults: state.polygonDefaults,
     angleDefaults: state.angleDefaults,
+    objectLabelDefaults: state.objectLabelDefaults,
     labelToolDefaults: state.labelToolDefaults,
     textboxToolDefaults: state.textboxToolDefaults,
     angleFixedTool: state.angleFixedTool,
@@ -195,6 +211,7 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
     circleDefaults: value.circleDefaults as ConstructionPreferencesState["circleDefaults"],
     polygonDefaults: value.polygonDefaults as ConstructionPreferencesState["polygonDefaults"],
     angleDefaults: value.angleDefaults as ConstructionPreferencesState["angleDefaults"],
+    objectLabelDefaults: normalizeObjectLabelDefaults(value.objectLabelDefaults),
     labelToolDefaults: value.labelToolDefaults as ConstructionPreferencesState["labelToolDefaults"],
     textboxToolDefaults: value.textboxToolDefaults as ConstructionPreferencesState["textboxToolDefaults"],
     angleFixedTool: value.angleFixedTool as ConstructionPreferencesState["angleFixedTool"],

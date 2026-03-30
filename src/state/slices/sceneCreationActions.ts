@@ -1,5 +1,5 @@
 import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
-import type { GeometryObjectRef, ReflectionObjectRef, SceneModel, SceneNumberDefinition, ScenePoint, ShowLabelMode } from "../../scene/points";
+import type { GeometryObjectRef, ReflectionObjectRef, SceneModel, SceneNumberDefinition, ScenePoint } from "../../scene/points";
 import { evaluateNumberExpression } from "../../scene/points";
 import {
   defaultCircleLabelPosWorld,
@@ -86,13 +86,14 @@ export function createSceneCreationActions(
           return prev;
         }
         id = `c_${prev.nextCircleId}`;
+        const showLabel = prev.objectLabelDefaults.circle;
         const circleForLabel = {
           id,
           kind: "twoPoint" as const,
           centerId,
           throughId,
           visible: false,
-          showLabel: false,
+          showLabel,
           style: prev.circleDefaults,
         };
         return {
@@ -107,7 +108,7 @@ export function createSceneCreationActions(
                 centerId,
                 throughId,
                 visible: false,
-                showLabel: false,
+                showLabel,
                 labelText: defaultCircleLabelText(circleForLabel, prev.scene),
                 labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
@@ -128,13 +129,14 @@ export function createSceneCreationActions(
         const t = prev.scene.points.find((p) => p.id === throughId);
         if (!c || !t) return prev;
         id = `c_${prev.nextCircleId}`;
+        const showLabel = prev.objectLabelDefaults.circle;
         const circleForLabel = {
           id,
           kind: "twoPoint" as const,
           centerId,
           throughId,
           visible: true,
-          showLabel: false,
+          showLabel,
           style: prev.circleDefaults,
         };
         return {
@@ -149,7 +151,7 @@ export function createSceneCreationActions(
                 centerId,
                 throughId,
                 visible: true,
-                showLabel: false,
+                showLabel,
                 labelText: defaultCircleLabelText(circleForLabel, prev.scene),
                 labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
@@ -179,6 +181,7 @@ export function createSceneCreationActions(
         const area2 = (bw.x - aw.x) * (cw.y - aw.y) - (bw.y - aw.y) * (cw.x - aw.x);
         if (Math.abs(area2) <= 1e-9) return prev;
         id = `c_${prev.nextCircleId}`;
+        const showLabel = prev.objectLabelDefaults.circle;
         const circleForLabel = {
           id,
           kind: "threePoint" as const,
@@ -186,7 +189,7 @@ export function createSceneCreationActions(
           bId,
           cId,
           visible: true,
-          showLabel: false,
+          showLabel,
           style: prev.circleDefaults,
         };
         return {
@@ -202,7 +205,7 @@ export function createSceneCreationActions(
                 bId,
                 cId,
                 visible: true,
-                showLabel: false,
+                showLabel,
                 labelText: defaultCircleLabelText(circleForLabel, prev.scene),
                 labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
@@ -227,6 +230,7 @@ export function createSceneCreationActions(
         const evaluated = evaluateNumberExpression(prev.scene, expr);
         if (!evaluated.ok || !Number.isFinite(evaluated.value) || evaluated.value <= 0) return prev;
         id = `c_${prev.nextCircleId}`;
+        const showLabel = prev.objectLabelDefaults.circle;
         const circleForLabel = {
           id,
           kind: "fixedRadius" as const,
@@ -234,7 +238,7 @@ export function createSceneCreationActions(
           radius: evaluated.value,
           radiusExpr: expr,
           visible: true,
-          showLabel: false,
+          showLabel,
           style: prev.circleDefaults,
         };
         return {
@@ -250,7 +254,7 @@ export function createSceneCreationActions(
                 radius: evaluated.value,
                 radiusExpr: expr,
                 visible: true,
-                showLabel: false,
+                showLabel,
                 labelText: defaultCircleLabelText(circleForLabel, prev.scene),
                 labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
@@ -285,7 +289,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 lineId,
@@ -325,7 +329,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 segId,
@@ -365,7 +369,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 circleId,
@@ -412,7 +416,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 centerId,
@@ -470,7 +474,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 pointId,
@@ -521,7 +525,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 pointId,
@@ -571,7 +575,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 pointId,
@@ -642,7 +646,7 @@ export function createSceneCreationActions(
               name,
               captionTex: name,
               visible: true,
-              showLabel: "name" as ShowLabelMode,
+              showLabel: prev.objectLabelDefaults.point,
               locked: true,
               auxiliary: true,
               circleId: segmentCircle.circleId,
@@ -661,7 +665,7 @@ export function createSceneCreationActions(
               name,
               captionTex: name,
               visible: true,
-              showLabel: "name" as ShowLabelMode,
+              showLabel: prev.objectLabelDefaults.point,
               locked: true,
               auxiliary: true,
               circleAId: circleCircle.circleAId,
@@ -680,7 +684,7 @@ export function createSceneCreationActions(
               name,
               captionTex: name,
               visible: true,
-              showLabel: "name" as ShowLabelMode,
+              showLabel: prev.objectLabelDefaults.point,
               locked: true,
               auxiliary: true,
               objA: lineLikeLike.objA,
@@ -704,7 +708,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: true,
                 auxiliary: true,
                 objA,

@@ -43,6 +43,13 @@ export function createSceneSliceState() {
     circleDefaults: defaultCircleStyle,
     polygonDefaults: defaultPolygonStyle,
     angleDefaults: defaultAngleStyle,
+    objectLabelDefaults: {
+      point: "name" as const,
+      segment: false,
+      line: false,
+      circle: false,
+      polygon: false,
+    },
     labelToolDefaults: defaultLabelToolStyle,
     textboxToolDefaults: defaultTextboxToolStyle,
   };

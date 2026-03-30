@@ -220,6 +220,14 @@ export type ExportClipWorld =
 
 export type AngleFixedDirection = "CCW" | "CW";
 
+export type ObjectLabelDefaults = {
+  point: ShowLabelMode;
+  segment: boolean;
+  line: boolean;
+  circle: boolean;
+  polygon: boolean;
+};
+
 export type GeoState = {
   camera: Camera;
   colorProfileId: ColorProfileId;
@@ -251,6 +259,7 @@ export type GeoState = {
   circleDefaults: CircleStyle;
   polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
+  objectLabelDefaults: ObjectLabelDefaults;
   labelToolDefaults: SceneTextLabelStyle;
   textboxToolDefaults: SceneTextLabelStyle;
   angleFixedTool: {
@@ -280,7 +289,8 @@ export type GeoState = {
     polygonStyle: PolygonStyle | null;
     angleStyle: Partial<AngleStyle> | null;
     textLabelStyle: SceneTextLabelStyle | null;
-    showLabel: ShowLabelMode | null;
+    pointShowLabel: ShowLabelMode | null;
+    objectShowLabel: boolean | null;
   };
   canUndo: boolean;
   canRedo: boolean;
@@ -301,6 +311,7 @@ export type AppPreferencesState = Pick<
   | "circleDefaults"
   | "polygonDefaults"
   | "angleDefaults"
+  | "objectLabelDefaults"
   | "labelToolDefaults"
   | "textboxToolDefaults"
   | "angleFixedTool"
@@ -381,6 +392,7 @@ export type GeoActions = {
   setCircleDefaults: (next: Partial<CircleStyle>) => void;
   setPolygonDefaults: (next: Partial<PolygonStyle>) => void;
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
+  setObjectLabelDefaults: (next: Partial<ObjectLabelDefaults>) => void;
   setLabelToolDefaults: (next: Partial<SceneTextLabelStyle>) => void;
   setTextboxToolDefaults: (next: Partial<SceneTextLabelStyle>) => void;
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;

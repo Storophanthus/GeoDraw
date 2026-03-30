@@ -44,7 +44,8 @@ export function createInteractionActions(
                 polygonStyle: null,
                 angleStyle: null,
                 textLabelStyle: null,
-                showLabel: null,
+                pointShowLabel: null,
+                objectShowLabel: null,
               },
         circleFixedTool: prev.circleFixedTool,
       }));

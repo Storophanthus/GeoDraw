@@ -1,4 +1,5 @@
 import {
+  getCircleWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
   isRightAngle,
@@ -209,11 +210,21 @@ function resolveRaySupports(scene: SceneModel, vertexId: string, otherId: string
 export function isRightExactByProvenance(scene: SceneModel, aId: string, bId: string, cId: string): boolean {
   const isCenterPointForCircle = (pointId: string, circleId: string): boolean =>
     getCanonicalCircleCenterPointIds(scene, circleId).has(pointId);
+  const isPointOnCircleBoundary = (pointId: string, circleId: string): boolean => {
+    const point = scene.points.find((p) => p.id === pointId);
+    const circle = scene.circles.find((item) => item.id === circleId);
+    if (!point || !circle) return false;
+    const world = getPointWorldPos(point, scene);
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (!world || !geom) return false;
+    return Math.abs(Math.hypot(world.x - geom.center.x, world.y - geom.center.y) - geom.radius) <= Math.max(1e-6, geom.radius * 1e-6);
+  };
 
   // Tangent-radius exact right at a tangency point: vertex is tangent's through-point.
   // Works for twoPoint/fixedRadius circles and threePoint circles when a circle-center point is used.
   for (const line of scene.lines) {
     if (line.kind !== "tangent" || line.throughId !== bId) continue;
+    if (!isPointOnCircleBoundary(bId, line.circleId)) continue;
     const aIsCenter = isCenterPointForCircle(aId, line.circleId);
     const cIsCenter = isCenterPointForCircle(cId, line.circleId);
     if (!aIsCenter && !cIsCenter) continue;
@@ -255,7 +266,6 @@ export function isRightExactByProvenance(scene: SceneModel, aId: string, bId: st
 }
 
 export function resolveAngleRightStatus(scene: SceneModel, angle: SceneAngle): AngleRightStatus {
-  if (angle.isRightExact === true) return "exact";
   if (isRightExactByProvenance(scene, angle.aId, angle.bId, angle.cId)) return "exact";
   const aPoint = scene.points.find((p) => p.id === angle.aId);
   const bPoint = scene.points.find((p) => p.id === angle.bId);
