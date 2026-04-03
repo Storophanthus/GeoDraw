@@ -1,5 +1,7 @@
-import { useState, useMemo, useEffect, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import {
+    ArrowDown,
+    ArrowUp,
     Copy,
     Hash,
     Link2,
@@ -8,7 +10,8 @@ import {
     LockOpen,
     Type as TypeIcon,
 } from "lucide-react";
-import type { SceneModel } from "../scene/points";
+import type { SceneGeometryLayerRef, SceneModel } from "../scene/points";
+import { geometryLayerKey, geometryLayerOrderForTab, geometryLayerRefMatchesTab, type GeometryLayerDropPosition } from "../scene/geometryLayerOrder";
 import type { SelectedObject } from "../state/slices/storeTypes";
 import { getNumberValue } from "../scene/points";
 import { commandBarApi, useGeoStore } from "../state/geoStore";
@@ -25,6 +28,22 @@ type ObjectBrowserProps = {
 
 type TabId = "all" | "points" | "lines" | "circles" | "angles" | "text" | "numbers";
 type SelectedObjectRef = Exclude<SelectedObject, null>;
+type ObjectRowDescriptor = {
+    key: string;
+    object: SelectedObjectRef;
+    title: string;
+    commandText: string;
+    visible: boolean;
+    reorderable: boolean;
+};
+
+type DragPreviewState = {
+    left: number;
+    top: number;
+    width: number;
+    title: string;
+    commandText: string;
+};
 
 function selectedObjectKey(obj: SelectedObjectRef): string {
     return `${obj.type}:${obj.id}`;
@@ -48,6 +67,19 @@ function objectFromRowKey(key: string): SelectedObjectRef | null {
         return null;
     }
     return { type, id };
+}
+
+function geometryLayerRefFromSelectedObject(obj: SelectedObjectRef): SceneGeometryLayerRef | null {
+    if (
+        obj.type === "segment" ||
+        obj.type === "line" ||
+        obj.type === "circle" ||
+        obj.type === "polygon" ||
+        obj.type === "angle"
+    ) {
+        return { type: obj.type, id: obj.id };
+    }
+    return null;
 }
 
 function isTextInputLike(target: EventTarget | null): boolean {
@@ -94,8 +126,24 @@ export function ObjectBrowser({
     const [activeTab, setActiveTab] = useState<TabId>("all");
     const [tabPinned, setTabPinned] = useState(false);
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
-    const objectRowRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+    const [draggedGeometryKey, setDraggedGeometryKey] = useState<string | null>(null);
+    const [dropIndicator, setDropIndicator] = useState<{ key: string; position: GeometryLayerDropPosition } | null>(null);
+    const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
+    const objectRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const lastSelectionKeyRef = useRef<string | null>(null);
+    const pointerDragRef = useRef<{
+        key: string;
+        pointerId: number;
+        startX: number;
+        startY: number;
+        started: boolean;
+        offsetX: number;
+        offsetY: number;
+        width: number;
+        title: string;
+        commandText: string;
+    } | null>(null);
+    const suppressRowClickRef = useRef(false);
     const setObjectVisibility = useGeoStore((store) => store.setObjectVisibility);
 
     // Toggles state
@@ -108,6 +156,7 @@ export function ObjectBrowser({
     const setAxesEnabled = useGeoStore((store) => store.setAxesEnabled);
     const setGridSnapEnabled = useGeoStore((store) => store.setGridSnapEnabled);
     const setDependencyGlowEnabled = useGeoStore((store) => store.setDependencyGlowEnabled);
+    const reorderGeometryLayerInTab = useGeoStore((store) => store.reorderGeometryLayerInTab);
     const multiSelectedKeySet = useMemo(
         () => new Set(multiSelectedObjects.map((obj) => selectedObjectKey(obj))),
         [multiSelectedObjects]
@@ -133,8 +182,20 @@ export function ObjectBrowser({
         row.scrollIntoView({ block: "nearest", inline: "nearest" });
     }, [selectedObject, activeTab]);
 
+    useEffect(() => {
+        setDraggedGeometryKey(null);
+        setDropIndicator(null);
+        setDragPreview(null);
+        pointerDragRef.current = null;
+    }, [activeTab]);
+
+    useEffect(() => {
+        document.body.classList.toggle("object-browser-dragging", draggedGeometryKey !== null);
+        return () => document.body.classList.remove("object-browser-dragging");
+    }, [draggedGeometryKey]);
+
     const bindObjectRowRef = useCallback(
-        (key: string) => (el: HTMLButtonElement | null) => {
+        (key: string) => (el: HTMLDivElement | null) => {
             if (el) objectRowRefs.current.set(key, el);
             else objectRowRefs.current.delete(key);
         },
@@ -163,6 +224,8 @@ export function ObjectBrowser({
     const lineById = useMemo(() => new Map(scene.lines.map((l) => [l.id, l])), [scene.lines]);
     const segmentById = useMemo(() => new Map(scene.segments.map((s) => [s.id, s])), [scene.segments]);
     const circleById = useMemo(() => new Map(scene.circles.map((c) => [c.id, c])), [scene.circles]);
+    const polygonById = useMemo(() => new Map(scene.polygons.map((p) => [p.id, p])), [scene.polygons]);
+    const angleById = useMemo(() => new Map(scene.angles.map((a) => [a.id, a])), [scene.angles]);
     const commandAliases = useMemo(() => commandBarApi.getCommandObjectAliases(), [scene]);
     const aliasByObjectKey = useMemo(() => {
         const map = new Map<string, string>();
@@ -237,6 +300,10 @@ export function ObjectBrowser({
     };
 
     const selectObject = (obj: SelectedObjectRef) => {
+        if (suppressRowClickRef.current) {
+            suppressRowClickRef.current = false;
+            return;
+        }
         setSelectedObject(obj);
         const key = selectedObjectKey(obj);
         if (multiSelectedKeySet.size === 0 || multiSelectedKeySet.has(key)) return;
@@ -272,7 +339,14 @@ export function ObjectBrowser({
         return true;
     }, [focusObjectRow, getOrderedRowKeys, multiSelectedObjects, setMultiSelectedObjects, setSelectedObject]);
 
-    const handleRowKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>, currentKey: string) => {
+    const handleRowKeyDown = (e: ReactKeyboardEvent<HTMLElement>, currentKey: string) => {
+        if (!e.shiftKey && (e.key === "Enter" || e.key === " ")) {
+            const current = objectFromRowKey(currentKey);
+            if (!current) return;
+            e.preventDefault();
+            selectObject(current);
+            return;
+        }
         if (!e.shiftKey) return;
         const isUp = e.key === "ArrowUp" || e.key === "Up";
         const isDown = e.key === "ArrowDown" || e.key === "Down";
@@ -310,20 +384,64 @@ export function ObjectBrowser({
         visible: boolean,
         onToggleVisible: (next: boolean) => void,
         title: string,
-        commandText: string
+        commandText: string,
+        reorderable = false,
+        dragging = false,
+        dropPosition: GeometryLayerDropPosition | null = null,
+        canMoveUp = false,
+        canMoveDown = false,
+        onMoveUp?: () => void,
+        onMoveDown?: () => void,
+        onPointerDown?: (e: ReactPointerEvent<HTMLDivElement>) => void
     ) => (
-        <button
+        <div
             key={key}
             ref={bindObjectRowRef(key)}
-            className={`objectItem${active ? " active" : ""}${selected ? " selected" : ""}`}
+            className={`objectItem${active ? " active" : ""}${selected ? " selected" : ""}${reorderable ? " reorderable" : ""}${dragging ? " dragging" : ""}${dropPosition === "before" ? " dropBefore" : ""}${dropPosition === "after" ? " dropAfter" : ""}`}
+            role="button"
+            tabIndex={0}
             onClick={onSelect}
             onKeyDown={(e) => handleRowKeyDown(e, key)}
+            onPointerDown={onPointerDown}
+            aria-grabbed={reorderable && dragging ? true : undefined}
         >
             <div className="objectItemText">
                 <span className="objectItemLabel">{title}</span>
                 <span className="objectItemCommand" title={commandText}>{commandText}</span>
             </div>
             <div className="objectItemActions">
+                {reorderable && (
+                    <>
+                        <button
+                            type="button"
+                            className="objectLayerMove"
+                            title="Move layer up"
+                            aria-label="Move layer up"
+                            disabled={!canMoveUp}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onMoveUp?.();
+                            }}
+                        >
+                            <ArrowUp size={12} strokeWidth={2.1} />
+                        </button>
+                        <button
+                            type="button"
+                            className="objectLayerMove"
+                            title="Move layer down"
+                            aria-label="Move layer down"
+                            disabled={!canMoveDown}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onMoveDown?.();
+                            }}
+                        >
+                            <ArrowDown size={12} strokeWidth={2.1} />
+                        </button>
+                    </>
+                )}
                 <button
                     type="button"
                     className={selected ? "objectLinkToggle active" : "objectLinkToggle"}
@@ -358,7 +476,7 @@ export function ObjectBrowser({
                     onChange={(e) => onToggleVisible(e.target.checked)}
                 />
             </div>
-        </button>
+        </div>
     );
 
     const tabs: Array<{ id: TabId; icon: React.ElementType; label: string; description: string; count: number }> = [
@@ -389,222 +507,290 @@ export function ObjectBrowser({
         { id: "numbers", icon: Hash, label: "Numbers", description: "Filter by Numbers & Values", count: scene.numbers.length },
     ];
 
-    const filteredContent = useMemo(() => {
-        const showPoints = activeTab === "all" || activeTab === "points";
-        const showSegments = activeTab === "all" || activeTab === "lines";
-        const showLines = activeTab === "all" || activeTab === "lines";
-        const showCircles = activeTab === "all" || activeTab === "circles";
-        const showAngles = activeTab === "all" || activeTab === "angles";
-        const showTextLabels = activeTab === "all" || activeTab === "text";
-        const showNumbers = activeTab === "all" || activeTab === "numbers";
-
-        return (
-            <>
-                {showPoints && scene.points.map((point) => (
-                    renderObjectRow(
-                        `point:${point.id}`,
-                        selectedObject?.type === "point" && selectedObject.id === point.id,
-                        multiSelectedKeySet.has(`point:${point.id}`),
-                        () => selectObject({ type: "point", id: point.id }),
-                        () => toggleBatchSelection({ type: "point", id: point.id }),
-                        point.visible,
-                        (next) => setObjectVisibility({ type: "point", id: point.id }, next),
-                        `Point ${point.name}`,
-                        point.kind === "free"
-                            ? withAliasPrefix(
-                                "point",
-                                point.id,
-                                `Point(${formatRoundedDisplay(point.position.x, 4)},${formatRoundedDisplay(point.position.y, 4)})`
-                              )
-                            : point.kind === "midpointPoints"
-                                ? withAliasPrefix("point", point.id, `Midpoint(${pointLabel(point.aId)},${pointLabel(point.bId)})`)
-                                : point.kind === "midpointSegment"
-                                    ? withAliasPrefix("point", point.id, `Midpoint(${lineLikeText({ type: "segment", id: point.segId })})`)
-                                    : point.kind === "pointByRotation"
+    const filteredRows = useMemo<ObjectRowDescriptor[]>(() => {
+        const buildPointRow = (point: SceneModel["points"][number]): ObjectRowDescriptor => ({
+            key: `point:${point.id}`,
+            object: { type: "point", id: point.id },
+            title: `Point ${point.name}`,
+            commandText:
+                point.kind === "free"
+                    ? withAliasPrefix("point", point.id, `Point(${formatRoundedDisplay(point.position.x, 4)},${formatRoundedDisplay(point.position.y, 4)})`)
+                    : point.kind === "midpointPoints"
+                        ? withAliasPrefix("point", point.id, `Midpoint(${pointLabel(point.aId)},${pointLabel(point.bId)})`)
+                        : point.kind === "midpointSegment"
+                            ? withAliasPrefix("point", point.id, `Midpoint(${lineLikeText({ type: "segment", id: point.segId })})`)
+                            : point.kind === "pointByRotation"
+                                ? withAliasPrefix(
+                                    "point",
+                                    point.id,
+                                    `Rotate(${pointLabel(point.pointId)},${pointLabel(point.centerId)},${point.angleExpr ?? point.angleDeg},${point.direction})`
+                                )
+                                : point.kind === "pointByTranslation"
+                                    ? withAliasPrefix(
+                                        "point",
+                                        point.id,
+                                        `Translate(${pointLabel(point.pointId)},${pointLabel(point.fromId)},${pointLabel(point.toId)})`
+                                    )
+                                    : point.kind === "pointByDilation"
                                         ? withAliasPrefix(
                                             "point",
                                             point.id,
-                                            `Rotate(${pointLabel(point.pointId)},${pointLabel(point.centerId)},${point.angleExpr ?? point.angleDeg},${point.direction})`
+                                            `Dilate(${pointLabel(point.pointId)},${pointLabel(point.centerId)},${point.factorExpr ?? point.factor ?? "?"})`
                                         )
-                                        : point.kind === "pointByTranslation"
-                                            ? withAliasPrefix(
-                                                "point",
-                                                point.id,
-                                                `Translate(${pointLabel(point.pointId)},${pointLabel(point.fromId)},${pointLabel(point.toId)})`
-                                            )
-                                            : point.kind === "pointByDilation"
-                                                ? withAliasPrefix(
-                                                    "point",
-                                                    point.id,
-                                                    `Dilate(${pointLabel(point.pointId)},${pointLabel(point.centerId)},${point.factorExpr ?? point.factor ?? "?"})`
-                                                )
-                                                : point.kind === "pointByReflection"
-                                                    ? withAliasPrefix(
-                                                        "point",
-                                                        point.id,
-                                                        `Reflect(${pointLabel(point.pointId)},${reflectionTargetText(point.axis)})`
-                                                    )
-                                        : point.kind === "pointOnCircle"
-                                            ? withAliasPrefix("point", point.id, `PointOn(${circleRefText(point.circleId)})`)
-                                            : point.kind === "pointOnLine"
-                                                ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "line", id: point.lineId })})`)
-                                                : point.kind === "pointOnSegment"
-                                                    ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "segment", id: point.segId })})`)
-                                                    : point.kind === "circleCenter"
-                                                        ? withAliasPrefix("point", point.id, `Center(${circleRefText(point.circleId)})`)
-                                                        : point.kind === "circleLineIntersectionPoint"
-                                                            ? withAliasPrefix(
-                                                                "point",
-                                                                point.id,
-                                                                `Intersect(${circleRefText(point.circleId)},${lineLikeText({ type: "line", id: point.lineId })})`
-                                                            )
-                                                            : point.kind === "circleSegmentIntersectionPoint"
-                                                                ? withAliasPrefix(
-                                                                    "point",
-                                                                    point.id,
-                                                                    `Intersect(${circleRefText(point.circleId)},${lineLikeText({ type: "segment", id: point.segId })})`
-                                                                )
-                                                                : point.kind === "circleCircleIntersectionPoint"
-                                                                    ? withAliasPrefix(
-                                                                        "point",
-                                                                        point.id,
-                                                                        `Intersect(${circleRefText(point.circleAId)},${circleRefText(point.circleBId)})`
-                                                                    )
-                                                                    : point.kind === "lineLikeIntersectionPoint"
-                                                                        ? withAliasPrefix(
-                                                                            "point",
-                                                                            point.id,
-                                                                            `Intersect(${lineLikeText(point.objA)},${lineLikeText(point.objB)})`
-                                                                        )
-                                                                        : withAliasPrefix("point", point.id, "Point(...)")
-                    )
-                ))}
+                                        : point.kind === "pointByReflection"
+                                            ? withAliasPrefix("point", point.id, `Reflect(${pointLabel(point.pointId)},${reflectionTargetText(point.axis)})`)
+                                            : point.kind === "pointOnCircle"
+                                                ? withAliasPrefix("point", point.id, `PointOn(${circleRefText(point.circleId)})`)
+                                                : point.kind === "pointOnLine"
+                                                    ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "line", id: point.lineId })})`)
+                                                    : point.kind === "pointOnSegment"
+                                                        ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "segment", id: point.segId })})`)
+                                                        : point.kind === "circleCenter"
+                                                            ? withAliasPrefix("point", point.id, `Center(${circleRefText(point.circleId)})`)
+                                                            : point.kind === "circleLineIntersectionPoint"
+                                                                ? withAliasPrefix("point", point.id, `Intersect(${circleRefText(point.circleId)},${lineLikeText({ type: "line", id: point.lineId })})`)
+                                                                : point.kind === "circleSegmentIntersectionPoint"
+                                                                    ? withAliasPrefix("point", point.id, `Intersect(${circleRefText(point.circleId)},${lineLikeText({ type: "segment", id: point.segId })})`)
+                                                                    : point.kind === "circleCircleIntersectionPoint"
+                                                                        ? withAliasPrefix("point", point.id, `Intersect(${circleRefText(point.circleAId)},${circleRefText(point.circleBId)})`)
+                                                                        : point.kind === "lineLikeIntersectionPoint"
+                                                                            ? withAliasPrefix("point", point.id, `Intersect(${lineLikeText(point.objA)},${lineLikeText(point.objB)})`)
+                                                                            : withAliasPrefix("point", point.id, "Point(...)"),
+            visible: point.visible,
+            reorderable: false,
+        });
 
-                {showSegments && scene.segments.map((segment) => (
-                    renderObjectRow(
-                        `segment:${segment.id}`,
-                        selectedObject?.type === "segment" && selectedObject.id === segment.id,
-                        multiSelectedKeySet.has(`segment:${segment.id}`),
-                        () => selectObject({ type: "segment", id: segment.id }),
-                        () => toggleBatchSelection({ type: "segment", id: segment.id }),
-                        segment.visible,
-                        (next) => setObjectVisibility({ type: "segment", id: segment.id }, next),
-                        `Segment ${pointLabel(segment.aId)}${pointLabel(segment.bId)}`,
-                        withAliasPrefix("segment", segment.id, `Segment(${pointLabel(segment.aId)},${pointLabel(segment.bId)})`)
-                    )
-                ))}
+        const buildSegmentRow = (segment: SceneModel["segments"][number]): ObjectRowDescriptor => ({
+            key: `segment:${segment.id}`,
+            object: { type: "segment", id: segment.id },
+            title: `Segment ${pointLabel(segment.aId)}${pointLabel(segment.bId)}`,
+            commandText: withAliasPrefix("segment", segment.id, `Segment(${pointLabel(segment.aId)},${pointLabel(segment.bId)})`),
+            visible: segment.visible,
+            reorderable: activeTab === "lines",
+        });
 
-                {showLines && scene.lines.map((line) => (
-                    renderObjectRow(
-                        `line:${line.id}`,
-                        selectedObject?.type === "line" && selectedObject.id === line.id,
-                        multiSelectedKeySet.has(`line:${line.id}`),
-                        () => selectObject({ type: "line", id: line.id }),
-                        () => toggleBatchSelection({ type: "line", id: line.id }),
-                        line.visible,
-                        (next) => setObjectVisibility({ type: "line", id: line.id }, next),
-                        line.kind === "twoPoint" ? `Line ${pointLabel(line.aId)}${pointLabel(line.bId)}` : `Line ${line.id}`,
-                        withAliasPrefix("line", line.id, lineLikeText({ type: "line", id: line.id }))
-                    )
-                ))}
+        const buildLineRow = (line: SceneModel["lines"][number]): ObjectRowDescriptor => ({
+            key: `line:${line.id}`,
+            object: { type: "line", id: line.id },
+            title: line.kind === "twoPoint" ? `Line ${pointLabel(line.aId)}${pointLabel(line.bId)}` : `Line ${line.id}`,
+            commandText: withAliasPrefix("line", line.id, lineLikeText({ type: "line", id: line.id })),
+            visible: line.visible,
+            reorderable: activeTab === "lines",
+        });
 
-                {showCircles && scene.circles.map((circle) => (
-                    renderObjectRow(
-                        `circle:${circle.id}`,
-                        selectedObject?.type === "circle" && selectedObject.id === circle.id,
-                        multiSelectedKeySet.has(`circle:${circle.id}`),
-                        () => selectObject({ type: "circle", id: circle.id }),
-                        () => toggleBatchSelection({ type: "circle", id: circle.id }),
-                        circle.visible,
-                        (next) => setObjectVisibility({ type: "circle", id: circle.id }, next),
-                        `Circle ${circle.id}`,
-                        withAliasPrefix("circle", circle.id, circleRefText(circle.id))
-                    )
-                ))}
+        const buildCircleRow = (circle: SceneModel["circles"][number]): ObjectRowDescriptor => ({
+            key: `circle:${circle.id}`,
+            object: { type: "circle", id: circle.id },
+            title: `Circle ${circle.id}`,
+            commandText: withAliasPrefix("circle", circle.id, circleRefText(circle.id)),
+            visible: circle.visible,
+            reorderable: activeTab === "circles",
+        });
 
-                {showCircles && scene.polygons.map((polygon) => (
-                    renderObjectRow(
-                        `polygon:${polygon.id}`,
-                        selectedObject?.type === "polygon" && selectedObject.id === polygon.id,
-                        multiSelectedKeySet.has(`polygon:${polygon.id}`),
-                        () => selectObject({ type: "polygon", id: polygon.id }),
-                        () => toggleBatchSelection({ type: "polygon", id: polygon.id }),
-                        polygon.visible,
-                        (next) => setObjectVisibility({ type: "polygon", id: polygon.id }, next),
-                        `Polygon ${polygon.id}`,
-                        withAliasPrefix("polygon", polygon.id, `Polygon(${polygon.pointIds.map((id) => pointLabel(id)).join(",")})`)
-                    )
-                ))}
+        const buildPolygonRow = (polygon: SceneModel["polygons"][number]): ObjectRowDescriptor => ({
+            key: `polygon:${polygon.id}`,
+            object: { type: "polygon", id: polygon.id },
+            title: `Polygon ${polygon.id}`,
+            commandText: withAliasPrefix("polygon", polygon.id, `Polygon(${polygon.pointIds.map((id) => pointLabel(id)).join(",")})`),
+            visible: polygon.visible,
+            reorderable: activeTab === "circles",
+        });
 
-                {showCircles && scene.angles.filter((angle) => angle.kind === "sector").map((angle) => (
-                    renderObjectRow(
-                        `angle:${angle.id}`,
-                        selectedObject?.type === "angle" && selectedObject.id === angle.id,
-                        multiSelectedKeySet.has(`angle:${angle.id}`),
-                        () => selectObject({ type: "angle", id: angle.id }),
-                        () => toggleBatchSelection({ type: "angle", id: angle.id }),
-                        angle.visible,
-                        (next) => setObjectVisibility({ type: "angle", id: angle.id }, next),
-                        `Sector ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`,
-                        withAliasPrefix("angle", angle.id, `Sector(${pointLabel(angle.bId)},${pointLabel(angle.aId)},${pointLabel(angle.cId)})`)
-                    )
-                ))}
+        const buildAngleRow = (angle: SceneModel["angles"][number]): ObjectRowDescriptor => ({
+            key: `angle:${angle.id}`,
+            object: { type: "angle", id: angle.id },
+            title: angle.kind === "sector"
+                ? `Sector ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`
+                : `Angle ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`,
+            commandText: angle.kind === "sector"
+                ? withAliasPrefix("angle", angle.id, `Sector(${pointLabel(angle.bId)},${pointLabel(angle.aId)},${pointLabel(angle.cId)})`)
+                : withAliasPrefix("angle", angle.id, `Angle(${pointLabel(angle.aId)},${pointLabel(angle.bId)},${pointLabel(angle.cId)})`),
+            visible: angle.visible,
+            reorderable: activeTab === "circles" ? angle.kind === "sector" : activeTab === "angles",
+        });
 
-                {showAngles && scene.angles.filter((angle) => angle.kind !== "sector").map((angle) => (
-                    renderObjectRow(
-                        `angle:${angle.id}`,
-                        selectedObject?.type === "angle" && selectedObject.id === angle.id,
-                        multiSelectedKeySet.has(`angle:${angle.id}`),
-                        () => selectObject({ type: "angle", id: angle.id }),
-                        () => toggleBatchSelection({ type: "angle", id: angle.id }),
-                        angle.visible,
-                        (next) => setObjectVisibility({ type: "angle", id: angle.id }, next),
-                        `Angle ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`,
-                        withAliasPrefix("angle", angle.id, `Angle(${pointLabel(angle.aId)},${pointLabel(angle.bId)},${pointLabel(angle.cId)})`)
-                    )
-                ))}
+        const buildTextLabelRow = (label: NonNullable<SceneModel["textLabels"]>[number]): ObjectRowDescriptor => ({
+            key: `textLabel:${label.id}`,
+            object: { type: "textLabel", id: label.id },
+            title: `Label ${label.name}`,
+            commandText: `Text(${JSON.stringify(label.text)})`,
+            visible: label.visible,
+            reorderable: false,
+        });
 
-                {showTextLabels && (scene.textLabels ?? []).map((label) => (
-                    renderObjectRow(
-                        `textLabel:${label.id}`,
-                        selectedObject?.type === "textLabel" && selectedObject.id === label.id,
-                        multiSelectedKeySet.has(`textLabel:${label.id}`),
-                        () => selectObject({ type: "textLabel", id: label.id }),
-                        () => toggleBatchSelection({ type: "textLabel", id: label.id }),
-                        label.visible,
-                        (next) => setObjectVisibility({ type: "textLabel", id: label.id }, next),
-                        `Label ${label.name}`,
-                        `Text(${JSON.stringify(label.text)})`
-                    )
-                ))}
+        const buildNumberRow = (num: SceneModel["numbers"][number]): ObjectRowDescriptor => ({
+            key: `number:${num.id}`,
+            object: { type: "number", id: num.id },
+            title: `Number ${num.name}`,
+            commandText: (() => {
+                const value = getNumberValue(num.id, scene);
+                return value === null ? `${num.name} = undefined` : `${num.name} = ${value.toFixed(6)}`;
+            })(),
+            visible: num.visible,
+            reorderable: false,
+        });
 
-                {showNumbers && scene.numbers.map((num) => (
-                    renderObjectRow(
-                        `number:${num.id}`,
-                        selectedObject?.type === "number" && selectedObject.id === num.id,
-                        multiSelectedKeySet.has(`number:${num.id}`),
-                        () => selectObject({ type: "number", id: num.id }),
-                        () => toggleBatchSelection({ type: "number", id: num.id }),
-                        num.visible,
-                        (next) => setObjectVisibility({ type: "number", id: num.id }, next),
-                        `Number ${num.name}`,
-                        (() => {
-                            const value = getNumberValue(num.id, scene);
-                            return value === null ? `${num.name} = undefined` : `${num.name} = ${value.toFixed(6)}`;
-                        })()
-                    )
-                ))}
-            </>
-        );
-    }, [
-        activeTab,
-        multiSelectedKeySet,
-        multiSelectedObjects,
-        scene,
-        setMultiSelectedObjects,
-        setObjectVisibility,
-        setSelectedObject,
-    ]);
+        const buildGeometryRow = (ref: SceneGeometryLayerRef): ObjectRowDescriptor | null => {
+            if (ref.type === "segment") {
+                const segment = segmentById.get(ref.id);
+                return segment ? buildSegmentRow(segment) : null;
+            }
+            if (ref.type === "line") {
+                const line = lineById.get(ref.id);
+                return line ? buildLineRow(line) : null;
+            }
+            if (ref.type === "circle") {
+                const circle = circleById.get(ref.id);
+                return circle ? buildCircleRow(circle) : null;
+            }
+            if (ref.type === "polygon") {
+                const polygon = polygonById.get(ref.id);
+                return polygon ? buildPolygonRow(polygon) : null;
+            }
+            const angle = angleById.get(ref.id);
+            return angle ? buildAngleRow(angle) : null;
+        };
+
+        const buildGeometryRowsForTab = (tab: "all" | "lines" | "circles" | "angles") =>
+            geometryLayerOrderForTab(scene, tab)
+                .map(buildGeometryRow)
+                .filter((row): row is ObjectRowDescriptor => Boolean(row));
+
+        if (activeTab === "all") {
+            return [
+                ...scene.points.map(buildPointRow),
+                ...buildGeometryRowsForTab("all"),
+                ...(scene.textLabels ?? []).map(buildTextLabelRow),
+                ...scene.numbers.map(buildNumberRow),
+            ];
+        }
+        if (activeTab === "points") return scene.points.map(buildPointRow);
+        if (activeTab === "lines" || activeTab === "circles" || activeTab === "angles") {
+            return buildGeometryRowsForTab(activeTab);
+        }
+        if (activeTab === "text") return (scene.textLabels ?? []).map(buildTextLabelRow);
+        return scene.numbers.map(buildNumberRow);
+    }, [activeTab, angleById, circleById, lineById, polygonById, scene, segmentById]);
+
+    const reorderableTab = activeTab === "lines" || activeTab === "circles" || activeTab === "angles" ? activeTab : null;
+    const reorderableRowKeys = useMemo(
+        () => filteredRows.filter((row) => row.reorderable).map((row) => row.key),
+        [filteredRows]
+    );
+
+    const computePointerDropIndicator = useCallback((clientY: number, draggedKey: string) => {
+        const candidates = reorderableRowKeys.filter((key) => key !== draggedKey);
+        if (candidates.length === 0) return null;
+        for (const key of candidates) {
+            const row = objectRowRefs.current.get(key);
+            if (!row) continue;
+            const rect = row.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            if (clientY < midpoint) {
+                return { key, position: "before" as GeometryLayerDropPosition };
+            }
+        }
+        const lastKey = candidates[candidates.length - 1];
+        return { key: lastKey, position: "after" as GeometryLayerDropPosition };
+    }, [reorderableRowKeys]);
+
+    useEffect(() => {
+        const clearPointerDrag = () => {
+            pointerDragRef.current = null;
+            setDraggedGeometryKey(null);
+            setDropIndicator(null);
+            setDragPreview(null);
+        };
+
+        const onPointerMove = (e: PointerEvent) => {
+            const drag = pointerDragRef.current;
+            if (!drag || drag.pointerId !== e.pointerId || !reorderableTab) return;
+            const dx = e.clientX - drag.startX;
+            const dy = e.clientY - drag.startY;
+            if (!drag.started) {
+                if (Math.hypot(dx, dy) < 5) return;
+                drag.started = true;
+                suppressRowClickRef.current = true;
+                setDraggedGeometryKey(drag.key);
+                setDragPreview({
+                    left: e.clientX - drag.offsetX,
+                    top: e.clientY - drag.offsetY,
+                    width: drag.width,
+                    title: drag.title,
+                    commandText: drag.commandText,
+                });
+            }
+            setDragPreview({
+                left: e.clientX - drag.offsetX,
+                top: e.clientY - drag.offsetY,
+                width: drag.width,
+                title: drag.title,
+                commandText: drag.commandText,
+            });
+            setDropIndicator(computePointerDropIndicator(e.clientY, drag.key));
+        };
+
+        const onPointerEnd = (e: PointerEvent) => {
+            const drag = pointerDragRef.current;
+            if (!drag || drag.pointerId !== e.pointerId) return;
+            if (drag.started && reorderableTab && dropIndicator) {
+                const dragged = objectFromRowKey(drag.key);
+                const draggedRef = dragged ? geometryLayerRefFromSelectedObject(dragged) : null;
+                const targetObj = objectFromRowKey(dropIndicator.key);
+                const targetRef = targetObj ? geometryLayerRefFromSelectedObject(targetObj) : null;
+                if (draggedRef && targetRef) {
+                    reorderGeometryLayerInTab(draggedRef, targetRef, reorderableTab, dropIndicator.position);
+                }
+            }
+            clearPointerDrag();
+        };
+
+        window.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointerup", onPointerEnd);
+        window.addEventListener("pointercancel", onPointerEnd);
+        return () => {
+            window.removeEventListener("pointermove", onPointerMove);
+            window.removeEventListener("pointerup", onPointerEnd);
+            window.removeEventListener("pointercancel", onPointerEnd);
+        };
+    }, [computePointerDropIndicator, dropIndicator, reorderGeometryLayerInTab, reorderableTab]);
+
+    const moveRowByStep = (row: ObjectRowDescriptor, direction: -1 | 1) => {
+        if (!reorderableTab || !row.reorderable) return;
+        const currentIndex = reorderableRowKeys.indexOf(row.key);
+        if (currentIndex < 0) return;
+        const targetKey = reorderableRowKeys[currentIndex + direction];
+        if (!targetKey) return;
+        const draggedRef = geometryLayerRefFromSelectedObject(row.object);
+        const targetObject = objectFromRowKey(targetKey);
+        const targetRef = targetObject ? geometryLayerRefFromSelectedObject(targetObject) : null;
+        if (!draggedRef || !targetRef) return;
+        reorderGeometryLayerInTab(draggedRef, targetRef, reorderableTab, direction < 0 ? "before" : "after");
+    };
+
+    const handlePointerDown = (row: ObjectRowDescriptor) => (e: ReactPointerEvent<HTMLDivElement>) => {
+        if (!reorderableTab || !row.reorderable) return;
+        if (e.button !== 0) return;
+        const target = e.target;
+        if (target instanceof HTMLElement && target.closest(".objectItemActions")) return;
+        const ref = geometryLayerRefFromSelectedObject(row.object);
+        if (!ref || !geometryLayerRefMatchesTab(scene, ref, reorderableTab)) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        e.preventDefault();
+        pointerDragRef.current = {
+            key: geometryLayerKey(ref),
+            pointerId: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            started: false,
+            offsetX: e.clientX - rect.left,
+            offsetY: e.clientY - rect.top,
+            width: rect.width,
+            title: row.title,
+            commandText: row.commandText,
+        };
+        setDropIndicator(null);
+    };
 
     const isEmpty =
         (activeTab === "all" &&
@@ -702,9 +888,42 @@ export function ObjectBrowser({
             <div className="objectListScrollArea">
                 <div className="objectList">
                     {isEmpty && <div className="emptyState">No objects</div>}
-                    {filteredContent}
+                    {filteredRows.map((row) => renderObjectRow(
+                        row.key,
+                        selectedObject?.type === row.object.type && selectedObject.id === row.object.id,
+                        multiSelectedKeySet.has(row.key),
+                        () => selectObject(row.object),
+                        () => toggleBatchSelection(row.object),
+                        row.visible,
+                        (next) => setObjectVisibility(row.object, next),
+                        row.title,
+                        row.commandText,
+                        Boolean(reorderableTab && row.reorderable),
+                        draggedGeometryKey === row.key,
+                        dropIndicator?.key === row.key ? dropIndicator.position : null,
+                        row.reorderable && reorderableRowKeys.indexOf(row.key) > 0,
+                        row.reorderable && reorderableRowKeys.indexOf(row.key) >= 0 && reorderableRowKeys.indexOf(row.key) < reorderableRowKeys.length - 1,
+                        () => moveRowByStep(row, -1),
+                        () => moveRowByStep(row, 1),
+                        handlePointerDown(row)
+                    ))}
                 </div>
             </div>
+            {dragPreview && (
+                <div
+                    className="objectBrowserDragGhost"
+                    style={{
+                        left: `${dragPreview.left}px`,
+                        top: `${dragPreview.top}px`,
+                        width: `${dragPreview.width}px`,
+                    }}
+                >
+                    <div className="objectItemText">
+                        <span className="objectItemLabel">{dragPreview.title}</span>
+                        <span className="objectItemCommand" title={dragPreview.commandText}>{dragPreview.commandText}</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

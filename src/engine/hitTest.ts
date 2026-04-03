@@ -1,5 +1,6 @@
 import { projectPointToLine, projectPointToSegment } from "../geo/geometry";
 import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
+import { getGeometryLayerOrder } from "../scene/geometryLayerOrder";
 import {
   computeOrientedAngleRad,
   getCircleWorldGeometry,
@@ -62,6 +63,32 @@ export function resolveVisibleAngles(scene: SceneModel): ResolvedAngle[] {
   return out;
 }
 
+function orderedGeometryIdsForType(
+  scene: SceneModel,
+  type: "segment" | "line" | "circle" | "polygon" | "angle"
+): string[] {
+  const ordered = getGeometryLayerOrder(scene)
+    .filter((ref) => ref.type === type)
+    .map((ref) => ref.id);
+  const seen = new Set(ordered);
+  const source =
+    type === "segment"
+      ? scene.segments
+      : type === "line"
+        ? scene.lines
+        : type === "circle"
+          ? scene.circles
+          : type === "polygon"
+            ? scene.polygons
+            : scene.angles;
+  for (const item of source) {
+    if (seen.has(item.id)) continue;
+    ordered.push(item.id);
+    seen.add(item.id);
+  }
+  return ordered;
+}
+
 export function hitTestPointId(
   screenPoint: Vec2,
   points: ResolvedPoint[],
@@ -94,13 +121,19 @@ export function hitTestSegmentId(
   scene: SceneModel,
   camera: Camera,
   vp: Viewport,
-  tolerancePx: number
+  tolerancePx: number,
+  orderedIds?: string[]
 ): string | null {
   let bestId: string | null = null;
   let best = tolerancePx;
 
-  for (let i = scene.segments.length - 1; i >= 0; i -= 1) {
-    const seg = scene.segments[i];
+  const segments = orderedIds
+    ? orderedIds
+      .map((id) => scene.segments.find((item) => item.id === id) ?? null)
+      .filter((seg): seg is SceneModel["segments"][number] => Boolean(seg))
+    : [...scene.segments].reverse();
+
+  for (const seg of segments) {
     if (!seg.visible) continue;
     const aPoint = scene.points.find((p) => p.id === seg.aId);
     const bPoint = scene.points.find((p) => p.id === seg.bId);
@@ -111,7 +144,7 @@ export function hitTestSegmentId(
     const ap = camMath.worldToScreen(aWorld, camera, vp);
     const bp = camMath.worldToScreen(bWorld, camera, vp);
     const pr = projectPointToSegment(screenPoint, ap, bp);
-    if (pr.distance <= best) {
+    if (pr.distance < best || (bestId === null && pr.distance <= best)) {
       best = pr.distance;
       bestId = seg.id;
     }
@@ -125,13 +158,19 @@ export function hitTestLineId(
   scene: SceneModel,
   camera: Camera,
   vp: Viewport,
-  tolerancePx: number
+  tolerancePx: number,
+  orderedIds?: string[]
 ): string | null {
   let bestId: string | null = null;
   let best = tolerancePx;
 
-  for (let i = scene.lines.length - 1; i >= 0; i -= 1) {
-    const line = scene.lines[i];
+  const lines = orderedIds
+    ? orderedIds
+      .map((id) => scene.lines.find((item) => item.id === id) ?? null)
+      .filter((line): line is SceneModel["lines"][number] => Boolean(line))
+    : [...scene.lines].reverse();
+
+  for (const line of lines) {
     if (!line.visible) continue;
     const anchors = getLineWorldAnchors(line, scene);
     const aWorld = anchors?.a ?? null;
@@ -140,7 +179,7 @@ export function hitTestLineId(
     const a = camMath.worldToScreen(aWorld, camera, vp);
     const b = camMath.worldToScreen(bWorld, camera, vp);
     const pr = projectPointToLine(screenPoint, a, b);
-    if (pr.distance <= best) {
+    if (pr.distance < best || (bestId === null && pr.distance <= best)) {
       best = pr.distance;
       bestId = line.id;
     }
@@ -154,13 +193,19 @@ export function hitTestCircleId(
   scene: SceneModel,
   camera: Camera,
   vp: Viewport,
-  tolerancePx: number
+  tolerancePx: number,
+  orderedIds?: string[]
 ): string | null {
   let bestId: string | null = null;
   let best = tolerancePx;
 
-  for (let i = scene.circles.length - 1; i >= 0; i -= 1) {
-    const circle = scene.circles[i];
+  const circles = orderedIds
+    ? orderedIds
+      .map((id) => scene.circles.find((item) => item.id === id) ?? null)
+      .filter((circle): circle is SceneModel["circles"][number] => Boolean(circle))
+    : [...scene.circles].reverse();
+
+  for (const circle of circles) {
     if (!circle.visible) continue;
     const geom = getCircleWorldGeometry(circle, scene);
     if (!geom) continue;
@@ -171,7 +216,7 @@ export function hitTestCircleId(
     if (vis === "none") continue;
     if (vis === "contains" && radiusPx >= HUGE_RADIUS_PICK_PX) continue;
     const d = Math.abs(Math.hypot(screenPoint.x - centerScreen.x, screenPoint.y - centerScreen.y) - radiusPx);
-    if (d <= best) {
+    if (d < best || (bestId === null && d <= best)) {
       best = d;
       bestId = circle.id;
     }
@@ -185,14 +230,22 @@ export function hitTestAngleId(
   resolvedAngles: ResolvedAngle[],
   camera: Camera,
   vp: Viewport,
-  tolerancePx: number
+  tolerancePx: number,
+  orderedIds?: string[]
 ): string | null {
   let bestId: string | null = null;
   let best = tolerancePx;
   let bestNonSectorId: string | null = null;
   let bestNonSector = tolerancePx;
-  for (let i = resolvedAngles.length - 1; i >= 0; i -= 1) {
-    const entry = resolvedAngles[i];
+
+  const resolvedById = new Map(resolvedAngles.map((entry) => [entry.angle.id, entry]));
+  const orderedEntries = orderedIds
+    ? orderedIds
+      .map((id) => resolvedById.get(id) ?? null)
+      .filter((entry): entry is ResolvedAngle => Boolean(entry))
+    : [...resolvedAngles].reverse();
+
+  for (const entry of orderedEntries) {
     if (!entry.angle.visible) continue;
     const as = camMath.worldToScreen(entry.a, camera, vp);
     const bs = camMath.worldToScreen(entry.b, camera, vp);
@@ -210,11 +263,11 @@ export function hitTestAngleId(
       right && markStyle === "rightSquare"
         ? distanceToRightAngleMark(screenPoint, as, bs, cs, computeRightMarkSizePx(r, entry.angle.style.strokeWidth))
         : arcDistance;
-    if (d <= best) {
+    if (d < best || (bestId === null && d <= best)) {
       best = d;
       bestId = entry.angle.id;
     }
-    if (entry.angle.kind !== "sector" && d <= bestNonSector) {
+    if (entry.angle.kind !== "sector" && (d < bestNonSector || (bestNonSectorId === null && d <= bestNonSector))) {
       bestNonSector = d;
       bestNonSectorId = entry.angle.id;
     }
@@ -227,10 +280,16 @@ export function hitTestPolygonId(
   scene: SceneModel,
   camera: Camera,
   vp: Viewport,
-  tolerancePx: number
+  tolerancePx: number,
+  orderedIds?: string[]
 ): string | null {
-  for (let i = scene.polygons.length - 1; i >= 0; i -= 1) {
-    const polygon = scene.polygons[i];
+  const polygons = orderedIds
+    ? orderedIds
+      .map((id) => scene.polygons.find((item) => item.id === id) ?? null)
+      .filter((polygon): polygon is SceneModel["polygons"][number] => Boolean(polygon))
+    : [...scene.polygons].reverse();
+
+  for (const polygon of polygons) {
     if (!polygon.visible || polygon.pointIds.length < 3) continue;
     const screenVertices = polygon.pointIds
       .map((id) => scene.points.find((p) => p.id === id))
@@ -276,18 +335,23 @@ export function hitTestTopObject(
 
   const pointId = hitTestPointId(screenPoint, resolvedPoints, camera, vp, pointTolPx);
   if (pointId) return { type: "point", id: pointId };
-  const angleId = hitTestAngleId(screenPoint, resolveVisibleAngles(scene), camera, vp, angleTolPx);
-  const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx);
+  const orderedAngleIds = orderedGeometryIdsForType(scene, "angle");
+  const orderedSegmentIds = orderedGeometryIdsForType(scene, "segment");
+  const orderedLineIds = orderedGeometryIdsForType(scene, "line");
+  const orderedCircleIds = orderedGeometryIdsForType(scene, "circle");
+  const orderedPolygonIds = orderedGeometryIdsForType(scene, "polygon");
+  const angleId = hitTestAngleId(screenPoint, resolveVisibleAngles(scene), camera, vp, angleTolPx, orderedAngleIds);
+  const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx, orderedSegmentIds);
   if (angleId && segmentId && isSectorAngle(scene, angleId)) {
     return { type: "segment", id: segmentId };
   }
   if (angleId) return { type: "angle", id: angleId };
   if (segmentId) return { type: "segment", id: segmentId };
-  const lineId = hitTestLineId(screenPoint, scene, camera, vp, lineTolPx);
+  const lineId = hitTestLineId(screenPoint, scene, camera, vp, lineTolPx, orderedLineIds);
   if (lineId) return { type: "line", id: lineId };
-  const circleId = hitTestCircleId(screenPoint, scene, camera, vp, circleTolPx);
+  const circleId = hitTestCircleId(screenPoint, scene, camera, vp, circleTolPx, orderedCircleIds);
   if (circleId) return { type: "circle", id: circleId };
-  const polygonId = hitTestPolygonId(screenPoint, scene, camera, vp, segmentTolPx);
+  const polygonId = hitTestPolygonId(screenPoint, scene, camera, vp, segmentTolPx, orderedPolygonIds);
   if (polygonId) return { type: "polygon", id: polygonId };
 
   return null;

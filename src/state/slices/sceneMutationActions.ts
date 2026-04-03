@@ -13,6 +13,7 @@ import {
   isFiniteLabelPosWorld,
   resolveObjectLabelText,
 } from "../../scene/objectLabels";
+import { geometryLayerKey, moveGeometryLayerWithinTab } from "../../scene/geometryLayerOrder";
 import { applyDeletion, collectCascadeDeleteMany, isSelectedObjectAlive } from "../../domain/geometryGraph";
 import { isValidNumberDefinition } from "../../domain/numberDefinitions";
 import { rebuildRightAngleProvenance, registerSegmentPair } from "../../domain/rightAngleProvenance";
@@ -69,6 +70,7 @@ export function createSceneMutationActions({
   | "updateTextLabelStyleByIds"
   | "setObjectVisibility"
   | "setObjectsVisibility"
+  | "reorderGeometryLayerInTab"
   | "deleteSelectedObject"
   | "deleteObjects"
   | "setCopyStyleSource"
@@ -1232,6 +1234,24 @@ export function createSceneMutationActions({
         return {
           ...prev,
           scene: nextScene,
+        };
+      });
+    },
+
+    reorderGeometryLayerInTab(dragged, target, tab, placement) {
+      setState((prev) => {
+        const nextOrder = moveGeometryLayerWithinTab(prev.scene, dragged, target, tab, placement);
+        const prevOrder = Array.isArray(prev.scene.geometryLayerOrder) ? prev.scene.geometryLayerOrder : [];
+        const sameOrder =
+          prevOrder.length === nextOrder.length &&
+          prevOrder.every((ref, idx) => geometryLayerKey(ref) === geometryLayerKey(nextOrder[idx]));
+        if (sameOrder) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            geometryLayerOrder: nextOrder,
+          },
         };
       });
     },

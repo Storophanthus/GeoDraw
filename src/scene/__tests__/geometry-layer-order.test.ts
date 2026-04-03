@@ -1,5 +1,14 @@
-import { exportTikz } from "../tikz.ts";
-import type { AngleStyle, SceneModel } from "../../scene/points.ts";
+import { normalizeSceneIntegrity } from "../../domain/sceneIntegrity";
+import { getGeometryLayerOrder, moveGeometryLayerWithinTab } from "../geometryLayerOrder";
+import type { AngleStyle, SceneModel } from "../points";
+
+function fail(message: string): never {
+  throw new Error(message);
+}
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) fail(message);
+}
 
 const pointStyle = {
   shape: "circle" as const,
@@ -7,7 +16,7 @@ const pointStyle = {
   strokeColor: "#0f172a",
   strokeWidth: 1.4,
   strokeOpacity: 1,
-  fillColor: "#60a5fa",
+  fillColor: "#ffffff",
   fillOpacity: 1,
   labelFontPx: 14,
   labelHaloWidthPx: 2,
@@ -101,55 +110,52 @@ const scene: SceneModel = {
   ],
   angles: [
     { id: "ang1", kind: "sector", aId: "pH", bId: "pI", cId: "pJ", visible: true, style: angleStyle },
-  ],
-  geometryLayerOrder: [
-    { type: "segment", id: "s1" },
-    { type: "line", id: "l1" },
-    { type: "circle", id: "c1" },
-    { type: "polygon", id: "poly1" },
-    { type: "angle", id: "ang1" },
+    { id: "ang2", kind: "angle", aId: "pE", bId: "pF", cId: "pG", visible: true, style: angleStyle },
   ],
 };
 
-const tikz = exportTikz(scene);
-const sectorFillIdx = tikz.indexOf("\\tkzFillSector");
-const sectorDrawIdx = tikz.indexOf("\\tkzDrawSector");
-const polygonFillIdx = tikz.indexOf("\\fill[");
-const polygonDrawIdx = tikz.indexOf("\\draw[");
-const circleFillIdx = tikz.indexOf("\\tkzFillCircle");
-const circleDrawIdx = tikz.indexOf("\\tkzDrawCircle");
-const lineDrawIdx = tikz.indexOf("\\tkzDrawLine");
-const segmentDrawIdx = tikz.indexOf("\\tkzDrawSegment");
+const normalized = normalizeSceneIntegrity(scene);
+const legacyOrder = getGeometryLayerOrder(normalized).map((ref) => `${ref.type}:${ref.id}`);
+assert(
+  JSON.stringify(legacyOrder) === JSON.stringify([
+    "angle:ang2",
+    "angle:ang1",
+    "segment:s1",
+    "line:l1",
+    "polygon:poly1",
+    "circle:c1",
+  ]),
+  `unexpected legacy geometry layer order: ${legacyOrder.join(", ")}`
+);
 
-const indices = [
-  ["sector fill", sectorFillIdx],
-  ["sector draw", sectorDrawIdx],
-  ["polygon fill", polygonFillIdx],
-  ["polygon draw", polygonDrawIdx],
-  ["circle fill", circleFillIdx],
-  ["circle draw", circleDrawIdx],
-  ["line draw", lineDrawIdx],
-  ["segment draw", segmentDrawIdx],
-] as const;
+const reorderedShapes = moveGeometryLayerWithinTab(
+  {
+    ...normalized,
+    geometryLayerOrder: [
+      { type: "angle", id: "ang2" },
+      { type: "angle", id: "ang1" },
+      { type: "segment", id: "s1" },
+      { type: "line", id: "l1" },
+      { type: "polygon", id: "poly1" },
+      { type: "circle", id: "c1" },
+    ],
+  },
+  { type: "circle", id: "c1" },
+  { type: "angle", id: "ang1" },
+  "circles",
+  "before"
+).map((ref) => `${ref.type}:${ref.id}`);
 
-for (const [label, idx] of indices) {
-  if (idx < 0) throw new Error(`Expected ${label} command in exported TikZ.`);
-}
+assert(
+  JSON.stringify(reorderedShapes) === JSON.stringify([
+    "angle:ang2",
+    "circle:c1",
+    "segment:s1",
+    "line:l1",
+    "angle:ang1",
+    "polygon:poly1",
+  ]),
+  `unexpected reordered geometry layer order: ${reorderedShapes.join(", ")}`
+);
 
-const ordered = [sectorFillIdx, sectorDrawIdx, polygonFillIdx, polygonDrawIdx, circleFillIdx, circleDrawIdx, lineDrawIdx, segmentDrawIdx];
-for (let i = 1; i < ordered.length; i += 1) {
-  if (ordered[i - 1] > ordered[i]) {
-    throw new Error("Expected geometry draw order to follow the explicit layer order.");
-  }
-}
-
-const drawPointsIdx = tikz.indexOf("% Draw points");
-const labelsIdx = tikz.indexOf("% Labels");
-if (drawPointsIdx < 0 || labelsIdx < 0 || drawPointsIdx > labelsIdx) {
-  throw new Error("Expected points layer before labels layer.");
-}
-if (drawPointsIdx < segmentDrawIdx) {
-  throw new Error("Expected points to be emitted after draw objects.");
-}
-
-console.log("✓ export layer-order test passed");
+console.log("geometry-layer-order: ok");

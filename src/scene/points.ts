@@ -390,6 +390,13 @@ export type GeometryObjectRef =
   | { type: "circle"; id: string }
   | { type: "angle"; id: string };
 
+export type SceneGeometryLayerRef =
+  | { type: "segment"; id: string }
+  | { type: "line"; id: string }
+  | { type: "circle"; id: string }
+  | { type: "polygon"; id: string }
+  | { type: "angle"; id: string };
+
 export type LineLikeObjectRef = { type: "line"; id: string } | { type: "segment"; id: string };
 export type ReflectionObjectRef = LineLikeObjectRef | { type: "point"; id: string };
 
@@ -788,6 +795,7 @@ export type SceneModel = {
   angles: SceneAngle[];
   numbers: SceneNumber[];
   textLabels?: SceneTextLabel[];
+  geometryLayerOrder?: SceneGeometryLayerRef[];
 };
 
 const sceneEvalState = createSceneEvalStateStore();

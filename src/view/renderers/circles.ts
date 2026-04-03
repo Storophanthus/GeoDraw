@@ -28,31 +28,62 @@ export function drawCircles(
 ): void {
   ctx.save();
   for (const circle of scene.circles) {
-    if (!circle.visible) continue;
-    const geom = getCircleWorldGeometry(circle, scene);
-    if (!geom) continue;
-    const c = camMath.worldToScreen(geom.center, camera, vp);
-    const r = geom.radius * camera.zoom;
-    if (!Number.isFinite(r) || r <= 1e-9) continue;
-    const vis = circleBoundaryVisibility(c, r, vp.widthPx, vp.heightPx, VIS_EPS);
-    if (vis === "none" || vis === "contains") continue;
+    drawCircleObject(ctx, scene, circle.id, camera, vp, selectedObject, recentCreatedObject, copySource);
+  }
+  ctx.restore();
+}
 
-    applyStrokeDash(ctx, circle.style.strokeDash, circle.style.strokeWidth);
-    if (vis === "crosses" && r <= HUGE_CIRCLE_RADIUS_PX && (circle.style.fillOpacity ?? 0) > 0 && circle.style.fillColor) {
-      ctx.globalAlpha = circle.style.fillOpacity ?? 0;
-      ctx.fillStyle = resolveCanvasFillStyle(
-        ctx,
-        circle.style.fillColor,
-        circle.style.pattern,
-        circle.style.patternColor
-      );
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.strokeStyle = circle.style.strokeColor;
-    ctx.globalAlpha = circle.style.strokeOpacity;
-    ctx.lineWidth = circle.style.strokeWidth;
+export function drawCircleObject(
+  ctx: CanvasRenderingContext2D,
+  scene: SceneModel,
+  circleId: string,
+  camera: Camera,
+  vp: Viewport,
+  selectedObject: DrawableObjectSelection,
+  recentCreatedObject: DrawableObjectSelection,
+  copySource: DrawableObjectSelection
+): void {
+  const circle = scene.circles.find((item) => item.id === circleId);
+  if (!circle || !circle.visible) return;
+  const geom = getCircleWorldGeometry(circle, scene);
+  if (!geom) return;
+  const c = camMath.worldToScreen(geom.center, camera, vp);
+  const r = geom.radius * camera.zoom;
+  if (!Number.isFinite(r) || r <= 1e-9) return;
+  const vis = circleBoundaryVisibility(c, r, vp.widthPx, vp.heightPx, VIS_EPS);
+  if (vis === "none" || vis === "contains") return;
+
+  applyStrokeDash(ctx, circle.style.strokeDash, circle.style.strokeWidth);
+  if (vis === "crosses" && r <= HUGE_CIRCLE_RADIUS_PX && (circle.style.fillOpacity ?? 0) > 0 && circle.style.fillColor) {
+    ctx.globalAlpha = circle.style.fillOpacity ?? 0;
+    ctx.fillStyle = resolveCanvasFillStyle(
+      ctx,
+      circle.style.fillColor,
+      circle.style.pattern,
+      circle.style.patternColor
+    );
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = circle.style.strokeColor;
+  ctx.globalAlpha = circle.style.strokeOpacity;
+  ctx.lineWidth = circle.style.strokeWidth;
+  if (r > HUGE_CIRCLE_RADIUS_PX) {
+    drawHugeCircleAsClippedLine(ctx, c, r, vp.widthPx, vp.heightPx);
+  } else {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  drawCircleArrowOverlay(ctx, c, r, circle.style);
+
+  if (selectedObject?.type === "circle" && selectedObject.id === circle.id) {
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+    const isNew = recentCreatedObject?.type === "circle" && recentCreatedObject.id === circle.id;
+    ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
+    ctx.lineWidth = circle.style.strokeWidth + (isNew ? 1.5 : 1.6);
     if (r > HUGE_CIRCLE_RADIUS_PX) {
       drawHugeCircleAsClippedLine(ctx, c, r, vp.widthPx, vp.heightPx);
     } else {
@@ -60,38 +91,21 @@ export function drawCircles(
       ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
       ctx.stroke();
     }
-    drawCircleArrowOverlay(ctx, c, r, circle.style);
+  }
 
-    if (selectedObject?.type === "circle" && selectedObject.id === circle.id) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      const isNew = recentCreatedObject?.type === "circle" && recentCreatedObject.id === circle.id;
-      ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
-      ctx.lineWidth = circle.style.strokeWidth + (isNew ? 1.5 : 1.6);
-      if (r > HUGE_CIRCLE_RADIUS_PX) {
-        drawHugeCircleAsClippedLine(ctx, c, r, vp.widthPx, vp.heightPx);
-      } else {
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    }
-
-    if (copySource?.type === "circle" && copySource.id === circle.id) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      ctx.strokeStyle = "#2563eb";
-      ctx.lineWidth = circle.style.strokeWidth + 3;
-      if (r > HUGE_CIRCLE_RADIUS_PX) {
-        drawHugeCircleAsClippedLine(ctx, c, r, vp.widthPx, vp.heightPx);
-      } else {
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+  if (copySource?.type === "circle" && copySource.id === circle.id) {
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = circle.style.strokeWidth + 3;
+    if (r > HUGE_CIRCLE_RADIUS_PX) {
+      drawHugeCircleAsClippedLine(ctx, c, r, vp.widthPx, vp.heightPx);
+    } else {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.stroke();
     }
   }
-  ctx.restore();
 }
 
 function drawCircleArrowOverlay(

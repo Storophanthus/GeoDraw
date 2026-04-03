@@ -8,6 +8,7 @@ import type {
   LineStyle,
   PointStyle,
   PolygonStyle,
+  SceneGeometryLayerRef,
   SceneModel,
   SceneNumberDefinition,
   ScenePoint,
@@ -486,6 +487,12 @@ export type GeoActions = {
   setObjectsVisibility: (
     objects: Array<Exclude<SelectedObject, null>>,
     visible: boolean
+  ) => void;
+  reorderGeometryLayerInTab: (
+    dragged: SceneGeometryLayerRef,
+    target: SceneGeometryLayerRef,
+    tab: "lines" | "circles" | "angles",
+    placement: "before" | "after"
   ) => void;
 
   renameSelectedPoint: (nextNameRaw: string) => RenameResult;

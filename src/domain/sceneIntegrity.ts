@@ -11,6 +11,7 @@ import {
   isFiniteLabelPosWorld,
   resolveObjectLabelText,
 } from "../scene/objectLabels";
+import { normalizeGeometryLayerOrder } from "../scene/geometryLayerOrder";
 import { resolveIntersectionBranchIndexInScene } from "./intersectionReuse";
 
 function escapeRegExp(text: string): string {
@@ -222,6 +223,12 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   let numbers = scene.numbers;
   let textLabels = Array.isArray(scene.textLabels) ? scene.textLabels : [];
   let changed = false;
+  const sameGeometryLayerOrder = (
+    a: NonNullable<SceneModel["geometryLayerOrder"]>,
+    b: NonNullable<SceneModel["geometryLayerOrder"]>
+  ) =>
+    a.length === b.length &&
+    a.every((item, idx) => item.type === b[idx]?.type && item.id === b[idx]?.id);
 
   const sameIds = (a: Array<{ id: string }>, b: Array<{ id: string }>) =>
     a.length === b.length && a.every((item, idx) => item.id === b[idx].id);
@@ -327,6 +334,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       angles,
       numbers,
       textLabels: nextTextLabels,
+      geometryLayerOrder: scene.geometryLayerOrder,
     };
     const pointsWithBranches = points.map((point) => {
       if (
@@ -449,6 +457,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       polygons: nextPolygons,
       angles: nextAngles,
       numbers: nextNumbers,
+      geometryLayerOrder: scene.geometryLayerOrder,
     };
 
     const nextSegmentsLabeled = nextSegmentsNormalized.map((segment) => {
@@ -597,6 +606,33 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     if (!anyChanged) break;
   }
 
-  if (!changed) return scene;
-  return { ...scene, points, vectors, segments, lines, circles, polygons, angles, numbers, textLabels };
+  const geometryLayerOrder = normalizeGeometryLayerOrder({
+    ...scene,
+    points,
+    vectors,
+    segments,
+    lines,
+    circles,
+    polygons,
+    angles,
+    numbers,
+    textLabels,
+  });
+  const priorGeometryLayerOrder = Array.isArray(scene.geometryLayerOrder) ? scene.geometryLayerOrder : [];
+  const geometryLayerChanged = !sameGeometryLayerOrder(priorGeometryLayerOrder, geometryLayerOrder);
+
+  if (!changed && !geometryLayerChanged) return scene;
+  return {
+    ...scene,
+    points,
+    vectors,
+    segments,
+    lines,
+    circles,
+    polygons,
+    angles,
+    numbers,
+    textLabels,
+    geometryLayerOrder,
+  };
 }

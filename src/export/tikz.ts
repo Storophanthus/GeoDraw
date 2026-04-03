@@ -18,12 +18,14 @@ import {
   resolveTextLabelDisplayText,
   resolveTextLabelRenderMode,
   type GeometryObjectRef,
+  type SceneGeometryLayerRef,
   SceneModel,
   ScenePoint,
   SegmentArrowMark,
   type SegmentMarkSymbol,
   type PathArrowMark,
 } from "../scene/points";
+import { geometryLayerKey, getGeometryLayerOrder } from "../scene/geometryLayerOrder";
 import {
   defaultObjectLabelPosWorld,
   defaultObjectLabelText,
@@ -188,9 +190,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   const defs: TikzCommand[] = [];
   const constructions: TikzCommand[] = [];
-  const drawFills: TikzCommand[] = [];
-  const drawStrokes: TikzCommand[] = [];
-  const drawOverlays: TikzCommand[] = [];
+  const geometryBundles = new Map<string, TikzCommand[]>();
   const drawPointsLayer: TikzCommand[] = [];
   const drawLabelsLayer: TikzCommand[] = [];
   const definedPointIds = new Set<string>();
@@ -202,6 +202,17 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       polygonOwnedEdgePresence.add(`${polygonId}::${key}`);
     }
   }
+
+  const pushGeometryCommands = (ref: SceneGeometryLayerRef, commands: TikzCommand[]): void => {
+    if (commands.length === 0) return;
+    const key = geometryLayerKey(ref);
+    const bundle = geometryBundles.get(key);
+    if (bundle) {
+      bundle.push(...commands);
+      return;
+    }
+    geometryBundles.set(key, [...commands]);
+  };
 
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
   const viewport = options.viewport ?? computeExportViewport(scene);
@@ -1090,6 +1101,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         return;
       }
       if (roots.length === 1) {
+        if (singleLineCircleRootIsExcluded(roots, point.excludePointId, scene)) {
+          visiting.delete(pointId);
+          visited.add(pointId);
+          return;
+        }
         constructions.push({
           kind: "DefPointByProjection",
           name,
@@ -1106,31 +1122,36 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       if (point.excludePointId) {
         const excluded = getPointWorldPosCached(scene, point.excludePointId);
         if (excluded) {
-          branch = inferLineCircleBranchFromExcludedWorld(
-            lineWorld.a,
-            lineWorld.b,
-            center,
-            { x: center.x + geom.radius, y: center.y },
-            excluded,
-            point.branchIndex
-          );
+          branch = inferLineCircleBranchFromExcludedRoots(roots, excluded, point.branchIndex);
         }
       }
-      let commonName: string | undefined;
-      if (point.excludePointId) {
-        commonName = mustName(pointName, point.excludePointId);
-      } else if (point.branchIndex === 1) {
+      let commonName = validDefinedLineCircleCommonPointName(
+        point.excludePointId,
+        roots,
+        branch,
+        scene,
+        definedPointIds,
+        pointName
+      );
+      if (!commonName) {
         const sibling = scene.points.find(
           (p) =>
             p.kind === "circleLineIntersectionPoint" &&
             p.id !== point.id &&
             p.circleId === point.circleId &&
             p.lineId === point.lineId &&
-            p.branchIndex === 0
+            definedPointIds.has(p.id)
         );
         if (sibling) {
           resolvePoint(sibling.id);
-          if (definedPointIds.has(sibling.id)) commonName = mustName(pointName, sibling.id);
+          commonName = validDefinedLineCircleCommonPointName(
+            sibling.id,
+            roots,
+            branch,
+            scene,
+            definedPointIds,
+            pointName
+          );
         }
       }
       let swap = false;
@@ -1187,12 +1208,17 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const circleThroughName = ensureCircleThroughName(circle.id);
       const geom = circleGeomById(circle.id);
       const center = geom.center;
-      const through = { x: center.x + geom.radius, y: center.y };
-      const roots = lineCircleIntersectionBranches(wa, wb, center, geom.radius);
+      const supportRoots = lineCircleIntersectionBranches(wa, wb, center, geom.radius);
+      const roots = filterLineCircleBranchesToFiniteDomain(supportRoots, true);
       if (roots.length === 0) {
         visiting.delete(pointId);
         visited.add(pointId);
         return;
+      }
+      if (roots.length === 1 && supportRoots.length > roots.length) {
+        throw new Error(
+          `Cannot export finite-domain single segment-circle intersection for ${point.name}: only one segment-domain root exists while tkzInterLC works on the support line.`
+        );
       }
       if (!point.excludePointId && point.branchIndex === 1 && roots.length < 2) {
         visiting.delete(pointId);
@@ -1200,6 +1226,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         return;
       }
       if (roots.length === 1) {
+        if (singleLineCircleRootIsExcluded(roots, point.excludePointId, scene)) {
+          visiting.delete(pointId);
+          visited.add(pointId);
+          return;
+        }
         constructions.push({
           kind: "DefPointByProjection",
           name,
@@ -1216,24 +1247,36 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       if (point.excludePointId) {
         const excluded = getPointWorldPosCached(scene, point.excludePointId);
         if (excluded) {
-          branch = inferLineCircleBranchFromExcludedWorld(wa, wb, center, through, excluded, point.branchIndex);
+          branch = inferLineCircleBranchFromExcludedRoots(roots, excluded, point.branchIndex);
         }
       }
-      let commonName: string | undefined;
-      if (point.excludePointId) {
-        commonName = mustName(pointName, point.excludePointId);
-      } else if (point.branchIndex === 1) {
+      let commonName = validDefinedLineCircleCommonPointName(
+        point.excludePointId,
+        roots,
+        branch,
+        scene,
+        definedPointIds,
+        pointName
+      );
+      if (!commonName) {
         const sibling = scene.points.find(
           (p) =>
             p.kind === "circleSegmentIntersectionPoint" &&
             p.id !== point.id &&
             p.circleId === point.circleId &&
             p.segId === point.segId &&
-            p.branchIndex === 0
+            definedPointIds.has(p.id)
         );
         if (sibling) {
           resolvePoint(sibling.id);
-          if (definedPointIds.has(sibling.id)) commonName = mustName(pointName, sibling.id);
+          commonName = validDefinedLineCircleCommonPointName(
+            sibling.id,
+            roots,
+            branch,
+            scene,
+            definedPointIds,
+            pointName
+          );
         }
       }
       let swap = false;
@@ -1295,11 +1338,23 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const cBThroughName = ensureCircleThroughName(cB.id);
       const cAGeom = circleGeomById(cA.id);
       const cBGeom = circleGeomById(cB.id);
+      const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
       let branch: 0 | 1 = point.branchIndex;
-      let commonName: string | undefined;
       if (point.excludePointId) {
-        commonName = mustName(pointName, point.excludePointId);
-      } else if (branch === 1) {
+        const excluded = getPointWorldPosCached(scene, point.excludePointId);
+        if (excluded) {
+          branch = inferCircleCircleBranchFromExcludedRoots(roots, excluded, point.branchIndex);
+        }
+      }
+      let commonName = validDefinedCircleCircleCommonPointName(
+        point.excludePointId,
+        roots,
+        branch,
+        scene,
+        definedPointIds,
+        pointName
+      );
+      if (!commonName && branch === 1) {
         const sibling = scene.points.find((p) => {
           if (p.id === point.id || p.kind !== "circleCircleIntersectionPoint") return false;
           return (
@@ -1308,13 +1363,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             definedPointIds.has(p.id)
           );
         });
-        if (sibling) commonName = mustName(pointName, sibling.id);
+        if (sibling) {
+          resolvePoint(sibling.id);
+          commonName = validDefinedCircleCircleCommonPointName(
+            sibling.id,
+            roots,
+            branch,
+            scene,
+            definedPointIds,
+            pointName
+          );
+        }
       }
       const targetWorld = getPointWorldPos(point, scene);
 
       // Find a common point (one that already exists and matches the OTHER intersection)
-      const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
-      if (roots.length === 2 && targetWorld) {
+      if (!commonName && roots.length === 2 && targetWorld) {
         const otherWorld = distance(roots[0], targetWorld) > distance(roots[1], targetWorld) ? roots[0] : roots[1];
         for (const pid of definedPointIds) {
           const pWorld = getPointWorldPosCached(scene, pid);
@@ -1415,8 +1479,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           const cBGeom = circleGeomById(cB.id);
           const cAThrough = { x: cAGeom.center.x + cAGeom.radius, y: cAGeom.center.y };
           const cBThrough = { x: cBGeom.center.x + cBGeom.radius, y: cBGeom.center.y };
-          const branch = inferCircleCircleBranch(point, cAGeom.center, cAThrough, cBGeom.center, cBThrough);
-          let commonName: string | undefined;
+          const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
+          let branch = inferCircleCircleBranch(point, cAGeom.center, cAThrough, cBGeom.center, cBThrough);
+          if (point.excludePointId) {
+            const excluded = getPointWorldPosCached(scene, point.excludePointId);
+            if (excluded) {
+              branch = inferCircleCircleBranchFromExcludedRoots(roots, excluded, branch);
+            }
+          }
+          let commonName = validDefinedCircleCircleCommonPointName(
+            point.excludePointId,
+            roots,
+            branch,
+            scene,
+            definedPointIds,
+            pointName
+          );
           if (branch === 1) {
             const sibling = scene.points.find((p) => {
               if (p.id === point.id || p.kind !== "intersectionPoint") return false;
@@ -1425,13 +1503,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
               if (!aCircle || !bCircle) return false;
               return sameObjectPair(p.objA, p.objB, point.objA, point.objB) && definedPointIds.has(p.id);
             });
-            if (sibling) commonName = mustName(pointName, sibling.id);
+            if (sibling) {
+              resolvePoint(sibling.id);
+              commonName = validDefinedCircleCircleCommonPointName(
+                sibling.id,
+                roots,
+                branch,
+                scene,
+                definedPointIds,
+                pointName
+              );
+            }
           }
           const targetWorld = getPointWorldPos(point, scene);
 
           // Find a common point (one that already exists and matches the OTHER intersection)
-          const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
-          if (roots.length === 2 && targetWorld) {
+          if (!commonName && roots.length === 2 && targetWorld) {
             const otherWorld = distance(roots[0], targetWorld) > distance(roots[1], targetWorld) ? roots[0] : roots[1];
             for (const pid of definedPointIds) {
               const pWorld = getPointWorldPosCached(scene, pid);
@@ -1480,14 +1567,24 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           const geom = circleGeomById(mixed.c.id);
           const center = geom.center;
           const through = { x: center.x + geom.radius, y: center.y };
-          const branch = inferLineCircleBranchFromWorld(point, mixed.ll.worldA, mixed.ll.worldB, center, through);
-          const roots = lineCircleIntersectionBranches(mixed.ll.worldA, mixed.ll.worldB, center, geom.radius);
+          const supportRoots = lineCircleIntersectionBranches(mixed.ll.worldA, mixed.ll.worldB, center, geom.radius);
+          const roots = filterLineCircleBranchesToFiniteDomain(supportRoots, mixed.ll.finite);
           if (roots.length === 0) {
             visiting.delete(pointId);
             visited.add(pointId);
             return;
           }
+          if (roots.length === 1 && supportRoots.length > roots.length) {
+            throw new Error(
+              `Cannot export finite-domain single segment-circle intersection for ${point.name}: only one segment-domain root exists while tkzInterLC works on the support line.`
+            );
+          }
           if (roots.length === 1) {
+            if (singleLineCircleRootIsExcluded(roots, point.excludePointId, scene)) {
+              visiting.delete(pointId);
+              visited.add(pointId);
+              return;
+            }
             constructions.push({
               kind: "DefPointByProjection",
               name,
@@ -1500,8 +1597,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             visited.add(pointId);
             return;
           }
-          let mixCommonName: string | undefined;
-          if (branch === 1) {
+          let branch = inferLineCircleBranchFromWorld(point, mixed.ll.worldA, mixed.ll.worldB, center, through);
+          if (point.excludePointId) {
+            const excluded = getPointWorldPosCached(scene, point.excludePointId);
+            if (excluded) {
+              branch = inferLineCircleBranchFromExcludedRoots(roots, excluded, branch);
+            }
+          }
+          let mixCommonName = validDefinedLineCircleCommonPointName(
+            point.excludePointId,
+            roots,
+            branch,
+            scene,
+            definedPointIds,
+            pointName
+          );
+          if (!mixCommonName) {
             const sibling = scene.points.find(
               (p) =>
                 p.kind === "intersectionPoint" &&
@@ -1509,7 +1620,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
                 sameObjectPair(p.objA, p.objB, point.objA, point.objB) &&
                 definedPointIds.has(p.id)
             );
-            if (sibling) mixCommonName = mustName(pointName, sibling.id);
+            if (sibling) {
+              mixCommonName = validDefinedLineCircleCommonPointName(
+                sibling.id,
+                roots,
+                branch,
+                scene,
+                definedPointIds,
+                pointName
+              );
+            }
           }
           if (!mixCommonName) {
             mixCommonName = inferLineCircleCommonFromEndpointsWorld(
@@ -1517,8 +1637,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
               mixed.ll.endpointBId,
               mixed.ll.worldA,
               mixed.ll.worldB,
-              center,
-              through,
+              roots,
               branch,
               pointName
             );
@@ -1565,10 +1684,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   for (const point of scene.points) {
     const pointWorld = getPointWorldPosCached(scene, point.id);
-    // Dynamic intersections can legitimately become undefined under drag.
-    // Skip undefined points (even visible ones) and let remaining defined
-    // geometry export normally.
-    if (!pointWorld) continue;
+    // Dynamic intersections can legitimately become undefined under drag,
+    // but only hidden ones may be omitted silently. Visible undefined points
+    // should fail closed so export cannot diverge from the canvas state.
+    if (!pointWorld) {
+      if (point.visible) {
+        throw new Error(`Cannot export visible undefined point: ${point.name}`);
+      }
+      continue;
+    }
     resolvePoint(point.id);
   }
 
@@ -1584,10 +1708,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     }
     const aName = mustName(pointName, seg.aId);
     const bName = mustName(pointName, seg.bId);
+    const segmentBundle: TikzCommand[] = [];
     const segmentArrows = seg.style.segmentArrowMarks ?? seg.style.segmentArrowMark;
     const segmentStrokeCarrierKey = selectSegmentStrokeCarrierArrowKey(seg.style, segmentArrows);
     if (!segmentStrokeCarrierKey) {
-      drawStrokes.push({
+      segmentBundle.push({
         kind: "DrawSegment",
         a: aName,
         b: bName,
@@ -1603,7 +1728,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       aName,
       bName
     );
-    drawOverlays.push(...markCommands);
+    segmentBundle.push(...markCommands);
     const aWorld = getPointWorldPosCached(scene, seg.aId);
     const bWorld = getPointWorldPosCached(scene, seg.bId);
     const segmentLengthWorld = aWorld && bWorld ? distance(aWorld, bWorld) : undefined;
@@ -1626,19 +1751,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     );
     if (arrowOverlay) {
       if (arrowOverlay.kind === "tkz") {
-        drawOverlays.push({
+        segmentBundle.push({
           kind: "DrawSegment",
           a: aName,
           b: bName,
           style: arrowOverlay.style,
         });
       } else {
-        drawOverlays.push({
+        segmentBundle.push({
           kind: "DrawRaw",
           tex: arrowOverlay.tex,
         });
       }
     }
+    pushGeometryCommands({ type: "segment", id: seg.id }, segmentBundle);
   }
   for (const line of scene.lines) {
     if (!line.visible) continue;
@@ -1666,34 +1792,35 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         : ext.drawBId === lineAnchorId
           ? lineNames.a
           : pointName.get(ext.drawBId) ?? ext.drawBId;
-    drawStrokes.push({
+    pushGeometryCommands({ type: "line", id: line.id }, [{
       kind: "DrawLine",
       a: drawAName,
       b: drawBName,
       addLeft: ext.addLeft,
       addRight: ext.addRight,
       style: lineStyleToTikz(line.style, options),
-    });
+    }]);
   }
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
     const centerName = ensureCircleCenterName(circle.id);
     const fillStyle = circleFillStyleToTikz(circle.style);
     const strokeStyle = circleStrokeStyleToTikz(circle.style, options);
+    const circleBundle: TikzCommand[] = [];
     if (circle.kind === "fixedRadius") {
       const geom = circleGeomById(circle.id);
       if (!Number.isFinite(geom.radius) || geom.radius <= 0) {
         throw new Error(`Unsupported construction: CircleFixedRadius (invalid radius for ${circle.id})`);
       }
       if (fillStyle) {
-        drawFills.push({
+        circleBundle.push({
           kind: "FillCircleRadius",
           o: centerName,
           radius: geom.radius,
           style: fillStyle,
         });
       }
-      drawStrokes.push({
+      circleBundle.push({
         kind: "DrawCircleRadius",
         o: centerName,
         radius: geom.radius,
@@ -1705,14 +1832,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       }
       const through = mustName(pointName, circle.aId);
       if (fillStyle) {
-        drawFills.push({
+        circleBundle.push({
           kind: "FillCircle",
           o: centerName,
           x: through,
           style: fillStyle,
         });
       }
-      drawStrokes.push({
+      circleBundle.push({
         kind: "DrawCircle",
         o: centerName,
         x: through,
@@ -1724,14 +1851,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       }
       const through = mustName(pointName, circle.throughId);
       if (fillStyle) {
-        drawFills.push({
+        circleBundle.push({
           kind: "FillCircle",
           o: centerName,
           x: through,
           style: fillStyle,
         });
       }
-      drawStrokes.push({
+      circleBundle.push({
         kind: "DrawCircle",
         o: centerName,
         x: through,
@@ -1757,8 +1884,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       options.pathDotMarkSizeScale
     );
     if (circleArrowOverlay) {
-      drawOverlays.push({ kind: "DrawRaw", tex: circleArrowOverlay });
+      circleBundle.push({ kind: "DrawRaw", tex: circleArrowOverlay });
     }
+    pushGeometryCommands({ type: "circle", id: circle.id }, circleBundle);
   }
   for (const polygon of scene.polygons) {
     if (!polygon.visible) continue;
@@ -1774,10 +1902,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     }
     const fillStyle = polygonFillStyleToTikz(polygon.style);
     const strokeStyle = polygonStrokeStyleToTikz(polygon.style, options);
+    const polygonBundle: TikzCommand[] = [];
     const path = names.map((name, idx) => (idx === 0 ? `(${name})` : ` -- (${name})`)).join("");
     if (fillStyle) {
       const fillOpts = fillStyle ? `[${fillStyle}]` : "";
-      drawFills.push({ kind: "DrawRaw", tex: `\\fill${fillOpts} ${path} -- cycle;` });
+      polygonBundle.push({ kind: "DrawRaw", tex: `\\fill${fillOpts} ${path} -- cycle;` });
     }
     const strokeOpts = strokeStyle ? `[${strokeStyle}]` : "";
     for (let i = 0; i < polygon.pointIds.length; i += 1) {
@@ -1785,11 +1914,12 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const scopedKey = `${polygon.id}::${edgeKey(polygon.pointIds[i], polygon.pointIds[nextIndex])}`;
       // Polygon edges are managed by owned segment objects when present.
       if (polygonOwnedEdgePresence.has(scopedKey)) continue;
-      drawStrokes.push({
+      polygonBundle.push({
         kind: "DrawRaw",
         tex: `\\draw${strokeOpts} (${names[i]}) -- (${names[nextIndex]});`,
       });
     }
+    pushGeometryCommands({ type: "polygon", id: polygon.id }, polygonBundle);
   }
   for (const angle of scene.angles) {
     if (!angle.visible) continue;
@@ -1809,12 +1939,13 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const aName = mustName(pointName, angle.aId);
     const bName = mustName(pointName, angle.bId);
     const cName = mustName(pointName, angle.cId);
+    const angleBundle: TikzCommand[] = [];
     if (angle.kind === "sector") {
       if (angle.style.fillEnabled) {
         const fillStyle = sectorFillStyleToTikz(angle.style);
-        drawFills.push({ kind: "FillSector", o: bName, a: aName, b: cName, style: fillStyle });
+        angleBundle.push({ kind: "FillSector", o: bName, a: aName, b: cName, style: fillStyle });
       }
-      drawStrokes.push({
+      angleBundle.push({
         kind: "DrawSector",
         o: bName,
         a: aName,
@@ -1847,7 +1978,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         options.pathDotMarkSizeScale
       );
       if (sectorArrowOverlay) {
-        drawOverlays.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
+        angleBundle.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
       }
       const sectorMarkOverlay = sectorMarksToTikz(
         angle.style,
@@ -1860,8 +1991,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         options
       );
       if (sectorMarkOverlay) {
-        drawOverlays.push({ kind: "DrawRaw", tex: sectorMarkOverlay });
+        angleBundle.push({ kind: "DrawRaw", tex: sectorMarkOverlay });
       }
+      pushGeometryCommands({ type: "angle", id: angle.id }, angleBundle);
       continue;
     }
     const rightStatus = resolveAngleRightStatus(scene, angle);
@@ -1871,12 +2003,12 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       exportAsRight && markKind === "rightSquare" && angle.style.fillEnabled ? rightSquareFillStyleToTikz(angle.style) : null;
     if (angle.style.fillEnabled && !rightSquareFillStyle) {
       const fillStyle = angleFillStyleToTikz(angle.style, options);
-      drawFills.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
+      angleBundle.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
     }
     if (markKind === "rightSquare" || markKind === "rightArcDot") {
       const markStyle = angleMarkStyleToTikz(angle.style, true, options, markKind);
       const mergedStyle = rightSquareFillStyle ? [markStyle, rightSquareFillStyle].filter(Boolean).join(", ") : markStyle;
-      drawOverlays.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: mergedStyle });
+      angleBundle.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: mergedStyle });
     } else if (markKind === "arc") {
       const marks = resolveAngleMarks(angle.style);
       let arcLayerOffset = 0;
@@ -1889,7 +2021,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           markColor: mark.markColor,
           arcLayerOffset,
         });
-        drawOverlays.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
+        angleBundle.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
         arcLayerOffset += mark.arcMultiplicity;
       }
     }
@@ -1919,9 +2051,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         options.pathDotMarkSizeScale
       );
       if (arcArrowOverlay) {
-        drawOverlays.push({ kind: "DrawRaw", tex: arcArrowOverlay });
+        angleBundle.push({ kind: "DrawRaw", tex: arcArrowOverlay });
       }
     }
+    pushGeometryCommands({ type: "angle", id: angle.id }, angleBundle);
     if (angle.style.showLabel || angle.style.showValue) {
       const labelText = buildAngleLabelTex(angle.style.labelText, angle.style.showLabel, angle.style.showValue, theta);
       if (labelText) {
@@ -2105,12 +2238,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     });
   }
 
+  const drawObjectsLayer = [...getGeometryLayerOrder(scene)]
+    .reverse()
+    .flatMap((ref) => geometryBundles.get(geometryLayerKey(ref)) ?? []);
+
   return [
     ...defs,
     ...constructions,
-    ...drawFills,
-    ...drawStrokes,
-    ...drawOverlays,
+    ...drawObjectsLayer,
     ...drawPointsLayer,
     ...drawLabelsLayer,
   ];
@@ -2683,7 +2818,15 @@ function lineLikeNamesFromRef(
   segById: Map<string, SceneModel["segments"][number]>,
   pointName: Map<string, string>,
   resolvePoint: (pointId: string) => void
-): { a: string; b: string; worldA: { x: number; y: number }; worldB: { x: number; y: number }; endpointAId?: string; endpointBId?: string } | null {
+): {
+  a: string;
+  b: string;
+  worldA: { x: number; y: number };
+  worldB: { x: number; y: number };
+  endpointAId?: string;
+  endpointBId?: string;
+  finite: boolean;
+} | null {
   if (ref.type === "line") {
     const line = lineById.get(ref.id);
     if (!line) return null;
@@ -2691,18 +2834,18 @@ function lineLikeNamesFromRef(
     const anchors = getLineWorldAnchors(line, scene);
     if (!anchors) return null;
     if (line.kind === "perpendicular" || line.kind === "parallel") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId, finite: false };
     }
     if (line.kind === "tangent") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId, finite: false };
     }
     if (line.kind === "circleCircleTangent") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, finite: false };
     }
     if (line.kind === "angleBisector") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.bId };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.bId, finite: false };
     }
-    return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.aId, endpointBId: line.bId };
+    return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.aId, endpointBId: line.bId, finite: false };
   }
   if (ref.type === "segment") {
     const seg = segById.get(ref.id);
@@ -2719,6 +2862,7 @@ function lineLikeNamesFromRef(
       worldB: wb,
       endpointAId: seg.aId,
       endpointBId: seg.bId,
+      finite: true,
     };
   }
   return null;
@@ -2745,26 +2889,6 @@ function inferLineCircleBranchFromWorld(
   return 0;
 }
 
-function inferLineCircleBranchFromExcludedWorld(
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-  center: { x: number; y: number },
-  through: { x: number; y: number },
-  excluded: { x: number; y: number },
-  fallback: 0 | 1
-): 0 | 1 {
-  const radius = distance(center, through);
-  const branches = lineCircleIntersectionBranches(a, b, center, radius);
-  if (branches.length < 2) return 0;
-
-  const ROOT_EPS = 1e-6;
-  const d0 = distance(branches[0].point, excluded);
-  const d1 = distance(branches[1].point, excluded);
-  if (d0 <= ROOT_EPS && d1 > ROOT_EPS) return 1;
-  if (d1 <= ROOT_EPS && d0 > ROOT_EPS) return 0;
-  return fallback;
-}
-
 function inferCircleCircleBranch(
   point: Extract<ScenePoint, { kind: "intersectionPoint" }>,
   _aCenter: { x: number; y: number },
@@ -2776,6 +2900,35 @@ function inferCircleCircleBranch(
     return (point.branchIndex as number) === 1 ? 1 : 0;
   }
   return 0;
+}
+
+function inferCircleCircleBranchFromExcludedRoots(
+  roots: Array<{ x: number; y: number }>,
+  excluded: { x: number; y: number },
+  fallback: 0 | 1
+): 0 | 1 {
+  if (roots.length < 2) return 0;
+  const ROOT_EPS = 1e-6;
+  const d0 = distance(roots[0], excluded);
+  const d1 = distance(roots[1], excluded);
+  if (d0 <= ROOT_EPS && d1 > ROOT_EPS) return 1;
+  if (d1 <= ROOT_EPS && d0 > ROOT_EPS) return 0;
+  return fallback;
+}
+
+function circleCircleRootMatchIndex(
+  roots: Array<{ x: number; y: number }>,
+  pointWorld: { x: number; y: number } | null
+): 0 | 1 | null {
+  if (!pointWorld || roots.length < 2) return null;
+  const ROOT_EPS = 1e-6;
+  const d0 = distance(roots[0], pointWorld);
+  const d1 = distance(roots[1], pointWorld);
+  const m0 = d0 <= ROOT_EPS;
+  const m1 = d1 <= ROOT_EPS;
+  if (m0 && !m1) return 0;
+  if (m1 && !m0) return 1;
+  return null;
 }
 
 function isCircleRef(ref: GeometryObjectRef): boolean {
@@ -2790,18 +2943,94 @@ function sameObjectRef(a: GeometryObjectRef, b: GeometryObjectRef): boolean {
   return a.type === b.type && a.id === b.id;
 }
 
+function filterLineCircleBranchesToFiniteDomain(
+  branches: Array<{ point: { x: number; y: number }; t: number }>,
+  finite: boolean
+): Array<{ point: { x: number; y: number }; t: number }> {
+  if (!finite) return branches;
+  const DOMAIN_EPS = 1e-6;
+  return branches.filter((branch) => branch.t >= -DOMAIN_EPS && branch.t <= 1 + DOMAIN_EPS);
+}
+
+function inferLineCircleBranchFromExcludedRoots(
+  roots: Array<{ point: { x: number; y: number }; t: number }>,
+  excluded: { x: number; y: number },
+  fallback: 0 | 1
+): 0 | 1 {
+  if (roots.length < 2) return 0;
+  const ROOT_EPS = 1e-6;
+  const d0 = distance(roots[0].point, excluded);
+  const d1 = distance(roots[1].point, excluded);
+  if (d0 <= ROOT_EPS && d1 > ROOT_EPS) return 1;
+  if (d1 <= ROOT_EPS && d0 > ROOT_EPS) return 0;
+  return fallback;
+}
+
+function lineCircleRootMatchIndex(
+  roots: Array<{ point: { x: number; y: number }; t: number }>,
+  pointWorld: { x: number; y: number } | null
+): 0 | 1 | null {
+  if (!pointWorld || roots.length < 2) return null;
+  const ROOT_EPS = 1e-6;
+  const d0 = distance(roots[0].point, pointWorld);
+  const d1 = distance(roots[1].point, pointWorld);
+  const m0 = d0 <= ROOT_EPS;
+  const m1 = d1 <= ROOT_EPS;
+  if (m0 && !m1) return 0;
+  if (m1 && !m0) return 1;
+  return null;
+}
+
+function validDefinedLineCircleCommonPointName(
+  pointId: string | undefined,
+  roots: Array<{ point: { x: number; y: number }; t: number }>,
+  selectedBranch: 0 | 1,
+  scene: SceneModel,
+  definedPointIds: Set<string>,
+  pointName: Map<string, string>
+): string | undefined {
+  if (!pointId || !definedPointIds.has(pointId) || roots.length < 2) return undefined;
+  const pointWorld = getPointWorldPosCached(scene, pointId);
+  const match = lineCircleRootMatchIndex(roots, pointWorld);
+  if (match === null || match === selectedBranch) return undefined;
+  return mustName(pointName, pointId);
+}
+
+function validDefinedCircleCircleCommonPointName(
+  pointId: string | undefined,
+  roots: Array<{ x: number; y: number }>,
+  selectedBranch: 0 | 1,
+  scene: SceneModel,
+  definedPointIds: Set<string>,
+  pointName: Map<string, string>
+): string | undefined {
+  if (!pointId || !definedPointIds.has(pointId) || roots.length < 2) return undefined;
+  const pointWorld = getPointWorldPosCached(scene, pointId);
+  const match = circleCircleRootMatchIndex(roots, pointWorld);
+  if (match === null || match === selectedBranch) return undefined;
+  return mustName(pointName, pointId);
+}
+
+function singleLineCircleRootIsExcluded(
+  roots: Array<{ point: { x: number; y: number }; t: number }>,
+  excludePointId: string | undefined,
+  scene: SceneModel
+): boolean {
+  if (!excludePointId || roots.length !== 1) return false;
+  const excluded = getPointWorldPosCached(scene, excludePointId);
+  if (!excluded) return false;
+  return distance(excluded, roots[0].point) <= 1e-6;
+}
+
 function inferLineCircleCommonFromEndpointsWorld(
   lineAId: string | undefined,
   lineBId: string | undefined,
   lineAWorld: { x: number; y: number },
   lineBWorld: { x: number; y: number },
-  circleO: { x: number; y: number },
-  circleX: { x: number; y: number },
+  branches: Array<{ point: { x: number; y: number }; t: number }>,
   selectedBranch: 0 | 1,
   pointName: Map<string, string>
 ): string | undefined {
-  const radius = distance(circleO, circleX);
-  const branches = lineCircleIntersectionBranches(lineAWorld, lineBWorld, circleO, radius);
   if (branches.length < 2) return undefined;
 
   const ROOT_EPS = 1e-6;

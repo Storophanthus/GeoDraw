@@ -2,6 +2,7 @@ import type { Vec2 } from "../geo/vec2";
 import type { RectGridSettings } from "../render/rectGrid";
 import { drawRectGrid } from "../render/rectGrid";
 import { beginSceneEvalTick, endSceneEvalTick, type ScenePoint } from "../scene/points";
+import { getGeometryLayerOrder } from "../scene/geometryLayerOrder";
 import type { ActiveTool, HoveredHit, PendingSelection } from "../state/geoStore";
 import type { ExportClipWorld } from "../state/slices/storeTypes";
 import type { Camera, Viewport } from "./camera";
@@ -15,7 +16,7 @@ import {
   type RegularPolygonToolState,
   type TransformToolState,
 } from "./previews/pendingPreview";
-import { drawAngles, drawCircles, drawLines, drawPoints, drawPolygons, drawSegments } from "./renderers";
+import { drawAngleObject, drawCircleObject, drawLineObject, drawPoints, drawPolygonObject, drawSegmentObject } from "./renderers";
 import type { DrawableObjectSelection } from "./renderers/types";
 import type { ResolvedAngle } from "./labelOverlays";
 import { drawInteractionHighlights } from "./interactionHighlights";
@@ -112,11 +113,48 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
 
     drawRectGrid(ctx, camera, vp, gridSettings, canvasTheme);
-    drawCircles(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
-    drawPolygons(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
-    drawLines(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
-    drawSegments(ctx, scene, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
-    drawAngles(ctx, resolvedAngles, camera, vp, selectedDrawableObject, recentDrawableObject, getAngleStrokeRenderWidth);
+    const polygonOwnedEdgePresence = new Set<string>();
+    for (const segment of scene.segments) {
+      if (!Array.isArray(segment.ownedByPolygonIds) || segment.ownedByPolygonIds.length === 0) continue;
+      const key = segment.aId < segment.bId ? `${segment.aId}::${segment.bId}` : `${segment.bId}::${segment.aId}`;
+      for (const polygonId of segment.ownedByPolygonIds) {
+        polygonOwnedEdgePresence.add(`${polygonId}::${key}`);
+      }
+    }
+    const geometryLayerOrder = getGeometryLayerOrder(scene);
+    for (let i = geometryLayerOrder.length - 1; i >= 0; i -= 1) {
+      const ref = geometryLayerOrder[i];
+      if (ref.type === "circle") {
+        drawCircleObject(ctx, scene, ref.id, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
+      } else if (ref.type === "polygon") {
+        drawPolygonObject(
+          ctx,
+          scene,
+          ref.id,
+          camera,
+          vp,
+          selectedDrawableObject,
+          recentDrawableObject,
+          copySourceDrawable,
+          polygonOwnedEdgePresence
+        );
+      } else if (ref.type === "line") {
+        drawLineObject(ctx, scene, ref.id, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
+      } else if (ref.type === "segment") {
+        drawSegmentObject(ctx, scene, ref.id, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
+      } else if (ref.type === "angle") {
+        drawAngleObject(
+          ctx,
+          resolvedAngles,
+          ref.id,
+          camera,
+          vp,
+          selectedDrawableObject,
+          recentDrawableObject,
+          getAngleStrokeRenderWidth
+        );
+      }
+    }
     drawPendingPreview(
       ctx,
       pendingSelection,

@@ -27,6 +27,7 @@ export function createSceneSliceState() {
       angles: [],
       numbers: [],
       textLabels: [],
+      geometryLayerOrder: [],
     },
     nextPointId: 1,
     nextSegmentId: 1,
