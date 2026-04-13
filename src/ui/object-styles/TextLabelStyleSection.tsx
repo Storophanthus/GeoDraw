@@ -1,4 +1,5 @@
 import { resolveTextLabelRenderMode, type SceneModel } from "../../scene/points";
+import { ColorSwatchInput } from "../ColorField";
 import { formatRoundedDisplay } from "../displayFormat";
 import { StyleSectionHeader } from "../StyleSectionHeader";
 
@@ -172,9 +173,7 @@ export function TextLabelStyleSection({
 
             <div className="controlRow">
                 <label className="controlLabel">Text Color</label>
-                <input
-                    className="colorInput"
-                    type="color"
+                <ColorSwatchInput
                     value={selectedTextLabel.style.textColor}
                     onChange={(e) => updateSelectedTextLabelStyle({ textColor: e.target.value })}
                 />

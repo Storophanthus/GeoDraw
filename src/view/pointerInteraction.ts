@@ -26,11 +26,13 @@ type MovePointerDownDecision = {
     | { type: "polygon"; id: string }
     | { type: "angle"; id: string }
     | { type: "textLabel"; id: string }
+    | { type: "richText"; id: string }
     | null;
 };
 
 type MovePointerDownInput = {
   hitTextLabelId?: string | null;
+  hitRichTextNodeId?: string | null;
   hitLabelId: string | null;
   hitAngleLabelId: string | null;
   hitPointId: string | null;
@@ -64,6 +66,7 @@ type MovePointerDownInput = {
 export function decideMovePointerDown(input: MovePointerDownInput): MovePointerDownDecision {
   const {
     hitTextLabelId,
+    hitRichTextNodeId,
     hitLabelId,
     hitAngleLabelId,
     hitPointId,
@@ -85,6 +88,15 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
       pointId: hitTextLabelId,
       dragObjectType: null,
       selectedObject: { type: "textLabel", id: hitTextLabelId },
+    };
+  }
+
+  if (hitRichTextNodeId) {
+    return {
+      mode: "drag-text-label",
+      pointId: hitRichTextNodeId,
+      dragObjectType: null,
+      selectedObject: { type: "richText", id: hitRichTextNodeId },
     };
   }
 

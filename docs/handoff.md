@@ -25,6 +25,59 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-03-30 TikZ export fixture sweep restored to green:
+  - `node --import tsx scripts/test-export.ts` now passes fully (`All 90 export fixtures compiled successfully.`).
+  - Closed stale export-test drift:
+    - right-angle fixtures now use actual exact-right provenance supports instead of bare free-point geometry:
+      - `src/export/__fixtures__/angle-right-german.json`
+      - `src/export/__fixtures__/angle-right-square.json`
+      - `src/export/__fixtures__/angle-right-mark.json`
+    - `line-circle-common-forward-ref-korea14` expectation now accepts either safe sibling order as long as no forward `common=` reference is emitted.
+    - `regression-line-coverage-j-o` no longer mixes an unrelated fail-closed point into a line-coverage regression, and the assertion now respects `exportError` before checking emitted TikZ.
+  - Restored fail-closed policy for visible undefined intersections in `src/export/tikz.ts`:
+    - hidden undefined points may be skipped
+    - visible undefined points now throw `Cannot export visible undefined point: ...`
+  - This closes the recent suite blockers:
+    - stale `angle-right-*` expectations
+    - misleading `korea_no_14` expectation
+    - false `J/O` regression failure
+    - `undefined-circle-line-points` silent-skip regression
+- 2026-03-30 TikZ `InterLC` robustness coverage expanded:
+  - Added mixed/generic regression coverage for cases that were previously only protected in dedicated intersection kinds:
+    - `src/export/__fixtures__/generic-circle-segment-finite-single-root-fail-closed.json`
+    - `src/export/__fixtures__/generic-circle-segment-exclude-common-swapped.json`
+    - `src/export/__fixtures__/generic-line-circle-exclude-common.json`
+    - `src/export/__fixtures__/line-circle-invalid-common-stale-point.json`
+    - `src/export/__fixtures__/line-circle-common-forward-ref-korea14.json`
+  - Strengthened exporter assertions:
+    - dedicated `circle-line-exclude` fixture now explicitly checks `common=...` reuse
+    - generic mixed `circle+segment` path is now covered for:
+      - fail-closed finite-domain single-root behavior
+      - swapped object-order parity
+      - endpoint/common reuse parity
+  - Export sweep now passes with these added cases and follow-up circle-circle coverage (`All 90 export fixtures compiled successfully.`).
+- 2026-03-30 Generic circle-circle export robustness expanded:
+  - Added regression coverage for generic `intersectionPoint` circle-circle branch/common cases:
+    - `src/export/__fixtures__/circle-circle-invalid-common-stale-point.json`
+    - `src/export/__fixtures__/generic-circle-circle-exclude-common-swapped.json`
+    - `src/export/__fixtures__/generic-circle-circle-near-tangent.json`
+    - `src/export/__fixtures__/generic-circle-circle-near-tangent-swapped.json`
+  - Exporter now validates circle-circle `common=...` reuse before emitting it:
+    - the common point must already be defined
+    - it must geometrically match the opposite root for that exact pair
+    - stale or unrelated points are rejected instead of being reused as `common=...`
+  - Generic circle-circle export now also respects `excludePointId` parity with runtime evaluation instead of relying only on sibling heuristics.
+- 2026-03-30 AGENTS visual TikZ spot checks completed:
+  - compiled TikZ vs intended geometry checked for:
+    - generic line-circle `common=A` reuse (`generic-line-circle-exclude-common.json`)
+    - stale invalid line-circle common rejection with near/swap fallback (`line-circle-invalid-common-stale-point.json`)
+    - generic circle-circle swapped-order `common=A` reuse (`generic-circle-circle-exclude-common-swapped.json`)
+    - generic circle-circle near-tangent branch/common pairing in both circle argument orders
+      (`generic-circle-circle-near-tangent.json`, `generic-circle-circle-near-tangent-swapped.json`)
+  - Result:
+    - no silent branch flip observed
+    - swapped circle argument order preserved the intended common-point semantics
+    - near-tangent circle-circle renders keep the intended branch/common pairing; the point markers overlap visually because the two roots are only about `0.1414` world units apart, not because export collapsed them
 - 2026-02-26 TikZ exporter architecture refactor (behavior-preserving slice: draw-layer backend emitter + plain-TikZ PoC):
   - Added draw-layer backend emitter module:
     - `src/export/tikz/renderDrawBackend.ts`
@@ -708,6 +761,12 @@
 - Active homework focus (correctness-first):
   1. Validate on dense construction scenes and guard against regressions.
   2. Regular polygon follow-up: optional orientation toggle (CW/CCW) if needed.
+  3. TikZ `InterLC` longer-tail hardening:
+     - keep adding concrete fixtures for mixed-topology branch/common edge cases instead of widening heuristics blindly
+     - watch for cases beyond current coverage where `excludePointId` and sibling/common reuse can still diverge from runtime semantics
+     - keep `common=<pt>` gated by both:
+       - already defined in emitted TeX
+       - geometrically valid for that exact pair
 - Performance track is secondary and must not alter intersection semantics.
 - Performance follow-up now is measurement/tuning only:
   - run `npm run test:zoom` and dense-scene checks
@@ -740,6 +799,10 @@
   This is intentional to keep deterministic, fail-closed behavior.
 - Pattern-library auto-emission only affects export header lines; drawing semantics are unchanged.
 - Future polygon fill can reuse the same `pattern`/`patternColor` style contract to stay consistent across object classes.
+- TikZ exporter note:
+  - `korea_no_14` compile failure is resolved; exporter now refuses forward `common=` references for `InterLC`.
+  - Visible undefined intersections are fail-closed again; hidden undefined intersections may still be skipped.
+  - Remaining exporter homework is semantic edge coverage, not a known suite blocker.
 
 ## Historical (Do Not Reopen Automatically)
 - Items below are historical progress logs and rationale.

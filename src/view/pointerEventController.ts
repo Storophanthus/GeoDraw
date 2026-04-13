@@ -7,7 +7,7 @@ type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | "richText" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -20,6 +20,7 @@ type DragFrameRef = { current: number | null };
 
 type PointerHits = {
   hitTextLabelId?: string | null;
+  hitRichTextNodeId?: string | null;
   hitPointId: string | null;
   hitLabelId: string | null;
   hitAngleLabelId: string | null;
@@ -48,6 +49,7 @@ type MoveDecision = {
     | { type: "polygon"; id: string }
     | { type: "angle"; id: string }
     | { type: "textLabel"; id: string }
+    | { type: "richText"; id: string }
     | null;
 };
 
@@ -80,6 +82,7 @@ type CreatePointerHandlersDeps = {
       | { type: "polygon"; id: string }
       | { type: "angle"; id: string }
       | { type: "textLabel"; id: string }
+      | { type: "richText"; id: string }
       | null
   ) => void;
   beginTextLabelEditing?: (id: string) => boolean;
@@ -137,11 +140,19 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       const decision = deps.decideMovePointerDown(hits);
       mode = decision.mode;
       pointId = decision.pointId;
-      objectType = decision.dragObjectType;
+      objectType = decision.selectedObject?.type ?? decision.dragObjectType ?? null;
       deps.setSelectedObject(decision.selectedObject);
     } else if (deps.activeTool === "label" || deps.activeTool === "textbox") {
       const decision = deps.decideMovePointerDown(hits);
-      if (
+      const shouldEnterTextboxEdit =
+        deps.activeTool === "textbox"
+        && Boolean(hits.hitTextLabelId)
+        && typeof deps.beginTextLabelEditing === "function";
+      if (shouldEnterTextboxEdit) {
+        mode = "tool-click";
+        pointId = null;
+        objectType = null;
+      } else if (
         decision.mode === "drag-label"
         || decision.mode === "drag-angle-label"
         || decision.mode === "drag-object-label"
@@ -149,7 +160,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       ) {
         mode = decision.mode;
         pointId = decision.pointId;
-        objectType = decision.dragObjectType;
+        objectType = decision.selectedObject?.type ?? decision.dragObjectType ?? null;
       } else {
         mode = "tool-click";
         pointId = null;

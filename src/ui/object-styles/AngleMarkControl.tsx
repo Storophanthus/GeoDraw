@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { type AngleMark } from "../../scene/points";
+import { ColorSwatchInput } from "../ColorField";
 import { MarkSymbolPicker } from "./MarkSymbolPicker";
 
 export const DEFAULT_ANGLE_MARK: AngleMark = {
@@ -239,9 +240,7 @@ export function AngleMarkControl({
                     </div>
                     <div className="controlRow">
                         <label className="controlLabel">Mark Color</label>
-                        <input
-                            className="colorInput"
-                            type="color"
+                        <ColorSwatchInput
                             value={selectedAngleMark.markColor ?? markColorFromStyle ?? strokeColor}
                             onChange={(e) => {
                                 const nextMarks = [...resolvedAngleMarks];

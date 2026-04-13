@@ -130,37 +130,8 @@ export function RightSidebar({
         </button>
       ) : (
         <>
-          <div className="rightTopRow">
-            <button
-              type="button"
-              className={helpOpen ? "sidebarToggleButton active" : "sidebarToggleButton"}
-              aria-label="Show shortcut help"
-              aria-expanded={helpOpen}
-              onClick={() => setHelpOpen((prev) => !prev)}
-            >
-              <CircleHelp size={16} strokeWidth={2} />
-            </button>
-            <button className="sidebarToggleButton" onClick={() => setRightCollapsed(true)} aria-label="Collapse right sidebar">
-              <IconSidebarPanelRight size={16} strokeWidth={2} />
-            </button>
-          </div>
-
-          {helpOpen && (
-            <section className="sidebarHelpCard" aria-label="Shortcut help">
-              <div className="sidebarHelpTitle">Quick Help</div>
-              <div className="sidebarHelpList">
-                {HELP_ROWS.map((item) => (
-                  <div key={`${item.combo}-${item.description}`} className="sidebarHelpRow">
-                    <kbd className="sidebarHelpKey">{item.combo}</kbd>
-                    <span className="sidebarHelpText">{item.description}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          <section className="sidebarSection">
-            <div className="rightTabs" role="tablist" aria-label="Right panel tabs">
+          <section className="sidebarHeaderBar">
+            <div className="rightTabs rightTabsHeader" role="tablist" aria-label="Right panel tabs">
               <button
                 type="button"
                 role="tab"
@@ -180,7 +151,35 @@ export function RightSidebar({
                 Export
               </button>
             </div>
+            <div className="rightHeaderActions">
+              <button
+                type="button"
+                className={helpOpen ? "sidebarToggleButton active" : "sidebarToggleButton"}
+                aria-label="Show shortcut help"
+                aria-expanded={helpOpen}
+                onClick={() => setHelpOpen((prev) => !prev)}
+              >
+                <CircleHelp size={16} strokeWidth={2} />
+              </button>
+              <button className="sidebarToggleButton" onClick={() => setRightCollapsed(true)} aria-label="Collapse right sidebar">
+                <IconSidebarPanelRight size={16} strokeWidth={2} />
+              </button>
+            </div>
           </section>
+
+          {helpOpen && (
+            <section className="sidebarHelpCard" aria-label="Shortcut help">
+              <div className="sidebarHelpTitle">Quick Help</div>
+              <div className="sidebarHelpList">
+                {HELP_ROWS.map((item) => (
+                  <div key={`${item.combo}-${item.description}`} className="sidebarHelpRow">
+                    <kbd className="sidebarHelpKey">{item.combo}</kbd>
+                    <span className="sidebarHelpText">{item.description}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {rightTab === "algebra" && (
             <section className="sidebarSection">

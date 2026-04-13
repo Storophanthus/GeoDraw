@@ -6,6 +6,7 @@ import {
   beginSceneEvalTick,
   endSceneEvalTick,
   getPointWorldPos,
+  resolveTextLabelToolKind,
   type ScenePoint,
 } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
@@ -26,6 +27,9 @@ import { renderCanvasFrame } from "./renderFrame";
 import { useCanvasInteractionController, type PointerState } from "./useCanvasInteractionController";
 import { isValidTarget } from "../tools/toolClick";
 import { CanvasTextEditor, useTextboxToolController } from "../textbox-tool";
+import { RichTextCanvasEditor } from "../richtext/RichTextCanvasEditor";
+import { useRichTextToolController } from "../richtext/useRichTextToolController";
+import { createRichTextOverlays } from "../richtext/overlays";
 import {
   applyDilationToObject,
   applyInversionToObject,
@@ -119,6 +123,8 @@ export function CanvasView() {
   const zoomAtScreenPoint = useGeoStore((store) => store.zoomAtScreenPoint);
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
   const createTextLabel = useGeoStore((store) => store.createTextLabel);
+  const createRichTextNode = useGeoStore((store) => store.createRichTextNode);
+  const migrateTextLabelToRichTextNode = useGeoStore((store) => store.migrateTextLabelToRichTextNode);
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
   const createPolygon = useGeoStore((store) => store.createPolygon);
@@ -153,6 +159,7 @@ export function CanvasView() {
   const moveObjectLabelTo = useGeoStore((store) => store.moveObjectLabelTo);
   const moveTextLabelTo = useGeoStore((store) => store.moveTextLabelTo);
   const moveTextLabelByWorldDelta = useGeoStore((store) => store.moveTextLabelByWorldDelta);
+  const moveRichTextNodeByWorldDelta = useGeoStore((store) => store.moveRichTextNodeByWorldDelta);
   const enableObjectLabel = useGeoStore((store) => store.enableObjectLabel);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
@@ -160,6 +167,9 @@ export function CanvasView() {
   const setObjectVisibility = useGeoStore((store) => store.setObjectVisibility);
   const updateTextLabelFieldsByIds = useGeoStore((store) => store.updateTextLabelFieldsByIds);
   const updateTextLabelStyleByIds = useGeoStore((store) => store.updateTextLabelStyleByIds);
+  const updateRichTextDocumentByIds = useGeoStore((store) => store.updateRichTextDocumentByIds);
+  const updateRichTextFieldsByIds = useGeoStore((store) => store.updateRichTextFieldsByIds);
+  const updateRichTextStyleByIds = useGeoStore((store) => store.updateRichTextStyleByIds);
   const deleteSelectedObject = useGeoStore((store) => store.deleteSelectedObject);
   const loadSnapshot = useGeoStore((store) => store.loadSnapshot);
   const fitViewToScene = useGeoStore((store) => store.fitViewToScene);
@@ -228,6 +238,8 @@ export function CanvasView() {
         clearPendingSelection,
         createFreePoint,
         createTextLabel,
+        createRichTextNode,
+        migrateTextLabelToRichTextNode,
         createSegment,
         createLine,
         createPolygon,
@@ -383,6 +395,7 @@ export function CanvasView() {
       clearPendingSelection,
       createFreePoint,
       createTextLabel,
+      createRichTextNode,
       createSegment,
       createLine,
       createPolygon,
@@ -459,11 +472,13 @@ export function CanvasView() {
     () => createTextLabelOverlays(scene, camera, vp),
     [scene, camera, vp]
   );
+  const richTextOverlays = useMemo(
+    () => createRichTextOverlays(scene, camera, vp),
+    [scene, camera, vp]
+  );
   const textboxTool = useTextboxToolController({
     activeTool,
     scene,
-    camera,
-    vp,
     recentCreatedObject,
     textLabelOverlays,
     setSelectedObject,
@@ -471,6 +486,28 @@ export function CanvasView() {
     updateTextLabelStyleByIds,
     deleteSelectedObject,
   });
+
+  const richTextTool = useRichTextToolController({
+    activeTool,
+    scene,
+    camera,
+    vp,
+    recentCreatedObject,
+    richTextOverlays,
+    setSelectedObject,
+    updateRichTextDocumentByIds,
+    updateRichTextFieldsByIds,
+    updateRichTextStyleByIds,
+    deleteSelectedObject,
+  });
+
+  useEffect(() => {
+    const legacyTextboxLabels = (scene.textLabels ?? []).filter((label) => resolveTextLabelToolKind(label) === "textbox");
+    if (legacyTextboxLabels.length === 0) return;
+    for (const label of legacyTextboxLabels) {
+      migrateTextLabelToRichTextNode(label.id);
+    }
+  }, [migrateTextLabelToRichTextNode, scene.textLabels]);
 
   const hoverSnap: SnapCandidate | null = useMemo(() => {
     if (!hoverScreen) return null;
@@ -512,9 +549,9 @@ export function CanvasView() {
     () => () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const selectedDrawableObject = selectedObject?.type === "number" || selectedObject?.type === "textLabel" ? null : selectedObject;
-      const recentDrawableObject = recentCreatedObject?.type === "number" || recentCreatedObject?.type === "textLabel" ? null : recentCreatedObject;
-      const copySourceDrawable = copyStyle.source?.type === "number" || copyStyle.source?.type === "textLabel" ? null : copyStyle.source;
+      const selectedDrawableObject = selectedObject?.type === "number" || selectedObject?.type === "textLabel" || selectedObject?.type === "richText" ? null : selectedObject;
+      const recentDrawableObject = recentCreatedObject?.type === "number" || recentCreatedObject?.type === "textLabel" || recentCreatedObject?.type === "richText" ? null : recentCreatedObject;
+      const copySourceDrawable = copyStyle.source?.type === "number" || copyStyle.source?.type === "textLabel" || copyStyle.source?.type === "richText" ? null : copyStyle.source;
       renderCanvasFrame({
         canvas,
         scene,
@@ -623,12 +660,14 @@ export function CanvasView() {
       moveObjectLabelTo,
       moveTextLabelTo,
       moveTextLabelByWorldDelta,
+      moveRichTextNodeByWorldDelta,
       setHoverScreen,
       setSnapDisabled,
       setCursorWorld,
       setHoveredHit,
       setSelectedObject,
       beginTextLabelEditing: textboxTool.beginTextLabelEditing,
+      beginRichTextEditing: richTextTool.beginRichTextEditing,
       clearPendingSelection,
       zoomAtScreenPoint,
     },
@@ -763,6 +802,7 @@ export function CanvasView() {
         angleLabelOverlays={angleLabelOverlays}
         objectLabelOverlays={objectLabelOverlays}
         textLabelOverlays={textboxTool.visibleTextLabelOverlays}
+        richTextOverlays={richTextTool.visibleRichTextOverlays}
         selectedTextLabelId={selectedObject?.type === "textLabel" ? selectedObject.id : null}
       />
       {textboxTool.editorSession && (
@@ -770,18 +810,27 @@ export function CanvasView() {
           sessionKey={textboxTool.editorSession.id}
           editorRef={textboxTool.editorRef}
           value={textboxTool.editorSession.value}
-          renderMode={textboxTool.editorSession.renderMode}
+          editorKind={textboxTool.editorSession.editorKind}
           textColor={textboxTool.editorSession.overlay.textColor}
           fontSizePx={Math.max(8, textboxTool.editorSession.overlay.textSize)}
-          minHeightPx={textboxTool.editorSession.minHeightPx}
-          resizeActive={textboxTool.editorSession.resizeActive}
           shouldIgnoreBlur={textboxTool.editorSession.shouldIgnoreBlur}
           sourceStyle={textboxTool.editorSession.sourceStyle}
           onChangeValue={textboxTool.editorSession.setValue}
           onCommit={textboxTool.editorSession.commit}
           onCancel={textboxTool.editorSession.cancel}
-          onResizeStart={textboxTool.editorSession.onResizeStart}
           shellStyle={textboxTool.editorSession.shellStyle}
+        />
+      )}
+      {richTextTool.editorSession && (
+        <RichTextCanvasEditor
+          sessionKey={richTextTool.editorSession.id}
+          document={richTextTool.editorSession.document}
+          style={richTextTool.editorSession.style}
+          shellStyle={richTextTool.editorSession.shellStyle}
+          onChangeDocument={richTextTool.editorSession.setDocument}
+          onMeasure={richTextTool.editorSession.setMeasuredBounds}
+          onCommit={richTextTool.editorSession.commit}
+          onCancel={richTextTool.editorSession.cancel}
         />
       )}
     </div>

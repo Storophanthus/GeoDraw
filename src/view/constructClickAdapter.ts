@@ -15,9 +15,10 @@ type RunConstructClickParams = {
   screen: Vec2;
   pointerEvent: PointerEvent;
   preHitTextLabelId?: string | null;
+  preHitRichTextNodeId?: string | null;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
   scene: SceneModel;
   resolvedPoints: Array<{ point: SceneModel["points"][number]; world: Vec2 }>;
   camera: Camera;
@@ -40,6 +41,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     screen,
     pointerEvent,
     preHitTextLabelId = null,
+    preHitRichTextNodeId = null,
     activeTool,
     pendingSelection,
     copyStyleSource,
@@ -109,6 +111,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
       hitPointId: rawHitPointId ?? snappedHitPointId,
       hitSegmentId: hitTestSegmentId(screen, scene, camera, vp, tolerances.segment),
       hitTextLabelId: preHitTextLabelId,
+      hitRichTextNodeId: preHitRichTextNodeId,
       hitObject,
       shiftKey: pointerEvent.shiftKey,
       hasCopyStyleSource: Boolean(copyStyleSource),

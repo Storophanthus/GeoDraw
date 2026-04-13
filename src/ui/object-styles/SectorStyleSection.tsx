@@ -1,8 +1,11 @@
 import * as React from "react";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { type AngleMark, type AngleMarkSymbol, type AngleStyle, type PathArrowMark, type SceneAngle } from "../../scene/points";
+import { ColorSwatchInput } from "../ColorField";
+import { StyleControlGroup } from "../StyleControlGroup";
 import { StyleSectionHeader } from "../StyleSectionHeader";
 import { ArrowListControl, DEFAULT_PATH_ARROW_MARK } from "./ArrowListControl";
+import { MarkDistributionToggle } from "./MarkDistributionToggle";
 import { MarkSymbolPicker } from "./MarkSymbolPicker";
 
 const FILL_PATTERN_OPTIONS = [
@@ -111,6 +114,101 @@ export function SectorStyleSection({
         selectedStyleAsDefault={selectedStyleAsDefault}
         onMakeStyleDefaultChange={onMakeStyleDefaultChange}
       />
+      <StyleControlGroup title="Stroke">
+      <div className="controlRow">
+        <label className="controlLabel">Stroke Color</label>
+        <ColorSwatchInput
+          value={selectedSector.style.strokeColor}
+          onChange={(e) => updateSelectedAngleStyle({ strokeColor: e.target.value })}
+        />
+      </div>
+      <div className="controlRow controlRowWithNumeric">
+        <label className="controlLabel">Stroke Width</label>
+        <input
+          className="sizeSlider"
+          type="range"
+          min={0.5}
+          max={6}
+          step={0.1}
+          value={selectedSector.style.strokeWidth}
+          onChange={(e) => updateSelectedAngleStyle({ strokeWidth: Number(e.target.value) })}
+        />
+        <input
+          className="scaleInputCompact"
+          type="number"
+          min={0.5}
+          max={6}
+          step={0.1}
+          value={selectedSector.style.strokeWidth}
+          onChange={(e) => updateSelectedAngleStyle({ strokeWidth: Number(e.target.value) })}
+        />
+      </div>
+      <div className="controlRow">
+        <label className="controlLabel">Dash</label>
+        <select
+          className="selectInput"
+          value={selectedSector.style.strokeDash ?? "solid"}
+          onChange={(e) => updateSelectedAngleStyle({ strokeDash: e.target.value as "solid" | "dashed" | "dotted" })}
+        >
+          <option value="solid">Solid</option>
+          <option value="dashed">Dashed</option>
+          <option value="dotted">Dotted</option>
+        </select>
+      </div>
+      </StyleControlGroup>
+      <StyleControlGroup title="Fill">
+      <label className="checkboxRow">
+        <input
+          type="checkbox"
+          checked={Boolean(selectedSector.style.fillEnabled)}
+          onChange={(e) => updateSelectedAngleStyle({ fillEnabled: e.target.checked })}
+        />
+        Fill Sector
+      </label>
+      <div className="controlRow">
+        <label className="controlLabel">Fill Color</label>
+        <ColorSwatchInput
+          value={selectedSector.style.fillColor}
+          onChange={(e) => updateSelectedAngleStyle({ fillColor: e.target.value })}
+        />
+      </div>
+      <div className="controlRow">
+        <label className="controlLabel">Fill Opacity</label>
+        <input
+          className="sizeSlider"
+          type="range"
+          min={0}
+          max={0.6}
+          step={0.01}
+          value={selectedSector.style.fillOpacity}
+          onChange={(e) => updateSelectedAngleStyle({ fillOpacity: Number(e.target.value) })}
+        />
+      </div>
+      <div className="controlRow">
+        <label className="controlLabel">Fill Pattern</label>
+        <select
+          className="selectInput"
+          value={selectedSector.style.pattern ?? ""}
+          onChange={(e) => updateSelectedAngleStyle({ pattern: e.target.value })}
+        >
+          {FILL_PATTERN_OPTIONS.map((opt) => (
+            <option key={opt.value || "none"} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {(selectedSector.style.pattern ?? "") !== "" && (
+        <div className="controlRow">
+          <label className="controlLabel">Pattern Color</label>
+          <ColorSwatchInput
+            value={selectedSector.style.patternColor ?? selectedSector.style.strokeColor}
+            onChange={(e) => updateSelectedAngleStyle({ patternColor: e.target.value })}
+          />
+        </div>
+      )}
+      </StyleControlGroup>
+      <StyleControlGroup title="Label">
       <label className="checkboxRow">
         <input
           type="checkbox"
@@ -127,10 +225,54 @@ export function SectorStyleSection({
           onChange={(e) => updateSelectedAngleStyle({ labelText: e.target.value })}
         />
       </div>
-
-      <div className="subSectionTitle" style={{ marginTop: 10 }}>
-        Arc Mark
+      <div className="controlRow">
+        <label className="controlLabel">Text Color</label>
+        <ColorSwatchInput
+          value={selectedSector.style.textColor}
+          onChange={(e) => updateSelectedAngleStyle({ textColor: e.target.value })}
+        />
       </div>
+      <div className="controlRow controlRowWithNumeric">
+        <label className="controlLabel">Text Size</label>
+        <input
+          className="sizeSlider"
+          type="range"
+          min={8}
+          max={32}
+          step={1}
+          value={selectedSector.style.textSize}
+          onChange={(e) => updateSelectedAngleStyle({ textSize: Number(e.target.value) })}
+        />
+        <input
+          className="scaleInputCompact"
+          type="number"
+          min={8}
+          max={32}
+          step={1}
+          value={selectedSector.style.textSize}
+          onChange={(e) => updateSelectedAngleStyle({ textSize: Number(e.target.value) })}
+        />
+      </div>
+      </StyleControlGroup>
+      <StyleControlGroup title="Arc Arrow">
+      <ArrowListControl<PathArrowMark>
+        arrows={
+          selectedSector.style.arcArrowMarks ??
+          (selectedSector.style.arcArrowMark?.enabled
+            ? [
+                {
+                  ...DEFAULT_PATH_ARROW_MARK,
+                  ...selectedSector.style.arcArrowMark,
+                },
+              ]
+            : [])
+        }
+        createArrow={() => ({ ...DEFAULT_PATH_ARROW_MARK })}
+        strokeColor={selectedSector.style.strokeColor}
+        onChange={(newArrows) => updateSelectedAngleStyle({ arcArrowMarks: newArrows })}
+      />
+      </StyleControlGroup>
+      <StyleControlGroup title="Arc Mark">
       <div
         className="arrowListHeader"
         style={{ display: "grid", gridTemplateColumns: "max-content 1fr", alignItems: "center", gap: "8px", marginTop: "4px" }}
@@ -277,47 +419,20 @@ export function SectorStyleSection({
           </div>
           <div className="controlRow">
             <label className="controlLabel">Distribution</label>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "4px",
+            <MarkDistributionToggle
+              value={selectedSectorMark.distribution ?? "single"}
+              onChange={(distribution) => {
+                const nextMarks = [...resolvedSectorMarks];
+                nextMarks[selectedSectorMarkIndex] = {
+                  ...selectedSectorMark,
+                  distribution,
+                  startPos: selectedSectorMark.startPos ?? 0.45,
+                  endPos: selectedSectorMark.endPos ?? 0.55,
+                  step: selectedSectorMark.step ?? 0.05,
+                };
+                commitSectorMarks(nextMarks);
               }}
-            >
-              {(["single", "multi"] as const).map((distribution) => (
-                <button
-                  key={distribution}
-                  type="button"
-                  className="iconButton"
-                  onClick={() => {
-                    const nextMarks = [...resolvedSectorMarks];
-                    nextMarks[selectedSectorMarkIndex] = {
-                      ...selectedSectorMark,
-                      distribution,
-                      startPos: selectedSectorMark.startPos ?? 0.45,
-                      endPos: selectedSectorMark.endPos ?? 0.55,
-                      step: selectedSectorMark.step ?? 0.05,
-                    };
-                    commitSectorMarks(nextMarks);
-                  }}
-                  style={{
-                    height: "32px",
-                    borderRadius: "6px",
-                    border: "1px solid var(--gd-ui-border, #cbd5e1)",
-                    background:
-                      (selectedSectorMark.distribution ?? "single") === distribution
-                        ? "var(--gd-ui-accent, #2563eb)"
-                        : "var(--gd-ui-surface, #fff)",
-                    color:
-                      (selectedSectorMark.distribution ?? "single") === distribution
-                        ? "var(--gd-ui-accent-contrast, #fff)"
-                        : "var(--gd-ui-text, #334155)",
-                  }}
-                >
-                  {distribution === "single" ? "Single" : "Multi"}
-                </button>
-              ))}
-            </div>
+            />
           </div>
           {(selectedSectorMark.distribution ?? "single") === "multi" ? (
             <div
@@ -469,9 +584,7 @@ export function SectorStyleSection({
           </div>
           <div className="controlRow">
             <label className="controlLabel">Mark Color</label>
-            <input
-              className="colorInput"
-              type="color"
+            <ColorSwatchInput
               value={selectedSectorMark.markColor ?? selectedSector.style.strokeColor}
               onChange={(e) => {
                 const nextMarks = [...resolvedSectorMarks];
@@ -487,154 +600,7 @@ export function SectorStyleSection({
           <span style={{ color: "var(--gd-ui-muted-text, #64748b)", fontSize: "12px" }}>Add a mark to start.</span>
         </div>
       )}
-
-      <div className="controlRow">
-        <label className="controlLabel">Stroke Color</label>
-        <input
-          className="colorInput"
-          type="color"
-          value={selectedSector.style.strokeColor}
-          onChange={(e) => updateSelectedAngleStyle({ strokeColor: e.target.value })}
-        />
-      </div>
-      <div className="controlRow controlRowWithNumeric">
-        <label className="controlLabel">Stroke Width</label>
-        <input
-          className="sizeSlider"
-          type="range"
-          min={0.5}
-          max={6}
-          step={0.1}
-          value={selectedSector.style.strokeWidth}
-          onChange={(e) => updateSelectedAngleStyle({ strokeWidth: Number(e.target.value) })}
-        />
-        <input
-          className="scaleInputCompact"
-          type="number"
-          min={0.5}
-          max={6}
-          step={0.1}
-          value={selectedSector.style.strokeWidth}
-          onChange={(e) => updateSelectedAngleStyle({ strokeWidth: Number(e.target.value) })}
-        />
-      </div>
-      <div className="controlRow">
-        <label className="controlLabel">Dash</label>
-        <select
-          className="selectInput"
-          value={selectedSector.style.strokeDash ?? "solid"}
-          onChange={(e) => updateSelectedAngleStyle({ strokeDash: e.target.value as "solid" | "dashed" | "dotted" })}
-        >
-          <option value="solid">Solid</option>
-          <option value="dashed">Dashed</option>
-          <option value="dotted">Dotted</option>
-        </select>
-      </div>
-
-      <div className="subSectionTitle" style={{ marginTop: 10 }}>
-        Arc Arrow
-      </div>
-      <ArrowListControl<PathArrowMark>
-        arrows={
-          selectedSector.style.arcArrowMarks ??
-          (selectedSector.style.arcArrowMark?.enabled
-            ? [
-                {
-                  ...DEFAULT_PATH_ARROW_MARK,
-                  ...selectedSector.style.arcArrowMark,
-                },
-              ]
-            : [])
-        }
-        createArrow={() => ({ ...DEFAULT_PATH_ARROW_MARK })}
-        strokeColor={selectedSector.style.strokeColor}
-        onChange={(newArrows) => updateSelectedAngleStyle({ arcArrowMarks: newArrows })}
-      />
-
-      <label className="checkboxRow">
-        <input
-          type="checkbox"
-          checked={Boolean(selectedSector.style.fillEnabled)}
-          onChange={(e) => updateSelectedAngleStyle({ fillEnabled: e.target.checked })}
-        />
-        Fill Sector
-      </label>
-      <div className="controlRow">
-        <label className="controlLabel">Fill Color</label>
-        <input
-          className="colorInput"
-          type="color"
-          value={selectedSector.style.fillColor}
-          onChange={(e) => updateSelectedAngleStyle({ fillColor: e.target.value })}
-        />
-      </div>
-      <div className="controlRow">
-        <label className="controlLabel">Fill Opacity</label>
-        <input
-          className="sizeSlider"
-          type="range"
-          min={0}
-          max={0.6}
-          step={0.01}
-          value={selectedSector.style.fillOpacity}
-          onChange={(e) => updateSelectedAngleStyle({ fillOpacity: Number(e.target.value) })}
-        />
-      </div>
-      <div className="controlRow">
-        <label className="controlLabel">Fill Pattern</label>
-        <select
-          className="selectInput"
-          value={selectedSector.style.pattern ?? ""}
-          onChange={(e) => updateSelectedAngleStyle({ pattern: e.target.value })}
-        >
-          {FILL_PATTERN_OPTIONS.map((opt) => (
-            <option key={opt.value || "none"} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      {(selectedSector.style.pattern ?? "") !== "" && (
-        <div className="controlRow">
-          <label className="controlLabel">Pattern Color</label>
-          <input
-            className="colorInput"
-            type="color"
-            value={selectedSector.style.patternColor ?? selectedSector.style.strokeColor}
-            onChange={(e) => updateSelectedAngleStyle({ patternColor: e.target.value })}
-          />
-        </div>
-      )}
-      <div className="controlRow">
-        <label className="controlLabel">Text Color</label>
-        <input
-          className="colorInput"
-          type="color"
-          value={selectedSector.style.textColor}
-          onChange={(e) => updateSelectedAngleStyle({ textColor: e.target.value })}
-        />
-      </div>
-      <div className="controlRow controlRowWithNumeric">
-        <label className="controlLabel">Text Size</label>
-        <input
-          className="sizeSlider"
-          type="range"
-          min={8}
-          max={32}
-          step={1}
-          value={selectedSector.style.textSize}
-          onChange={(e) => updateSelectedAngleStyle({ textSize: Number(e.target.value) })}
-        />
-        <input
-          className="scaleInputCompact"
-          type="number"
-          min={8}
-          max={32}
-          step={1}
-          value={selectedSector.style.textSize}
-          onChange={(e) => updateSelectedAngleStyle({ textSize: Number(e.target.value) })}
-        />
-      </div>
+      </StyleControlGroup>
       <button className="deleteButton" onClick={deleteSelectedObject}>
         {deleteLabel}
       </button>

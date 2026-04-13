@@ -2,14 +2,15 @@ import { type SceneModel } from "../points";
 import { applyProfileColorsToDefaults, recolorSceneForProfile } from "../../state/colorProfiles";
 import {
   defaultAngleStyle,
-  defaultCircleStyle,
-  defaultLabelToolStyle,
-  defaultLineStyle,
-  defaultPointStyle,
-  defaultPolygonStyle,
-  defaultSegmentStyle,
-  defaultTextboxToolStyle,
-} from "../../state/slices/sceneSlice";
+    defaultCircleStyle,
+    defaultLabelToolStyle,
+    defaultLineStyle,
+    defaultPointStyle,
+    defaultPolygonStyle,
+    defaultRichTextToolStyle,
+    defaultSegmentStyle,
+    defaultTextboxToolStyle,
+  } from "../../state/slices/sceneSlice";
 
 function fail(message: string): never {
   throw new Error(message);
@@ -29,6 +30,7 @@ const defaults = applyProfileColorsToDefaults(
     angleDefaults: { ...defaultAngleStyle, labelPosWorld: { ...defaultAngleStyle.labelPosWorld } },
     labelToolDefaults: { ...defaultLabelToolStyle },
     textboxToolDefaults: { ...defaultTextboxToolStyle },
+    richTextToolDefaults: { ...defaultRichTextToolStyle },
   },
   "grayscale_white_dot"
 );

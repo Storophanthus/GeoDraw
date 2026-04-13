@@ -283,7 +283,7 @@ Command Bar supports expression evaluation, object creation commands, and assign
 \begin{itemize}[leftmargin=1.5em]
   \item \textbf{Point/transform}: \texttt{Point(x,y)}, \texttt{Midpoint(A,B)}, \texttt{Midpoint(s)}, \texttt{Incenter(A,B,C)}, \texttt{Orthocenter(A,B,C)} (\texttt{Ortho}), \texttt{Centroid(A,B,C)}, \texttt{Circumcenter(A,B,C)}, \texttt{Translate(P,A,B)}, \texttt{Rotate(P,O,expr[,CW|CCW])}, \texttt{Dilate(P,O,k)}, \texttt{Reflect(P,l|s|O)}.
   \item \textbf{Line/segment}: \texttt{Line(A,B)}, \texttt{Line(x1,y1,x2,y2)}, \texttt{Perpendicular(P,l)}, \texttt{Parallel(P,l)}, \texttt{Tangent(P,c)}, \texttt{AngleBisector(A,B,C)}, \texttt{Segment(A,B)}.
-  \item \textbf{Angle/polygon}: \texttt{Angle(A,B,C)}, \texttt{AngleFixed(V,A,expr[,CW|CCW])}, \texttt{Sector(O,A,B)}, \texttt{Polygon(A,B,C,...)}, \texttt{RegularPolygon(A,B,n[,CW|CCW])}.
+  \item \textbf{Angle/polygon}: \texttt{Angle(A,B,C)} for degree value, \texttt{MarkedAngle(A,B,C)} for an angle object, \texttt{AngleFixed(V,A,expr[,CW|CCW])}, \texttt{Sector(O,A,B)}, \texttt{Polygon(A,B,C,...)}, \texttt{RegularPolygon(A,B,n[,CW|CCW])}.
   \item \textbf{Circle}: \texttt{Circle(x,y,r)}, \texttt{Circle(O,A)}, \texttt{Circle(O,r)}, \texttt{Circle3P(A,B,C)} (alias: \texttt{CircleThreePoint(A,B,C)}).
   \item \textbf{Numeric query}: \texttt{Distance(...)}, \texttt{Area(...)}, \texttt{Perimeter(...)}, \texttt{Inradius(A,B,C)}, \texttt{Circumradius(A,B,C)} return scalar values (no object created).
 \end{itemize}

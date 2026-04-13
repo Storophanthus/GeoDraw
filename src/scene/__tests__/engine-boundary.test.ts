@@ -215,6 +215,7 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     ...baseIo,
     ...overrides,
     createTextLabel: overrides.createTextLabel ?? baseIo.createTextLabel,
+    createRichTextNode: () => "rich_text",
   };
 }
 

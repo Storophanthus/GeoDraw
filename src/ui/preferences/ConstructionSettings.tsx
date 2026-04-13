@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useGeoStore } from "../../state/geoStore";
 import { COLOR_PROFILE_OPTIONS, getCanvasColorTheme, type CanvasColorTheme } from "../../state/colorProfiles";
-import { toColorInputValue, parseNonNegativeNumber, parsePositiveNumber } from "./utils";
+import { ColorTokenField } from "../ColorField";
+import { parseNonNegativeNumber, parsePositiveNumber } from "./utils";
 
 const CANVAS_THEME_KEYS: Array<{ key: keyof CanvasColorTheme; label: string }> = [
     { key: "backgroundColor", label: "Canvas Background" },
@@ -164,34 +165,24 @@ export function ConstructionSettings() {
                             <label className="preferencesTokenLabel" htmlFor={`construction-canvas-${key}`}>
                                 {label}
                             </label>
-                            <div className="preferencesTokenControls">
-                                <input
-                                    className="preferencesTokenColor"
-                                    type="color"
-                                    value={toColorInputValue(effectiveValue) ?? "#000000"}
-                                    disabled={toColorInputValue(effectiveValue) === null}
-                                    onChange={(event) => setCanvasThemeValue(key, event.target.value)}
-                                    aria-label={`${label} color picker`}
-                                />
-                                <input
-                                    id={`construction-canvas-${key}`}
-                                    className="preferencesTokenInput"
-                                    type="text"
-                                    value={effectiveValue}
-                                    onChange={(event) => setCanvasThemeValue(key, event.target.value)}
-                                    spellCheck={false}
-                                    aria-label={`${label} value`}
-                                />
-                                <button
-                                    type="button"
-                                    className="preferencesTokenReset"
-                                    onClick={() => setCanvasThemeValue(key, baseValue)}
-                                    disabled={!isCustom}
-                                    aria-label={`Reset ${label} to palette`}
-                                >
-                                    Reset
-                                </button>
-                            </div>
+                            <ColorTokenField
+                                id={`construction-canvas-${key}`}
+                                value={effectiveValue}
+                                onChange={(nextValue) => setCanvasThemeValue(key, nextValue)}
+                                pickerAriaLabel={`${label} color picker`}
+                                textAriaLabel={`${label} value`}
+                                trailing={
+                                    <button
+                                        type="button"
+                                        className="preferencesTokenReset"
+                                        onClick={() => setCanvasThemeValue(key, baseValue)}
+                                        disabled={!isCustom}
+                                        aria-label={`Reset ${label} to palette`}
+                                    >
+                                        Reset
+                                    </button>
+                                }
+                            />
                         </div>
                     );
                 })}
@@ -244,50 +235,56 @@ export function ConstructionSettings() {
                     <label className="preferencesTokenLabel" htmlFor="construction-point-fill">
                         Point Fill
                     </label>
-                    <div className="preferencesTokenControls preferencesTokenControlsCompact">
-                        <input
-                            className="preferencesTokenColor"
-                            type="color"
-                            value={toColorInputValue(pointDefaults.fillColor) ?? "#000000"}
-                            disabled={toColorInputValue(pointDefaults.fillColor) === null}
-                            onChange={(event) => setPointDefault({ fillColor: event.target.value })}
-                            aria-label="Point fill color picker"
-                        />
-                        <input
-                            id="construction-point-fill"
-                            className="preferencesTokenInput"
-                            type="text"
-                            value={pointDefaults.fillColor}
-                            onChange={(event) => setPointDefault({ fillColor: event.target.value })}
-                            spellCheck={false}
-                            aria-label="Point fill color"
-                        />
-                    </div>
+                    <ColorTokenField
+                        id="construction-point-fill"
+                        value={pointDefaults.fillColor}
+                        onChange={(nextValue) => setPointDefault({ fillColor: nextValue })}
+                        pickerAriaLabel="Point fill color picker"
+                        textAriaLabel="Point fill color"
+                        controlsClassName="preferencesTokenControlsCompact"
+                    />
                 </div>
 
                 <div role="listitem" className="preferencesTokenRow">
                     <label className="preferencesTokenLabel" htmlFor="construction-point-stroke">
                         Point Stroke
                     </label>
-                    <div className="preferencesTokenControls preferencesTokenControlsCompact">
-                        <input
-                            className="preferencesTokenColor"
-                            type="color"
-                            value={toColorInputValue(pointDefaults.strokeColor) ?? "#000000"}
-                            disabled={toColorInputValue(pointDefaults.strokeColor) === null}
-                            onChange={(event) => setPointDefault({ strokeColor: event.target.value })}
-                            aria-label="Point stroke color picker"
-                        />
-                        <input
-                            id="construction-point-stroke"
-                            className="preferencesTokenInput"
-                            type="text"
-                            value={pointDefaults.strokeColor}
-                            onChange={(event) => setPointDefault({ strokeColor: event.target.value })}
-                            spellCheck={false}
-                            aria-label="Point stroke color"
-                        />
-                    </div>
+                    <ColorTokenField
+                        id="construction-point-stroke"
+                        value={pointDefaults.strokeColor}
+                        onChange={(nextValue) => setPointDefault({ strokeColor: nextValue })}
+                        pickerAriaLabel="Point stroke color picker"
+                        textAriaLabel="Point stroke color"
+                        controlsClassName="preferencesTokenControlsCompact"
+                    />
+                </div>
+
+                <div role="listitem" className="preferencesTokenRow">
+                    <label className="preferencesTokenLabel" htmlFor="construction-point-label-color">
+                        Point Label
+                    </label>
+                    <ColorTokenField
+                        id="construction-point-label-color"
+                        value={pointDefaults.labelColor}
+                        onChange={(nextValue) => setPointDefault({ labelColor: nextValue })}
+                        pickerAriaLabel="Point label color picker"
+                        textAriaLabel="Point label color"
+                        controlsClassName="preferencesTokenControlsCompact"
+                    />
+                </div>
+
+                <div role="listitem" className="preferencesTokenRow">
+                    <label className="preferencesTokenLabel" htmlFor="construction-point-label-halo">
+                        Point Label Halo
+                    </label>
+                    <ColorTokenField
+                        id="construction-point-label-halo"
+                        value={pointDefaults.labelHaloColor}
+                        onChange={(nextValue) => setPointDefault({ labelHaloColor: nextValue })}
+                        pickerAriaLabel="Point label halo color picker"
+                        textAriaLabel="Point label halo color"
+                        controlsClassName="preferencesTokenControlsCompact"
+                    />
                 </div>
 
                 <div role="listitem" className="preferencesTokenRow">
@@ -316,25 +313,14 @@ export function ConstructionSettings() {
                     <label className="preferencesTokenLabel" htmlFor="construction-segment-stroke">
                         Segment Color
                     </label>
-                    <div className="preferencesTokenControls preferencesTokenControlsCompact">
-                        <input
-                            className="preferencesTokenColor"
-                            type="color"
-                            value={toColorInputValue(segmentDefaults.strokeColor) ?? "#000000"}
-                            disabled={toColorInputValue(segmentDefaults.strokeColor) === null}
-                            onChange={(event) => setSegmentDefault({ strokeColor: event.target.value })}
-                            aria-label="Segment color picker"
-                        />
-                        <input
-                            id="construction-segment-stroke"
-                            className="preferencesTokenInput"
-                            type="text"
-                            value={segmentDefaults.strokeColor}
-                            onChange={(event) => setSegmentDefault({ strokeColor: event.target.value })}
-                            spellCheck={false}
-                            aria-label="Segment color"
-                        />
-                    </div>
+                    <ColorTokenField
+                        id="construction-segment-stroke"
+                        value={segmentDefaults.strokeColor}
+                        onChange={(nextValue) => setSegmentDefault({ strokeColor: nextValue })}
+                        pickerAriaLabel="Segment color picker"
+                        textAriaLabel="Segment color"
+                        controlsClassName="preferencesTokenControlsCompact"
+                    />
                 </div>
 
                 <div role="listitem" className="preferencesTokenRow">
@@ -363,25 +349,14 @@ export function ConstructionSettings() {
                     <label className="preferencesTokenLabel" htmlFor="construction-line-stroke">
                         Line Color
                     </label>
-                    <div className="preferencesTokenControls preferencesTokenControlsCompact">
-                        <input
-                            className="preferencesTokenColor"
-                            type="color"
-                            value={toColorInputValue(lineDefaults.strokeColor) ?? "#000000"}
-                            disabled={toColorInputValue(lineDefaults.strokeColor) === null}
-                            onChange={(event) => setLineDefault({ strokeColor: event.target.value })}
-                            aria-label="Line color picker"
-                        />
-                        <input
-                            id="construction-line-stroke"
-                            className="preferencesTokenInput"
-                            type="text"
-                            value={lineDefaults.strokeColor}
-                            onChange={(event) => setLineDefault({ strokeColor: event.target.value })}
-                            spellCheck={false}
-                            aria-label="Line color"
-                        />
-                    </div>
+                    <ColorTokenField
+                        id="construction-line-stroke"
+                        value={lineDefaults.strokeColor}
+                        onChange={(nextValue) => setLineDefault({ strokeColor: nextValue })}
+                        pickerAriaLabel="Line color picker"
+                        textAriaLabel="Line color"
+                        controlsClassName="preferencesTokenControlsCompact"
+                    />
                 </div>
 
                 <div role="listitem" className="preferencesTokenRow">
@@ -410,75 +385,42 @@ export function ConstructionSettings() {
                     <label className="preferencesTokenLabel" htmlFor="construction-circle-stroke">
                         Circle Color
                     </label>
-                    <div className="preferencesTokenControls preferencesTokenControlsCompact">
-                        <input
-                            className="preferencesTokenColor"
-                            type="color"
-                            value={toColorInputValue(circleDefaults.strokeColor) ?? "#000000"}
-                            disabled={toColorInputValue(circleDefaults.strokeColor) === null}
-                            onChange={(event) => setCircleDefault({ strokeColor: event.target.value })}
-                            aria-label="Circle color picker"
-                        />
-                        <input
-                            id="construction-circle-stroke"
-                            className="preferencesTokenInput"
-                            type="text"
-                            value={circleDefaults.strokeColor}
-                            onChange={(event) => setCircleDefault({ strokeColor: event.target.value })}
-                            spellCheck={false}
-                            aria-label="Circle color"
-                        />
-                    </div>
+                    <ColorTokenField
+                        id="construction-circle-stroke"
+                        value={circleDefaults.strokeColor}
+                        onChange={(nextValue) => setCircleDefault({ strokeColor: nextValue })}
+                        pickerAriaLabel="Circle color picker"
+                        textAriaLabel="Circle color"
+                        controlsClassName="preferencesTokenControlsCompact"
+                    />
                 </div>
 
                 <div role="listitem" className="preferencesTokenRow">
                     <label className="preferencesTokenLabel" htmlFor="construction-polygon-fill">
                         Polygon Fill
                     </label>
-                    <div className="preferencesTokenControls preferencesTokenControlsCompact">
-                        <input
-                            className="preferencesTokenColor"
-                            type="color"
-                            value={toColorInputValue(polygonDefaults.fillColor ?? "") ?? "#000000"}
-                            disabled={toColorInputValue(polygonDefaults.fillColor ?? "") === null}
-                            onChange={(event) => setPolygonDefault({ fillColor: event.target.value })}
-                            aria-label="Polygon fill color picker"
-                        />
-                        <input
-                            id="construction-polygon-fill"
-                            className="preferencesTokenInput"
-                            type="text"
-                            value={polygonDefaults.fillColor ?? ""}
-                            onChange={(event) => setPolygonDefault({ fillColor: event.target.value })}
-                            spellCheck={false}
-                            aria-label="Polygon fill color"
-                        />
-                    </div>
+                    <ColorTokenField
+                        id="construction-polygon-fill"
+                        value={polygonDefaults.fillColor ?? ""}
+                        onChange={(nextValue) => setPolygonDefault({ fillColor: nextValue })}
+                        pickerAriaLabel="Polygon fill color picker"
+                        textAriaLabel="Polygon fill color"
+                        controlsClassName="preferencesTokenControlsCompact"
+                    />
                 </div>
 
                 <div role="listitem" className="preferencesTokenRow">
                     <label className="preferencesTokenLabel" htmlFor="construction-angle-mark-color">
                         Angle Mark Color
                     </label>
-                    <div className="preferencesTokenControls preferencesTokenControlsCompact">
-                        <input
-                            className="preferencesTokenColor"
-                            type="color"
-                            value={toColorInputValue(angleDefaults.markColor) ?? "#000000"}
-                            disabled={toColorInputValue(angleDefaults.markColor) === null}
-                            onChange={(event) => setAngleDefault({ markColor: event.target.value })}
-                            aria-label="Angle mark color picker"
-                        />
-                        <input
-                            id="construction-angle-mark-color"
-                            className="preferencesTokenInput"
-                            type="text"
-                            value={angleDefaults.markColor}
-                            onChange={(event) => setAngleDefault({ markColor: event.target.value })}
-                            spellCheck={false}
-                            aria-label="Angle mark color"
-                        />
-                    </div>
+                    <ColorTokenField
+                        id="construction-angle-mark-color"
+                        value={angleDefaults.markColor}
+                        onChange={(nextValue) => setAngleDefault({ markColor: nextValue })}
+                        pickerAriaLabel="Angle mark color picker"
+                        textAriaLabel="Angle mark color"
+                        controlsClassName="preferencesTokenControlsCompact"
+                    />
                 </div>
             </div>
         </>

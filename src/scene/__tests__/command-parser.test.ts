@@ -1,5 +1,5 @@
 import { parseCommandInput, type ParseContext } from "../../CommandParser";
-import { evaluateNumberExpression, type SceneModel } from "../points";
+import { evaluateAngleExpressionDegrees, evaluateNumberExpression, type SceneModel } from "../points";
 
 function mustExpr(input: string, ctx: ParseContext, expected: string) {
   const out = parseCommandInput(input, ctx);
@@ -91,6 +91,7 @@ mustExpr("acosd(0)", baseCtx, "90");
 mustExpr("atand(1)", baseCtx, "45");
 mustExpr("atan2d(1,0)", baseCtx, "90");
 mustExpr("Atan2d(1,1)", baseCtx, "45");
+mustExpr("Angle(A,B,C)+1", baseCtx, "37.8698976458");
 
 mustCmd("Point(1,2)", baseCtx, "CreatePointXY");
 mustCmd("Line(0,0,3,4)", baseCtx, "CreateLineXY");
@@ -192,9 +193,24 @@ if (circle3p.type !== "CreateCircleThreePoint" || circle3p.aId !== "pA" || circl
   throw new Error("Circle3P(A,B,O) mismatch");
 }
 
+const incircle = mustCmd("Incircle(A,B,O)", baseCtx, "CreateIncircle");
+if (incircle.type !== "CreateIncircle" || incircle.aId !== "pA" || incircle.bId !== "pB" || incircle.cId !== "pO") {
+  throw new Error("Incircle(A,B,O) mismatch");
+}
+
 const perp = mustCmd("Perpendicular(A,lAB)", baseCtx, "CreatePerpendicularLine");
 if (perp.type !== "CreatePerpendicularLine" || perp.throughId !== "pA" || perp.base.type !== "line" || perp.base.id !== "lAB") {
   throw new Error("Perpendicular(A,lAB) mismatch");
+}
+
+const perpBis = mustCmd("PerpBisector(A,B)", baseCtx, "CreatePerpendicularBisector");
+if (perpBis.type !== "CreatePerpendicularBisector" || perpBis.aId !== "pA" || perpBis.bId !== "pB") {
+  throw new Error("PerpBisector(A,B) mismatch");
+}
+
+const perpBisLong = mustCmd("PerpendicularBisector(A,B)", baseCtx, "CreatePerpendicularBisector");
+if (perpBisLong.type !== "CreatePerpendicularBisector" || perpBisLong.aId !== "pA" || perpBisLong.bId !== "pB") {
+  throw new Error("PerpendicularBisector(A,B) mismatch");
 }
 
 const parallel = mustCmd("Parallel(B,sAB)", baseCtx, "CreateParallelLine");
@@ -215,6 +231,11 @@ if (bis.type !== "CreateAngleBisector" || bis.aId !== "pA" || bis.bId !== "pB" |
 const angle = mustCmd("Angle(A,B,O)", baseCtx, "CreateAngle");
 if (angle.type !== "CreateAngle" || angle.aId !== "pA" || angle.bId !== "pB" || angle.cId !== "pO") {
   throw new Error("Angle(A,B,O) mismatch");
+}
+
+const markedAngle = mustCmd("MarkedAngle(A,B,O)", baseCtx, "CreateAngle");
+if (markedAngle.type !== "CreateAngle" || markedAngle.aId !== "pA" || markedAngle.bId !== "pB" || markedAngle.cId !== "pO") {
+  throw new Error("MarkedAngle(A,B,O) mismatch");
 }
 
 const angleFixed = mustCmd("AngleFixed(B,A,30,CW)", baseCtx, "CreateAngleFixed");
@@ -351,6 +372,14 @@ const sceneScalarFn = evaluateNumberExpression(sceneDistanceParity, "sin(pi/2)+D
 if (!sceneScalarFn.ok || Math.abs(sceneScalarFn.value - 6) > 1e-9) {
   throw new Error(`Scene scalar function parity mismatch: ${JSON.stringify(sceneScalarFn)}`);
 }
+const sceneAngleFn = evaluateNumberExpression(sceneDistanceParity, "Angle(A,B,C)");
+if (!sceneAngleFn.ok || Math.abs(sceneAngleFn.value - 36.86989764584402) > 1e-9) {
+  throw new Error(`Scene Angle(A,B,C) mismatch: ${JSON.stringify(sceneAngleFn)}`);
+}
+const sceneAngleExpr = evaluateAngleExpressionDegrees(sceneDistanceParity, "Angle(A,B,C)");
+if (!sceneAngleExpr.ok || Math.abs(sceneAngleExpr.valueDeg - 36.86989764584402) > 1e-9) {
+  throw new Error(`Scene angle-expression Angle(A,B,C) mismatch: ${JSON.stringify(sceneAngleExpr)}`);
+}
 const sceneInvTrigFn = evaluateNumberExpression(sceneDistanceParity, "atan2(4,3)+asin(1)-acos(0)");
 if (!sceneInvTrigFn.ok || Math.abs(sceneInvTrigFn.value - Math.atan2(4, 3)) > 1e-9) {
   throw new Error(`Scene inverse trig parity mismatch: ${JSON.stringify(sceneInvTrigFn)}`);
@@ -410,6 +439,11 @@ const assignLine = mustAssignObject("l = Line(A,B)", baseCtx, "l", "CreateLineBy
 if (assignLine.type !== "CreateLineByPoints" || assignLine.aId !== "pA" || assignLine.bId !== "pB") {
   throw new Error("l = Line(A,B) mismatch");
 }
+mustAssignScalar("t = Angle(A,B,C)", baseCtx, "t", 36.86989764584402);
+const assignMarkedAngle = mustAssignObject("ang = MarkedAngle(A,B,C)", baseCtx, "ang", "CreateAngle");
+if (assignMarkedAngle.type !== "CreateAngle" || assignMarkedAngle.aId !== "pA" || assignMarkedAngle.bId !== "pB" || assignMarkedAngle.cId !== "pC") {
+  throw new Error("ang = MarkedAngle(A,B,C) mismatch");
+}
 const assignRegularPolygon = mustAssignObject("rp = RegularPolygon(A,B,6)", baseCtx, "rp", "CreateRegularPolygonFromEdge");
 if (
   assignRegularPolygon.type !== "CreateRegularPolygonFromEdge" ||
@@ -424,6 +458,11 @@ if (
 const assignMidpoint = mustAssignObject("M = Midpoint(A,B)", baseCtx, "M", "CreateMidpointByPoints");
 if (assignMidpoint.type !== "CreateMidpointByPoints" || assignMidpoint.aId !== "pA" || assignMidpoint.bId !== "pB") {
   throw new Error("M = Midpoint(A,B) mismatch");
+}
+
+const assignPerpBisector = mustAssignObject("pb = PerpBisector(A,B)", baseCtx, "pb", "CreatePerpendicularBisector");
+if (assignPerpBisector.type !== "CreatePerpendicularBisector" || assignPerpBisector.aId !== "pA" || assignPerpBisector.bId !== "pB") {
+  throw new Error("pb = PerpBisector(A,B) mismatch");
 }
 
 const assignTranslated = mustAssignObject("T = Translate(A,O,B)", baseCtx, "T", "CreatePointByTranslation");
@@ -485,6 +524,11 @@ if (
   assignCircleStoredRadius.rExpr !== "r_1"
 ) {
   throw new Error("c_3=Circle(O,r_1) mismatch");
+}
+
+const assignIncircle = mustAssignObject("ic = Incircle(A,B,O)", baseCtx, "ic", "CreateIncircle");
+if (assignIncircle.type !== "CreateIncircle" || assignIncircle.aId !== "pA" || assignIncircle.bId !== "pB" || assignIncircle.cId !== "pO") {
+  throw new Error("ic = Incircle(A,B,O) mismatch");
 }
 
 mustError("Line(A,Z)", baseCtx, "Unknown point: Z");

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p1", "kind": "free", "name": "O", "captionTex": "O", "visible": true, "showLabel": "name", "position": { "x": 0, "y": 0 } },
+    { "id": "p2", "kind": "free", "name": "A", "captionTex": "A", "visible": true, "showLabel": "name", "position": { "x": 5, "y": 0 } },
+    { "id": "p3", "kind": "free", "name": "K", "captionTex": "K", "visible": true, "showLabel": "name", "position": { "x": 9.999, "y": 0 } },
+    { "id": "p4", "kind": "free", "name": "B", "captionTex": "B", "visible": true, "showLabel": "name", "position": { "x": 14.999, "y": 0 } },
+    {
+      "id": "p5",
+      "kind": "intersectionPoint",
+      "name": "P",
+      "captionTex": "P",
+      "visible": true,
+      "showLabel": "name",
+      "objA": { "type": "circle", "id": "c1" },
+      "objB": { "type": "circle", "id": "c2" },
+      "preferredWorld": { "x": 4.9995, "y": 0.0707089104183589 },
+      "branchIndex": 0
+    },
+    {
+      "id": "p6",
+      "kind": "intersectionPoint",
+      "name": "Q",
+      "captionTex": "Q",
+      "visible": true,
+      "showLabel": "name",
+      "objA": { "type": "circle", "id": "c1" },
+      "objB": { "type": "circle", "id": "c2" },
+      "preferredWorld": { "x": 4.9995, "y": -0.0707089104183589 },
+      "branchIndex": 1
+    }
+  ],
+  "segments": [],
+  "lines": [],
+  "circles": [
+    { "id": "c1", "kind": "twoPoint", "centerId": "p1", "throughId": "p2", "visible": true },
+    { "id": "c2", "kind": "twoPoint", "centerId": "p3", "throughId": "p4", "visible": true }
+  ],
+  "angles": [],
+  "numbers": []
+}

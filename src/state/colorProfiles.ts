@@ -8,6 +8,7 @@ import type {
   SceneModel,
   SceneTextLabelStyle,
 } from "../scene/points";
+import type { RichTextStyle } from "../richtext/model";
 
 export type ColorProfileId = "classic" | "grayscale_white_dot" | "beige_light" | "dark_mode";
 export type UiColorProfileId = "vanilla" | "grayscale" | "beige" | "dark";
@@ -52,6 +53,7 @@ export type SceneStyleDefaults = {
   angleDefaults: AngleStyle;
   labelToolDefaults: SceneTextLabelStyle;
   textboxToolDefaults: SceneTextLabelStyle;
+  richTextToolDefaults: RichTextStyle;
 };
 
 export const DEFAULT_COLOR_PROFILE_ID: ColorProfileId = "beige_light";
@@ -607,6 +609,12 @@ export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneSt
       boxWidthPx: 220,
       rotationDeg: 0,
     },
+    richTextToolDefaults: {
+      textColor: palette.pointLabel,
+      textSize: 16,
+      textAlign: "left",
+      rotationDeg: 0,
+    },
   };
 }
 
@@ -682,6 +690,10 @@ export function applyProfileColorsToDefaults(defaults: SceneStyleDefaults, profi
     },
     textboxToolDefaults: {
       ...defaults.textboxToolDefaults,
+      textColor: palette.pointLabel,
+    },
+    richTextToolDefaults: {
+      ...defaults.richTextToolDefaults,
       textColor: palette.pointLabel,
     },
   };

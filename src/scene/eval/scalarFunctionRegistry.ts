@@ -2,6 +2,7 @@ import type { MathNode } from "mathjs";
 import type { NumberExpressionEvalResult } from "./numericExpression";
 import { evaluateScalarDistanceArgs, type ScalarDistanceArg } from "./scalarDistance";
 import type { ScalarMeasureFunctionName } from "./scalarObjectMeasure";
+import { computeOrientedAngleRad } from "./angleMath";
 import {
   evalTriangleCircumradius,
   evalTriangleInradius,
@@ -70,6 +71,23 @@ function evaluateTriangleMetricByPoints(
   return { ok: true, value };
 }
 
+function evaluateAngleByPoints(
+  args: MathNode[],
+  adapters: ScalarFunctionRuntimeAdapters
+): NumberExpressionEvalResult {
+  if (!adapters.resolvePointArg) return { ok: false, error: "Angle(...) is not supported in this context" };
+  if (args.length !== 3) return { ok: false, error: "Angle(...) expects 3 point arguments" };
+  const a = adapters.resolvePointArg(args[0].toString());
+  if (!a.ok) return a;
+  const b = adapters.resolvePointArg(args[1].toString());
+  if (!b.ok) return b;
+  const c = adapters.resolvePointArg(args[2].toString());
+  if (!c.ok) return c;
+  const theta = computeOrientedAngleRad(a.value, b.value, c.value);
+  if (theta === null) return { ok: false, error: "Angle(...) is undefined for coincident points" };
+  return { ok: true, value: (theta * 180) / Math.PI };
+}
+
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
 
@@ -134,6 +152,8 @@ const FUNCTION_REGISTRY = new Map<string, ScalarFunctionSpec>([
     "Circumradius",
     rawFn((args, adapters) => evaluateTriangleMetricByPoints("Circumradius", args, adapters)),
   ],
+  ["Angle", rawFn((args, adapters) => evaluateAngleByPoints(args, adapters))],
+  ["angle", rawFn((args, adapters) => evaluateAngleByPoints(args, adapters))],
   ["sin", SHARED_NUMERIC_SPECS.sin],
   ["Sin", SHARED_NUMERIC_SPECS.sin],
   ["cos", SHARED_NUMERIC_SPECS.cos],

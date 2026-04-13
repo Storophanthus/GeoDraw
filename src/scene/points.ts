@@ -27,6 +27,7 @@ import {
 import { evalPointUncheckedInSceneWithFacades } from "./eval/scenePointEvalFacade";
 import { evalPointWithCtxInScene } from "./eval/pointRuntime";
 import { type SceneEvalContext } from "./eval/sceneContextBuilder";
+import type { RichTextDocument, RichTextStyle } from "../richtext/model";
 
 export {
   isNameUnique,
@@ -785,6 +786,22 @@ export type SceneTextLabel = {
   style: SceneTextLabelStyle;
 };
 
+export type SceneRichTextStyle = RichTextStyle;
+
+export type SceneRichTextNode = {
+  id: string;
+  type: "richText";
+  name: string;
+  visible: boolean;
+  positionWorld: Vec2;
+  document: RichTextDocument;
+  style: SceneRichTextStyle;
+  boundsPx?: {
+    widthPx: number;
+    heightPx: number;
+  };
+};
+
 export type SceneModel = {
   points: ScenePoint[];
   vectors?: SceneVector[];
@@ -795,6 +812,7 @@ export type SceneModel = {
   angles: SceneAngle[];
   numbers: SceneNumber[];
   textLabels?: SceneTextLabel[];
+  richTextNodes?: SceneRichTextNode[];
   geometryLayerOrder?: SceneGeometryLayerRef[];
 };
 
@@ -917,7 +935,14 @@ function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): n
   });
 }
 
-export { computeConvexAngleRad, computeOrientedAngleRad, isRightAngle, RIGHT_ANGLE_EPS } from "./eval/angleMath";
+export {
+  computeConvexAngleRad,
+  computeOrientedAngleRad,
+  isRightAngle,
+  isRightAngleSweepRad,
+  RIGHT_ANGLE_EPS,
+  RIGHT_ANGLE_SWEEP_EPS,
+} from "./eval/angleMath";
 
 export function evaluateAngleExpressionDegrees(scene: SceneModel, exprRaw: string): AngleExpressionEvalResult {
   return evaluateAngleExpressionDegreesInScenePublic(scene, exprRaw, {

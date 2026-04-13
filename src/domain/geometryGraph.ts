@@ -1,7 +1,7 @@
 import type { GeometryObjectRef, SceneModel } from "../scene/points";
 import type { SelectedObject } from "../state/slices/storeTypes";
 
-type NodeType = "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number";
+type NodeType = "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | "number";
 type NodeKey = `${NodeType}:${string}`;
 
 type Graph = {
@@ -27,6 +27,7 @@ function selectedToKey(selected: Exclude<SelectedObject, null>): NodeKey {
   if (selected.type === "point") return key("point", selected.id);
   if (selected.type === "angle") return key("angle", selected.id);
   if (selected.type === "textLabel") return key("textLabel", selected.id);
+  if (selected.type === "richText") return key("richText", selected.id);
   return key("number", selected.id);
 }
 
@@ -215,6 +216,9 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
   for (const label of scene.textLabels ?? []) {
     ensureNode(graph, key("textLabel", label.id));
   }
+  for (const node of scene.richTextNodes ?? []) {
+    ensureNode(graph, key("richText", node.id));
+  }
 
   return graph;
 }
@@ -280,9 +284,10 @@ export function applyDeletion(scene: SceneModel, deleted: Set<NodeKey>): SceneMo
   const polygons = scene.polygons.filter((p) => !drop("polygon", p.id));
   const angles = scene.angles.filter((a) => !drop("angle", a.id));
   const textLabels = (scene.textLabels ?? []).filter((label) => !drop("textLabel", label.id));
+  const richTextNodes = (scene.richTextNodes ?? []).filter((node) => !drop("richText", node.id));
   const numbers = scene.numbers.filter((n) => !drop("number", n.id));
 
-  return { ...scene, points, segments, lines, circles, polygons, angles, textLabels, numbers };
+  return { ...scene, points, segments, lines, circles, polygons, angles, textLabels, richTextNodes, numbers };
 }
 
 export function isSelectedObjectAlive(scene: SceneModel, selected: SelectedObject): boolean {
@@ -294,5 +299,6 @@ export function isSelectedObjectAlive(scene: SceneModel, selected: SelectedObjec
   if (selected.type === "polygon") return scene.polygons.some((p) => p.id === selected.id);
   if (selected.type === "angle") return scene.angles.some((a) => a.id === selected.id);
   if (selected.type === "textLabel") return (scene.textLabels ?? []).some((label) => label.id === selected.id);
+  if (selected.type === "richText") return (scene.richTextNodes ?? []).some((node) => node.id === selected.id);
   return scene.numbers.some((n) => n.id === selected.id);
 }

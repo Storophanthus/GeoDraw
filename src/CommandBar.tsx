@@ -327,6 +327,16 @@ export function CommandBar() {
       return;
     }
 
+    if (cmd.type === "CreatePerpendicularBisector") {
+      const lineId = commandBarApi.createPerpendicularBisector(cmd.aId, cmd.bId);
+      if (!lineId) {
+        setStatus({ kind: "error", text: "Cannot construct perpendicular bisector" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created line ${lineId}` });
+      return;
+    }
+
     if (cmd.type === "CreateParallelLine") {
       const lineId = createParallelLine(cmd.throughId, cmd.base);
       if (!lineId) {
@@ -412,6 +422,16 @@ export function CommandBar() {
       const circleId = createCircleFixedRadius(cmd.centerId, radiusExpr);
       if (!circleId) {
         setStatus({ kind: "error", text: "Cannot construct circle" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created circle ${circleId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateIncircle") {
+      const circleId = commandBarApi.createIncircle(cmd.aId, cmd.bId, cmd.cId);
+      if (!circleId) {
+        setStatus({ kind: "error", text: "Cannot construct incircle" });
         return;
       }
       setStatus({ kind: "ok", text: `Created circle ${circleId}` });

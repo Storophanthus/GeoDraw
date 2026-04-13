@@ -39,6 +39,7 @@ export type UiSliceState = {
     polygonStyle: import("../../scene/points").PolygonStyle | null;
     angleStyle: Partial<import("../../scene/points").AngleStyle> | null;
     textLabelStyle: import("../../scene/points").SceneTextLabelStyle | null;
+    richTextStyle: import("../../richtext/model").RichTextStyle | null;
     pointShowLabel: import("../../scene/points").ShowLabelMode | null;
     objectShowLabel: boolean | null;
   };
@@ -83,6 +84,7 @@ export function createUiSliceState(): UiSliceState {
       polygonStyle: null,
       angleStyle: null,
       textLabelStyle: null,
+      richTextStyle: null,
       pointShowLabel: null,
       objectShowLabel: null,
     },

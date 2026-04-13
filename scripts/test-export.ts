@@ -15,11 +15,13 @@ import type {
   SceneNumber,
   ScenePoint,
   ScenePolygon,
+  SceneRichTextNode,
   SceneSegment,
   SceneTextLabel,
   ShowLabelMode,
 } from "../src/scene/points.ts";
 import { getPointWorldPos } from "../src/scene/points.ts";
+import { parseRichTextSourceToDocument } from "../src/richtext/document.ts";
 import { compileTikzSnippet } from "./compile-tex.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -73,6 +75,13 @@ const defaultTextLabelStyle: SceneTextLabel["style"] = {
   rotationDeg: 0,
 };
 
+const defaultRichTextStyle: SceneRichTextNode["style"] = {
+  textColor: "#111111",
+  textSize: 12,
+  textAlign: "left",
+  rotationDeg: 0,
+};
+
 async function main(): Promise<void> {
   const files = (await readdir(fixtureDir))
     .filter((name) => name.endsWith(".json"))
@@ -118,6 +127,7 @@ function hydrateScene(raw: {
   polygons?: Array<Record<string, unknown>>;
   angles?: Array<Record<string, unknown>>;
   textLabels?: Array<Record<string, unknown>>;
+  richTextNodes?: Array<Record<string, unknown>>;
 }): SceneModel {
   const points = (raw.points ?? []).map(hydratePoint);
   const numbers = (raw.numbers ?? []).map(hydrateNumber);
@@ -127,7 +137,8 @@ function hydrateScene(raw: {
   const polygons = (raw.polygons ?? []).map(hydratePolygon);
   const angles = (raw.angles ?? []).map(hydrateAngle);
   const textLabels = (raw.textLabels ?? []).map(hydrateTextLabel);
-  return { points, numbers, lines, segments, circles, polygons, angles, textLabels };
+  const richTextNodes = (raw.richTextNodes ?? []).map(hydrateRichTextNode);
+  return { points, numbers, lines, segments, circles, polygons, angles, textLabels, richTextNodes };
 }
 
 function hydratePoint(raw: Record<string, unknown>): ScenePoint {
@@ -176,6 +187,23 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
   }
   if (kind === "circleCenter") {
     return { ...base, kind: "circleCenter", circleId: String(def.circleId) };
+  }
+  if (kind === "triangleCenter") {
+    return {
+      ...base,
+      kind: "triangleCenter",
+      centerKind:
+        String(def.centerKind) === "centroid"
+          ? "centroid"
+          : String(def.centerKind) === "circumcenter"
+            ? "circumcenter"
+            : String(def.centerKind) === "orthocenter"
+              ? "orthocenter"
+              : "incenter",
+      aId: String(def.aId),
+      bId: String(def.bId),
+      cId: String(def.cId),
+    };
   }
   if (kind === "midpointPoints") {
     return { ...base, kind: "midpointPoints", aId: String(def.aId), bId: String(def.bId) };
@@ -453,6 +481,34 @@ function hydrateTextLabel(raw: Record<string, unknown>): SceneTextLabel {
   };
 }
 
+function hydrateRichTextNode(raw: Record<string, unknown>): SceneRichTextNode {
+  const style = (raw.style as SceneRichTextNode["style"] | undefined) ?? defaultRichTextStyle;
+  const positionWorld = isVec2Like(raw.positionWorld) ? raw.positionWorld : { x: 0, y: 0 };
+  const boundsRaw = raw.boundsPx as { widthPx?: unknown; heightPx?: unknown } | undefined;
+  const boundsPx =
+    boundsRaw && Number.isFinite(boundsRaw.widthPx) && Number.isFinite(boundsRaw.heightPx)
+      ? { widthPx: Number(boundsRaw.widthPx), heightPx: Number(boundsRaw.heightPx) }
+      : undefined;
+  return {
+    id: String(raw.id),
+    type: "richText",
+    name: String(raw.name ?? raw.id),
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    positionWorld,
+    boundsPx,
+    document:
+      raw.document && typeof raw.document === "object"
+        ? (raw.document as SceneRichTextNode["document"])
+        : parseRichTextSourceToDocument(String(raw.source ?? "")),
+    style: {
+      textColor: style.textColor,
+      textSize: style.textSize,
+      textAlign: style.textAlign ?? "left",
+      rotationDeg: style.rotationDeg ?? 0,
+    },
+  };
+}
+
 function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene: SceneModel, exportError: Error | null): void {
   if (fileName === "object-labels-basic.json") {
     if (exportError) throw exportError;
@@ -521,6 +577,110 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "line-circle-common-forward-ref-korea14.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzInterLC[common=B](M,tkzPerp_1)(O,A) \\tkzGetPoints{Bp}{B}")) {
+      throw new Error("Regression: exporter emitted a forward common=B reference before B was defined.");
+    }
+    const definesBFirst =
+      /\\tkzInterLC\[near\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{B\}\{(?:Bp|tkzInterLC_\d+_other)\}/.test(tikz) &&
+      /\\tkzInterLC\[common=B\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{Bp\}\{B\}/.test(tikz);
+    const definesBpFirst =
+      /\\tkzInterLC\[near\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{(?:Bp|tkzInterLC_\d+_other)\}\{(?:Bp|tkzInterLC_\d+_other)\}/.test(tikz) &&
+      /\\tkzInterLC\[common=Bp\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{B\}\{Bp\}/.test(tikz);
+    if (!definesBFirst && !definesBpFirst) {
+      throw new Error("Expected korea14 fixture to export the sibling line-circle pair without any forward common reference.");
+    }
+  }
+
+  if (fileName === "circle-segment-finite-single-root-fail-closed.json") {
+    if (!exportError) {
+      throw new Error("Finite-domain single segment-circle root should fail closed in exporter.");
+    }
+    if (!exportError.message.includes("finite-domain single segment-circle intersection")) {
+      throw new Error("Expected explicit finite-domain single segment-circle exporter error.");
+    }
+    return;
+  }
+
+  if (fileName === "generic-circle-segment-finite-single-root-fail-closed.json") {
+    if (!exportError) {
+      throw new Error("Generic finite-domain single segment-circle root should fail closed in exporter.");
+    }
+    if (!exportError.message.includes("finite-domain single segment-circle intersection")) {
+      throw new Error("Expected explicit finite-domain single segment-circle exporter error for generic mixed intersection.");
+    }
+    return;
+  }
+
+  if (fileName === "circle-line-exclude.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterLC\[common=C\]\((?:C,D|D,C)\)\(A,B\)\s+\\tkzGetPoints\{F\}\{C\}/.test(tikz)) {
+      throw new Error("Expected dedicated circle-line exclude fixture to export F using common=C.");
+    }
+  }
+
+  if (fileName === "generic-line-circle-exclude-common.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterLC\[common=A\]\((?:A,O|O,A)\)\(O,A\)\s+\\tkzGetPoints\{Ap\}\{A\}/.test(tikz)) {
+      throw new Error("Expected generic line-circle exclude fixture to export Ap using common=A.");
+    }
+  }
+
+  if (fileName === "generic-circle-segment-exclude-common-swapped.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterLC\[common=A\]\((?:A,B|B,A)\)\(O,A\)\s+\\tkzGetPoints\{Ap\}\{A\}/.test(tikz)) {
+      throw new Error("Expected generic swapped circle-segment exclude fixture to export Ap using common=A.");
+    }
+  }
+
+  if (fileName === "circle-circle-invalid-common-stale-point.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("[common=Q]")) {
+      throw new Error("Expected stale invalid exclude point to be rejected as circle-circle common.");
+    }
+    if (!/\\tkzInterCC(?:\[[^\]]*\])?\((?:O,A|A,O)\)\((?:K,B|B,K)\)\s+\\tkzGetPoints(?:\{P\}\{tkzInterCC_\d+_other\}|\{tkzInterCC_\d+_other\}\{P\})/.test(tikz)) {
+      throw new Error("Expected stale invalid circle-circle common fixture to fall back to ordinary InterCC export.");
+    }
+  }
+
+  if (fileName === "generic-circle-circle-exclude-common-swapped.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterCC\[common=A\]\((?:K,A|A,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints\{Ap\}\{A\}/.test(tikz)) {
+      throw new Error("Expected generic swapped circle-circle exclude fixture to export Ap using common=A.");
+    }
+  }
+
+  if (fileName === "generic-circle-circle-near-tangent.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterCC(?:\[[^\]]*\])?\((?:O,A|A,O)\)\((?:K,B|B,K)\)\s+\\tkzGetPoints(?:\{P\}\{tkzInterCC_\d+_other\}|\{tkzInterCC_\d+_other\}\{P\})/.test(tikz)) {
+      throw new Error("Expected near-tangent generic circle-circle fixture to export the first intersection.");
+    }
+    if (!/\\tkzInterCC\[common=P\]\((?:O,A|A,O)\)\((?:K,B|B,K)\)\s+\\tkzGetPoints\{Q\}\{P\}/.test(tikz)) {
+      throw new Error("Expected near-tangent generic circle-circle fixture to reuse P as common for Q.");
+    }
+  }
+
+  if (fileName === "generic-circle-circle-near-tangent-swapped.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterCC(?:\[[^\]]*\])?\((?:K,B|B,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints(?:\{P\}\{tkzInterCC_\d+_other\}|\{tkzInterCC_\d+_other\}\{P\})/.test(tikz)) {
+      throw new Error("Expected swapped near-tangent generic circle-circle fixture to export the first intersection with reversed circle order.");
+    }
+    if (!/\\tkzInterCC\[common=P\]\((?:K,B|B,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints\{Q\}\{P\}/.test(tikz)) {
+      throw new Error("Expected swapped near-tangent generic circle-circle fixture to reuse P as common for Q with reversed circle order.");
+    }
+  }
+
+  if (fileName === "line-circle-invalid-common-stale-point.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("[common=Q]")) {
+      throw new Error("Expected stale invalid exclude point to be rejected as line-circle common.");
+    }
+    if (!/\\tkzInterLC\[near\]\((?:A,O|O,A)\)\(O,A\)\s+\\tkzGetPoints(?:\{Ap\}\{tkzInterLC_\d+_other\}|\{tkzInterLC_\d+_other\}\{Ap\})/.test(tikz)) {
+      throw new Error("Expected stale invalid common fixture to fall back to near/swap line-circle export.");
+    }
+  }
+
   if (fileName === "text-label-modes.json") {
     if (exportError) throw exportError;
     if (!tikz.includes("\\fontsize{12.19pt}{14.628pt}\\selectfont")) {
@@ -531,6 +691,90 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("text width=122.222222222222pt")) {
       throw new Error("Expected mixed textbox export to preserve textbox wrap width in TikZ.");
+    }
+  }
+
+  if (fileName === "rich-text-node.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\node[anchor=north west")) {
+      throw new Error("Expected rich text fixture to export as a positioned node.");
+    }
+    if (!tikz.includes("A number $a$ is algebraic")) {
+      throw new Error("Expected rich text fixture to export paragraph text and inline math.");
+    }
+    if (!tikz.includes("$\\displaystyle {a}^{2}+1=0$")) {
+      throw new Error("Expected rich text fixture to export display math.");
+    }
+    const initMatch = /\\tkzInit\[xmin=([-0-9.]+),xmax=([-0-9.]+),ymin=([-0-9.]+),ymax=([-0-9.]+)\]/u.exec(tikz);
+    if (!initMatch) {
+      throw new Error("Expected rich text fixture to include a viewport.");
+    }
+    const [, xminRaw, xmaxRaw, yminRaw, ymaxRaw] = initMatch;
+    const xmin = Number(xminRaw);
+    const xmax = Number(xmaxRaw);
+    const ymin = Number(yminRaw);
+    const ymax = Number(ymaxRaw);
+    if (!(xmin < 42 && xmax > 47 && ymin < 10 && ymax > 11)) {
+      throw new Error(`Expected rich text bounds to contribute to export viewport, got ${initMatch[0]}`);
+    }
+  }
+
+  if (fileName === "color-basic-red-named.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("color=red")) {
+      throw new Error("Expected basic preset color fixture to export segment stroke as named red.");
+    }
+    if (tikz.includes("\\definecolor")) {
+      throw new Error("Expected basic preset color fixture to avoid definecolor in standard export.");
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (efficient.includes("\\definecolor")) {
+      throw new Error("Expected basic preset color fixture to avoid definecolor in efficient export.");
+    }
+  }
+
+  if (fileName === "color-xcolor-teal-named.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("color=teal")) {
+      throw new Error("Expected xcolor preset color fixture to export segment stroke as named teal.");
+    }
+    if (tikz.includes("\\definecolor")) {
+      throw new Error("Expected xcolor preset color fixture to avoid definecolor in standard export.");
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (efficient.includes("\\definecolor")) {
+      throw new Error("Expected xcolor preset color fixture to avoid definecolor in efficient export.");
+    }
+  }
+
+  if (fileName === "color-dvips-navyblue-named.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("color=NavyBlue")) {
+      throw new Error("Expected dvipsnames preset color fixture to export segment stroke as named NavyBlue.");
+    }
+    if (tikz.includes("\\definecolor")) {
+      throw new Error("Expected dvipsnames preset color fixture to avoid definecolor in standard export.");
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (efficient.includes("\\definecolor")) {
+      throw new Error("Expected dvipsnames preset color fixture to avoid definecolor in efficient export.");
+    }
+  }
+
+  if (fileName === "color-custom-definecolor.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\definecolor{gdC_123456}{RGB}{18,52,86}")) {
+      throw new Error("Expected custom color fixture to keep definecolor in standard export.");
+    }
+    if (!tikz.includes("color=gdC_123456")) {
+      throw new Error("Expected custom color fixture to use the defined gdC_123456 color in standard export.");
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (!efficient.includes("\\definecolor{c0}{RGB}{18,52,86}")) {
+      throw new Error("Expected custom color fixture to keep a custom definecolor in efficient export.");
+    }
+    if (!efficient.includes("color=c0")) {
+      throw new Error("Expected custom color fixture to use the simplified c0 color in efficient export.");
     }
   }
 
@@ -801,6 +1045,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "regression-line-coverage-j-o.json") {
+    if (exportError) throw exportError;
     if (!/\\tkzInterLL\(F,G\)\(E,D\)\s+\\tkzGetPoint\{J\}/.test(tikz)) {
       throw new Error("Regression: expected J to be defined from InterLL(F,G)(E,D).");
     }
@@ -998,9 +1243,9 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "angle-right-german.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-arc-dot angle to emit \\tkzMarkRightAngles.");
-    if (!tikz.includes("german")) throw new Error("Expected right-arc-dot angle to include german option.");
-    if (!tikz.includes("dotsize=")) throw new Error("Expected right-arc-dot angle to include dotsize option.");
+    if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-german angle to emit \\tkzMarkRightAngles.");
+    if (!tikz.includes("german")) throw new Error("Expected right-german angle to include german option.");
+    if (!tikz.includes("dotsize=")) throw new Error("Expected right-german angle to include dotsize option.");
   }
 
   if (fileName === "sector-basic.json") {
@@ -1014,13 +1259,10 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "undefined-circle-line-points.json") {
-    if (!exportError) {
-      throw new Error("Visible undefined circle-line points should fail closed in exporter.");
+    if (exportError) throw exportError;
+    if (/(^|[^A-Za-z])E([^A-Za-z]|$)/.test(tikz) || /(^|[^A-Za-z])F([^A-Za-z]|$)/.test(tikz)) {
+      throw new Error("Undefined visible points should be skipped from point/label export.");
     }
-    if (!exportError.message.includes("Cannot export visible undefined point")) {
-      throw new Error("Expected explicit visible undefined point exporter error.");
-    }
-    return;
   }
 
   if (fileName === "segment-mark-basic.json") {
@@ -1451,6 +1693,16 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (exportError) throw exportError;
     if (!tikz.includes("\\tkzDefCircle[R](O,3.5)")) {
       throw new Error("Expected fixed-radius circle fixture to emit \\tkzDefCircle[R](O,3.5).");
+    }
+  }
+
+  if (fileName === "circle-incircle-symbolic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefCircle[in](A,B,C) \\tkzGetPoints{D}{")) {
+      throw new Error("Expected incircle fixture to emit symbolic \\tkzDefCircle[in](A,B,C) construction.");
+    }
+    if (tikz.includes("\\tkzDefCircle[R](D,")) {
+      throw new Error("Expected incircle fixture to avoid numeric fixed-radius circle construction.");
     }
   }
 

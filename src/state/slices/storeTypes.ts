@@ -12,6 +12,7 @@ import type {
   SceneModel,
   SceneNumberDefinition,
   ScenePoint,
+  SceneRichTextStyle,
   SceneTextLabelStyle,
   ShowLabelMode,
   TextLabelToolKind,
@@ -63,6 +64,7 @@ export type SelectedObject =
   | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
   | { type: "textLabel"; id: string }
+  | { type: "richText"; id: string }
   | { type: "number"; id: string }
   | null;
 
@@ -254,6 +256,7 @@ export type GeoState = {
   nextNumberId: number;
   nextVectorId: number;
   nextTextLabelId: number;
+  nextRichTextId: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
@@ -263,6 +266,7 @@ export type GeoState = {
   objectLabelDefaults: ObjectLabelDefaults;
   labelToolDefaults: SceneTextLabelStyle;
   textboxToolDefaults: SceneTextLabelStyle;
+  richTextToolDefaults: SceneRichTextStyle;
   angleFixedTool: {
     angleExpr: string;
     direction: AngleFixedDirection;
@@ -290,6 +294,7 @@ export type GeoState = {
     polygonStyle: PolygonStyle | null;
     angleStyle: Partial<AngleStyle> | null;
     textLabelStyle: SceneTextLabelStyle | null;
+    richTextStyle: SceneRichTextStyle | null;
     pointShowLabel: ShowLabelMode | null;
     objectShowLabel: boolean | null;
   };
@@ -315,6 +320,7 @@ export type AppPreferencesState = Pick<
   | "objectLabelDefaults"
   | "labelToolDefaults"
   | "textboxToolDefaults"
+  | "richTextToolDefaults"
   | "angleFixedTool"
   | "circleFixedTool"
   | "regularPolygonTool"
@@ -377,6 +383,8 @@ export type GeoActions = {
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createNumber: (definition: SceneNumberDefinition, preferredName?: string) => string | null;
   createTextLabel: (world: Vec2, preset?: TextLabelToolKind) => string;
+  createRichTextNode: (world: Vec2) => string;
+  migrateTextLabelToRichTextNode: (id: string) => string | null;
 
   movePointTo: (id: string, world: Vec2) => void;
   movePolygonByWorldDelta: (id: string, deltaWorld: Vec2) => void;
@@ -385,6 +393,8 @@ export type GeoActions = {
   moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon" | "angle"; id: string }, world: Vec2) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
   moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
+  moveRichTextNodeTo: (id: string, world: Vec2) => void;
+  moveRichTextNodeByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
 
   setPointDefaults: (next: Partial<PointStyle>) => void;
@@ -396,6 +406,7 @@ export type GeoActions = {
   setObjectLabelDefaults: (next: Partial<ObjectLabelDefaults>) => void;
   setLabelToolDefaults: (next: Partial<SceneTextLabelStyle>) => void;
   setTextboxToolDefaults: (next: Partial<SceneTextLabelStyle>) => void;
+  setRichTextToolDefaults: (next: Partial<SceneRichTextStyle>) => void;
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
   setCircleFixedTool: (next: Partial<GeoState["circleFixedTool"]>) => void;
   setRegularPolygonTool: (next: Partial<GeoState["regularPolygonTool"]>) => void;
@@ -480,6 +491,17 @@ export type GeoActions = {
   ) => void;
   updateSelectedTextLabelStyle: (next: Partial<SceneTextLabelStyle>) => void;
   updateTextLabelStyleByIds: (ids: string[], next: Partial<SceneTextLabelStyle>) => void;
+  updateSelectedRichTextFields: (
+    next: Partial<Pick<NonNullable<SceneModel["richTextNodes"]>[number], "visible" | "name" | "positionWorld" | "boundsPx">>
+  ) => void;
+  updateRichTextFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<NonNullable<SceneModel["richTextNodes"]>[number], "visible" | "name" | "positionWorld" | "boundsPx">>
+  ) => void;
+  updateSelectedRichTextStyle: (next: Partial<SceneRichTextStyle>) => void;
+  updateRichTextStyleByIds: (ids: string[], next: Partial<SceneRichTextStyle>) => void;
+  updateSelectedRichTextDocument: (document: NonNullable<SceneModel["richTextNodes"]>[number]["document"]) => void;
+  updateRichTextDocumentByIds: (ids: string[], document: NonNullable<SceneModel["richTextNodes"]>[number]["document"]) => void;
   setObjectVisibility: (
     obj: Exclude<SelectedObject, null>,
     visible: boolean

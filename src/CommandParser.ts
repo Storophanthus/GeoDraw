@@ -37,6 +37,8 @@ export type Command =
   | { type: "CreateMidpointByPoints"; aId: string; bId: string }
   | { type: "CreateMidpointBySegment"; segId: string }
   | { type: "CreateTriangleCenterPoint"; centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter"; aId: string; bId: string; cId: string }
+  | { type: "CreatePerpendicularBisector"; aId: string; bId: string }
+  | { type: "CreateIncircle"; aId: string; bId: string; cId: string }
   | { type: "CreatePointByTranslation"; pointId: string; fromId: string; toId: string }
   | { type: "CreatePointByRotation"; pointId: string; centerId: string; angleDeg: number; angleExpr: string; direction: "CCW" | "CW" }
   | { type: "CreatePointByDilation"; pointId: string; centerId: string; factorExpr: string }
@@ -511,6 +513,24 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     };
   }
 
+  if (name === "Incircle") {
+    if (args.length !== 3) return err("Incircle(A,B,C) expects 3 point labels");
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    const cLabel = asIdentifier(args[2]);
+    if (!aLabel || !bLabel || !cLabel) return err("Incircle(A,B,C) expects point labels");
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const c = resolvePointIdentifier(cLabel, ctx);
+    if (!c.ok) return err(c.message);
+    return {
+      kind: "cmd",
+      cmd: { type: "CreateIncircle", aId: a.id, bId: b.id, cId: c.id },
+    };
+  }
+
   if (name === "Translate") {
     if (args.length !== 3) return err("Translate(P, A, B) expects 3 point labels");
     const pointLabel = asIdentifier(args[0]);
@@ -625,6 +645,18 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     };
   }
 
+  if (name === "PerpBisector" || name === "PerpendicularBisector") {
+    if (args.length !== 2) return err(`${name}(A,B) expects 2 point labels`);
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    if (!aLabel || !bLabel) return err(`${name}(A,B) expects point labels`);
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    return { kind: "cmd", cmd: { type: "CreatePerpendicularBisector", aId: a.id, bId: b.id } };
+  }
+
   if (name === "Parallel") {
     if (args.length !== 2) return err("Parallel(P, l) expects 2 arguments");
     const throughLabel = asIdentifier(args[0]);
@@ -668,12 +700,13 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return { kind: "cmd", cmd: { type: "CreateAngleBisector", aId: a.id, bId: b.id, cId: c.id } };
   }
 
-  if (name === "Angle") {
-    if (args.length !== 3) return err("Angle(A,B,C) expects 3 point labels");
+  if (name === "Angle" || name === "MarkedAngle") {
+    const sig = name === "MarkedAngle" ? "MarkedAngle(A,B,C)" : "Angle(A,B,C)";
+    if (args.length !== 3) return err(`${sig} expects 3 point labels`);
     const aLabel = asIdentifier(args[0]);
     const bLabel = asIdentifier(args[1]);
     const cLabel = asIdentifier(args[2]);
-    if (!aLabel || !bLabel || !cLabel) return err("Angle(A,B,C) expects point labels");
+    if (!aLabel || !bLabel || !cLabel) return err(`${sig} expects point labels`);
     const a = resolvePointIdentifier(aLabel, ctx);
     if (!a.ok) return err(a.message);
     const b = resolvePointIdentifier(bLabel, ctx);
@@ -878,6 +911,15 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
 
     const commandMatch = assignment.right.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
     if (commandMatch) {
+      if (commandMatch[1] === "Angle") {
+        const rhsAngleExpr = evaluatePointOrScalarExpression(assignment.right, ctx);
+        if (rhsAngleExpr.ok) {
+          if (rhsAngleExpr.value.kind === "point") {
+            return { kind: "assignObject", name: left, cmd: { type: "CreatePointXY", x: rhsAngleExpr.value.x, y: rhsAngleExpr.value.y } };
+          }
+          return { kind: "assignScalar", name: left, value: rhsAngleExpr.value.value, expr: assignment.right.trim() };
+        }
+      }
       const args = splitArgs(commandMatch[2]);
       const rhsCmd = args ? parseCommand(commandMatch[1], args, ctx) : err("Invalid command arguments");
       if (rhsCmd.kind !== "error") {

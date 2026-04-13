@@ -1,0 +1,283 @@
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ChangeEvent,
+  type ChangeEventHandler,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
+import { EXPORT_FRIENDLY_COLOR_PRESETS, PRIMARY_EXPORT_FRIENDLY_COLOR_PRESETS } from "../exportFriendlyColors";
+import { toColorInputValue } from "./preferences/utils";
+
+function joinClassNames(...parts: Array<string | undefined | false | null>) {
+  return parts.filter(Boolean).join(" ");
+}
+
+const PRIMARY_SWATCHES = PRIMARY_EXPORT_FRIENDLY_COLOR_PRESETS.map((preset) => ({
+  id: preset.id,
+  hex: preset.hex,
+  label: preset.label,
+}));
+
+const PRIMARY_IDS = new Set(PRIMARY_EXPORT_FRIENDLY_COLOR_PRESETS.map((preset) => preset.id));
+
+const SECONDARY_SWATCHES = EXPORT_FRIENDLY_COLOR_PRESETS
+  .filter((preset) => !PRIMARY_IDS.has(preset.id))
+  .map((preset) => ({
+    id: preset.id,
+    hex: preset.hex,
+    label: preset.label,
+  }));
+
+type ColorSwatchInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
+  value: string;
+  variant?: "panel" | "token";
+};
+
+function createColorChangeEvent(nextValue: string): ChangeEvent<HTMLInputElement> {
+  return {
+    target: { value: nextValue } as EventTarget & HTMLInputElement,
+    currentTarget: { value: nextValue } as EventTarget & HTMLInputElement,
+  } as ChangeEvent<HTMLInputElement>;
+}
+
+export function ColorSwatchInput({
+  value,
+  variant = "panel",
+  className,
+  disabled,
+  onChange,
+  style,
+  ...props
+}: ColorSwatchInputProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const nativeInputRef = useRef<HTMLInputElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
+  const pickerValue = toColorInputValue(value) ?? "#000000";
+  const nativeChange = onChange as ChangeEventHandler<HTMLInputElement> | undefined;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePopoverPosition = () => {
+      const trigger = rootRef.current;
+      const popover = popoverRef.current;
+      if (!trigger || !popover) return;
+
+      const triggerRect = trigger.getBoundingClientRect();
+      const popoverRect = popover.getBoundingClientRect();
+      const gutter = 12;
+      const width = popoverRect.width || 248;
+      const height = popoverRect.height || 248;
+
+      let left = triggerRect.left;
+      if (left + width > window.innerWidth - gutter) {
+        left = window.innerWidth - width - gutter;
+      }
+      left = Math.max(gutter, left);
+
+      let top = triggerRect.bottom + 10;
+      const fitsBelow = top + height <= window.innerHeight - gutter;
+      const fitsAbove = triggerRect.top - 10 - height >= gutter;
+      if (!fitsBelow && fitsAbove) {
+        top = triggerRect.top - height - 10;
+      } else if (!fitsBelow) {
+        top = Math.max(gutter, window.innerHeight - height - gutter);
+      }
+
+      setPopoverStyle({
+        position: "fixed",
+        left,
+        top,
+      });
+    };
+
+    const raf = requestAnimationFrame(updatePopoverPosition);
+    window.addEventListener("resize", updatePopoverPosition);
+    window.addEventListener("scroll", updatePopoverPosition, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", updatePopoverPosition);
+      window.removeEventListener("scroll", updatePopoverPosition, true);
+    };
+  }, [open, variant]);
+
+  const commitValue = (nextValue: string) => {
+    nativeChange?.(createColorChangeEvent(nextValue));
+  };
+
+  const openNativePicker = () => {
+    setOpen(false);
+    requestAnimationFrame(() => {
+      nativeInputRef.current?.click();
+    });
+  };
+
+  return (
+    <div ref={rootRef} className={joinClassNames("colorField", open && "colorFieldOpen")}>
+      <button
+        type="button"
+        className={joinClassNames(
+          "colorFieldTrigger",
+          variant === "token" ? "preferencesTokenColor" : "colorInput",
+          className
+        )}
+        style={style as CSSProperties | undefined}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        aria-label={props["aria-label"] ?? "Choose color"}
+      >
+        <span className="colorFieldSwatch" style={{ background: pickerValue }} aria-hidden />
+      </button>
+
+      <input
+        ref={nativeInputRef}
+        className="colorFieldNativeInput"
+        type="color"
+        value={pickerValue}
+        disabled={disabled}
+        onChange={(event) => {
+          nativeChange?.(event);
+          setOpen(false);
+        }}
+        tabIndex={-1}
+        aria-hidden
+      />
+
+      {open &&
+        !disabled &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            className={joinClassNames(
+              "colorFieldPopover",
+              "colorFieldPopoverFloating",
+              variant === "token" ? "colorFieldPopoverToken" : "colorFieldPopoverPanel"
+            )}
+            style={popoverStyle ?? undefined}
+          >
+            <div className="colorFieldSection colorFieldSectionPrimary">
+              <div className="colorFieldSectionLabel">Main</div>
+              <div className="colorFieldPrimaryGrid">
+                {PRIMARY_SWATCHES.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={joinClassNames(
+                      "colorFieldPreset",
+                      preset.hex === pickerValue && "colorFieldPresetActive"
+                    )}
+                    onClick={() => {
+                      commitValue(preset.hex);
+                      setOpen(false);
+                    }}
+                    title={preset.label}
+                    aria-label={preset.label}
+                  >
+                    <span className="colorFieldPresetSwatch" style={{ background: preset.hex }} aria-hidden />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="colorFieldSection colorFieldSectionSecondary">
+              <div className="colorFieldSectionLabel">Named</div>
+              <div className="colorFieldPresetGrid">
+                {SECONDARY_SWATCHES.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={joinClassNames(
+                      "colorFieldPreset",
+                      preset.hex === pickerValue && "colorFieldPresetActive"
+                    )}
+                    onClick={() => {
+                      commitValue(preset.hex);
+                      setOpen(false);
+                    }}
+                    title={preset.label}
+                    aria-label={preset.label}
+                  >
+                    <span className="colorFieldPresetSwatch" style={{ background: preset.hex }} aria-hidden />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button type="button" className="colorFieldMoreButton" onClick={openNativePicker}>
+              Custom…
+            </button>
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
+type ColorTokenFieldProps = {
+  id?: string;
+  value: string;
+  onChange: (nextValue: string) => void;
+  pickerAriaLabel: string;
+  textAriaLabel: string;
+  trailing?: ReactNode;
+  spellCheck?: boolean;
+  controlsClassName?: string;
+};
+
+export function ColorTokenField({
+  id,
+  value,
+  onChange,
+  pickerAriaLabel,
+  textAriaLabel,
+  trailing,
+  spellCheck = false,
+  controlsClassName,
+}: ColorTokenFieldProps) {
+  return (
+    <div className={joinClassNames("preferencesTokenControls", controlsClassName)}>
+      <ColorSwatchInput
+        variant="token"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={pickerAriaLabel}
+      />
+      <input
+        id={id}
+        className="preferencesTokenInput"
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        spellCheck={spellCheck}
+        aria-label={textAriaLabel}
+      />
+      {trailing}
+    </div>
+  );
+}

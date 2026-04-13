@@ -1,4 +1,4 @@
-import { resolveTextLabelRenderMode, type PointStyle, type SceneModel, type SceneTextLabelStyle } from "../../scene/points";
+import { resolveTextLabelRenderMode, type PointStyle, type SceneModel, type SceneRichTextStyle, type SceneTextLabelStyle } from "../../scene/points";
 
 export function pointStyleEqual(a: PointStyle, b: PointStyle): boolean {
     return (
@@ -96,6 +96,15 @@ export function textLabelStyleEqual(a: SceneTextLabelStyle, b: SceneTextLabelSty
         Boolean(a.useTex) === Boolean(b.useTex) &&
         (a.boxWidthPx ?? null) === (b.boxWidthPx ?? null) &&
         (a.boxHeightPx ?? null) === (b.boxHeightPx ?? null) &&
+        (a.rotationDeg ?? 0) === (b.rotationDeg ?? 0)
+    );
+}
+
+export function richTextStyleEqual(a: SceneRichTextStyle, b: SceneRichTextStyle): boolean {
+    return (
+        a.textColor === b.textColor &&
+        a.textSize === b.textSize &&
+        a.textAlign === b.textAlign &&
         (a.rotationDeg ?? 0) === (b.rotationDeg ?? 0)
     );
 }

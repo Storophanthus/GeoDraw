@@ -14,6 +14,9 @@ export function drawPointSymbol(
 ): void {
   const r = Math.max(1.5, sizePx);
   ctx.save();
+  ctx.setLineDash([]);
+  ctx.lineCap = "butt";
+  ctx.lineJoin = "miter";
   ctx.lineWidth = strokeWidth;
   ctx.strokeStyle = strokeColor;
   ctx.fillStyle = fillColor;
@@ -28,6 +31,8 @@ export function drawPointSymbol(
   }
 
   if (shape === "x" || shape === "plus" || shape === "cross") {
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     ctx.globalAlpha = strokeOpacity;
     ctx.beginPath();
     if (shape === "x" || shape === "cross") {

@@ -17,7 +17,7 @@ const pointStyle = {
   labelOffsetPx: { x: 8, y: -8 },
 };
 
-function makeAngleStyle(labelPosWorld: { x: number; y: number }, labelText: string): AngleStyle {
+function makeAngleStyle(labelPosWorld: { x: number; y: number }, labelText: string, arcRadius = 1.95): AngleStyle {
   return {
     strokeColor: "#000000",
     strokeWidth: 1,
@@ -35,13 +35,18 @@ function makeAngleStyle(labelPosWorld: { x: number; y: number }, labelText: stri
     markPos: 0.5,
     markSize: 7.4,
     markColor: "#000000",
-    arcRadius: 1.95,
+    arcRadius,
     labelText,
     labelPosWorld,
     showLabel: true,
     showValue: false,
     promoteToSolid: false,
   };
+}
+
+function polarPoint(angleDeg: number, dist: number): { x: number; y: number } {
+  const angleRad = (angleDeg * Math.PI) / 180;
+  return { x: Math.cos(angleRad) * dist, y: Math.sin(angleRad) * dist };
 }
 
 function exportScene(scene: SceneModel): string {
@@ -144,6 +149,61 @@ const outlierAngleScene: SceneModel = {
   ],
 };
 
+const smallRadiusPoints = [
+  {
+    id: "pSA",
+    kind: "free" as const,
+    name: "SA",
+    captionTex: "SA",
+    visible: false,
+    showLabel: "none" as const,
+    position: { x: 1, y: 0 },
+    style: pointStyle,
+  },
+  {
+    id: "pSB",
+    kind: "free" as const,
+    name: "SB",
+    captionTex: "SB",
+    visible: false,
+    showLabel: "none" as const,
+    position: { x: 0, y: 0 },
+    style: pointStyle,
+  },
+  {
+    id: "pSC",
+    kind: "free" as const,
+    name: "SC",
+    captionTex: "SC",
+    visible: false,
+    showLabel: "none" as const,
+    position: { x: 0, y: 1 },
+    style: pointStyle,
+  },
+];
+
+function makeSmallRadiusScene(labelAngleDeg: number): SceneModel {
+  return {
+    points: smallRadiusPoints,
+    vectors: [],
+    segments: [],
+    lines: [],
+    circles: [],
+    polygons: [],
+    numbers: [],
+    angles: [
+      {
+        id: "a_small",
+        aId: "pSA",
+        bId: "pSB",
+        cId: "pSC",
+        visible: true,
+        style: makeAngleStyle(polarPoint(labelAngleDeg, 0.14), "\\theta", 0.65),
+      },
+    ],
+  };
+}
+
 const farTikz = exportScene(outlierDistanceScene);
 const farLine = farTikz.split("\n").find((line) => line.includes("\\tkzLabelAngle"));
 if (!farLine) {
@@ -151,11 +211,11 @@ if (!farLine) {
 }
 const farDist = Number(farLine.match(/dist=([-0-9.]+)/)?.[1] ?? Number.NaN);
 const farAngle = Number(farLine.match(/angle=([-0-9.]+)/)?.[1] ?? Number.NaN);
-if (Math.abs(farDist - 0.3162) > 1e-3) {
-  throw new Error(`Expected calibrated angle-label distance near 0.3162: ${farLine}`);
+if (Math.abs(farDist - 0.5) > 1e-4) {
+  throw new Error(`Expected manual angle-label distance to be preserved at export precision: ${farLine}`);
 }
-if (Math.abs(farAngle - 133.354277031814) > 1e-6) {
-  throw new Error(`Expected small manual angle tweak to be preserved: ${farLine}`);
+if (Math.abs(farAngle - 139.44448468483) > 1e-4) {
+  throw new Error(`Expected angle-label direction to use the geometric bisector: ${farLine}`);
 }
 
 const turnTikz = exportScene(outlierAngleScene);
@@ -169,7 +229,29 @@ if (Math.abs(turnDist - 0.27) > 1e-4) {
   throw new Error(`Expected in-band angle-label distance to be preserved: ${turnLine}`);
 }
 if (Math.abs(turnAngle - (-100.554095408036)) > 1e-4) {
-  throw new Error(`Expected outlier angle direction to snap back to the bisector: ${turnLine}`);
+  throw new Error(`Expected angle-label direction to use the geometric bisector: ${turnLine}`);
+}
+
+const smallTightLine = exportScene(makeSmallRadiusScene(20))
+  .split("\n")
+  .find((line) => line.includes("\\tkzLabelAngle"));
+if (!smallTightLine) {
+  throw new Error("Expected exported angle label line for tight small-radius scene.");
+}
+const smallTightDist = Number(smallTightLine.match(/dist=([-0-9.]+)/)?.[1] ?? Number.NaN);
+if (Math.abs(smallTightDist - 0.09) > 1e-4) {
+  throw new Error(`Expected tiny arc label to use tight distance: ${smallTightLine}`);
+}
+
+const smallFarLine = exportScene(makeSmallRadiusScene(80))
+  .split("\n")
+  .find((line) => line.includes("\\tkzLabelAngle"));
+if (!smallFarLine) {
+  throw new Error("Expected exported angle label line for far small-radius scene.");
+}
+const smallFarDist = Number(smallFarLine.match(/dist=([-0-9.]+)/)?.[1] ?? Number.NaN);
+if (Math.abs(smallFarDist - 0.13) > 1e-4) {
+  throw new Error(`Expected tiny arc label to use farther distance when the label vector leads the bisector: ${smallFarLine}`);
 }
 
 console.log("✓ export angle-label calibration test passed");

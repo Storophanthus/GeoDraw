@@ -1,5 +1,5 @@
 import type { Vec2 } from "../geo/vec2";
-import type { GeometryObjectRef, LineLikeObjectRef, ReflectionObjectRef, TextLabelToolKind } from "../scene/points";
+import type { GeometryObjectRef, LineLikeObjectRef, ReflectionObjectRef, TextLabelToolKind, SceneModel } from "../scene/points";
 import type { ActiveTool, PendingSelection, TransformableObjectRef } from "../state/geoStore";
 import type { ExportClipWorld } from "../state/slices/storeTypes";
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
@@ -9,7 +9,8 @@ export type ToolClickHits = {
   hitPointId: string | null;
   hitSegmentId: string | null;
   hitTextLabelId?: string | null;
-  hitObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null;
+  hitRichTextNodeId?: string | null;
+  hitObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "richText"; id: string } | null;
   shiftKey: boolean;
   hasCopyStyleSource: boolean;
   snap: SnapCandidate | null;
@@ -20,6 +21,8 @@ export type ToolClickIO = {
   clearPendingSelection: () => void;
   createFreePoint: (world: Vec2) => string;
   createTextLabel: (world: Vec2, preset?: TextLabelToolKind) => string;
+  createRichTextNode?: (world: Vec2) => string;
+  migrateTextLabelToRichTextNode?: (id: string) => string | null;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
   createPolygon: (pointIds: string[]) => string | null;
@@ -68,11 +71,13 @@ export type ToolClickIO = {
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
-  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string } | null) => void;
-  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string }) => void;
-  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string }) => void;
+  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText"; id: string } | null) => void;
+  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText"; id: string }) => void;
+  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText"; id: string }) => void;
   enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
   beginTextLabelEditing?: (id: string) => boolean;
+  beginRichTextEditing?: (id: string) => boolean;
+  textLabels?: NonNullable<SceneModel["textLabels"]>;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
   regularPolygonTool: { sides: number; direction: "CCW" | "CW" };
   transformTool: {
@@ -226,6 +231,8 @@ export function handleToolClick(
   if (activeTool === "copyStyle") {
     const target = hits.hitTextLabelId
       ? ({ type: "textLabel", id: hits.hitTextLabelId } as const)
+      : hits.hitRichTextNodeId
+      ? ({ type: "richText", id: hits.hitRichTextNodeId } as const)
       : hits.hitObject;
     if (!target) return;
     io.setSelectedObject(target);
@@ -250,13 +257,35 @@ export function handleToolClick(
   }
 
   if (activeTool === "textbox") {
-    if (hits.hitTextLabelId) {
-      io.setSelectedObject({ type: "textLabel", id: hits.hitTextLabelId });
-      io.beginTextLabelEditing?.(hits.hitTextLabelId);
+    if (hits.hitRichTextNodeId) {
+      io.setSelectedObject({ type: "richText", id: hits.hitRichTextNodeId });
+      io.beginRichTextEditing?.(hits.hitRichTextNodeId);
       return;
+    }
+    // Migration: If they click an old textbox toolKind textLabel while in textbox mode, migrate it?
+    // Wait, let's just let them edit it for now, or we can see if it's textLabel.
+    if (hits.hitTextLabelId) {
+      if (io.textLabels) {
+        const label = io.textLabels.find((l: NonNullable<SceneModel["textLabels"]>[number]) => l.id === hits.hitTextLabelId);
+        if (label?.toolKind === "textbox") {
+          const newId = io.migrateTextLabelToRichTextNode?.(label.id) ?? null;
+          if (newId) {
+            io.setSelectedObject({ type: "richText", id: newId });
+            io.beginRichTextEditing?.(newId);
+          } else {
+            io.setSelectedObject({ type: "textLabel", id: label.id });
+          }
+          return;
+        }
+      }
     }
     const snapWorld = !hits.shiftKey ? hits.snap?.world ?? null : null;
     const world = snapWorld ?? maybeSnapWorldToGrid(camMath.screenToWorld(screen, io.camera, io.vp));
+    const richTextId = io.createRichTextNode?.(world) ?? null;
+    if (richTextId) {
+      io.setSelectedObject({ type: "richText", id: richTextId });
+      return;
+    }
     const id = io.createTextLabel(world, "textbox");
     io.setSelectedObject({ type: "textLabel", id });
     return;

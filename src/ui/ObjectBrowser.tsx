@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { SceneGeometryLayerRef, SceneModel } from "../scene/points";
 import { geometryLayerKey, geometryLayerOrderForTab, geometryLayerRefMatchesTab, type GeometryLayerDropPosition } from "../scene/geometryLayerOrder";
+import { serializeRichTextDocumentToSource } from "../richtext/document";
 import type { SelectedObject } from "../state/slices/storeTypes";
 import { getNumberValue } from "../scene/points";
 import { commandBarApi, useGeoStore } from "../state/geoStore";
@@ -62,6 +63,7 @@ function objectFromRowKey(key: string): SelectedObjectRef | null {
         type !== "polygon" &&
         type !== "angle" &&
         type !== "textLabel" &&
+        type !== "richText" &&
         type !== "number"
     ) {
         return null;
@@ -108,6 +110,7 @@ function tabForSelectedObject(selected: SelectedObject | null, scene?: SceneMode
             return "angles";
         }
         case "textLabel":
+        case "richText":
             return "text";
         case "number":
             return "numbers";
@@ -480,7 +483,7 @@ export function ObjectBrowser({
     );
 
     const tabs: Array<{ id: TabId; icon: React.ElementType; label: string; description: string; count: number }> = [
-        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.polygons.length + scene.angles.length + (scene.textLabels?.length ?? 0) + scene.numbers.length },
+        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.polygons.length + scene.angles.length + (scene.textLabels?.length ?? 0) + (scene.richTextNodes?.length ?? 0) + scene.numbers.length },
         {
             id: "points",
             icon: IconPoint as React.ElementType,
@@ -503,7 +506,13 @@ export function ObjectBrowser({
             description: "Filter by Angles",
             count: scene.angles.filter((angle) => angle.kind !== "sector").length,
         },
-        { id: "text", icon: TypeIcon, label: "Labels", description: "Filter by Text Labels", count: scene.textLabels?.length ?? 0 },
+        {
+            id: "text",
+            icon: TypeIcon,
+            label: "Labels",
+            description: "Filter by Text Objects",
+            count: (scene.textLabels?.length ?? 0) + (scene.richTextNodes?.length ?? 0),
+        },
         { id: "numbers", icon: Hash, label: "Numbers", description: "Filter by Numbers & Values", count: scene.numbers.length },
     ];
 
@@ -604,7 +613,7 @@ export function ObjectBrowser({
                 : `Angle ${pointLabel(angle.aId)}${pointLabel(angle.bId)}${pointLabel(angle.cId)}`,
             commandText: angle.kind === "sector"
                 ? withAliasPrefix("angle", angle.id, `Sector(${pointLabel(angle.bId)},${pointLabel(angle.aId)},${pointLabel(angle.cId)})`)
-                : withAliasPrefix("angle", angle.id, `Angle(${pointLabel(angle.aId)},${pointLabel(angle.bId)},${pointLabel(angle.cId)})`),
+                : withAliasPrefix("angle", angle.id, `MarkedAngle(${pointLabel(angle.aId)},${pointLabel(angle.bId)},${pointLabel(angle.cId)})`),
             visible: angle.visible,
             reorderable: activeTab === "circles" ? angle.kind === "sector" : activeTab === "angles",
         });
@@ -615,6 +624,15 @@ export function ObjectBrowser({
             title: `Label ${label.name}`,
             commandText: `Text(${JSON.stringify(label.text)})`,
             visible: label.visible,
+            reorderable: false,
+        });
+
+        const buildRichTextRow = (node: NonNullable<SceneModel["richTextNodes"]>[number]): ObjectRowDescriptor => ({
+            key: `richText:${node.id}`,
+            object: { type: "richText", id: node.id },
+            title: `Textbox ${node.name}`,
+            commandText: `Textbox(${JSON.stringify(serializeRichTextDocumentToSource(node.document))})`,
+            visible: node.visible,
             reorderable: false,
         });
 
@@ -661,6 +679,7 @@ export function ObjectBrowser({
                 ...scene.points.map(buildPointRow),
                 ...buildGeometryRowsForTab("all"),
                 ...(scene.textLabels ?? []).map(buildTextLabelRow),
+                ...(scene.richTextNodes ?? []).map(buildRichTextRow),
                 ...scene.numbers.map(buildNumberRow),
             ];
         }
@@ -668,7 +687,7 @@ export function ObjectBrowser({
         if (activeTab === "lines" || activeTab === "circles" || activeTab === "angles") {
             return buildGeometryRowsForTab(activeTab);
         }
-        if (activeTab === "text") return (scene.textLabels ?? []).map(buildTextLabelRow);
+        if (activeTab === "text") return [...(scene.textLabels ?? []).map(buildTextLabelRow), ...(scene.richTextNodes ?? []).map(buildRichTextRow)];
         return scene.numbers.map(buildNumberRow);
     }, [activeTab, angleById, circleById, lineById, polygonById, scene, segmentById]);
 
@@ -801,15 +820,15 @@ export function ObjectBrowser({
             scene.polygons.length === 0 &&
             scene.angles.length === 0 &&
             (scene.textLabels?.length ?? 0) === 0 &&
+            (scene.richTextNodes?.length ?? 0) === 0 &&
             scene.numbers.length === 0) ||
         (activeTab === "points" && scene.points.length === 0) ||
         (activeTab === "lines" && scene.segments.length === 0 && scene.lines.length === 0) ||
         (activeTab === "circles" && scene.circles.length === 0 && scene.polygons.length === 0 && !scene.angles.some((angle) => angle.kind === "sector")) ||
         (activeTab === "angles" && !scene.angles.some((angle) => angle.kind !== "sector")) ||
-        (activeTab === "text" && (scene.textLabels?.length ?? 0) === 0) ||
+        (activeTab === "text" && (scene.textLabels?.length ?? 0) === 0 && (scene.richTextNodes?.length ?? 0) === 0) ||
         (activeTab === "numbers" && scene.numbers.length === 0);
     const multiSelectionCount = multiSelectedObjects.length;
-
     return (
         <div className="objectBrowser">
             <div className="objectBrowserHeader">

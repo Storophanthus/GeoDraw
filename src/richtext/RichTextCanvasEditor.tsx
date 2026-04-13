@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { parseTextLabelRichText } from "../text/textLabelRichText";
 import { DEFAULT_TEXT_EDITOR_COMPLETIONS, type TextEditorCompletionItem } from "../textbox-tool/catalog";
@@ -76,6 +77,10 @@ type PlaceholderSession = {
   items: TextEditorSnippetPlaceholder[];
   activeIndex: number;
 };
+
+const SOURCE_START_ATTR = "data-richtext-source-start";
+const SOURCE_END_ATTR = "data-richtext-source-end";
+const SOURCE_ATOMIC_ATTR = "data-richtext-source-atomic";
 
 export type RichTextCanvasEditorProps = {
   sessionKey: string;
@@ -310,17 +315,47 @@ function isCollapsedSelection(selection: EditorSelection): boolean {
   return selection.start === selection.end;
 }
 
-function renderTextWithCaret(
+function normalizedSelectionRange(selection: EditorSelection): EditorSelection {
+  return selection.start <= selection.end
+    ? selection
+    : { start: selection.end, end: selection.start };
+}
+
+function sourceRangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
+}
+
+function renderTextWithSelection(
   content: string,
   sourceStart: number,
   sourceEnd: number,
   selection: EditorSelection
 ): string {
-  if (!isCollapsedSelection(selection) || selection.start < sourceStart || selection.start > sourceEnd) {
-    return escapeHtml(content);
+  if (isCollapsedSelection(selection)) {
+    if (selection.start < sourceStart || selection.start > sourceEnd) {
+      return `<span class="gdRichTextTextSegment" ${SOURCE_START_ATTR}="${sourceStart}" ${SOURCE_END_ATTR}="${sourceEnd}">${escapeHtml(content)}</span>`;
+    }
+    const localCaret = Math.max(0, Math.min(selection.start - sourceStart, content.length));
+    return `<span class="gdRichTextTextSegment" ${SOURCE_START_ATTR}="${sourceStart}" ${SOURCE_END_ATTR}="${sourceEnd}">${escapeHtml(
+      content.slice(0, localCaret)
+    )}${renderMathCaret()}${escapeHtml(content.slice(localCaret))}</span>`;
   }
-  const localCaret = Math.max(0, Math.min(selection.start - sourceStart, content.length));
-  return `${escapeHtml(content.slice(0, localCaret))}${renderMathCaret()}${escapeHtml(content.slice(localCaret))}`;
+
+  const range = normalizedSelectionRange(selection);
+  if (!sourceRangesOverlap(sourceStart, sourceEnd, range.start, range.end)) {
+    return `<span class="gdRichTextTextSegment" ${SOURCE_START_ATTR}="${sourceStart}" ${SOURCE_END_ATTR}="${sourceEnd}">${escapeHtml(content)}</span>`;
+  }
+
+  const selectedStart = Math.max(sourceStart, range.start);
+  const selectedEnd = Math.min(sourceEnd, range.end);
+  const localStart = Math.max(0, selectedStart - sourceStart);
+  const localEnd = Math.max(localStart, selectedEnd - sourceStart);
+
+  return `<span class="gdRichTextTextSegment" ${SOURCE_START_ATTR}="${sourceStart}" ${SOURCE_END_ATTR}="${sourceEnd}">${[
+    escapeHtml(content.slice(0, localStart)),
+    `<span class="gdRichTextEditorSelection">${escapeHtml(content.slice(localStart, localEnd))}</span>`,
+    escapeHtml(content.slice(localEnd)),
+  ].join("")}</span>`;
 }
 
 function renderRawMathSourceWithCaret(source: string, caretLocal: number | null): string {
@@ -525,7 +560,7 @@ function buildEditorBlocksFromSource(
 
 function renderParagraphSegmentHtml(segment: EditorParagraphSegment, selection: EditorSelection): string {
   if (segment.kind === "text") {
-    return renderTextWithCaret(segment.content, segment.sourceStart, segment.sourceEnd, selection);
+    return renderTextWithSelection(segment.content, segment.sourceStart, segment.sourceEnd, selection);
   }
   if (segment.kind === "inline-open") {
     return `<span class="gdRichTextInlineMathActive gdRichTextEditorMathActive">${renderActiveMathSourceHtml(segment.content, false)}</span>`;
@@ -533,9 +568,15 @@ function renderParagraphSegmentHtml(segment: EditorParagraphSegment, selection: 
   if (segment.kind === "inline-active-source") {
     return `<span class="gdRichTextInlineMathActive gdRichTextEditorMathActive">${renderActiveMathHtml(segment.content, false, segment.view)}</span>`;
   }
+  const selected =
+    !isCollapsedSelection(selection) &&
+    sourceRangesOverlap(segment.sourceStart, segment.sourceEnd, normalizedSelectionRange(selection).start, normalizedSelectionRange(selection).end);
   const before = isCollapsedSelection(selection) && selection.start === segment.sourceStart ? renderMathCaret() : "";
   const after = isCollapsedSelection(selection) && selection.start === segment.sourceEnd ? renderMathCaret() : "";
-  return `${before}<span class="gdRichTextInlineMathClosed gdRichTextEditorMathClosed">${renderMathSourceHtml(
+  const className = selected
+    ? "gdRichTextInlineMathClosed gdRichTextEditorMathClosed gdRichTextEditorSelection"
+    : "gdRichTextInlineMathClosed gdRichTextEditorMathClosed";
+  return `${before}<span class="${className}" ${SOURCE_START_ATTR}="${segment.sourceStart}" ${SOURCE_END_ATTR}="${segment.sourceEnd}" ${SOURCE_ATOMIC_ATTR}="true">${renderMathSourceHtml(
     segment.content,
     false
   )}</span>${after}`;
@@ -561,16 +602,24 @@ function renderEditorBlocksHtml(blocks: EditorBlock[], isEmpty: boolean, selecti
         )}</div>`;
       }
       if (block.kind === "display-closed") {
-        return `<div class="gdRichTextDisplayMathClosed gdRichTextEditorMathClosed">${renderMathSourceHtml(
+        const selected =
+          !isCollapsedSelection(selection) &&
+          sourceRangesOverlap(block.sourceStart, block.sourceEnd, normalizedSelectionRange(selection).start, normalizedSelectionRange(selection).end);
+        const className = selected
+          ? "gdRichTextDisplayMathClosed gdRichTextEditorMathClosed gdRichTextEditorSelection"
+          : "gdRichTextDisplayMathClosed gdRichTextEditorMathClosed";
+        return `<div class="${className}" ${SOURCE_START_ATTR}="${block.sourceStart}" ${SOURCE_END_ATTR}="${block.sourceEnd}" ${SOURCE_ATOMIC_ATTR}="true">${renderMathSourceHtml(
           block.content,
           true
         )}</div>`;
       }
       if (block.kind === "paragraph") {
         const content = block.segments.map((segment) => renderParagraphSegmentHtml(segment, selection)).join("");
-        if (content.length > 0) return `<div class="gdRichTextParagraphRow">${content}</div>`;
+        if (content.length > 0) {
+          return `<div class="gdRichTextParagraphRow" ${SOURCE_START_ATTR}="${block.sourceStart}" ${SOURCE_END_ATTR}="${block.sourceEnd}">${content}</div>`;
+        }
         const emptyCaret = isCollapsedSelection(selection) && selection.start === block.sourceStart ? renderMathCaret() : "";
-        return `<div class="gdRichTextParagraphRow">${emptyCaret || "&nbsp;"}</div>`;
+        return `<div class="gdRichTextParagraphRow" ${SOURCE_START_ATTR}="${block.sourceStart}" ${SOURCE_END_ATTR}="${block.sourceEnd}">${emptyCaret || "&nbsp;"}</div>`;
       }
       return "";
     })
@@ -588,6 +637,86 @@ function findOpenInlineMathAtCaret(source: string, caret: number): { sourceEnd: 
     }
   }
   return null;
+}
+
+function numericSourceAttr(element: HTMLElement, name: string): number | null {
+  const raw = element.getAttribute(name);
+  if (raw === null) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function findSourceElement(node: Node | null, root: HTMLElement): HTMLElement | null {
+  if (!node) return null;
+  const element =
+    node instanceof HTMLElement
+      ? node
+      : node.parentElement instanceof HTMLElement
+        ? node.parentElement
+        : null;
+  const match = element?.closest<HTMLElement>(`[${SOURCE_START_ATTR}][${SOURCE_END_ATTR}]`) ?? null;
+  return match && root.contains(match) ? match : null;
+}
+
+function textOffsetWithin(container: HTMLElement, targetNode: Node, targetOffset: number): number {
+  const walker = container.ownerDocument.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let total = 0;
+  let current = walker.nextNode();
+  while (current) {
+    const text = current.textContent ?? "";
+    if (current === targetNode) return total + Math.max(0, Math.min(targetOffset, text.length));
+    total += text.length;
+    current = walker.nextNode();
+  }
+  return total;
+}
+
+function sourceOffsetFromElementFallback(element: HTMLElement, clientX: number): number | null {
+  const start = numericSourceAttr(element, SOURCE_START_ATTR);
+  const end = numericSourceAttr(element, SOURCE_END_ATTR);
+  if (start === null || end === null) return null;
+  if (element.getAttribute(SOURCE_ATOMIC_ATTR) === "true") {
+    const rect = element.getBoundingClientRect();
+    return clientX < rect.left + rect.width / 2 ? start : end;
+  }
+  return clientX < element.getBoundingClientRect().left + element.getBoundingClientRect().width / 2 ? start : end;
+}
+
+function sourceOffsetFromPoint(root: HTMLElement, clientX: number, clientY: number): number | null {
+  const docWithCaret = root.ownerDocument as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+
+  let node: Node | null = null;
+  let offset = 0;
+  const position = docWithCaret.caretPositionFromPoint?.(clientX, clientY) ?? null;
+  if (position) {
+    node = position.offsetNode;
+    offset = position.offset;
+  } else {
+    const range = docWithCaret.caretRangeFromPoint?.(clientX, clientY) ?? null;
+    if (range) {
+      node = range.startContainer;
+      offset = range.startOffset;
+    }
+  }
+
+  if (node && root.contains(node)) {
+    const sourceElement = findSourceElement(node, root);
+    if (sourceElement) {
+      const fallback = sourceOffsetFromElementFallback(sourceElement, clientX);
+      if (sourceElement.getAttribute(SOURCE_ATOMIC_ATTR) === "true" || !(node instanceof Text)) return fallback;
+      const start = numericSourceAttr(sourceElement, SOURCE_START_ATTR);
+      const end = numericSourceAttr(sourceElement, SOURCE_END_ATTR);
+      if (start === null || end === null) return fallback;
+      return Math.max(start, Math.min(end, start + textOffsetWithin(sourceElement, node, offset)));
+    }
+  }
+
+  const hit = root.ownerDocument.elementFromPoint(clientX, clientY);
+  const sourceElement = findSourceElement(hit, root);
+  return sourceElement ? sourceOffsetFromElementFallback(sourceElement, clientX) : null;
 }
 
 type CompletionListProps = {
@@ -636,9 +765,11 @@ export function RichTextCanvasEditor({
   onMeasure,
 }: RichTextCanvasEditorProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const sourceRef = useRef(serializeRichTextDocumentToSource(document));
   const pendingSelectionRef = useRef<EditorSelection | null>(null);
+  const pointerSelectionAnchorRef = useRef<number | null>(null);
   const [source, setSource] = useState(() => sourceRef.current);
   const [selection, setSelection] = useState<EditorSelection>(() => {
     const end = sourceRef.current.length;
@@ -706,6 +837,17 @@ export function RichTextCanvasEditor({
     if (!textarea) return;
     textarea.focus();
   }, [sessionKey]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && root.contains(event.target)) return;
+      onCommit();
+    };
+    root.ownerDocument.addEventListener("pointerdown", handlePointerDown, true);
+    return () => root.ownerDocument.removeEventListener("pointerdown", handlePointerDown, true);
+  }, [onCommit]);
 
   const commitSourceToDocument = (nextSource: string) => {
     sourceRef.current = nextSource;
@@ -819,6 +961,22 @@ export function RichTextCanvasEditor({
     return false;
   };
 
+  const focusInput = () => {
+    textareaRef.current?.focus();
+  };
+
+  const updatePointerSelection = (event: ReactPointerEvent<HTMLDivElement>, mode: "start" | "extend"): boolean => {
+    const preview = previewRef.current;
+    if (!preview) return false;
+    const offset = sourceOffsetFromPoint(preview, event.clientX, event.clientY);
+    if (offset === null) return false;
+    const anchor = mode === "start" ? offset : pointerSelectionAnchorRef.current ?? offset;
+    if (mode === "start") pointerSelectionAnchorRef.current = offset;
+    queueSelection({ start: anchor, end: offset });
+    focusInput();
+    return true;
+  };
+
   const editorStyle = {
     ...shellStyle,
     color: style.textColor,
@@ -836,8 +994,38 @@ export function RichTextCanvasEditor({
     >
       <div className="gdRichTextEditorBody">
         <div
+          ref={previewRef}
           className="gdRichTextEditorPreview"
           aria-hidden
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            if (!updatePointerSelection(event, "start")) return;
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (pointerSelectionAnchorRef.current === null || (event.buttons & 1) === 0) return;
+            if (!updatePointerSelection(event, "extend")) return;
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onPointerUp={(event) => {
+            if (pointerSelectionAnchorRef.current === null) return;
+            updatePointerSelection(event, "extend");
+            pointerSelectionAnchorRef.current = null;
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onPointerCancel={(event) => {
+            pointerSelectionAnchorRef.current = null;
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+          }}
           dangerouslySetInnerHTML={{ __html: previewHtml }}
         />
         <textarea

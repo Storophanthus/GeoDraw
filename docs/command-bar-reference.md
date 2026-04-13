@@ -45,6 +45,7 @@ Notes:
 - `Midpoint(A,B)`
 - `Midpoint(s)` where `s` is a named segment alias (from assignment)
 - `Incenter(A,B,C)`
+- `Incircle(A,B,C)`
 - `Orthocenter(A,B,C)` (alias: `Ortho(A,B,C)`)
 - `Centroid(A,B,C)`
 - `Circumcenter(A,B,C)`
@@ -55,10 +56,12 @@ Notes:
 - `Line(x1,y1,x2,y2)`
 - `Line(A,B)`
 - `Perpendicular(P,l)` where `l` is a named line/segment alias
+- `PerpBisector(A,B)` (alias: `PerpendicularBisector(A,B)`)
 - `Parallel(P,l)` where `l` is a named line/segment alias
 - `Tangent(P,c)` where `c` is a named circle alias
 - `AngleBisector(A,B,C)`
-- `Angle(A,B,C)`
+- `Angle(A,B,C)` returns the angle measure in degrees
+- `MarkedAngle(A,B,C)` creates an angle object
 - `AngleFixed(V,A,expr[,CW|CCW])`
 - `Sector(O,A,B)`
 - `Segment(A,B)`
@@ -79,6 +82,7 @@ Notes:
   - `P = Point(1,2)`
   - `M = Midpoint(A,B)`
   - `I = Incenter(A,B,C)`
+  - `ic = Incircle(A,B,C)`
   - `H = Orthocenter(A,B,C)`
   - `G = Centroid(A,B,C)`
   - `O = Circumcenter(A,B,C)`
@@ -88,9 +92,11 @@ Notes:
   - `Q = Reflect(A,l)`
   - `l = Line(A,B)`
   - `p = Perpendicular(A,l)`
+  - `pb = PerpBisector(A,B)`
   - `q = Parallel(B,l)`
   - `b = AngleBisector(A,B,C)`
-  - `ang = Angle(A,B,C)`
+  - `t = Angle(A,B,C)`
+  - `ang = MarkedAngle(A,B,C)`
   - `af = AngleFixed(B,A,30,CW)`
   - `sec = Sector(O,A,B)`
   - `s = Segment(A,B)`

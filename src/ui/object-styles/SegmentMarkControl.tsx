@@ -2,6 +2,8 @@ import * as React from "react";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { useClickAway } from "react-use";
 import { type SegmentMark } from "../../scene/points";
+import { ColorSwatchInput } from "../ColorField";
+import { MarkDistributionToggle } from "./MarkDistributionToggle";
 
 export const SEGMENT_MARK_OPTIONS = ["none", "|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z", "dot"] as const;
 
@@ -197,47 +199,20 @@ export function SegmentMarkControl({
                     </div>
                     <div className="controlRow">
                         <label className="controlLabel">Distribution</label>
-                        <div
-                            style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 1fr",
-                                gap: "4px",
+                        <MarkDistributionToggle
+                            value={selectedSegmentMark.distribution ?? "single"}
+                            onChange={(distribution) => {
+                                const nextMarks = [...resolvedSegmentMarks];
+                                nextMarks[selectedSegmentMarkIndex] = {
+                                    ...selectedSegmentMark,
+                                    distribution,
+                                    startPos: selectedSegmentMark.startPos ?? 0.45,
+                                    endPos: selectedSegmentMark.endPos ?? 0.55,
+                                    step: selectedSegmentMark.step ?? 0.05,
+                                };
+                                commitSegmentMarks(nextMarks);
                             }}
-                        >
-                            {(["single", "multi"] as const).map((distribution) => (
-                                <button
-                                    key={distribution}
-                                    type="button"
-                                    className="iconButton"
-                                    onClick={() => {
-                                        const nextMarks = [...resolvedSegmentMarks];
-                                        nextMarks[selectedSegmentMarkIndex] = {
-                                            ...selectedSegmentMark,
-                                            distribution,
-                                            startPos: selectedSegmentMark.startPos ?? 0.45,
-                                            endPos: selectedSegmentMark.endPos ?? 0.55,
-                                            step: selectedSegmentMark.step ?? 0.05,
-                                        };
-                                        commitSegmentMarks(nextMarks);
-                                    }}
-                                    style={{
-                                        height: "32px",
-                                        borderRadius: "6px",
-                                        border: "1px solid var(--gd-ui-border, #cbd5e1)",
-                                        background:
-                                            (selectedSegmentMark.distribution ?? "single") === distribution
-                                                ? "var(--gd-ui-accent, #2563eb)"
-                                                : "var(--gd-ui-surface, #fff)",
-                                        color:
-                                            (selectedSegmentMark.distribution ?? "single") === distribution
-                                                ? "var(--gd-ui-accent-contrast, #fff)"
-                                                : "var(--gd-ui-text, #334155)",
-                                    }}
-                                >
-                                    {distribution === "single" ? "Single" : "Multi"}
-                                </button>
-                            ))}
-                        </div>
+                        />
                     </div>
                     {(selectedSegmentMark.distribution ?? "single") === "multi" ? (
                         <div className="nestedGroup" style={{
@@ -386,9 +361,7 @@ export function SegmentMarkControl({
                     </div>
                     <div className="controlRow">
                         <label className="controlLabel">Mark Color</label>
-                        <input
-                            className="colorInput"
-                            type="color"
+                        <ColorSwatchInput
                             value={selectedSegmentMark.color ?? strokeColor}
                             onChange={(e) => {
                                 const nextMarks = [...resolvedSegmentMarks];

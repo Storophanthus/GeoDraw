@@ -15,6 +15,7 @@ import {
   getLineWorldAnchors,
   getPointWorldPos,
   isRightAngle,
+  isRightAngleSweepRad,
   type LineLikeObjectRef,
   type SceneModel,
 } from "../../scene/points";
@@ -873,8 +874,7 @@ export function drawPendingPreview(
             ? hoveredHit.id
             : null;
       if (hoveredCircleId && hoveredCircleId !== pendingSelection.first.id) {
-        const fallbackStyle = { strokeColor: "#334155", strokeWidth: 1.2, dash: "solid" as const, opacity: 1 };
-        const previewStyle = scene.lines[0]?.style ?? fallbackStyle;
+        const previewStyle = { strokeColor: "#334155", strokeWidth: 1.2, dash: "solid" as const, opacity: 1 };
         const signatures = new Set<string>();
         const signatureFor = (a: Vec2, b: Vec2): string => {
           const dx = b.x - a.x;
@@ -1009,15 +1009,18 @@ export function drawPendingPreview(
         const bs = camMath.worldToScreen(b, camera, vp);
         const cs = camMath.worldToScreen(c, camera, vp);
         const radiusPx = nonSectorAngleRadiusPx(anglePreviewArcRadius);
-        const rightStatus: "none" | "approx" | "exact" = cId
-          ? isRightExactByProvenance(scene, pendingSelection.first.id, pendingSelection.second.id, cId)
-            ? "exact"
+        const displayedRight = isRightAngleSweepRad(theta, 1e-2);
+        const rightStatus: "none" | "approx" | "exact" = displayedRight
+          ? cId
+            ? isRightExactByProvenance(scene, pendingSelection.first.id, pendingSelection.second.id, cId)
+              ? "exact"
+              : isRightAngle(a, b, c, 1e-2)
+                ? "approx"
+                : "none"
             : isRightAngle(a, b, c, 1e-2)
               ? "approx"
               : "none"
-          : isRightAngle(a, b, c, 1e-2)
-            ? "approx"
-            : "none";
+          : "none";
         if (rightStatus === "none") {
           drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
         } else {
@@ -1199,7 +1202,8 @@ function formatPreviewAngleDegrees(degRaw: number): string {
   const deg = ((degRaw % 360) + 360) % 360;
   const nearest5 = Math.round(deg / 5) * 5;
   if (Math.abs(deg - nearest5) <= 1e-3) return String(nearest5);
-  return deg.toFixed(2);
+  const rounded = deg.toFixed(2).replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0+$/u, "");
+  return rounded === "-0" ? "0" : rounded;
 }
 
 function geoPointWorld(scene: SceneModel, pointId: string): Vec2 | null {

@@ -15,8 +15,8 @@ import {
 import { selectConstructionDescription } from "../state/selectors/constructionDescription";
 import { useGeoStore } from "../state/geoStore";
 import { NumberStyleSection } from "./object-styles/NumberStyleSection";
+import { RichTextStyleSection } from "./object-styles/RichTextStyleSection";
 import { TextLabelStyleSection } from "./object-styles/TextLabelStyleSection";
-import { NumbersSection } from "./NumbersSection";
 import { ObjectStyleSections } from "./ObjectStyleSections";
 import { PointPropertiesSection } from "./PointPropertiesSection";
 import { ToolInfoSection } from "./ToolInfoSection";
@@ -26,6 +26,7 @@ import {
   lineStyleEqual,
   pointStyleEqual,
   polygonStyleEqual,
+  richTextStyleEqual,
   textLabelStyleEqual,
 } from "./object-styles/styleComparisons";
 import type { SelectedObject } from "../state/slices/storeTypes";
@@ -61,6 +62,7 @@ export function PropertiesPanel({
   const objectLabelDefaults = useGeoStore((store) => store.objectLabelDefaults);
   const labelToolDefaults = useGeoStore((store) => store.labelToolDefaults);
   const textboxToolDefaults = useGeoStore((store) => store.textboxToolDefaults);
+  const richTextToolDefaults = useGeoStore((store) => store.richTextToolDefaults);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
   const regularPolygonTool = useGeoStore((store) => store.regularPolygonTool);
@@ -75,6 +77,7 @@ export function PropertiesPanel({
   const setObjectLabelDefaults = useGeoStore((store) => store.setObjectLabelDefaults);
   const setLabelToolDefaults = useGeoStore((store) => store.setLabelToolDefaults);
   const setTextboxToolDefaults = useGeoStore((store) => store.setTextboxToolDefaults);
+  const setRichTextToolDefaults = useGeoStore((store) => store.setRichTextToolDefaults);
   const setAngleFixedTool = useGeoStore((store) => store.setAngleFixedTool);
   const setCircleFixedTool = useGeoStore((store) => store.setCircleFixedTool);
   const setRegularPolygonTool = useGeoStore((store) => store.setRegularPolygonTool);
@@ -95,14 +98,10 @@ export function PropertiesPanel({
   const updatePolygonStyleByIds = useGeoStore((store) => store.updatePolygonStyleByIds);
   const updateSelectedAngleStyle = useGeoStore((store) => store.updateSelectedAngleStyle);
   const updateAngleStyleByIds = useGeoStore((store) => store.updateAngleStyleByIds);
-  const updateSelectedSegmentFields = useGeoStore((store) => store.updateSelectedSegmentFields);
-  const updateSegmentFieldsByIds = useGeoStore((store) => store.updateSegmentFieldsByIds);
   const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
   const updateLineFieldsByIds = useGeoStore((store) => store.updateLineFieldsByIds);
   const convertSelectedLineToSegment = useGeoStore((store) => store.convertSelectedLineToSegment);
   const convertLinesToSegmentsByIds = useGeoStore((store) => store.convertLinesToSegmentsByIds);
-  const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
-  const updateCircleFieldsByIds = useGeoStore((store) => store.updateCircleFieldsByIds);
   const updateSelectedPolygonFields = useGeoStore((store) => store.updateSelectedPolygonFields);
   const updatePolygonFieldsByIds = useGeoStore((store) => store.updatePolygonFieldsByIds);
   const setSelectedPolygonOwnedSegmentsVisible = useGeoStore((store) => store.setSelectedPolygonOwnedSegmentsVisible);
@@ -111,7 +110,12 @@ export function PropertiesPanel({
   const updateTextLabelFieldsByIds = useGeoStore((store) => store.updateTextLabelFieldsByIds);
   const updateSelectedTextLabelStyle = useGeoStore((store) => store.updateSelectedTextLabelStyle);
   const updateTextLabelStyleByIds = useGeoStore((store) => store.updateTextLabelStyleByIds);
-  const createNumber = useGeoStore((store) => store.createNumber);
+  const updateSelectedRichTextFields = useGeoStore((store) => store.updateSelectedRichTextFields);
+  const updateRichTextFieldsByIds = useGeoStore((store) => store.updateRichTextFieldsByIds);
+  const updateSelectedRichTextStyle = useGeoStore((store) => store.updateSelectedRichTextStyle);
+  const updateRichTextStyleByIds = useGeoStore((store) => store.updateRichTextStyleByIds);
+  const updateSelectedRichTextDocument = useGeoStore((store) => store.updateSelectedRichTextDocument);
+  const updateRichTextDocumentByIds = useGeoStore((store) => store.updateRichTextDocumentByIds);
 
   const selectedPoint = useMemo(
     () => (selectedObject?.type === "point" ? scene.points.find((point) => point.id === selectedObject.id) ?? null : null),
@@ -152,6 +156,10 @@ export function PropertiesPanel({
   const selectedTextLabel = useMemo(
     () => (selectedObject?.type === "textLabel" ? (scene.textLabels ?? []).find((item) => item.id === selectedObject.id) ?? null : null),
     [scene.textLabels, selectedObject]
+  );
+  const selectedRichText = useMemo(
+    () => (selectedObject?.type === "richText" ? (scene.richTextNodes ?? []).find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.richTextNodes, selectedObject]
   );
   const selectedPointWorld = useMemo(() => {
     if (!selectedPoint) return null;
@@ -219,7 +227,7 @@ export function PropertiesPanel({
     () => evaluateAngleExpressionDegrees(scene, transformTool.angleExpr),
     [scene, transformTool.angleExpr]
   );
-  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | null>(() => {
+  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | null>(() => {
     if (selectedPoint) return "point";
     if (selectedSegment) return "segment";
     if (selectedLine) return "line";
@@ -227,8 +235,9 @@ export function PropertiesPanel({
     if (selectedPolygon) return "polygon";
     if (selectedAngle) return "angle";
     if (selectedTextLabel) return "textLabel";
+    if (selectedRichText) return "richText";
     return null;
-  }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedPolygon, selectedSegment, selectedTextLabel]);
+  }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedPolygon, selectedRichText, selectedSegment, selectedTextLabel]);
   const selectedAngleRightStatus = useMemo<"none" | "approx" | "exact">(
     () => (selectedAngle ? resolveAngleRightStatus(scene, selectedAngle) : "none"),
     [scene, selectedAngle]
@@ -244,6 +253,7 @@ export function PropertiesPanel({
       const defaults = resolveTextLabelToolKind(selectedTextLabel) === "textbox" ? textboxToolDefaults : labelToolDefaults;
       return textLabelStyleEqual(defaults, selectedTextLabel.style);
     }
+    if (selectedRichText) return richTextStyleEqual(richTextToolDefaults, selectedRichText.style);
     return false;
   }, [
     angleDefaults,
@@ -253,12 +263,14 @@ export function PropertiesPanel({
     objectLabelDefaults,
     pointDefaults,
     polygonDefaults,
+    richTextToolDefaults,
     segmentDefaults,
     selectedAngle,
     selectedCircle,
     selectedLine,
     selectedPoint,
     selectedPolygon,
+    selectedRichText,
     selectedSegment,
     selectedTextLabel,
     textboxToolDefaults,
@@ -306,6 +318,10 @@ export function PropertiesPanel({
       } else {
         setLabelToolDefaults({ ...selectedTextLabel.style });
       }
+      return;
+    }
+    if (selectedStyleKind === "richText" && selectedRichText) {
+      setRichTextToolDefaults({ ...selectedRichText.style });
     }
   };
 
@@ -376,13 +392,6 @@ export function PropertiesPanel({
     }
     updateSelectedSegmentStyle(next);
   };
-  const handleUpdateSelectedSegmentFields = (next: Parameters<typeof updateSelectedSegmentFields>[0]) => {
-    if (selectedObject?.type === "segment" && hasLinkedSelection) {
-      updateSegmentFieldsByIds(linkedSameTypeIds, next);
-      return;
-    }
-    updateSelectedSegmentFields(next);
-  };
   const handleUpdateSelectedLineStyle = (next: Parameters<typeof updateSelectedLineStyle>[0]) => {
     if (selectedObject?.type === "line" && hasLinkedSelection) {
       updateLineStyleByIds(linkedSameTypeIds, next);
@@ -403,13 +412,6 @@ export function PropertiesPanel({
       return;
     }
     updateSelectedCircleStyle(next);
-  };
-  const handleUpdateSelectedCircleFields = (next: Parameters<typeof updateSelectedCircleFields>[0]) => {
-    if (selectedObject?.type === "circle" && hasLinkedSelection) {
-      updateCircleFieldsByIds(linkedSameTypeIds, next);
-      return;
-    }
-    updateSelectedCircleFields(next);
   };
   const handleUpdateSelectedPolygonStyle = (next: Parameters<typeof updateSelectedPolygonStyle>[0]) => {
     if (selectedObject?.type === "polygon" && hasLinkedSelection) {
@@ -446,6 +448,27 @@ export function PropertiesPanel({
     }
     updateSelectedTextLabelStyle(next);
   };
+  const handleUpdateSelectedRichTextFields = (next: Parameters<typeof updateSelectedRichTextFields>[0]) => {
+    if (selectedObject?.type === "richText" && hasLinkedSelection) {
+      updateRichTextFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedRichTextFields(next);
+  };
+  const handleUpdateSelectedRichTextStyle = (next: Parameters<typeof updateSelectedRichTextStyle>[0]) => {
+    if (selectedObject?.type === "richText" && hasLinkedSelection) {
+      updateRichTextStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedRichTextStyle(next);
+  };
+  const handleUpdateSelectedRichTextDocument = (document: Parameters<typeof updateSelectedRichTextDocument>[0]) => {
+    if (selectedObject?.type === "richText" && hasLinkedSelection) {
+      updateRichTextDocumentByIds(linkedSameTypeIds, document);
+      return;
+    }
+    updateSelectedRichTextDocument(document);
+  };
   const handleConvertSelectedLineToSegment = () => {
     if (selectedObject?.type === "line" && hasLinkedSelection) {
       const createdIds = convertLinesToSegmentsByIds(linkedSameTypeIds);
@@ -467,11 +490,6 @@ export function PropertiesPanel({
   const [nameInput, setNameInput] = useState("");
   const [renameError, setRenameError] = useState("");
   const [shapePickerOpen, setShapePickerOpen] = useState(false);
-  const [newNumberValue, setNewNumberValue] = useState("1");
-  const [newSliderMin, setNewSliderMin] = useState("0");
-  const [newSliderMax, setNewSliderMax] = useState("10");
-  const [newSliderStep, setNewSliderStep] = useState("0.1");
-  const [newSliderMode, setNewSliderMode] = useState<"real" | "degree">("real");
   const shapePickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -549,7 +567,7 @@ export function PropertiesPanel({
           deleteLabel={deleteButtonLabel}
         />
       )}
-      {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedPolygon && !selectedAngle && !selectedTextLabel && !selectedNumber && (
+      {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedPolygon && !selectedAngle && !selectedTextLabel && !selectedRichText && !selectedNumber && (
         <div className="emptyState">Select an object to edit properties</div>
       )}
       {selectedPoint && (
@@ -613,6 +631,18 @@ export function PropertiesPanel({
           deleteLabel={deleteButtonLabel}
         />
       )}
+      {selectedRichText && (
+        <RichTextStyleSection
+          selectedRichText={selectedRichText}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={handleMakeStyleDefaultChange}
+          updateSelectedRichTextFields={handleUpdateSelectedRichTextFields}
+          updateSelectedRichTextStyle={handleUpdateSelectedRichTextStyle}
+          updateSelectedRichTextDocument={handleUpdateSelectedRichTextDocument}
+          deleteSelectedObject={handleDeleteFromProperties}
+          deleteLabel={deleteButtonLabel}
+        />
+      )}
       <ObjectStyleSections
         selectedPointPresent={Boolean(selectedPoint)}
         selectedSegment={selectedSegment}
@@ -627,46 +657,15 @@ export function PropertiesPanel({
         updateSelectedCircleStyle={handleUpdateSelectedCircleStyle}
         updateSelectedPolygonStyle={handleUpdateSelectedPolygonStyle}
         updateSelectedAngleStyle={handleUpdateSelectedAngleStyle}
-        updateSelectedSegmentFields={handleUpdateSelectedSegmentFields}
         updateSelectedLineFields={handleUpdateSelectedLineFields}
         canConvertSelectedLineToSegment={canConvertSelectedLineToSegment}
         convertSelectedLineToSegment={handleConvertSelectedLineToSegment}
-        updateSelectedCircleFields={handleUpdateSelectedCircleFields}
         updateSelectedPolygonFields={handleUpdateSelectedPolygonFields}
         setSelectedPolygonOwnedSegmentsVisible={setSelectedPolygonOwnedSegmentsVisible}
         selectedStyleAsDefault={selectedStyleAsDefault}
         onMakeStyleDefaultChange={handleMakeStyleDefaultChange}
         deleteSelectedObject={handleDeleteFromProperties}
         deleteLabel={deleteButtonLabel}
-      />
-      <NumbersSection
-        newNumberValue={newNumberValue}
-        setNewNumberValue={setNewNumberValue}
-        newSliderMin={newSliderMin}
-        setNewSliderMin={setNewSliderMin}
-        newSliderMax={newSliderMax}
-        setNewSliderMax={setNewSliderMax}
-        newSliderStep={newSliderStep}
-        setNewSliderStep={setNewSliderStep}
-        newSliderMode={newSliderMode}
-        setNewSliderMode={(next) => {
-          setNewSliderMode(next);
-          if (next === "degree") {
-            setNewSliderMin("0");
-            setNewSliderMax("360");
-            setNewSliderStep("1");
-            setNewNumberValue("0");
-          } else {
-            setNewSliderMin("0");
-            setNewSliderMax("10");
-            setNewSliderStep("0.1");
-            setNewNumberValue("1");
-          }
-        }}
-        selectedSegmentId={selectedSegment?.id ?? null}
-        selectedCircleId={selectedCircle?.id ?? null}
-        selectedAngleId={selectedAngle?.id ?? null}
-        createNumber={createNumber}
       />
     </section>
   );

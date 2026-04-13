@@ -2,7 +2,9 @@ import {
   getCircleWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
+  computeOrientedAngleRad,
   isRightAngle,
+  isRightAngleSweepRad,
   type LineLikeObjectRef,
   type SceneAngle,
   type SceneModel,
@@ -266,7 +268,6 @@ export function isRightExactByProvenance(scene: SceneModel, aId: string, bId: st
 }
 
 export function resolveAngleRightStatus(scene: SceneModel, angle: SceneAngle): AngleRightStatus {
-  if (isRightExactByProvenance(scene, angle.aId, angle.bId, angle.cId)) return "exact";
   const aPoint = scene.points.find((p) => p.id === angle.aId);
   const bPoint = scene.points.find((p) => p.id === angle.bId);
   const cPoint = scene.points.find((p) => p.id === angle.cId);
@@ -275,6 +276,9 @@ export function resolveAngleRightStatus(scene: SceneModel, angle: SceneAngle): A
   const b = getPointWorldPos(bPoint, scene);
   const c = getPointWorldPos(cPoint, scene);
   if (!a || !b || !c) return "none";
+  const theta = computeOrientedAngleRad(a, b, c);
+  if (theta === null || !isRightAngleSweepRad(theta, APPROX_RIGHT_EPS)) return "none";
+  if (isRightExactByProvenance(scene, angle.aId, angle.bId, angle.cId)) return "exact";
   return isRightAngle(a, b, c, APPROX_RIGHT_EPS) ? "approx" : "none";
 }
 

@@ -9,6 +9,7 @@ export async function compileTikzSnippet(name, tikzCode) {
   const logPath = path.join(tmpDir, `${name}.log`);
 
   const tex = [
+    "\\PassOptionsToPackage{dvipsnames}{xcolor}",
     "\\documentclass[tikz,border=2pt]{standalone}",
     "\\usepackage{tkz-euclide}",
     "\\begin{document}",

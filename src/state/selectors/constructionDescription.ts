@@ -7,7 +7,7 @@ import {
 } from "../../scene/points";
 
 export function selectConstructionDescription(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number" | "richText"; id: string } | null,
   scene: SceneModel
 ): string | null {
   const pointNameById = new Map(scene.points.map((p) => [p.id, p.name]));
@@ -34,7 +34,7 @@ export function selectConstructionDescription(
 }
 
 function describeSelectedConstruction(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number" | "richText"; id: string } | null,
   scene: SceneModel,
   pointNameById: Map<string, string>,
   pointById: Map<string, ScenePoint>,

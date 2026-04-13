@@ -105,6 +105,51 @@ function applyAssignedPointLabel(pointId: string, label: string): void {
   });
 }
 
+function hideHelperPoint(pointId: string): void {
+  setState((prev) => {
+    const point = prev.scene.points.find((p) => p.id === pointId);
+    if (!point) return prev;
+    return {
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((p) =>
+          p.id === pointId
+            ? { ...p, visible: false, showLabel: "none", auxiliary: true }
+            : p
+        ),
+      },
+    };
+  });
+}
+
+function hideHelperSegment(segId: string): void {
+  setState((prev) => {
+    const seg = prev.scene.segments.find((s) => s.id === segId);
+    if (!seg) return prev;
+    return {
+      ...prev,
+      scene: {
+        ...prev.scene,
+        segments: prev.scene.segments.map((s) =>
+          s.id === segId
+            ? { ...s, visible: false, showLabel: false, labelText: undefined, labelPosWorld: undefined }
+            : s
+        ),
+      },
+    };
+  });
+}
+
+function buildInradiusExpr(aId: string, bId: string, cId: string): string | null {
+  const scene = runtime.getState().scene;
+  const a = scene.points.find((p) => p.id === aId);
+  const b = scene.points.find((p) => p.id === bId);
+  const c = scene.points.find((p) => p.id === cId);
+  if (!a || !b || !c) return null;
+  return `Inradius(${a.name},${b.name},${c.name})`;
+}
+
 const actions: GeoActions = {
   ...createInteractionActions({
     getState: runtime.getState,
@@ -148,6 +193,17 @@ const actions: GeoActions = {
     setState,
   }),
 };
+
+function canUseCommandObjectLabel(nameRaw: string): boolean {
+  const name = nameRaw.trim();
+  if (!name) return false;
+  const state = runtime.getState();
+  pruneStaleCommandAliases(state.scene);
+  if (commandBarObjectAliases.has(name)) return false;
+  if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return false;
+  if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return false;
+  return true;
+}
 
 export const commandBarApi = {
   getScalarVars(): Record<string, number> {
@@ -232,6 +288,39 @@ export const commandBarApi = {
     pruneStaleCommandAliases(runtime.getState().scene);
     return Object.fromEntries(commandBarObjectAliases.entries());
   },
+  createPerpendicularBisector(aId: string, bId: string): string | null {
+    const helperSegmentId = actions.createSegment(aId, bId);
+    if (!helperSegmentId) return null;
+    hideHelperSegment(helperSegmentId);
+    const midpointId = actions.createMidpointFromSegment(helperSegmentId);
+    if (!midpointId) return null;
+    hideHelperPoint(midpointId);
+    return actions.createPerpendicularLine(midpointId, { type: "segment", id: helperSegmentId });
+  },
+  createPerpendicularBisectorWithLabel(aId: string, bId: string, label: string): string | null {
+    const name = label.trim();
+    if (!canUseCommandObjectLabel(name)) return null;
+    const lineId = commandBarApi.createPerpendicularBisector(aId, bId);
+    if (!lineId) return null;
+    commandBarObjectAliases.set(name, { type: "line", id: lineId });
+    return lineId;
+  },
+  createIncircle(aId: string, bId: string, cId: string): string | null {
+    const centerId = actions.createTriangleCenterPoint("incenter", aId, bId, cId);
+    if (!centerId) return null;
+    hideHelperPoint(centerId);
+    const radiusExpr = buildInradiusExpr(aId, bId, cId);
+    if (!radiusExpr) return null;
+    return actions.createCircleFixedRadius(centerId, radiusExpr);
+  },
+  createIncircleWithLabel(aId: string, bId: string, cId: string, label: string): string | null {
+    const name = label.trim();
+    if (!canUseCommandObjectLabel(name)) return null;
+    const circleId = commandBarApi.createIncircle(aId, bId, cId);
+    if (!circleId) return null;
+    commandBarObjectAliases.set(name, { type: "circle", id: circleId });
+    return circleId;
+  },
   applyObjectAssignment(
     name: string,
     cmd: Command
@@ -269,6 +358,11 @@ export const commandBarApi = {
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         return { ok: true as const, mode: "created", objectType: "line", id };
       }
+      if (cmd.type === "CreatePerpendicularBisector") {
+        const id = commandBarApi.createPerpendicularBisectorWithLabel(cmd.aId, cmd.bId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "line", id };
+      }
       if (cmd.type === "CreateAngleBisector") {
         const id = commandBarApi.createAngleBisectorWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
@@ -296,6 +390,11 @@ export const commandBarApi = {
       }
       if (cmd.type === "CreateCircleCenterRadius") {
         const id = commandBarApi.createCircleCenterRadiusWithLabel(cmd.centerId, cmd.r, label, cmd.rExpr);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "circle", id };
+      }
+      if (cmd.type === "CreateIncircle") {
+        const id = commandBarApi.createIncircleWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         return { ok: true as const, mode: "created", objectType: "circle", id };
       }

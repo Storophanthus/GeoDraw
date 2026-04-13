@@ -44,6 +44,7 @@ export function createInteractionActions(
                 polygonStyle: null,
                 angleStyle: null,
                 textLabelStyle: null,
+                richTextStyle: null,
                 pointShowLabel: null,
                 objectShowLabel: null,
               },

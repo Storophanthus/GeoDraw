@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import type { Vec2 } from "../geo/vec2";
 import type { PointShape, ScenePoint } from "../scene/points";
+import { ColorSwatchInput } from "./ColorField";
 import { formatRoundedDisplay } from "./displayFormat";
 import { StyleSectionHeader } from "./StyleSectionHeader";
 
@@ -112,6 +113,26 @@ export function PointPropertiesSection({
         </select>
       </div>
 
+      {selectedPoint.showLabel !== "none" && (
+        <>
+          <div className="controlRow">
+            <label className="controlLabel">Label Color</label>
+            <ColorSwatchInput
+              value={selectedPoint.style.labelColor}
+              onChange={(e) => updateSelectedPointStyle({ labelColor: e.target.value })}
+            />
+          </div>
+
+          <div className="controlRow">
+            <label className="controlLabel">Halo Color</label>
+            <ColorSwatchInput
+              value={selectedPoint.style.labelHaloColor}
+              onChange={(e) => updateSelectedPointStyle({ labelHaloColor: e.target.value })}
+            />
+          </div>
+        </>
+      )}
+
       <label className="checkboxRow">
         <input
           type="checkbox"
@@ -187,9 +208,7 @@ export function PointPropertiesSection({
 
         <div className="controlRow">
           <label className="controlLabel">Stroke Color</label>
-          <input
-            className="colorInput"
-            type="color"
+          <ColorSwatchInput
             value={selectedPoint.style.strokeColor}
             onChange={(e) => updateSelectedPointStyle({ strokeColor: e.target.value })}
           />
@@ -232,9 +251,7 @@ export function PointPropertiesSection({
 
         <div className="controlRow">
           <label className="controlLabel">Fill Color</label>
-          <input
-            className="colorInput"
-            type="color"
+          <ColorSwatchInput
             value={selectedPoint.style.fillColor}
             onChange={(e) => updateSelectedPointStyle({ fillColor: e.target.value })}
           />

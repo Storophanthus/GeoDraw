@@ -68,6 +68,14 @@ export function createSceneMutationActions({
   | "updateTextLabelFieldsByIds"
   | "updateSelectedTextLabelStyle"
   | "updateTextLabelStyleByIds"
+  | "moveRichTextNodeTo"
+  | "moveRichTextNodeByWorldDelta"
+  | "updateSelectedRichTextFields"
+  | "updateRichTextFieldsByIds"
+  | "updateSelectedRichTextStyle"
+  | "updateRichTextStyleByIds"
+  | "updateSelectedRichTextDocument"
+  | "updateRichTextDocumentByIds"
   | "setObjectVisibility"
   | "setObjectsVisibility"
   | "reorderGeometryLayerInTab"
@@ -281,6 +289,154 @@ export function createSceneMutationActions({
           },
         }),
         { history: "coalesce", actionKey: `moveTextLabelTo:${id}` }
+      );
+    },
+
+
+
+    moveRichTextNodeTo(id, world) {
+      if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+              node.id === id ? { ...node, positionWorld: { x: world.x, y: world.y } } : node
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: `moveRichTextNodeTo:${id}` }
+      );
+    },
+
+    moveRichTextNodeByWorldDelta(id, deltaWorld) {
+      if (!Number.isFinite(deltaWorld.x) || !Number.isFinite(deltaWorld.y)) return;
+      if (Math.abs(deltaWorld.x) <= 1e-12 && Math.abs(deltaWorld.y) <= 1e-12) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+              node.id === id
+                ? {
+                    ...node,
+                    positionWorld: {
+                      x: node.positionWorld.x + deltaWorld.x,
+                      y: node.positionWorld.y + deltaWorld.y,
+                    },
+                  }
+                : node
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: `moveRichTextNodeTo:${id}` }
+      );
+    },
+
+    updateSelectedRichTextFields(next) {
+      setState(
+        (prev) => {
+          if (!prev.selectedObject || prev.selectedObject.type !== "richText") return prev;
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+                node.id === prev.selectedObject!.id ? { ...node, ...next } : node
+              ),
+            },
+          };
+        },
+        { history: "coalesce", actionKey: "updateSelectedRichTextFields" }
+      );
+    },
+
+    updateRichTextFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+              idSet.has(node.id) ? { ...node, ...next } : node
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: "updateRichTextFieldsByIds" }
+      );
+    },
+
+    updateSelectedRichTextStyle(next) {
+      setState(
+        (prev) => {
+          if (!prev.selectedObject || prev.selectedObject.type !== "richText") return prev;
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+                node.id === prev.selectedObject!.id ? { ...node, style: { ...node.style, ...next } } : node
+              ),
+            },
+          };
+        },
+        { history: "coalesce", actionKey: "updateSelectedRichTextStyle" }
+      );
+    },
+
+    updateRichTextStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+              idSet.has(node.id) ? { ...node, style: { ...node.style, ...next } } : node
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: "updateRichTextStyleByIds" }
+      );
+    },
+
+    updateSelectedRichTextDocument(document) {
+      setState(
+        (prev) => {
+          if (!prev.selectedObject || prev.selectedObject.type !== "richText") return prev;
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+                node.id === prev.selectedObject!.id ? { ...node, document } : node
+              ),
+            },
+          };
+        },
+        { history: "coalesce", actionKey: "updateSelectedRichTextDocument" }
+      );
+    },
+
+    updateRichTextDocumentByIds(ids, document) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+              idSet.has(node.id) ? { ...node, document } : node
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: "updateRichTextDocumentByIds" }
       );
     },
 
@@ -1287,6 +1443,7 @@ export function createSceneMutationActions({
               polygonStyle: null,
               angleStyle: null,
               textLabelStyle: null,
+              richTextStyle: null,
               pointShowLabel: point.showLabel,
               objectShowLabel: null,
             },
@@ -1306,6 +1463,7 @@ export function createSceneMutationActions({
               polygonStyle: polygonStyleFromLineStyle(segment.style),
               angleStyle: angleStyleFromLineStyle(segment.style),
               textLabelStyle: null,
+              richTextStyle: null,
               pointShowLabel: null,
               objectShowLabel: Boolean(segment.showLabel),
             },
@@ -1325,6 +1483,7 @@ export function createSceneMutationActions({
               polygonStyle: polygonStyleFromCircleStyle(circle.style),
               angleStyle: angleStyleFromCircleStyle(circle.style),
               textLabelStyle: null,
+              richTextStyle: null,
               pointShowLabel: null,
               objectShowLabel: Boolean(circle.showLabel),
             },
@@ -1344,6 +1503,7 @@ export function createSceneMutationActions({
               polygonStyle: { ...polygon.style },
               angleStyle: angleStyleFromCircleStyle(circleStyleFromPolygonStyle(polygon.style)),
               textLabelStyle: null,
+              richTextStyle: null,
               pointShowLabel: null,
               objectShowLabel: Boolean(polygon.showLabel),
             },
@@ -1389,6 +1549,7 @@ export function createSceneMutationActions({
                 labelPosWorld: { ...angle.style.labelPosWorld },
               },
               textLabelStyle: null,
+              richTextStyle: null,
               pointShowLabel: null,
               objectShowLabel: null,
             },
@@ -1408,6 +1569,27 @@ export function createSceneMutationActions({
               polygonStyle: null,
               angleStyle: null,
               textLabelStyle: { ...textLabel.style },
+              richTextStyle: null,
+              pointShowLabel: null,
+              objectShowLabel: null,
+            },
+          };
+        }
+
+        if (obj.type === "richText") {
+          const richText = (prev.scene.richTextNodes ?? []).find((item) => item.id === obj.id);
+          if (!richText) return prev;
+          return {
+            ...prev,
+            copyStyle: {
+              source: obj,
+              pointStyle: null,
+              lineStyle: null,
+              circleStyle: null,
+              polygonStyle: null,
+              angleStyle: null,
+              textLabelStyle: null,
+              richTextStyle: { ...richText.style },
               pointShowLabel: null,
               objectShowLabel: null,
             },
@@ -1428,6 +1610,7 @@ export function createSceneMutationActions({
             polygonStyle: polygonStyleFromLineStyle(line.style),
             angleStyle: angleStyleFromLineStyle(line.style),
             textLabelStyle: null,
+            richTextStyle: null,
             pointShowLabel: null,
             objectShowLabel: Boolean(line.showLabel),
           },
@@ -1509,6 +1692,7 @@ function emptyCopyStyle(): GeoState["copyStyle"] {
     polygonStyle: null,
     angleStyle: null,
     textLabelStyle: null,
+    richTextStyle: null,
     pointShowLabel: null,
     objectShowLabel: null,
   };
@@ -1522,6 +1706,7 @@ function applyVisibilityToScene(scene: SceneModel, objects: SelectedObjectRef[],
   const polygonIds = new Set<string>();
   const angleIds = new Set<string>();
   const textLabelIds = new Set<string>();
+  const richTextIds = new Set<string>();
   const numberIds = new Set<string>();
   for (let i = 0; i < objects.length; i += 1) {
     const obj = objects[i];
@@ -1532,6 +1717,7 @@ function applyVisibilityToScene(scene: SceneModel, objects: SelectedObjectRef[],
     else if (obj.type === "polygon") polygonIds.add(obj.id);
     else if (obj.type === "angle") angleIds.add(obj.id);
     else if (obj.type === "textLabel") textLabelIds.add(obj.id);
+    else if (obj.type === "richText") richTextIds.add(obj.id);
     else numberIds.add(obj.id);
   }
 
@@ -1599,6 +1785,15 @@ function applyVisibilityToScene(scene: SceneModel, objects: SelectedObjectRef[],
     });
     if (changed) nextScene = { ...nextScene, textLabels };
   }
+  if (richTextIds.size > 0) {
+    let changed = false;
+    const richTextNodes = (nextScene.richTextNodes ?? []).map((node) => {
+      if (!richTextIds.has(node.id) || node.visible === visible) return node;
+      changed = true;
+      return { ...node, visible };
+    });
+    if (changed) nextScene = { ...nextScene, richTextNodes };
+  }
   if (numberIds.size > 0) {
     let changed = false;
     const numbers = nextScene.numbers.map((num) => {
@@ -1653,6 +1848,23 @@ function applyCopyStyleToScene(
       };
     });
     return changed ? { ...scene, textLabels } : scene;
+  }
+
+  if (obj.type === "richText") {
+    if (!copyStyle.richTextStyle) return scene;
+    let changed = false;
+    const richTextNodes = (scene.richTextNodes ?? []).map((node) => {
+      if (node.id !== obj.id) return node;
+      changed = true;
+      return {
+        ...node,
+        style: {
+          ...node.style,
+          ...copyStyle.richTextStyle,
+        },
+      };
+    });
+    return changed ? { ...scene, richTextNodes } : scene;
   }
 
   if (obj.type === "point") {

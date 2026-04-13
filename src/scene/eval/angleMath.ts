@@ -1,6 +1,7 @@
 import type { Vec2 } from "../../geo/vec2";
 
 export const RIGHT_ANGLE_EPS = 1e-6;
+export const RIGHT_ANGLE_SWEEP_EPS = 1e-2;
 
 export function computeConvexAngleRad(a: Vec2, b: Vec2, c: Vec2): number | null {
   const bax = a.x - b.x;
@@ -29,6 +30,14 @@ export function computeOrientedAngleRad(a: Vec2, b: Vec2, c: Vec2): number | nul
   while (delta < 0) delta += Math.PI * 2;
   while (delta >= Math.PI * 2) delta -= Math.PI * 2;
   return delta;
+}
+
+export function isRightAngleSweepRad(thetaRad: number, eps: number = RIGHT_ANGLE_SWEEP_EPS): boolean {
+  if (!Number.isFinite(thetaRad)) return false;
+  let theta = thetaRad;
+  while (theta < 0) theta += Math.PI * 2;
+  while (theta >= Math.PI * 2) theta -= Math.PI * 2;
+  return Math.abs(theta - Math.PI / 2) <= eps;
 }
 
 export function isRightAngle(a: Vec2, b: Vec2, c: Vec2, eps: number = RIGHT_ANGLE_EPS): boolean {

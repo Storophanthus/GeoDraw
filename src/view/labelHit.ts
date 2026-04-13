@@ -90,6 +90,29 @@ export function hitTestTextLabelFromDom(
   return null;
 }
 
+export function hitTestSpecificTextLabelFromDom(
+  clientX: number,
+  clientY: number,
+  labelsLayer: HTMLDivElement | null,
+  textLabelId: string,
+  padPx = 8
+): boolean {
+  if (!labelsLayer) return false;
+  const labels = labelsLayer.querySelectorAll<HTMLElement>(".pointLabel[data-text-label-id]");
+  for (let i = labels.length - 1; i >= 0; i -= 1) {
+    const el = labels[i];
+    if ((el.dataset.textLabelId ?? null) !== textLabelId) continue;
+    const rect = el.getBoundingClientRect();
+    return (
+      clientX >= rect.left - padPx
+      && clientX <= rect.right + padPx
+      && clientY >= rect.top - padPx
+      && clientY <= rect.bottom + padPx
+    );
+  }
+  return false;
+}
+
 export function hitTestObjectLabelFromDom(
   clientX: number,
   clientY: number,
@@ -111,4 +134,50 @@ export function hitTestObjectLabelFromDom(
     };
   }
   return null;
+}
+
+export function hitTestRichTextNodeFromDom(
+  clientX: number,
+  clientY: number,
+  labelsLayer: HTMLDivElement | null
+): string | null {
+  if (!labelsLayer) return null;
+  const labels = labelsLayer.querySelectorAll<HTMLElement>(".gdRichTextOverlay[data-rich-text-id]");
+  const padPx = 8;
+  for (let i = labels.length - 1; i >= 0; i -= 1) {
+    const el = labels[i];
+    const rect = el.getBoundingClientRect();
+    if (
+      clientX >= rect.left - padPx
+      && clientX <= rect.right + padPx
+      && clientY >= rect.top - padPx
+      && clientY <= rect.bottom + padPx
+    ) {
+      return el.dataset.richTextId ?? null;
+    }
+  }
+  return null;
+}
+
+export function hitTestSpecificRichTextNodeFromDom(
+  clientX: number,
+  clientY: number,
+  labelsLayer: HTMLDivElement | null,
+  richTextId: string,
+  padPx = 8
+): boolean {
+  if (!labelsLayer) return false;
+  const labels = labelsLayer.querySelectorAll<HTMLElement>(".gdRichTextOverlay[data-rich-text-id]");
+  for (let i = labels.length - 1; i >= 0; i -= 1) {
+    const el = labels[i];
+    if ((el.dataset.richTextId ?? null) !== richTextId) continue;
+    const rect = el.getBoundingClientRect();
+    return (
+      clientX >= rect.left - padPx
+      && clientX <= rect.right + padPx
+      && clientY >= rect.top - padPx
+      && clientY <= rect.bottom + padPx
+    );
+  }
+  return false;
 }

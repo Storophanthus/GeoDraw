@@ -10,7 +10,7 @@ import { COLOR_PROFILE_OPTIONS, getColorProfile } from "../state/colorProfiles";
 import { ConstructionProfileSwatch } from "./ConstructionProfileSwatch";
 import { ToolGroupButton } from "./ToolGroupButton";
 import { toRgba } from "./colorUtils";
-import { MousePointer2, Paintbrush, Type, Crop, Scissors } from "lucide-react";
+import { MousePointer2, Paintbrush, Type, Crop, Scissors, Hash } from "lucide-react";
 import {
   IconAngle,
   IconAngleFixed,
@@ -121,9 +121,19 @@ export function ToolPalette({
 }: ToolPaletteProps) {
   const colorProfileId = useGeoStore((store) => store.colorProfileId);
   const setColorProfile = useGeoStore((store) => store.setColorProfile);
+  const selectedObject = useGeoStore((store) => store.selectedObject);
+  const createNumber = useGeoStore((store) => store.createNumber);
+  const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
   const activeProfilePalette = getColorProfile(colorProfileId).palette;
   const [openFlyoutGroup, setOpenFlyoutGroup] = useState<ToolGroupId | null>(null);
   const [profileFlyoutOpen, setProfileFlyoutOpen] = useState(false);
+  const [numberFlyoutOpen, setNumberFlyoutOpen] = useState(false);
+  const [numberName, setNumberName] = useState("");
+  const [numberValue, setNumberValue] = useState("1");
+  const [numberMin, setNumberMin] = useState("0");
+  const [numberMax, setNumberMax] = useState("10");
+  const [numberStep, setNumberStep] = useState("0.1");
+  const [numberMode, setNumberMode] = useState<"real" | "degree">("real");
   const [groupLastSelected, setGroupLastSelected] = useState<Record<ToolGroupId, ActiveTool>>({
     move: "move",
     points: "point",
@@ -148,6 +158,7 @@ export function ToolPalette({
       if (!toolbarRef.current.contains(e.target as Node)) {
         setOpenFlyoutGroup(null);
         setProfileFlyoutOpen(false);
+        setNumberFlyoutOpen(false);
       }
     };
     window.addEventListener("mousedown", onMouseDown);
@@ -161,19 +172,59 @@ export function ToolPalette({
       const isTextInput =
         tagName === "INPUT" || tagName === "TEXTAREA" || target?.isContentEditable === true;
       if (isTextInput) return;
-      if (e.key === "Escape" && (openFlyoutGroup || profileFlyoutOpen)) {
+      if (e.key === "Escape" && (openFlyoutGroup || profileFlyoutOpen || numberFlyoutOpen)) {
         e.preventDefault();
         setOpenFlyoutGroup(null);
         setProfileFlyoutOpen(false);
+        setNumberFlyoutOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [openFlyoutGroup, profileFlyoutOpen]);
+  }, [numberFlyoutOpen, openFlyoutGroup, profileFlyoutOpen]);
 
   useEffect(() => {
-    onFlyoutVisibilityChange?.(openFlyoutGroup !== null || profileFlyoutOpen);
-  }, [openFlyoutGroup, onFlyoutVisibilityChange, profileFlyoutOpen]);
+    onFlyoutVisibilityChange?.(openFlyoutGroup !== null || profileFlyoutOpen || numberFlyoutOpen);
+  }, [numberFlyoutOpen, openFlyoutGroup, onFlyoutVisibilityChange, profileFlyoutOpen]);
+
+  const createAndSelectNumber = (
+    definition:
+      | { kind: "slider"; value: number; min: number; max: number; step: number; sliderMode?: "real" | "degree" | "radian" }
+      | { kind: "segmentLength"; segId: string }
+      | { kind: "circleRadius"; circleId: string }
+      | { kind: "circleArea"; circleId: string }
+      | { kind: "angleDegrees"; angleId: string },
+    preferredName?: string
+  ) => {
+    const id = createNumber(definition, preferredName);
+    if (!id) return;
+    setSelectedObject({ type: "number", id });
+    setNumberName("");
+    setNumberFlyoutOpen(false);
+  };
+
+  const handleCreateSlider = () => {
+    const value = Number(numberValue);
+    const min = Number(numberMin);
+    const max = Number(numberMax);
+    const step = Number(numberStep);
+    if (![value, min, max, step].every(Number.isFinite)) return;
+    if (!(step > 0)) return;
+    const lo = Math.min(min, max);
+    const hi = Math.max(min, max);
+    createAndSelectNumber({
+      kind: "slider",
+      value: Math.min(hi, Math.max(lo, value)),
+      min: lo,
+      max: hi,
+      step,
+      sliderMode: numberMode,
+    }, numberName);
+  };
+
+  const selectedSegmentId = selectedObject?.type === "segment" ? selectedObject.id : null;
+  const selectedCircleId = selectedObject?.type === "circle" ? selectedObject.id : null;
+  const selectedAngleId = selectedObject?.type === "angle" ? selectedObject.id : null;
 
   return (
     <aside
@@ -227,6 +278,30 @@ export function ToolPalette({
             );
           })}
 
+          <div className="toolGroupBlock toolNumberSection">
+            <div className="toolGroupDivider" />
+            <div className="toolGroupLabel">VALUE</div>
+            <div className="toolGroupWrap">
+              <div className={numberFlyoutOpen ? "toolButtonWrap suppressTooltip" : "toolButtonWrap"}>
+                <button
+                  type="button"
+                  className={numberFlyoutOpen ? "toolIconButton active" : "toolIconButton"}
+                  onClick={() => {
+                    setOpenFlyoutGroup(null);
+                    setProfileFlyoutOpen(false);
+                    setNumberFlyoutOpen((prev) => !prev);
+                  }}
+                  aria-label="Number tools"
+                >
+                  <Hash size={18} strokeWidth={2} />
+                </button>
+                <span className="toolTooltip" role="tooltip">
+                  Number tools
+                </span>
+              </div>
+            </div>
+          </div>
+
           <div className="toolGroupBlock toolProfileSection">
             <div className="toolGroupDivider" />
             <div className="toolGroupLabel">PALETTE</div>
@@ -277,6 +352,127 @@ export function ToolPalette({
             </div>
           </div>
         </>
+      )}
+      {numberFlyoutOpen && (
+        <div
+          className="toolModalBackdrop"
+          onMouseDown={() => setNumberFlyoutOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="toolModalCard toolQuickPanel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Number tools"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="toolModalTitle">Number</div>
+            <div className="toolQuickGrid">
+              <label className="toolQuickField toolQuickFieldFull">
+                <span>Name</span>
+                <input
+                  className="renameInput"
+                  type="text"
+                  value={numberName}
+                  onChange={(e) => setNumberName(e.target.value)}
+                  placeholder="auto"
+                />
+              </label>
+              <label className="toolQuickField">
+                <span>Val</span>
+                <input
+                  className="renameInput"
+                  type="text"
+                  value={numberValue}
+                  onChange={(e) => setNumberValue(e.target.value)}
+                  placeholder="1"
+                />
+              </label>
+              <label className="toolQuickField">
+                <span>Type</span>
+                <select
+                  className="selectInput"
+                  value={numberMode}
+                  onChange={(e) => setNumberMode(e.target.value === "degree" ? "degree" : "real")}
+                >
+                  <option value="real">Real</option>
+                  <option value="degree">Deg</option>
+                </select>
+              </label>
+              <label className="toolQuickField">
+                <span>Min</span>
+                <input
+                  className="renameInput"
+                  type="text"
+                  value={numberMin}
+                  onChange={(e) => setNumberMin(e.target.value)}
+                  placeholder="0"
+                />
+              </label>
+              <label className="toolQuickField">
+                <span>Max</span>
+                <input
+                  className="renameInput"
+                  type="text"
+                  value={numberMax}
+                  onChange={(e) => setNumberMax(e.target.value)}
+                  placeholder={numberMode === "degree" ? "360" : "10"}
+                />
+              </label>
+              <label className="toolQuickField toolQuickFieldFull">
+                <span>Step</span>
+                <input
+                  className="renameInput"
+                  type="text"
+                  value={numberStep}
+                  onChange={(e) => setNumberStep(e.target.value)}
+                  placeholder={numberMode === "degree" ? "1" : "0.1"}
+                />
+              </label>
+            </div>
+            <div className="toolQuickActions">
+              <button type="button" className="actionButton secondary" onClick={handleCreateSlider}>
+                Add
+              </button>
+              {selectedSegmentId && (
+                <button
+                  type="button"
+                  className="actionButton secondary"
+                  onClick={() => createAndSelectNumber({ kind: "segmentLength", segId: selectedSegmentId }, numberName)}
+                >
+                  Len
+                </button>
+              )}
+              {selectedCircleId && (
+                <button
+                  type="button"
+                  className="actionButton secondary"
+                  onClick={() => createAndSelectNumber({ kind: "circleRadius", circleId: selectedCircleId }, numberName)}
+                >
+                  Rad
+                </button>
+              )}
+              {selectedCircleId && (
+                <button
+                  type="button"
+                  className="actionButton secondary"
+                  onClick={() => createAndSelectNumber({ kind: "circleArea", circleId: selectedCircleId }, numberName)}
+                >
+                  Area
+                </button>
+              )}
+              {selectedAngleId && (
+                <button
+                  type="button"
+                  className="actionButton secondary"
+                  onClick={() => createAndSelectNumber({ kind: "angleDegrees", angleId: selectedAngleId }, numberName)}
+                >
+                  Ang
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </aside>
   );

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p1", "kind": "free", "name": "O", "captionTex": "O", "visible": true, "showLabel": "name", "position": { "x": 0, "y": 0 } },
+    { "id": "p2", "kind": "free", "name": "A", "captionTex": "A", "visible": true, "showLabel": "name", "position": { "x": 3, "y": 4 } },
+    { "id": "p3", "kind": "free", "name": "K", "captionTex": "K", "visible": true, "showLabel": "name", "position": { "x": 6, "y": 0 } },
+    {
+      "id": "p4",
+      "kind": "intersectionPoint",
+      "name": "Ap",
+      "captionTex": "A^{\\prime}",
+      "visible": true,
+      "showLabel": "caption",
+      "objA": { "type": "circle", "id": "c2" },
+      "objB": { "type": "circle", "id": "c1" },
+      "preferredWorld": { "x": 3, "y": -4 },
+      "branchIndex": 0,
+      "excludePointId": "p2"
+    }
+  ],
+  "segments": [],
+  "lines": [],
+  "circles": [
+    { "id": "c1", "kind": "twoPoint", "centerId": "p1", "throughId": "p2", "visible": true },
+    { "id": "c2", "kind": "twoPoint", "centerId": "p3", "throughId": "p2", "visible": true }
+  ],
+  "angles": [],
+  "numbers": []
+}

@@ -1,0 +1,29 @@
+{
+  "scene": {
+    "points": [],
+    "numbers": [],
+    "lines": [],
+    "segments": [],
+    "circles": [],
+    "polygons": [],
+    "angles": [],
+    "textLabels": [],
+    "richTextNodes": [
+      {
+        "id": "rt_1",
+        "type": "richText",
+        "name": "rt_1",
+        "visible": true,
+        "positionWorld": { "x": 42, "y": 11 },
+        "boundsPx": { "widthPx": 400, "heightPx": 80 },
+        "source": "A number $a$ is algebraic\n\\[{a}^{2}+1=0\\]",
+        "style": {
+          "textColor": "#000000",
+          "textSize": 12,
+          "textAlign": "left",
+          "rotationDeg": 0
+        }
+      }
+    ]
+  }
+}

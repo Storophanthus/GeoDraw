@@ -6,8 +6,23 @@
     { "id": "p_3", "name": "C", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 1, "y": 1 } }
   ],
   "numbers": [],
-  "lines": [],
-  "segments": [],
+  "lines": [
+    {
+      "id": "l_1",
+      "kind": "perpendicular",
+      "throughId": "p_2",
+      "base": { "type": "segment", "id": "s_1" },
+      "visible": true
+    }
+  ],
+  "segments": [
+    {
+      "id": "s_1",
+      "aId": "p_1",
+      "bId": "p_2",
+      "visible": true
+    }
+  ],
   "circles": [],
   "angles": [
     {

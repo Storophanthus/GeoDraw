@@ -42,7 +42,8 @@ const MIN_PDF_ZOOM = 0.4;
 const MAX_PDF_ZOOM = 4;
 const PDF_CANVAS_PADDING = 18;
 
-const REQUIRED_PREAMBLE = `\\documentclass[tikz,border=2pt]{standalone}
+const REQUIRED_PREAMBLE = `\\PassOptionsToPackage{dvipsnames}{xcolor}
+\\documentclass[tikz,border=2pt]{standalone}
 \\usepackage{tkz-euclide}
 \\usepackage{xfp}
 \\usetikzlibrary{arrows.meta,bending,decorations.markings,patterns,patterns.meta,shapes.geometric}`;

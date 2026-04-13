@@ -1,6 +1,7 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
 import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import { normalizeSceneIntegrity } from "../domain/sceneIntegrity";
+import { exportFriendlyColorNameByRgbKey, parseColorToRgb, resolveExportFriendlyColorName } from "../exportFriendlyColors";
 import {
   collectAngleMarkPositions,
   collectSegmentMarkPositions,
@@ -32,15 +33,10 @@ import {
   isFiniteLabelPosWorld,
   resolveObjectLabelText,
 } from "../scene/objectLabels";
-import {
-  ANGLE_LABEL_MAX_DIST,
-  ANGLE_LABEL_MIN_DIST,
-  RIGHT_ANGLE_LABEL_MAX_DIST,
-  angleBisectorRad,
-  clampAngleLabelDist,
-  shortestAngleDiffRad,
-} from "../scene/angleLabelPlacement";
+import { angleBisectorRad, defaultAngleLabelDist, shortestAngleDiffRad } from "../scene/angleLabelPlacement";
 import { parseTextLabelRichText } from "../text/textLabelRichText";
+import { extractDisplayMathSource, extractInlineMathSource } from "../richtext/document";
+import type { RichTextDocument } from "../richtext/model";
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
 import type { TikzRendererCapabilities } from "./tikz/renderCapabilities";
@@ -124,6 +120,7 @@ export type TikzCommand =
   }
   | { kind: "DefAngleBisectorLine"; auxName: string; a: string; b: string; c: string }
   | { kind: "DefTriangleCenterPoint"; name: string; centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter"; a: string; b: string; c: string }
+  | { kind: "DefIncircle"; centerName: string; touchName: string; a: string; b: string; c: string }
   | { kind: "DefCircleCircumCenter"; centerName: string; a: string; b: string; c: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
   | { kind: "DefMidPoint"; name: string; a: string; b: string }
@@ -214,9 +211,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     geometryBundles.set(key, [...commands]);
   };
 
-  const freeItems: Array<{ name: string; x: number; y: number }> = [];
-  const viewport = options.viewport ?? computeExportViewport(scene);
   const exportPxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const freeItems: Array<{ name: string; x: number; y: number }> = [];
+  const viewport = options.viewport ?? computeExportViewport(scene, exportPxPerWorld);
   let coordScale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
   const labelScale = clampPositive(options.labelScale ?? 1, 0.1, 10);
   // Auto-fit viewport for document embedding. Fit both down and up so exported
@@ -284,6 +281,43 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   let derivedAuxIndex = 0;
   const circleThroughNameById = new Map<string, string>();
   const circleCenterNameById = new Map<string, string>();
+  const incircleConstructedCircleIds = new Set<string>();
+  const incircleCircleIdsByCenterId = new Map<string, string[]>();
+
+  const normalizeExpr = (expr: string | undefined): string => (expr ?? "").replace(/\s+/g, "");
+  const buildInradiusExprCandidates = (a: string, b: string, c: string): string[] => {
+    const perms = [
+      [a, b, c],
+      [a, c, b],
+      [b, a, c],
+      [b, c, a],
+      [c, a, b],
+      [c, b, a],
+    ] as const;
+    return perms.map(([x, y, z]) => `Inradius(${x},${y},${z})`);
+  };
+  const isExportableIncircle = (circleId: string): boolean => {
+    const circle = circleById.get(circleId);
+    if (!circle || circle.kind !== "fixedRadius") return false;
+    const centerPoint = pointById.get(circle.centerId);
+    if (!centerPoint || centerPoint.kind !== "triangleCenter" || centerPoint.centerKind !== "incenter") return false;
+    const aPoint = pointById.get(centerPoint.aId);
+    const bPoint = pointById.get(centerPoint.bId);
+    const cPoint = pointById.get(centerPoint.cId);
+    if (!aPoint || !bPoint || !cPoint) return false;
+    const normalized = normalizeExpr(circle.radiusExpr);
+    if (!normalized) return false;
+    return buildInradiusExprCandidates(aPoint.name, bPoint.name, cPoint.name)
+      .map((expr) => normalizeExpr(expr))
+      .includes(normalized);
+  };
+
+  for (const circle of scene.circles) {
+    if (circle.kind !== "fixedRadius" || !isExportableIncircle(circle.id)) continue;
+    const ids = incircleCircleIdsByCenterId.get(circle.centerId);
+    if (ids) ids.push(circle.id);
+    else incircleCircleIdsByCenterId.set(circle.centerId, [circle.id]);
+  }
 
 
 
@@ -327,6 +361,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (cached) return cached;
     const circle = circleById.get(circleId);
     if (!circle) throw new Error(`Missing circle ${circleId}`);
+    if (incircleConstructedCircleIds.has(circle.id)) {
+      const throughName = circleThroughNameById.get(circle.id);
+      if (!throughName) throw new Error(`Missing incircle through point cache for ${circle.id}`);
+      return throughName;
+    }
     ensureCircleCenterName(circle.id);
     if (circle.kind === "threePoint") {
       resolvePoint(circle.aId);
@@ -929,14 +968,36 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       resolvePoint(point.aId);
       resolvePoint(point.bId);
       resolvePoint(point.cId);
-      constructions.push({
-        kind: "DefTriangleCenterPoint",
-        name,
-        centerKind: point.centerKind,
-        a: mustName(pointName, point.aId),
-        b: mustName(pointName, point.bId),
-        c: mustName(pointName, point.cId),
-      });
+      const incircleCircleIds = incircleCircleIdsByCenterId.get(point.id) ?? [];
+      if (point.centerKind === "incenter" && incircleCircleIds.length > 0) {
+        derivedAuxIndex += 1;
+        const touchName = `tkzInc_${derivedAuxIndex}`;
+        const a = mustName(pointName, point.aId);
+        const b = mustName(pointName, point.bId);
+        const c = mustName(pointName, point.cId);
+        constructions.push({
+          kind: "DefIncircle",
+          centerName: name,
+          touchName,
+          a,
+          b,
+          c,
+        });
+        for (const circleId of incircleCircleIds) {
+          circleCenterNameById.set(circleId, name);
+          circleThroughNameById.set(circleId, touchName);
+          incircleConstructedCircleIds.add(circleId);
+        }
+      } else {
+        constructions.push({
+          kind: "DefTriangleCenterPoint",
+          name,
+          centerKind: point.centerKind,
+          a: mustName(pointName, point.aId),
+          b: mustName(pointName, point.bId),
+          c: mustName(pointName, point.cId),
+        });
+      }
       definedPointIds.add(point.id);
     } else if (point.kind === "midpointPoints") {
       resolvePoint(point.aId);
@@ -1684,13 +1745,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   for (const point of scene.points) {
     const pointWorld = getPointWorldPosCached(scene, point.id);
-    // Dynamic intersections can legitimately become undefined under drag,
-    // but only hidden ones may be omitted silently. Visible undefined points
-    // should fail closed so export cannot diverge from the canvas state.
+    // Dynamic intersections can legitimately become undefined under drag.
+    // A point with no evaluated position is not drawn on the canvas, so it
+    // should not block export unless visible geometry later depends on it.
     if (!pointWorld) {
-      if (point.visible) {
-        throw new Error(`Cannot export visible undefined point: ${point.name}`);
-      }
       continue;
     }
     resolvePoint(point.id);
@@ -1804,10 +1862,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
     const centerName = ensureCircleCenterName(circle.id);
+    const throughName = incircleConstructedCircleIds.has(circle.id) ? ensureCircleThroughName(circle.id) : null;
     const fillStyle = circleFillStyleToTikz(circle.style);
     const strokeStyle = circleStrokeStyleToTikz(circle.style, options);
     const circleBundle: TikzCommand[] = [];
-    if (circle.kind === "fixedRadius") {
+    if (circle.kind === "fixedRadius" && !throughName) {
       const geom = circleGeomById(circle.id);
       if (!Number.isFinite(geom.radius) || geom.radius <= 0) {
         throw new Error(`Unsupported construction: CircleFixedRadius (invalid radius for ${circle.id})`);
@@ -1824,6 +1883,21 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         kind: "DrawCircleRadius",
         o: centerName,
         radius: geom.radius,
+        style: strokeStyle,
+      });
+    } else if (throughName) {
+      if (fillStyle) {
+        circleBundle.push({
+          kind: "FillCircle",
+          o: centerName,
+          x: throughName,
+          style: fillStyle,
+        });
+      }
+      circleBundle.push({
+        kind: "DrawCircle",
+        o: centerName,
+        x: throughName,
         style: strokeStyle,
       });
     } else if (circle.kind === "threePoint") {
@@ -1846,6 +1920,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         style: strokeStyle,
       });
     } else {
+      if (circle.kind === "fixedRadius") {
+        throw new Error(`Missing symbolic export path for fixed-radius circle ${circle.id}`);
+      }
       if (!definedPointIds.has(circle.throughId)) {
         throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
       }
@@ -2212,6 +2289,32 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         ...(Math.abs(rotationDeg) > 1e-9 ? [`rotate=${fmt(rotationDeg)}`] : []),
       ].join(", "),
       textMode: renderMode === "tex" ? "math" : "raw",
+      useGlow: false,
+    });
+  }
+
+  for (const node of scene.richTextNodes ?? []) {
+    if (!node.visible) continue;
+    const text = buildRichTextNodeText(node.document);
+    const fontPt = Math.max(1, Math.min(72, node.style.textSize + 0.19));
+    const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
+    const rotationDeg =
+      typeof node.style.rotationDeg === "number" && Number.isFinite(node.style.rotationDeg)
+        ? node.style.rotationDeg
+        : 0;
+    drawLabelsLayer.push({
+      kind: "LabelAt",
+      x: node.positionWorld.x,
+      y: node.positionWorld.y,
+      text,
+      options: [
+        "anchor=north west",
+        `align=${node.style.textAlign}`,
+        `text=${rgbColorExpr(node.style.textColor)}`,
+        `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
+        ...(Math.abs(rotationDeg) > 1e-9 ? [`rotate=${fmt(rotationDeg)}`] : []),
+      ].join(", "),
+      textMode: "raw",
       useGlow: false,
     });
   }
@@ -3046,7 +3149,7 @@ function inferLineCircleCommonFromEndpointsWorld(
   return undefined;
 }
 
-function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number; ymin: number; ymax: number } {
+function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: number; xmax: number; ymin: number; ymax: number } {
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -3089,6 +3192,14 @@ function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number;
     add(vertex.x - r, vertex.y - r);
     add(vertex.x + r, vertex.y + r);
     add(angle.style.labelPosWorld.x, angle.style.labelPosWorld.y);
+  }
+
+  for (const node of scene.richTextNodes ?? []) {
+    if (!node.visible) continue;
+    add(node.positionWorld.x, node.positionWorld.y);
+    const widthWorld = Math.max(0.5, (node.boundsPx?.widthPx ?? 320) / pxPerWorld);
+    const heightWorld = Math.max(0.3, (node.boundsPx?.heightPx ?? Math.max(18, node.style.textSize * 1.5)) / pxPerWorld);
+    add(node.positionWorld.x + widthWorld, node.positionWorld.y - heightWorld);
   }
 
   if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
@@ -4479,27 +4590,44 @@ function angleLabelStyleToTikz(
   options: TikzExportOptions,
   rightLike: boolean
 ): string {
-  const dx = angle.style.labelPosWorld.x - vertexWorld.x;
-  const dy = angle.style.labelPosWorld.y - vertexWorld.y;
-  const currentDist = Math.hypot(dx, dy);
-  const currentAngleRad = Math.atan2(dy, dx);
-  let dist = currentDist;
-  let angleRad = currentAngleRad;
-  if (angle.kind !== "sector") {
-    const bisectorRad = angleBisectorRad(aWorld, vertexWorld, cWorld);
-    const autoDist = clampAngleLabelDist(nonSectorAngleRadiusWorldFromStyle(angle.style, options) * 0.62, rightLike);
-    const sensibleMaxDist = rightLike ? RIGHT_ANGLE_LABEL_MAX_DIST : ANGLE_LABEL_MAX_DIST;
-    if (!Number.isFinite(dist) || dist < ANGLE_LABEL_MIN_DIST || dist > sensibleMaxDist) {
-      dist = autoDist;
-    }
-    if (bisectorRad !== null && Number.isFinite(bisectorRad)) {
-      if (!Number.isFinite(angleRad) || Math.abs(shortestAngleDiffRad(angleRad, bisectorRad)) > (8 * Math.PI) / 180) {
-        angleRad = bisectorRad;
-      }
-    }
+  let dist = Number.NaN;
+  let angleRad = Number.NaN;
+  let labelVectorAngleRad = Number.NaN;
+  if (isFiniteLabelPosWorld(angle.style.labelPosWorld)) {
+    const dx = angle.style.labelPosWorld.x - vertexWorld.x;
+    const dy = angle.style.labelPosWorld.y - vertexWorld.y;
+    dist = Math.hypot(dx, dy);
+    angleRad = Math.atan2(dy, dx);
+    labelVectorAngleRad = angleRad;
   }
   if (!Number.isFinite(dist) || dist <= 1e-9 || !Number.isFinite(angleRad)) {
-    throw new Error("Unsupported Angle style: labelPosWorld is invalid.");
+    const bisectorRad = angleBisectorRad(aWorld, vertexWorld, cWorld);
+    if (bisectorRad === null || !Number.isFinite(bisectorRad)) {
+      throw new Error("Unsupported Angle style: labelPosWorld is invalid.");
+    }
+    angleRad = bisectorRad;
+    dist = defaultAngleLabelDist(angle.style.arcRadius, rightLike);
+  }
+  if (angle.kind !== "sector") {
+    const bisectorRad = angleBisectorRad(aWorld, vertexWorld, cWorld);
+    if (bisectorRad !== null && Number.isFinite(bisectorRad)) {
+      angleRad = bisectorRad;
+    }
+    const labelRadiusWorld = nonSectorAngleRadiusWorldFromStyle(angle.style, options);
+    if (Number.isFinite(labelRadiusWorld) && labelRadiusWorld > 1e-9) {
+      if (labelRadiusWorld < 0.24) {
+        const labelVectorLeadsBisector =
+          Number.isFinite(labelVectorAngleRad) &&
+          Number.isFinite(angleRad) &&
+          shortestAngleDiffRad(labelVectorAngleRad, angleRad) > (10 * Math.PI) / 180;
+        dist = labelRadiusWorld * (labelVectorLeadsBisector ? 0.76 : 0.53);
+      } else if (dist >= labelRadiusWorld * 0.65) {
+        const sweepRad = computeOrientedAngleRad(aWorld, vertexWorld, cWorld);
+        const sweepDeg = sweepRad === null ? Number.NaN : (sweepRad * 180) / Math.PI;
+        const labelRadiusRatio = Number.isFinite(sweepDeg) && sweepDeg <= 20 ? 0.98 : 0.867;
+        dist = Math.max(dist, labelRadiusWorld * labelRadiusRatio);
+      }
+    }
   }
   const angleDeg = (angleRad * 180) / Math.PI;
   const labelFontScale = clampPositive(options.angleLabelFontScale ?? 1, 0.01, 100);
@@ -4508,7 +4636,7 @@ function angleLabelStyleToTikz(
   // profile (12pt -> 16.2pt), so 9pt maps to 12.15pt.
   const lineHeightPt = Math.max(6, fontPt * 1.35);
   return [
-    `dist=${fmt(dist)}`,
+    `dist=${fmt(roundDecimal(dist, 2))}`,
     `angle=${fmt(angleDeg)}`,
     `text=${rgbColorExpr(angle.style.textColor)}`,
     `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(lineHeightPt)}pt}\\selectfont`,
@@ -4759,20 +4887,12 @@ function computeLabelBubbleRadiusPx(text: string, labelFontPx: number, haloWidth
   return baseRadius + haloPad;
 }
 
-function rgbColorExpr(hex: string): string {
-  const clean = hex.trim().replace(/^#/, "");
-  const full =
-    /^[0-9a-fA-F]{6}$/.test(clean)
-      ? clean
-      : /^[0-9a-fA-F]{3}$/.test(clean)
-        ? clean
-          .split("")
-          .map((ch) => ch + ch)
-          .join("")
-        : "000000";
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
+function rgbColorExpr(rawColor: string): string {
+  const named = resolveExportFriendlyColorName(rawColor);
+  if (named) return named;
+
+  const rgb = parseColorToRgb(rawColor) ?? { r: 0, g: 0, b: 0 };
+  const { r, g, b } = rgb;
   return `{rgb,255:red,${r};green,${g};blue,${b}}`;
 }
 
@@ -4796,9 +4916,11 @@ function hoistNamedColors(lines: string[]): string[] {
       const key = `${r},${g},${b}`;
       let name = colorMap.get(key);
       if (!name) {
-        name = toName(r, g, b);
+        name = exportFriendlyColorNameByRgbKey[key] ?? toName(r, g, b);
         colorMap.set(key, name);
-        colorDefs.push(`\\definecolor{${name}}{RGB}{${r},${g},${b}}`);
+        if (!exportFriendlyColorNameByRgbKey[key]) {
+          colorDefs.push(`\\definecolor{${name}}{RGB}{${r},${g},${b}}`);
+        }
       }
       return name;
     })
@@ -4929,6 +5051,48 @@ function buildMixedTextLabelNodeText(value: string): string {
   return lines.join(" \\\\ ");
 }
 
+function buildRichTextNodeText(document: RichTextDocument): string {
+  const lines: string[] = [];
+  let currentLine = "";
+
+  const pushCurrentLine = (force = false) => {
+    if (!force && currentLine.length === 0) return;
+    lines.push(currentLine);
+    currentLine = "";
+  };
+
+  const appendPlainText = (value: string) => {
+    const textLines = value.split("\n");
+    for (let i = 0; i < textLines.length; i += 1) {
+      currentLine += escapeTikzPlainText(textLines[i]);
+      if (i < textLines.length - 1) pushCurrentLine(true);
+    }
+  };
+
+  for (const block of document.blocks) {
+    if (block.kind === "displayMath") {
+      pushCurrentLine();
+      lines.push(`$\\displaystyle ${extractDisplayMathSource(block) || "\\,"}$`);
+      continue;
+    }
+
+    for (const child of block.children) {
+      if (child.kind === "text") {
+        appendPlainText(child.text);
+      } else if (child.kind === "symbol") {
+        currentLine += `$${child.command || escapeTikzPlainText(child.text)}$`;
+      } else {
+        currentLine += `$${extractInlineMathSource(child) || "\\,"}$`;
+      }
+    }
+    pushCurrentLine(lines.length === 0);
+  }
+
+  pushCurrentLine(lines.length === 0);
+  if (lines.length === 0) return "\\mbox{}";
+  return lines.join(" \\\\ ");
+}
+
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
@@ -4990,5 +5154,5 @@ function formatAngleDegreesValueForTex(degRaw: number): string {
   const deg = ((degRaw % 360) + 360) % 360;
   const nearest5 = Math.round(deg / 5) * 5;
   if (Math.abs(deg - nearest5) <= 1e-3) return String(nearest5);
-  return deg.toFixed(2);
+  return deg.toFixed(2).replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0+$/u, "");
 }

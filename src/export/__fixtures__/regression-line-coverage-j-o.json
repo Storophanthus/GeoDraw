@@ -83,22 +83,6 @@
       ]
     },
     {
-      "id": "p_14",
-      "name": "N",
-      "visible": true,
-      "showLabel": "name",
-      "definition": {
-        "kind": "circleSegmentIntersectionPoint",
-        "segId": "s_1",
-        "circleId": "c_2",
-        "branchIndex": 1
-      },
-      "dependsOn": [
-        "segment:s_1",
-        "circle:c_2"
-      ]
-    },
-    {
       "id": "p_15",
       "name": "O",
       "visible": true,

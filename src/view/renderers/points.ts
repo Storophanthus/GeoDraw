@@ -45,6 +45,8 @@ export function drawPoints(
     if (dependencyGlowEnabled) {
       // Canvas-only visual cue for point category.
       ctx.save();
+      ctx.setLineDash([]);
+      ctx.lineCap = "round";
       ctx.beginPath();
       ctx.arc(p.x, p.y, Math.max(point.style.sizePx + 3.5, 6.5), 0, Math.PI * 2);
       ctx.strokeStyle = getPointCategoryGlowColor(category);
@@ -69,6 +71,8 @@ export function drawPoints(
     );
 
     if (selected) {
+      ctx.setLineDash([]);
+      ctx.lineCap = "round";
       ctx.beginPath();
       ctx.arc(p.x, p.y, Math.max(point.style.sizePx + 3, 7), 0, Math.PI * 2);
       ctx.strokeStyle = "#93c5fd";
@@ -77,6 +81,8 @@ export function drawPoints(
     }
 
     if (copySource?.type === "point" && copySource.id === point.id) {
+      ctx.setLineDash([]);
+      ctx.lineCap = "round";
       ctx.beginPath();
       ctx.arc(p.x, p.y, Math.max(point.style.sizePx + 4.5, 8), 0, Math.PI * 2);
       ctx.strokeStyle = "#2563eb";

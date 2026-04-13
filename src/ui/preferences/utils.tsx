@@ -1,4 +1,5 @@
 import { type UiCssVariableName, type UiColorProfileId, getUiColorProfileSwatch } from "../../state/colorProfiles";
+import { colorToHex } from "../../exportFriendlyColors";
 
 export function ProfileSwatch({ profileId }: { profileId: UiColorProfileId }) {
     const swatch = getUiColorProfileSwatch(profileId);
@@ -34,26 +35,7 @@ export function formatUiCssVariableLabel(name: UiCssVariableName): string {
 }
 
 export function toColorInputValue(raw: string): string | null {
-    const value = raw.trim();
-    const shortHex = /^#([0-9a-fA-F]{3})$/.exec(value);
-    if (shortHex) {
-        const [r, g, b] = shortHex[1].split("").map((digit) => parseInt(digit + digit, 16));
-        return rgbToHex(r, g, b);
-    }
-    const fullHex = /^#([0-9a-fA-F]{6})$/.exec(value);
-    if (fullHex) {
-        return `#${fullHex[1].toLowerCase()}`;
-    }
-    const rgb = /^rgba?\(\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)(?:\s*,\s*([+-]?\d*(?:\.\d+)?))?\s*\)$/i.exec(
-        value
-    );
-    if (rgb) {
-        const r = clampColorChannel(Number(rgb[1]));
-        const g = clampColorChannel(Number(rgb[2]));
-        const b = clampColorChannel(Number(rgb[3]));
-        return rgbToHex(r, g, b);
-    }
-    return null;
+    return colorToHex(raw);
 }
 
 export function clampColorChannel(value: number): number {

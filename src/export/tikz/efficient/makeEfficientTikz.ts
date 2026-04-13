@@ -324,6 +324,23 @@ function applyLabelGrouping(tex: string): string {
         return body.replace(re, "__POINT__");
     }
 
+    function extractSharedWrapper(body: string): { prefix: string; inner: string; suffix: string } | null {
+        const wrappers = [
+            { prefix: "{\\gdLabelGlow{$", suffix: "$}}" },
+            { prefix: "\\gdLabelGlow{$", suffix: "$}" },
+            { prefix: "{$", suffix: "$}" },
+            { prefix: "$", suffix: "$" },
+        ];
+
+        for (const wrapper of wrappers) {
+            if (!body.startsWith(wrapper.prefix) || !body.endsWith(wrapper.suffix)) continue;
+            const inner = body.slice(wrapper.prefix.length, body.length - wrapper.suffix.length);
+            return { prefix: wrapper.prefix, inner, suffix: wrapper.suffix };
+        }
+
+        return null;
+    }
+
     function flushBuffer() {
         if (buffer.length === 0) return;
         if (buffer.length === 1) {
@@ -358,6 +375,40 @@ function applyLabelGrouping(tex: string): string {
                     newLines.push(`\\foreach \\P/\\pos in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){${body}}}`);
                 }
             } else {
+                const wrappedBodies = buffer.map((b) => extractSharedWrapper(b.body));
+                const firstWrapper = wrappedBodies[0];
+                const allSameWrapper =
+                    firstWrapper !== null &&
+                    wrappedBodies.every(
+                        (wrapped) =>
+                            wrapped !== null &&
+                            wrapped.prefix === firstWrapper.prefix &&
+                            wrapped.suffix === firstWrapper.suffix
+                    );
+
+                if (allSameWrapper && firstWrapper) {
+                    if (allSamePos) {
+                        const pts = buffer.map((b, index) => `${b.point}/{${wrappedBodies[index]!.inner}}`).join(",");
+                        const optStr = buffer[0].options;
+                        newLines.push(
+                            `\\foreach \\P/\\descr in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){${firstWrapper.prefix}\\descr${firstWrapper.suffix}}}`
+                        );
+                    } else {
+                        const pts = buffer
+                            .map((b, index) => {
+                                const pOpts = parseOptions(b.options);
+                                return `${b.point}/${pOpts.pos}/{${wrappedBodies[index]!.inner}}`;
+                            })
+                            .join(",");
+                        const optStr = otherOpts ? `\\pos, ${otherOpts}` : `\\pos`;
+                        newLines.push(
+                            `\\foreach \\P/\\pos/\\descr in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){${firstWrapper.prefix}\\descr${firstWrapper.suffix}}}`
+                        );
+                    }
+                    buffer = [];
+                    return;
+                }
+
                 // Case 2: Varying bodies (e.g. $B_n$)
                 // We need to extract the description content.
                 // WE ASSUME the body has a consistent structure enclosing the text, e.g. \gdLabelGlow{...}

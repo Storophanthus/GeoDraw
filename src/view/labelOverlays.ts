@@ -6,6 +6,7 @@ import {
   resolveTextLabelBoxHeightPx,
   resolveTextLabelDisplayText,
   resolveTextLabelRenderMode,
+  resolveTextLabelToolKind,
   type SceneModel,
   type ScenePoint,
   type TextLabelRenderMode,
@@ -182,7 +183,8 @@ function formatAngleDegreesValue(degRaw: number): string {
   if (Math.abs(deg - nearest5) <= 1e-3) {
     return String(nearest5);
   }
-  return deg.toFixed(2);
+  const rounded = deg.toFixed(2).replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0+$/u, "");
+  return rounded === "-0" ? "0" : rounded;
 }
 
 export function createPointLabelOverlays(
@@ -360,6 +362,7 @@ export function createTextLabelOverlays(
   const labels = scene.textLabels ?? [];
   for (const label of labels) {
     if (!label.visible) continue;
+    if (resolveTextLabelToolKind(label) !== "label") continue;
     const screen = camMath.worldToScreen(label.positionWorld, camera, vp);
     const displayText = resolveTextLabelDisplayText(label, scene);
     const renderMode = resolveTextLabelRenderMode(label.style);

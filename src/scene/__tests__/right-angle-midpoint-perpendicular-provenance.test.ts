@@ -130,4 +130,64 @@ for (const angle of scene.angles) {
   );
 }
 
+const reflexScene: SceneModel = {
+  ...scene,
+  points: [
+    {
+      id: "r_a",
+      kind: "free",
+      name: "A",
+      captionTex: "A",
+      visible: true,
+      showLabel: "name",
+      locked: false,
+      auxiliary: false,
+      position: { x: 1, y: 0 },
+      style: { ...base.pointDefaults },
+    },
+    {
+      id: "r_b",
+      kind: "free",
+      name: "B",
+      captionTex: "B",
+      visible: true,
+      showLabel: "name",
+      locked: false,
+      auxiliary: false,
+      position: { x: 0, y: 0 },
+      style: { ...base.pointDefaults },
+    },
+    {
+      id: "r_c",
+      kind: "free",
+      name: "C",
+      captionTex: "C",
+      visible: true,
+      showLabel: "name",
+      locked: false,
+      auxiliary: false,
+      position: { x: 0, y: -1 },
+      style: { ...base.pointDefaults },
+    },
+  ],
+  segments: [],
+  lines: [],
+  circles: [],
+  angles: [
+    {
+      id: "r_270",
+      aId: "r_a",
+      bId: "r_b",
+      cId: "r_c",
+      visible: true,
+      style: { ...base.angleDefaults, markStyle: "rightSquare" },
+    },
+  ],
+};
+
+assert(
+  resolveAngleRightStatus(reflexScene, reflexScene.angles[0]) === "none",
+  "Expected a 270 degree oriented angle not to resolve as right-angle status."
+);
+
 console.log("right-angle-midpoint-perpendicular-provenance: ok");

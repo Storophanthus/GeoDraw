@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import type { AngleLabelOverlay, ObjectLabelOverlay, PointLabelOverlay, TextLabelOverlay } from "./labelOverlays";
+import type { RichTextOverlay } from "../richtext/overlays";
 
 type CanvasLabelsLayerProps = {
   labelsLayerRef: RefObject<HTMLDivElement | null>;
@@ -7,6 +8,7 @@ type CanvasLabelsLayerProps = {
   angleLabelOverlays: AngleLabelOverlay[];
   objectLabelOverlays: ObjectLabelOverlay[];
   textLabelOverlays: TextLabelOverlay[];
+  richTextOverlays: RichTextOverlay[];
   selectedTextLabelId: string | null;
 };
 
@@ -16,6 +18,7 @@ export function CanvasLabelsLayer({
   angleLabelOverlays,
   objectLabelOverlays,
   textLabelOverlays,
+  richTextOverlays,
   selectedTextLabelId,
 }: CanvasLabelsLayerProps) {
   return (
@@ -82,6 +85,21 @@ export function CanvasLabelsLayer({
             minHeight: label.boxHeightPx ? `${label.boxHeightPx}px` : undefined,
             padding: label.boxWidthPx || label.boxHeightPx ? "10px 12px" : undefined,
             boxSizing: label.boxWidthPx || label.boxHeightPx ? "border-box" : undefined,
+            textAlign: label.textAlign,
+          }}
+          dangerouslySetInnerHTML={{ __html: label.html }}
+        />
+      ))}
+      {richTextOverlays.map((label) => (
+        <div
+          key={label.id}
+          className="pointLabel gdRichTextOverlay"
+          data-rich-text-id={label.id}
+          style={{
+            transform: `translate(${label.x}px, ${label.y}px) rotate(${label.rotationDeg}deg)`,
+            transformOrigin: "top left",
+            fontSize: `${Math.max(8, label.textSize)}px`,
+            color: label.textColor,
             textAlign: label.textAlign,
           }}
           dangerouslySetInnerHTML={{ __html: label.html }}

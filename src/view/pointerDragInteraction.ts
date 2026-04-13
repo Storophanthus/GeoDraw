@@ -5,7 +5,7 @@ type PointerStateLike = {
   active: boolean;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | "richText" | null;
 };
 
 export type DragBufferAccess = {
@@ -33,6 +33,7 @@ type DragUpdateOps = {
   ) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
   moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
+  moveRichTextNodeByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   screenToWorld: (screen: Vec2) => Vec2;
   screenDeltaToWorldDelta: (delta: Vec2) => Vec2;
 };
@@ -98,7 +99,11 @@ export function applyBufferedDragUpdate(
   if (st.mode === "drag-text-label" && st.pointId) {
     const panDelta = buffers.getPanDelta();
     if (panDelta.x !== 0 || panDelta.y !== 0) {
-      ops.moveTextLabelByWorldDelta(st.pointId, ops.screenDeltaToWorldDelta(panDelta));
+      if (st.objectType === "richText") {
+        ops.moveRichTextNodeByWorldDelta(st.pointId, ops.screenDeltaToWorldDelta(panDelta));
+      } else {
+        ops.moveTextLabelByWorldDelta(st.pointId, ops.screenDeltaToWorldDelta(panDelta));
+      }
       buffers.setPanDelta({ x: 0, y: 0 });
     }
     return;

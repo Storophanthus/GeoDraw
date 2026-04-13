@@ -47,11 +47,13 @@ runTest("simplifies colors", () => {
     const input = `
 \\definecolor{c1}{RGB}{0,0,0}
 \\definecolor{c2}{RGB}{255,0,0}
+\\definecolor{c3}{RGB}{0,128,128}
 \\definecolor{myColor}{RGB}{100,100,100}
 \\definecolor{myColor2}{RGB}{100,100,100}
 \\begin{tikzpicture}
 \\tkzDrawSegment[color=c1](A,B)
 \\tkzDrawPoint[color=c2](A)
+\\tkzDrawCircle[color=c3](O,A)
 \\tkzLabelPoint[text=myColor](A){A}
 \\tkzLabelPoint[text=myColor2](B){B}
 \\end{tikzpicture}
@@ -62,9 +64,11 @@ runTest("simplifies colors", () => {
     assertOk(output.includes("\\definecolor{c0}{RGB}{100,100,100}"), "Should define c0");
     assertOk(!output.includes("\\definecolor{c1}"), "Should not define c1");
     assertOk(!output.includes("\\definecolor{c2}"), "Should not define c2");
+    assertOk(!output.includes("\\definecolor{c3}"), "Should not define c3");
     assertOk(!output.includes("color=c1"), "Should replace color=c1");
     assertOk(output.includes("color=black"), "Should use black");
     assertOk(output.includes("color=red"), "Should use red");
+    assertOk(output.includes("color=teal"), "Should use teal");
     assertOk(output.includes("text=c0"), "Should use c0");
 });
 
@@ -101,6 +105,23 @@ runTest("handles complex label templates", () => {
      `.trim();
     const output = makeEfficientTikz(input);
     assertOk(output.includes("\\foreach \\P in {P1,P2}{\\tkzLabelPoint[xshift=1pt](\\P){$\\P$}}"));
+});
+
+runTest("hoists shared gdLabelGlow wrapper outside grouped foreach tuples", () => {
+    const input = `
+\\tkzLabelPoint[above left, text=black](A){\\gdLabelGlow{$A$}}
+\\tkzLabelPoint[below left, text=black](Ap){\\gdLabelGlow{$A^{\\prime}$}}
+\\tkzLabelPoint[below, text=black](B){\\gdLabelGlow{$B$}}
+\\tkzLabelPoint[above left, text=black](Bp){\\gdLabelGlow{$B^{\\prime}$}}
+    `.trim();
+
+    const output = makeEfficientTikz(input);
+
+    assertOk(
+        output.includes("\\foreach \\P/\\pos/\\descr in {A/above left/{A},Ap/below left/{A^{\\prime}},B/below/{B},Bp/above left/{B^{\\prime}}}{\\tkzLabelPoint[\\pos, text=black](\\P){\\gdLabelGlow{$\\descr$}}}"),
+        "Expected grouped label export to hoist shared \\gdLabelGlow wrapper outside tuple payload."
+    );
+    assertOk(!output.includes("A/above left/{\\gdLabelGlow{$A$}}"), "Expected tuple payload to avoid repeated gdLabelGlow wrapper.");
 });
 
 runTest("rounds angle-label options and angle keyword syntax", () => {

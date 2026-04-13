@@ -1,0 +1,65 @@
+{
+  "points": [
+    {
+      "id": "p1",
+      "kind": "free",
+      "name": "A",
+      "captionTex": "A",
+      "visible": true,
+      "showLabel": "none",
+      "position": { "x": 0, "y": 0 },
+      "style": {
+        "shape": "circle",
+        "sizePx": 4,
+        "strokeColor": "#000000",
+        "strokeWidth": 1.2,
+        "strokeOpacity": 1,
+        "fillColor": "#ffffff",
+        "fillOpacity": 1,
+        "labelFontPx": 14,
+        "labelHaloWidthPx": 2.5,
+        "labelHaloColor": "#ffffff",
+        "labelColor": "#000000",
+        "labelOffsetPx": { "x": 8, "y": -8 }
+      }
+    },
+    {
+      "id": "p2",
+      "kind": "free",
+      "name": "B",
+      "captionTex": "B",
+      "visible": true,
+      "showLabel": "none",
+      "position": { "x": 4, "y": 0 },
+      "style": {
+        "shape": "circle",
+        "sizePx": 4,
+        "strokeColor": "#000000",
+        "strokeWidth": 1.2,
+        "strokeOpacity": 1,
+        "fillColor": "#ffffff",
+        "fillOpacity": 1,
+        "labelFontPx": 14,
+        "labelHaloWidthPx": 2.5,
+        "labelHaloColor": "#ffffff",
+        "labelColor": "#000000",
+        "labelOffsetPx": { "x": 8, "y": -8 }
+      }
+    }
+  ],
+  "segments": [
+    {
+      "id": "s1",
+      "aId": "p1",
+      "bId": "p2",
+      "visible": true,
+      "showLabel": false,
+      "style": {
+        "strokeColor": "#123456",
+        "strokeWidth": 1.8,
+        "dash": "solid",
+        "opacity": 1
+      }
+    }
+  ]
+}

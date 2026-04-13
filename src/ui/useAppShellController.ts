@@ -4,6 +4,17 @@ import { useGlobalCanvasHotkeys } from "./useGlobalCanvasHotkeys";
 import { useSidebarResize } from "./useSidebarResize";
 import type { WorkspaceShellProps } from "./WorkspaceShell";
 
+function buildRichTextDocumentFromPlainText(text: string) {
+  const lines = text.split("\n");
+  return {
+    kind: "document" as const,
+    blocks: (lines.length > 0 ? lines : [""]).map((line) => ({
+      kind: "paragraph" as const,
+      children: [{ kind: "text" as const, text: line }],
+    })),
+  };
+}
+
 const LEFT_MIN = 86;
 const LEFT_MAX = 240;
 const RIGHT_MIN = 300;
@@ -18,8 +29,12 @@ export function useAppShellController(): WorkspaceShellProps {
   const deleteSelectedObject = useGeoStore((store) => store.deleteSelectedObject);
   const clearCopyStyle = useGeoStore((store) => store.clearCopyStyle);
   const createTextLabel = useGeoStore((store) => store.createTextLabel);
+  const createRichTextNode = useGeoStore((store) => store.createRichTextNode);
   const updateSelectedTextLabelFields = useGeoStore((store) => store.updateSelectedTextLabelFields);
   const updateSelectedTextLabelStyle = useGeoStore((store) => store.updateSelectedTextLabelStyle);
+  const updateSelectedRichTextDocument = useGeoStore((store) => store.updateSelectedRichTextDocument);
+  const updateSelectedRichTextFields = useGeoStore((store) => store.updateSelectedRichTextFields);
+  const updateSelectedRichTextStyle = useGeoStore((store) => store.updateSelectedRichTextStyle);
   const undo = useGeoStore((store) => store.undo);
   const redo = useGeoStore((store) => store.redo);
   const canUndo = useGeoStore((store) => store.canUndo);
@@ -51,7 +66,18 @@ export function useAppShellController(): WorkspaceShellProps {
     onRedo: redo,
     onFitView: doFitView,
     onPasteTextLabel: (payload, world) => {
-      createTextLabel(world, payload.toolKind === "textbox" ? "textbox" : "label");
+      if (payload.toolKind === "textbox") {
+        createRichTextNode(world);
+        updateSelectedRichTextDocument(buildRichTextDocumentFromPlainText(payload.text));
+        updateSelectedRichTextFields({ visible: payload.visible });
+        updateSelectedRichTextStyle({
+          textColor: payload.style.textColor,
+          textSize: payload.style.textSize,
+          rotationDeg: payload.style.rotationDeg,
+        });
+        return;
+      }
+      createTextLabel(world, "label");
       updateSelectedTextLabelFields({
         text: payload.text,
         toolKind: payload.toolKind,

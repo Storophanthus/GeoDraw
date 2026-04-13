@@ -7,7 +7,8 @@ import {
     getUiProfileBaseVariables,
     getUiCssVariables,
 } from "../../state/colorProfiles";
-import { ProfileSwatch, formatUiCssVariableLabel, toColorInputValue } from "./utils";
+import { ColorTokenField } from "../ColorField";
+import { ProfileSwatch, formatUiCssVariableLabel } from "./utils";
 import { toRgba } from "../colorUtils";
 
 export function ThemeSettings() {
@@ -79,7 +80,6 @@ export function ThemeSettings() {
                     const baseValue = uiBaseVariables[tokenName];
                     const customValue = uiCssOverrides[tokenName];
                     const isCustom = typeof customValue === "string" && customValue.trim().length > 0;
-                    const colorPickerValue = toColorInputValue(effectiveValue);
                     return (
                         <div
                             key={tokenName}
@@ -89,34 +89,24 @@ export function ThemeSettings() {
                             <label className="preferencesTokenLabel" htmlFor={`ui-token-${tokenName}`}>
                                 {formatUiCssVariableLabel(tokenName)}
                             </label>
-                            <div className="preferencesTokenControls">
-                                <input
-                                    className="preferencesTokenColor"
-                                    type="color"
-                                    value={colorPickerValue ?? "#000000"}
-                                    disabled={colorPickerValue === null}
-                                    onChange={(event) => setUiCssVariable(tokenName, event.target.value)}
-                                    aria-label={`${formatUiCssVariableLabel(tokenName)} color picker`}
-                                />
-                                <input
-                                    id={`ui-token-${tokenName}`}
-                                    className="preferencesTokenInput"
-                                    type="text"
-                                    value={effectiveValue}
-                                    onChange={(event) => setUiCssVariable(tokenName, event.target.value)}
-                                    spellCheck={false}
-                                    aria-label={`${formatUiCssVariableLabel(tokenName)} value`}
-                                />
-                                <button
-                                    type="button"
-                                    className="preferencesTokenReset"
-                                    onClick={() => setUiCssVariable(tokenName, baseValue)}
-                                    disabled={!isCustom}
-                                    aria-label={`Reset ${formatUiCssVariableLabel(tokenName)} to preset`}
-                                >
-                                    Reset
-                                </button>
-                            </div>
+                            <ColorTokenField
+                                id={`ui-token-${tokenName}`}
+                                value={effectiveValue}
+                                onChange={(nextValue) => setUiCssVariable(tokenName, nextValue)}
+                                pickerAriaLabel={`${formatUiCssVariableLabel(tokenName)} color picker`}
+                                textAriaLabel={`${formatUiCssVariableLabel(tokenName)} value`}
+                                trailing={
+                                    <button
+                                        type="button"
+                                        className="preferencesTokenReset"
+                                        onClick={() => setUiCssVariable(tokenName, baseValue)}
+                                        disabled={!isCustom}
+                                        aria-label={`Reset ${formatUiCssVariableLabel(tokenName)} to preset`}
+                                    >
+                                        Reset
+                                    </button>
+                                }
+                            />
                         </div>
                     );
                 })}

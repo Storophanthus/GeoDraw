@@ -1,4 +1,4 @@
-import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneTextLabelStyle } from "../../scene/points";
+import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneRichTextStyle, SceneTextLabelStyle } from "../../scene/points";
 import {
   buildDefaultStylesForProfile,
   DEFAULT_COLOR_PROFILE_ID,
@@ -14,6 +14,12 @@ export const defaultPolygonStyle: PolygonStyle = profileDefaults.polygonDefaults
 export const defaultAngleStyle: AngleStyle = profileDefaults.angleDefaults;
 export const defaultLabelToolStyle: SceneTextLabelStyle = profileDefaults.labelToolDefaults;
 export const defaultTextboxToolStyle: SceneTextLabelStyle = profileDefaults.textboxToolDefaults;
+export const defaultRichTextToolStyle: SceneRichTextStyle = {
+  textColor: profileDefaults.textboxToolDefaults.textColor,
+  textSize: profileDefaults.textboxToolDefaults.textSize,
+  textAlign: "left",
+  rotationDeg: 0,
+};
 
 export function createSceneSliceState() {
   return {
@@ -27,6 +33,7 @@ export function createSceneSliceState() {
       angles: [],
       numbers: [],
       textLabels: [],
+      richTextNodes: [],
       geometryLayerOrder: [],
     },
     nextPointId: 1,
@@ -38,6 +45,7 @@ export function createSceneSliceState() {
     nextNumberId: 1,
     nextVectorId: 1,
     nextTextLabelId: 1,
+    nextRichTextId: 1,
     pointDefaults: defaultPointStyle,
     segmentDefaults: defaultSegmentStyle,
     lineDefaults: defaultLineStyle,
@@ -53,5 +61,6 @@ export function createSceneSliceState() {
     },
     labelToolDefaults: defaultLabelToolStyle,
     textboxToolDefaults: defaultTextboxToolStyle,
+    richTextToolDefaults: defaultRichTextToolStyle,
   };
 }

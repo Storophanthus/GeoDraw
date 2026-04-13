@@ -20,7 +20,16 @@ import {
   shouldCancelOnCanvasDoubleClick,
   type PointerMode,
 } from "./pointerInteraction";
-import { hitTestAngleLabelHandle, hitTestObjectLabelFromDom, hitTestPointLabel, hitTestPointLabelFromDom, hitTestTextLabelFromDom } from "./labelHit";
+import {
+  hitTestAngleLabelHandle,
+  hitTestObjectLabelFromDom,
+  hitTestPointLabel,
+  hitTestPointLabelFromDom,
+  hitTestSpecificTextLabelFromDom,
+  hitTestTextLabelFromDom,
+  hitTestRichTextNodeFromDom,
+  hitTestSpecificRichTextNodeFromDom,
+} from "./labelHit";
 import {
   hitTestAngleId as engineHitTestAngleId,
   hitTestCircleId as engineHitTestCircleId,
@@ -42,7 +51,7 @@ export type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | "richText" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -68,12 +77,14 @@ type InteractionActions = {
   moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon"; id: string }, world: Vec2) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
   moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
+  moveRichTextNodeByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   setHoverScreen: (value: Vec2 | null) => void;
   setSnapDisabled: (value: boolean) => void;
   setCursorWorld: (value: Vec2 | null) => void;
   setHoveredHit: (hit: HoveredHit) => void;
-  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null) => void;
+  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null) => void;
   beginTextLabelEditing?: (id: string) => boolean;
+  beginRichTextEditing?: (id: string) => boolean;
   clearPendingSelection: () => void;
   zoomAtScreenPoint: (vp: Viewport, screen: Vec2, zoomFactor: number) => void;
 };
@@ -85,14 +96,14 @@ type InteractionDeps = {
   dragBuffers: DragBufferRefs;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
   scene: SceneModel;
   camera: Camera;
   vp: Viewport;
   resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>;
   resolvedAngles: ResolvedAngle[];
   hoveredHit: HoveredHit;
-  selectedObject: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null;
+  selectedObject: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
   pointLabelOffsetPx: Vec2;
   angleFixedTool: AngleFixedToolState;
   circleFixedTool: CircleFixedToolState;
@@ -186,6 +197,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           moveObjectLabelTo: actions.moveObjectLabelTo,
           moveTextLabelTo: actions.moveTextLabelTo,
           moveTextLabelByWorldDelta: actions.moveTextLabelByWorldDelta,
+          moveRichTextNodeByWorldDelta: actions.moveRichTextNodeByWorldDelta,
           screenToWorld: (screen) => camMath.screenToWorld(screen, camera, vp),
           screenDeltaToWorldDelta: (delta) => {
             const world0 = camMath.screenToWorld({ x: 0, y: 0 }, camera, vp);
@@ -235,6 +247,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       beginTextLabelEditing: actions.beginTextLabelEditing,
       resolveHits: (screen, e) => ({
         hitTextLabelId: hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current),
+        hitRichTextNodeId: hitTestRichTextNodeFromDom(e.clientX, e.clientY, labelsLayerRef.current),
         hitPointId: engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
         hitLabelId:
           hitTestPointLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current) ??
@@ -259,6 +272,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           screen,
           pointerEvent: e,
           preHitTextLabelId: hits.hitTextLabelId ?? null,
+          preHitRichTextNodeId: hits.hitRichTextNodeId ?? null,
           activeTool,
           pendingSelection,
           copyStyleSource,
@@ -273,6 +287,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           io: {
             ...constructClickIo,
             beginTextLabelEditing: actions.beginTextLabelEditing,
+            beginRichTextEditing: actions.beginRichTextEditing,
           },
         }),
     });
@@ -289,10 +304,33 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
 
     const onDoubleClick = (e: MouseEvent) => {
       if (activeTool === "move") {
+        const hitRichTextNodeId = hitTestRichTextNodeFromDom(e.clientX, e.clientY, labelsLayerRef.current);
+        if (hitRichTextNodeId) {
+          e.preventDefault();
+          actions.beginRichTextEditing?.(hitRichTextNodeId);
+          return;
+        }
+        if (
+          selectedObject?.type === "richText"
+          && hitTestSpecificRichTextNodeFromDom(e.clientX, e.clientY, labelsLayerRef.current, selectedObject.id, 12)
+        ) {
+          e.preventDefault();
+          actions.beginRichTextEditing?.(selectedObject.id);
+          return;
+        }
+
         const hitTextLabelId = hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current);
         if (hitTextLabelId) {
           e.preventDefault();
           actions.beginTextLabelEditing?.(hitTextLabelId);
+          return;
+        }
+        if (
+          selectedObject?.type === "textLabel"
+          && hitTestSpecificTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current, selectedObject.id, 12)
+        ) {
+          e.preventDefault();
+          actions.beginTextLabelEditing?.(selectedObject.id);
           return;
         }
       }

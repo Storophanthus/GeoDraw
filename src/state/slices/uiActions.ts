@@ -25,6 +25,7 @@ export function createUiActions(
   | "setObjectLabelDefaults"
   | "setLabelToolDefaults"
   | "setTextboxToolDefaults"
+  | "setRichTextToolDefaults"
   | "setAngleFixedTool"
   | "setCircleFixedTool"
   | "setRegularPolygonTool"
@@ -132,6 +133,16 @@ export function createUiActions(
       }));
     },
 
+    setRichTextToolDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        richTextToolDefaults: {
+          ...prev.richTextToolDefaults,
+          ...next,
+        },
+      }));
+    },
+
     setAngleFixedTool(next) {
       ctx.setState((prev) => ({
         ...prev,
@@ -209,6 +220,7 @@ export function createUiActions(
             angleDefaults: prev.angleDefaults,
             labelToolDefaults: prev.labelToolDefaults,
             textboxToolDefaults: prev.textboxToolDefaults,
+            richTextToolDefaults: prev.richTextToolDefaults,
             } satisfies SceneStyleDefaults,
             profileId
           );
@@ -226,6 +238,7 @@ export function createUiActions(
           objectLabelDefaults: prev.objectLabelDefaults,
           labelToolDefaults: nextDefaults.labelToolDefaults,
           textboxToolDefaults: nextDefaults.textboxToolDefaults,
+          richTextToolDefaults: nextDefaults.richTextToolDefaults,
         };
       });
     },
@@ -298,6 +311,7 @@ export function createUiActions(
                 angleDefaults: prev.angleDefaults,
                 labelToolDefaults: prev.labelToolDefaults,
                 textboxToolDefaults: prev.textboxToolDefaults,
+                richTextToolDefaults: prev.richTextToolDefaults,
               } satisfies SceneStyleDefaults,
               nextColorProfileId
             )
@@ -310,6 +324,7 @@ export function createUiActions(
               angleDefaults: prev.angleDefaults,
               labelToolDefaults: prev.labelToolDefaults,
               textboxToolDefaults: prev.textboxToolDefaults,
+              richTextToolDefaults: prev.richTextToolDefaults,
             };
 
           const pointDefaults = next.pointDefaults
@@ -342,6 +357,9 @@ export function createUiActions(
           const textboxToolDefaults = next.textboxToolDefaults
             ? { ...next.textboxToolDefaults }
             : baseDefaults.textboxToolDefaults;
+          const richTextToolDefaults = next.richTextToolDefaults
+            ? { ...next.richTextToolDefaults }
+            : baseDefaults.richTextToolDefaults;
           const canvasThemeOverrides = next.canvasThemeOverrides
             ? { ...next.canvasThemeOverrides }
             : prev.canvasThemeOverrides;
@@ -367,6 +385,7 @@ export function createUiActions(
             objectLabelDefaults: next.objectLabelDefaults ? { ...next.objectLabelDefaults } : prev.objectLabelDefaults,
             labelToolDefaults,
             textboxToolDefaults,
+            richTextToolDefaults,
             angleFixedTool: next.angleFixedTool ? { ...next.angleFixedTool } : prev.angleFixedTool,
             circleFixedTool: next.circleFixedTool ? { ...next.circleFixedTool } : prev.circleFixedTool,
             regularPolygonTool: next.regularPolygonTool ? { ...next.regularPolygonTool } : prev.regularPolygonTool,

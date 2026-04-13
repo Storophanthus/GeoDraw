@@ -31,11 +31,9 @@ type ObjectStyleSectionsProps = {
   updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
   updateSelectedPolygonStyle: (style: Partial<ScenePolygon["style"]>) => void;
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
-  updateSelectedSegmentFields: (fields: Partial<Pick<SceneSegment, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   canConvertSelectedLineToSegment: boolean;
   convertSelectedLineToSegment: () => void;
-  updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
   setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
   selectedStyleAsDefault: boolean;
@@ -58,11 +56,9 @@ export function ObjectStyleSections({
   updateSelectedCircleStyle,
   updateSelectedPolygonStyle,
   updateSelectedAngleStyle,
-  updateSelectedSegmentFields,
   updateSelectedLineFields,
   canConvertSelectedLineToSegment,
   convertSelectedLineToSegment,
-  updateSelectedCircleFields,
   updateSelectedPolygonFields,
   setSelectedPolygonOwnedSegmentsVisible,
   selectedStyleAsDefault,
@@ -78,7 +74,6 @@ export function ObjectStyleSections({
           selectedStyleAsDefault={selectedStyleAsDefault}
           onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedSegmentStyle={updateSelectedSegmentStyle}
-          updateSelectedSegmentFields={updateSelectedSegmentFields}
         />
       )}
 
@@ -112,7 +107,6 @@ export function ObjectStyleSections({
           selectedStyleAsDefault={selectedStyleAsDefault}
           onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedCircleStyle={updateSelectedCircleStyle}
-          updateSelectedCircleFields={updateSelectedCircleFields}
         />
       )}
 

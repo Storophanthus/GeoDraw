@@ -83,9 +83,15 @@ function drawResolvedAngleObject(
   const resolvedArcMarks = resolveAngleMarks(angle.style);
   const totalArcLayers = resolvedArcMarks.reduce((sum, mark) => sum + mark.arcMultiplicity, 0);
   const rawMarkStyle = angle.style.markStyle === "right" ? "rightSquare" : angle.style.markStyle;
-  const drawRightSquareShape =
-    !isSector && (rawMarkStyle === "rightSquare" || (rightLike && rawMarkStyle === "arc"));
-  const resolvedMarkStyle = (drawRightSquareShape ? "rightSquare" : rawMarkStyle) as
+  const resolvedMarkStyle = (isSector
+    ? rawMarkStyle
+    : rightLike
+      ? rawMarkStyle === "arc"
+        ? "rightSquare"
+        : rawMarkStyle
+      : rawMarkStyle === "rightSquare" || rawMarkStyle === "rightArcDot"
+        ? "arc"
+        : rawMarkStyle) as
     | "arc"
     | "none"
     | "rightSquare"
@@ -105,7 +111,7 @@ function drawResolvedAngleObject(
       angle.style.pattern,
       angle.style.patternColor
     );
-    if (resolvedMarkStyle === "rightSquare") {
+    if (!isSector && rightLike && resolvedMarkStyle === "rightSquare") {
       drawRightAngleSquareFill(ctx, as, bs, cs, rightMarkSizePx);
     } else {
       drawAngleSector(ctx, as, bs, entry.theta, radiusPx);

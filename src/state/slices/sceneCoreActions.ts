@@ -44,6 +44,8 @@ export function createSceneCoreActions(
   GeoActions,
   | "createFreePoint"
   | "createTextLabel"
+  | "createRichTextNode"
+  | "migrateTextLabelToRichTextNode"
   | "createMidpointFromPoints"
   | "createMidpointFromSegment"
   | "createSegment"
@@ -125,6 +127,109 @@ export function createSceneCoreActions(
           selectedObject: { type: "textLabel", id },
           recentCreatedObject: { type: "textLabel", id },
           nextTextLabelId: prev.nextTextLabelId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createRichTextNode(world) {
+      let createdId = "";
+      ctx.setState((prev) => {
+        if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return prev;
+        const id = `rt_${prev.nextRichTextId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: [
+              ...(prev.scene.richTextNodes ?? []),
+              {
+                id,
+                type: "richText",
+                name: id,
+                visible: true,
+                positionWorld: { x: world.x, y: world.y },
+                style: {
+                  ...prev.richTextToolDefaults,
+                },
+                document: {
+                  kind: "document",
+                  blocks: [
+                    {
+                      kind: "paragraph",
+                      textAlign: prev.richTextToolDefaults.textAlign ?? "left",
+                      children: [{ kind: "text", text: "" }],
+                    },
+                  ],
+                },
+                boundsPx: { widthPx: 100, heightPx: 20 },
+              },
+            ],
+          },
+          selectedObject: { type: "richText", id },
+          recentCreatedObject: { type: "richText", id },
+          nextRichTextId: prev.nextRichTextId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    migrateTextLabelToRichTextNode(id) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const textLabel = (prev.scene.textLabels ?? []).find(l => l.id === id);
+        if (!textLabel) return prev;
+
+        const newId = `rt_${prev.nextRichTextId}`;
+        createdId = newId;
+
+        const textLines = textLabel.text.split("\n");
+        const blocks = textLines.length > 0 ? textLines.map(line => ({
+          kind: "paragraph" as const,
+          textAlign: prev.richTextToolDefaults.textAlign ?? "left",
+          children: [{ kind: "text" as const, text: line }],
+        })) : [
+          {
+            kind: "paragraph" as const,
+            textAlign: prev.richTextToolDefaults.textAlign ?? "left",
+            children: [{ kind: "text" as const, text: "" }],
+          }
+        ];
+
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels: prev.scene.textLabels!.filter(l => l.id !== id),
+            richTextNodes: [
+              ...(prev.scene.richTextNodes ?? []),
+              {
+                id: newId,
+                type: "richText",
+                name: newId,
+                visible: textLabel.visible,
+                positionWorld: { ...textLabel.positionWorld },
+                style: {
+                  ...prev.richTextToolDefaults,
+                  textColor: textLabel.style.textColor,
+                  textSize: textLabel.style.textSize,
+                  rotationDeg:
+                    typeof textLabel.style.rotationDeg === "number" && Number.isFinite(textLabel.style.rotationDeg)
+                      ? textLabel.style.rotationDeg
+                      : prev.richTextToolDefaults.rotationDeg,
+                },
+                document: {
+                  kind: "document",
+                  blocks,
+                },
+                boundsPx: { widthPx: 200, heightPx: 30 * Math.max(1, textLines.length) },
+              },
+            ],
+          },
+          selectedObject: { type: "richText", id: newId },
+          recentCreatedObject: { type: "richText", id: newId },
+          nextRichTextId: prev.nextRichTextId + 1,
         };
       });
       return createdId;
