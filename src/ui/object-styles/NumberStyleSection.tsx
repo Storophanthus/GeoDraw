@@ -53,24 +53,26 @@ export function NumberStyleSection({
                                 <option value="degree">Degree</option>
                             </select>
                         </div>
-                        <div className="controlRow controlRowWithNumeric">
+                        <div className="controlRow numberSliderValueRow">
                             <label className="controlLabel">Value</label>
-                            <input
-                                className="sizeSlider"
-                                type="range"
-                                min={lo}
-                                max={hi}
-                                step={safeStep}
-                                value={safeValue}
-                                onChange={(e) => updateSlider({ value: Number(e.target.value) })}
-                            />
-                            <input
-                                className="scaleInputCompact"
-                                type="number"
-                                step="any"
-                                value={safeValue}
-                                onChange={(e) => updateSlider({ value: Number(e.target.value) })}
-                            />
+                            <div className="numberSliderValueControls">
+                                <input
+                                    className="sizeSlider numberSliderTrack"
+                                    type="range"
+                                    min={lo}
+                                    max={hi}
+                                    step={safeStep}
+                                    value={safeValue}
+                                    onChange={(e) => updateSlider({ value: Number(e.target.value) })}
+                                />
+                                <input
+                                    className="scaleInputCompact numberSliderValueInput"
+                                    type="number"
+                                    step="any"
+                                    value={safeValue}
+                                    onChange={(e) => updateSlider({ value: Number(e.target.value) })}
+                                />
+                            </div>
                         </div>
                         <div className="controlRow controlRowWithNumeric">
                             <label className="controlLabel">Min</label>

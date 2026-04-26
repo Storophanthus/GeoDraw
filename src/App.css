@@ -1496,6 +1496,37 @@ body.sidebar-resizing * {
   margin: 0;
 }
 
+.numberSliderValueRow {
+  grid-template-columns: minmax(76px, 92px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.numberSliderValueControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.numberSliderTrack {
+  min-width: 0;
+}
+
+.numberSliderValueInput {
+  min-width: 0;
+  width: min(100%, 208px);
+}
+
+@media (max-width: 560px) {
+  .numberSliderValueRow {
+    grid-template-columns: 1fr;
+  }
+
+  .numberSliderValueInput {
+    width: 100%;
+  }
+}
+
 .controlRow input[type="number"]:not(.scaleInputCompact) {
   width: 100%;
   min-width: 0;
