@@ -58,22 +58,24 @@ export function NumberStyleSection({
                         </div>
                         <div className="numberSliderValueRow">
                             <label className="controlLabel">Value</label>
-                            <input
-                                className="sizeSlider numberSliderTrack"
-                                type="range"
-                                min={lo}
-                                max={hi}
-                                step={safeStep}
-                                value={safeValue}
-                                onChange={(e) => updateSlider({ value: Number(e.target.value) })}
-                            />
-                            <input
-                                className="scaleInputCompact numberSliderValueInput"
-                                type="number"
-                                step="any"
-                                value={safeValue}
-                                onChange={(e) => updateSlider({ value: Number(e.target.value) })}
-                            />
+                            <div className="numberSliderValueControls">
+                                <input
+                                    className="sizeSlider numberSliderTrack"
+                                    type="range"
+                                    min={lo}
+                                    max={hi}
+                                    step={safeStep}
+                                    value={safeValue}
+                                    onChange={(e) => updateSlider({ value: Number(e.target.value) })}
+                                />
+                                <input
+                                    className="scaleInputCompact numberSliderValueInput"
+                                    type="number"
+                                    step="any"
+                                    value={safeValue}
+                                    onChange={(e) => updateSlider({ value: Number(e.target.value) })}
+                                />
+                            </div>
                         </div>
                         <div className="numberSliderBoundsRow">
                             <label className="numberSliderBoundField">

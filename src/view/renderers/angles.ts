@@ -123,11 +123,15 @@ function drawResolvedAngleObject(
   ctx.lineWidth = mapStrokeWidth(angle.style.strokeWidth);
   const approxDashed =
     !isSector && rightApprox && !rightSolid && (resolvedMarkStyle === "rightSquare" || resolvedMarkStyle === "rightArcDot");
-  if (approxDashed) ctx.setLineDash([6, 4]);
-  if (isSector) {
+  if (approxDashed) {
+    ctx.setLineDash([6, 4]);
+  } else if (isSector) {
     const dash = angle.style.strokeDash ?? "solid";
     if (dash === "dashed") ctx.setLineDash([7, 5]);
     else if (dash === "dotted") ctx.setLineDash([2, 4]);
+    else ctx.setLineDash([]);
+  } else {
+    ctx.setLineDash([]);
   }
   if (isSector) {
     const end = startAngle - entry.theta;

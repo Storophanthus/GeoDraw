@@ -3091,14 +3091,27 @@ body.sidebar-resizing * {
 
 .numberSliderValueRow {
   display: grid;
-  grid-template-columns: 92px minmax(140px, 1fr) 100px;
-  align-items: center;
+  grid-template-columns: minmax(76px, 92px) minmax(0, 1fr);
+  align-items: start;
   gap: 10px;
   margin-top: 10px;
 }
 
+.numberSliderValueControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.numberSliderTrack {
+  min-width: 0;
+}
+
 .numberSliderValueInput {
   text-align: center;
+  min-width: 0;
+  width: min(100%, 208px);
 }
 
 .numberSliderBoundsRow {
@@ -3122,6 +3135,10 @@ body.sidebar-resizing * {
 @media (max-width: 560px) {
   .numberSliderValueRow {
     grid-template-columns: 1fr;
+  }
+
+  .numberSliderValueInput {
+    width: 100%;
   }
 
   .numberSliderBoundsRow {
