@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import {
     ArrowDown,
     ArrowUp,
@@ -10,14 +10,15 @@ import {
     LockOpen,
     Type as TypeIcon,
 } from "lucide-react";
-import type { SceneGeometryLayerRef, SceneModel } from "../scene/points";
+import type { ReflectionObjectRef, SceneGeometryLayerRef, SceneModel } from "../scene/points";
 import { geometryLayerKey, geometryLayerOrderForTab, geometryLayerRefMatchesTab, type GeometryLayerDropPosition } from "../scene/geometryLayerOrder";
-import { serializeRichTextDocumentToSource } from "../richtext/document";
+import { serializeRichTextDocumentToSource } from "../text-editor/richTextDocument";
 import type { SelectedObject } from "../state/slices/storeTypes";
 import { getNumberValue } from "../scene/points";
 import { commandBarApi, useGeoStore } from "../state/geoStore";
 import { IconAngle, IconPoint, IconLine, IconCircleRadius } from "./icons";
 import { formatRoundedDisplay } from "./displayFormat";
+import { GeoContextMenu, type GeoContextMenuState } from "./GeoContextMenu";
 
 type ObjectBrowserProps = {
     scene: SceneModel;
@@ -132,6 +133,7 @@ export function ObjectBrowser({
     const [draggedGeometryKey, setDraggedGeometryKey] = useState<string | null>(null);
     const [dropIndicator, setDropIndicator] = useState<{ key: string; position: GeometryLayerDropPosition } | null>(null);
     const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
+    const [contextMenu, setContextMenu] = useState<GeoContextMenuState | null>(null);
     const objectRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const lastSelectionKeyRef = useRef<string | null>(null);
     const pointerDragRef = useRef<{
@@ -264,8 +266,12 @@ export function ObjectBrowser({
         return `Line(${ref.id})`;
     };
 
-    const reflectionTargetText = (ref: { type: "line" | "segment" | "point"; id: string }): string =>
-        ref.type === "point" ? pointLabel(ref.id) : lineLikeText(ref as { type: "line" | "segment"; id: string });
+    const reflectionTargetText = (ref: ReflectionObjectRef): string =>
+        ref.type === "point"
+            ? pointLabel(ref.id)
+            : ref.type === "pointPair"
+                ? `Line(${pointLabel(ref.aId)},${pointLabel(ref.bId)})`
+                : lineLikeText(ref);
 
     const copyCommand = async (value: string, key: string) => {
         try {
@@ -395,7 +401,8 @@ export function ObjectBrowser({
         canMoveDown = false,
         onMoveUp?: () => void,
         onMoveDown?: () => void,
-        onPointerDown?: (e: ReactPointerEvent<HTMLDivElement>) => void
+        onPointerDown?: (e: ReactPointerEvent<HTMLDivElement>) => void,
+        onContextMenu?: (e: ReactMouseEvent<HTMLDivElement>) => void
     ) => (
         <div
             key={key}
@@ -406,6 +413,7 @@ export function ObjectBrowser({
             onClick={onSelect}
             onKeyDown={(e) => handleRowKeyDown(e, key)}
             onPointerDown={onPointerDown}
+            onContextMenu={onContextMenu}
             aria-grabbed={reorderable && dragging ? true : undefined}
         >
             <div className="objectItemText">
@@ -548,15 +556,21 @@ export function ObjectBrowser({
                                         )
                                         : point.kind === "pointByReflection"
                                             ? withAliasPrefix("point", point.id, `Reflect(${pointLabel(point.pointId)},${reflectionTargetText(point.axis)})`)
-                                            : point.kind === "pointOnCircle"
-                                                ? withAliasPrefix("point", point.id, `PointOn(${circleRefText(point.circleId)})`)
-                                                : point.kind === "pointOnLine"
-                                                    ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "line", id: point.lineId })})`)
-                                                    : point.kind === "pointOnSegment"
-                                                        ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "segment", id: point.segId })})`)
-                                                        : point.kind === "circleCenter"
-                                                            ? withAliasPrefix("point", point.id, `Center(${circleRefText(point.circleId)})`)
-                                                            : point.kind === "circleLineIntersectionPoint"
+                                            : point.kind === "pointByProjection"
+                                                ? withAliasPrefix(
+                                                    "point",
+                                                    point.id,
+                                                    `Orthoproject(${pointLabel(point.pointId)},${pointLabel(point.axisAId)},${pointLabel(point.axisBId)})`
+                                                )
+                                                : point.kind === "pointOnCircle"
+                                                    ? withAliasPrefix("point", point.id, `PointOn(${circleRefText(point.circleId)})`)
+                                                    : point.kind === "pointOnLine"
+                                                        ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "line", id: point.lineId })})`)
+                                                        : point.kind === "pointOnSegment"
+                                                            ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "segment", id: point.segId })})`)
+                                                            : point.kind === "circleCenter"
+                                                                ? withAliasPrefix("point", point.id, `Center(${circleRefText(point.circleId)})`)
+                                                                : point.kind === "circleLineIntersectionPoint"
                                                                 ? withAliasPrefix("point", point.id, `Intersect(${circleRefText(point.circleId)},${lineLikeText({ type: "line", id: point.lineId })})`)
                                                                 : point.kind === "circleSegmentIntersectionPoint"
                                                                     ? withAliasPrefix("point", point.id, `Intersect(${circleRefText(point.circleId)},${lineLikeText({ type: "segment", id: point.segId })})`)
@@ -924,10 +938,17 @@ export function ObjectBrowser({
                         row.reorderable && reorderableRowKeys.indexOf(row.key) >= 0 && reorderableRowKeys.indexOf(row.key) < reorderableRowKeys.length - 1,
                         () => moveRowByStep(row, -1),
                         () => moveRowByStep(row, 1),
-                        handlePointerDown(row)
+                        handlePointerDown(row),
+                        (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            selectObject(row.object);
+                            setContextMenu({ x: e.clientX, y: e.clientY, target: row.object });
+                        }
                     ))}
                 </div>
             </div>
+            <GeoContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
             {dragPreview && (
                 <div
                     className="objectBrowserDragGhost"

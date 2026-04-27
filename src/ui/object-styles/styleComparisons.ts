@@ -80,6 +80,7 @@ export function angleStyleEqual(a: SceneModel["angles"][number]["style"], b: Sce
         a.labelText === b.labelText &&
         a.showLabel === b.showLabel &&
         a.showValue === b.showValue &&
+        Boolean(a.labelGlow) === Boolean(b.labelGlow) &&
         Boolean(a.promoteToSolid) === Boolean(b.promoteToSolid) &&
         JSON.stringify(a.angleMarks ?? null) === JSON.stringify(b.angleMarks ?? null) &&
         JSON.stringify(a.arcArrowMark ?? null) === JSON.stringify(b.arcArrowMark ?? null) &&
@@ -96,7 +97,8 @@ export function textLabelStyleEqual(a: SceneTextLabelStyle, b: SceneTextLabelSty
         Boolean(a.useTex) === Boolean(b.useTex) &&
         (a.boxWidthPx ?? null) === (b.boxWidthPx ?? null) &&
         (a.boxHeightPx ?? null) === (b.boxHeightPx ?? null) &&
-        (a.rotationDeg ?? 0) === (b.rotationDeg ?? 0)
+        (a.rotationDeg ?? 0) === (b.rotationDeg ?? 0) &&
+        Boolean(a.labelGlow) === Boolean(b.labelGlow)
     );
 }
 
@@ -105,6 +107,7 @@ export function richTextStyleEqual(a: SceneRichTextStyle, b: SceneRichTextStyle)
         a.textColor === b.textColor &&
         a.textSize === b.textSize &&
         a.textAlign === b.textAlign &&
-        (a.rotationDeg ?? 0) === (b.rotationDeg ?? 0)
+        (a.rotationDeg ?? 0) === (b.rotationDeg ?? 0) &&
+        Boolean(a.labelGlow) === Boolean(b.labelGlow)
     );
 }

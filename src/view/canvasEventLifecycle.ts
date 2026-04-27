@@ -3,6 +3,7 @@ type CanvasPointerHandlers = {
   onMove: (e: PointerEvent) => void;
   onFinish: (e: PointerEvent) => void;
   onDoubleClick: (e: MouseEvent) => void;
+  onContextMenu: (e: MouseEvent) => void;
   onLeave: () => void;
   onWheel: (e: WheelEvent) => void;
 };
@@ -16,6 +17,7 @@ export function bindCanvasEventLifecycle(
   canvas.addEventListener("pointerup", handlers.onFinish);
   canvas.addEventListener("pointercancel", handlers.onFinish);
   canvas.addEventListener("dblclick", handlers.onDoubleClick);
+  canvas.addEventListener("contextmenu", handlers.onContextMenu);
   canvas.addEventListener("pointerleave", handlers.onLeave);
   canvas.addEventListener("wheel", handlers.onWheel, { passive: false });
 
@@ -25,6 +27,7 @@ export function bindCanvasEventLifecycle(
     canvas.removeEventListener("pointerup", handlers.onFinish);
     canvas.removeEventListener("pointercancel", handlers.onFinish);
     canvas.removeEventListener("dblclick", handlers.onDoubleClick);
+    canvas.removeEventListener("contextmenu", handlers.onContextMenu);
     canvas.removeEventListener("pointerleave", handlers.onLeave);
     canvas.removeEventListener("wheel", handlers.onWheel);
   };

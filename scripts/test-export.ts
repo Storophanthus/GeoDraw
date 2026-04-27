@@ -280,6 +280,7 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -294,6 +295,7 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -309,6 +311,7 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -323,6 +326,7 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -335,6 +339,7 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
     showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
     labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
     labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+    labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
     style: (raw.style as LineStyle) ?? defaultLineStyle,
   };
 }
@@ -348,6 +353,7 @@ function hydrateSegment(raw: Record<string, unknown>): SceneSegment {
     showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
     labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
     labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+    labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
     style: (raw.style as LineStyle) ?? defaultLineStyle,
   };
 }
@@ -365,6 +371,7 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as CircleStyle) ?? defaultCircleStyle,
     };
   }
@@ -379,6 +386,7 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as CircleStyle) ?? defaultCircleStyle,
     };
   }
@@ -391,6 +399,7 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
     showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
     labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
     labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+    labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
     style: (raw.style as CircleStyle) ?? defaultCircleStyle,
   };
 }
@@ -437,6 +446,7 @@ function hydratePolygon(raw: Record<string, unknown>): ScenePolygon {
     showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
     labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
     labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+    labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
     style: (raw.style as PolygonStyle) ?? defaultPolygonStyle,
   };
 }
@@ -475,8 +485,10 @@ function hydrateTextLabel(raw: Record<string, unknown>): SceneTextLabel {
       textSize: style.textSize,
       useTex: Boolean(style.useTex),
       textMode: style.textMode,
+      textAlign: style.textAlign,
       boxWidthPx: style.boxWidthPx,
       rotationDeg: style.rotationDeg ?? 0,
+      labelGlow: Boolean(style.labelGlow),
     },
   };
 }
@@ -505,6 +517,7 @@ function hydrateRichTextNode(raw: Record<string, unknown>): SceneRichTextNode {
       textSize: style.textSize,
       textAlign: style.textAlign ?? "left",
       rotationDeg: style.rotationDeg ?? 0,
+      labelGlow: Boolean(style.labelGlow),
     },
   };
 }
@@ -527,6 +540,21 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("{$ABDC$}")) {
       throw new Error("Expected polygon object label to be exported.");
+    }
+  }
+
+  if (fileName === "label-glow-options.json") {
+    if (exportError) throw exportError;
+    for (const expected of [
+      "\\gdLabelGlow{$Obj$}",
+      "\\gdLabelGlow{$Ang$}",
+      "\\gdLabelGlow{$T$}",
+      "\\gdLabelGlow{Plain}",
+      "\\gdLabelGlow{Rich}",
+    ]) {
+      if (!tikz.includes(expected)) {
+        throw new Error(`Expected label glow fixture to include ${expected}`);
+      }
     }
   }
 
@@ -594,21 +622,17 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "circle-segment-finite-single-root-fail-closed.json") {
-    if (!exportError) {
-      throw new Error("Finite-domain single segment-circle root should fail closed in exporter.");
-    }
-    if (!exportError.message.includes("finite-domain single segment-circle intersection")) {
-      throw new Error("Expected explicit finite-domain single segment-circle exporter error.");
+    if (exportError) throw exportError;
+    if (!/\\tkzDefPointBy\[homothety=center C ratio 0\.5\]\(D\)\s+\\tkzGetPoint\{E\}/.test(tikz)) {
+      throw new Error("Expected dedicated finite single segment-circle root fixture to export via homothety.");
     }
     return;
   }
 
   if (fileName === "generic-circle-segment-finite-single-root-fail-closed.json") {
-    if (!exportError) {
-      throw new Error("Generic finite-domain single segment-circle root should fail closed in exporter.");
-    }
-    if (!exportError.message.includes("finite-domain single segment-circle intersection")) {
-      throw new Error("Expected explicit finite-domain single segment-circle exporter error for generic mixed intersection.");
+    if (exportError) throw exportError;
+    if (!/\\tkzDefPointBy\[homothety=center C ratio 0\.5\]\(D\)\s+\\tkzGetPoint\{E\}/.test(tikz)) {
+      throw new Error("Expected generic finite single segment-circle root fixture to export via homothety.");
     }
     return;
   }
@@ -851,6 +875,19 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (tikz.includes("\\tkzDefIntSimilitudeCenter")) {
       throw new Error("Impossible inner tangents in exact internal tangency should be skipped, not exported.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-near-external-outer.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Near-external outer tangent fixture should keep the valid outer tangent constructive export.");
+    }
+    if (tikz.includes("\\tkzDefIntSimilitudeCenter")) {
+      throw new Error("Near-external inner tangent is currently undefined and should not be exported.");
+    }
+    if (!tikz.includes("\\tkzDrawLine")) {
+      throw new Error("Near-external outer tangent fixture should draw the valid tangent line.");
     }
   }
 

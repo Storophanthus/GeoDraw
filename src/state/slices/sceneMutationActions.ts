@@ -981,6 +981,7 @@ export function createSceneMutationActions({
           showLabel: Boolean(selectedLine.showLabel),
           labelText: selectedLine.labelText,
           labelPosWorld: selectedLine.labelPosWorld ? { ...selectedLine.labelPosWorld } : undefined,
+          labelGlow: selectedLine.labelGlow,
           style: { ...selectedLine.style },
         }, prev.scene);
 
@@ -1036,6 +1037,7 @@ export function createSceneMutationActions({
                 showLabel: Boolean(line.showLabel),
                 labelText: line.labelText,
                 labelPosWorld: line.labelPosWorld ? { ...line.labelPosWorld } : undefined,
+                labelGlow: line.labelGlow,
                 style: { ...line.style },
               },
               prev.scene
@@ -1446,6 +1448,7 @@ export function createSceneMutationActions({
               richTextStyle: null,
               pointShowLabel: point.showLabel,
               objectShowLabel: null,
+              objectLabelGlow: null,
             },
           };
         }
@@ -1466,6 +1469,7 @@ export function createSceneMutationActions({
               richTextStyle: null,
               pointShowLabel: null,
               objectShowLabel: Boolean(segment.showLabel),
+              objectLabelGlow: segment.labelGlow !== false,
             },
           };
         }
@@ -1486,6 +1490,7 @@ export function createSceneMutationActions({
               richTextStyle: null,
               pointShowLabel: null,
               objectShowLabel: Boolean(circle.showLabel),
+              objectLabelGlow: circle.labelGlow !== false,
             },
           };
         }
@@ -1506,6 +1511,7 @@ export function createSceneMutationActions({
               richTextStyle: null,
               pointShowLabel: null,
               objectShowLabel: Boolean(polygon.showLabel),
+              objectLabelGlow: polygon.labelGlow !== false,
             },
           };
         }
@@ -1552,6 +1558,7 @@ export function createSceneMutationActions({
               richTextStyle: null,
               pointShowLabel: null,
               objectShowLabel: null,
+              objectLabelGlow: null,
             },
           };
         }
@@ -1572,6 +1579,7 @@ export function createSceneMutationActions({
               richTextStyle: null,
               pointShowLabel: null,
               objectShowLabel: null,
+              objectLabelGlow: null,
             },
           };
         }
@@ -1592,6 +1600,7 @@ export function createSceneMutationActions({
               richTextStyle: { ...richText.style },
               pointShowLabel: null,
               objectShowLabel: null,
+              objectLabelGlow: null,
             },
           };
         }
@@ -1613,6 +1622,7 @@ export function createSceneMutationActions({
             richTextStyle: null,
             pointShowLabel: null,
             objectShowLabel: Boolean(line.showLabel),
+            objectLabelGlow: line.labelGlow !== false,
           },
         };
       }, { history: "skip" });
@@ -1695,6 +1705,7 @@ function emptyCopyStyle(): GeoState["copyStyle"] {
     richTextStyle: null,
     pointShowLabel: null,
     objectShowLabel: null,
+    objectLabelGlow: null,
   };
 }
 
@@ -1904,6 +1915,7 @@ function applyCopyStyleToScene(
       return {
         ...segment,
         showLabel: copyStyle.objectShowLabel ?? segment.showLabel,
+        labelGlow: copyStyle.objectLabelGlow ?? segment.labelGlow,
         style: { ...segment.style, ...sourceLineStyle },
       };
     });
@@ -1924,6 +1936,7 @@ function applyCopyStyleToScene(
       return {
         ...circle,
         showLabel: copyStyle.objectShowLabel ?? circle.showLabel,
+        labelGlow: copyStyle.objectLabelGlow ?? circle.labelGlow,
         style: { ...circle.style, ...sourceCircleStyle },
       };
     });
@@ -1943,6 +1956,7 @@ function applyCopyStyleToScene(
       return {
         ...polygon,
         showLabel: copyStyle.objectShowLabel ?? polygon.showLabel,
+        labelGlow: copyStyle.objectLabelGlow ?? polygon.labelGlow,
         style: { ...polygon.style, ...sourcePolygonStyle },
       };
     });
@@ -1987,6 +2001,7 @@ function applyCopyStyleToScene(
     return {
       ...line,
       showLabel: copyStyle.objectShowLabel ?? line.showLabel,
+      labelGlow: copyStyle.objectLabelGlow ?? line.labelGlow,
       style: { ...line.style, ...sourceLineStyle },
     };
   });

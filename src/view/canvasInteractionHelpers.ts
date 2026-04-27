@@ -42,7 +42,7 @@ type DragBufferRefs = {
 };
 
 export function createReadScreen(canvas: HTMLCanvasElement) {
-  return (e: PointerEvent | WheelEvent): Vec2 => {
+  return (e: PointerEvent | WheelEvent | MouseEvent): Vec2 => {
     const rect = canvas.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };

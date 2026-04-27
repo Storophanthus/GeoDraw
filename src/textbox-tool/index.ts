@@ -1,6 +1,6 @@
-export { CanvasTextEditor, type CanvasTextEditorProps } from "./CanvasTextEditor";
+export { CanvasTextEditor, type CanvasTextEditorProps } from "../text-editor/CanvasTextEditor";
 export {
   useTextboxToolController,
   type TextboxEditorSession,
   type TextboxToolControllerResult,
-} from "./useTextboxToolController";
+} from "../text-editor/useTextboxToolController";

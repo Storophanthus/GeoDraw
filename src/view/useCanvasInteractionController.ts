@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { RefObject } from "react";
 import type { Vec2 } from "../geo/vec2";
-import type { ActiveTool, HoveredHit, PendingSelection } from "../state/geoStore";
+import type { ActiveTool, HoveredHit, PendingSelection, SelectedObject } from "../state/geoStore";
 import type { Camera, Viewport } from "./camera";
 import { camera as camMath } from "./camera";
 import { runConstructClickAdapter, type ConstructClickIo } from "./constructClickAdapter";
@@ -87,6 +87,13 @@ type InteractionActions = {
   beginRichTextEditing?: (id: string) => boolean;
   clearPendingSelection: () => void;
   zoomAtScreenPoint: (vp: Viewport, screen: Vec2, zoomFactor: number) => void;
+  openContextMenu?: (payload: {
+    clientX: number;
+    clientY: number;
+    screen: Vec2;
+    world: Vec2;
+    target: Exclude<SelectedObject, null> | null;
+  }) => void;
 };
 
 type InteractionDeps = {
@@ -226,6 +233,32 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       dragAngleLabelScreenRef: dragBuffers.dragAngleLabelScreenRef,
     });
 
+    const resolveCanvasHits = (screen: Vec2, clientX: number, clientY: number) => ({
+      hitTextLabelId: hitTestTextLabelFromDom(clientX, clientY, labelsLayerRef.current),
+      hitRichTextNodeId: hitTestRichTextNodeFromDom(clientX, clientY, labelsLayerRef.current),
+      hitPointId: engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
+      hitLabelId:
+        hitTestPointLabelFromDom(clientX, clientY, labelsLayerRef.current) ??
+        hitTestPointLabel(screen, resolvedPoints, camera, vp, pointLabelOffsetPx),
+      hitAngleLabelId: hitTestAngleLabelHandle(screen, resolvedAngles, camera, vp, getAngleTextRenderSize),
+      hitAngleId: engineHitTestAngleId(screen, resolvedAngles, camera, vp, tolerances.angle),
+      hitSegmentId: engineHitTestSegmentId(screen, scene, camera, vp, tolerances.segment),
+      hitPolygonId: engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment),
+      hitLineId: engineHitTestLineId(screen, scene, camera, vp, tolerances.line),
+      hitCircleId: engineHitTestCircleId(screen, scene, camera, vp, tolerances.circle),
+      hitObjectLabel: hitTestObjectLabelFromDom(clientX, clientY, labelsLayerRef.current),
+    });
+
+    const resolveContextTarget = (hits: ReturnType<typeof resolveCanvasHits>): Exclude<SelectedObject, null> | null => {
+      const decision = decideMovePointerDown({
+        ...hits,
+        scenePoints: scene.points,
+        sceneSegments: scene.segments,
+        sceneAngles: scene.angles,
+      });
+      return decision.selectedObject;
+    };
+
     const { onDown, onMove, finish, cancelPendingHoverUpdate } = createPointerHandlers({
       canvas,
       activeTool,
@@ -245,21 +278,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       setHoveredHit: actions.setHoveredHit,
       setSelectedObject: actions.setSelectedObject,
       beginTextLabelEditing: actions.beginTextLabelEditing,
-      resolveHits: (screen, e) => ({
-        hitTextLabelId: hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current),
-        hitRichTextNodeId: hitTestRichTextNodeFromDom(e.clientX, e.clientY, labelsLayerRef.current),
-        hitPointId: engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
-        hitLabelId:
-          hitTestPointLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current) ??
-          hitTestPointLabel(screen, resolvedPoints, camera, vp, pointLabelOffsetPx),
-        hitAngleLabelId: hitTestAngleLabelHandle(screen, resolvedAngles, camera, vp, getAngleTextRenderSize),
-        hitAngleId: engineHitTestAngleId(screen, resolvedAngles, camera, vp, tolerances.angle),
-        hitSegmentId: engineHitTestSegmentId(screen, scene, camera, vp, tolerances.segment),
-        hitPolygonId: engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment),
-        hitLineId: engineHitTestLineId(screen, scene, camera, vp, tolerances.line),
-        hitCircleId: engineHitTestCircleId(screen, scene, camera, vp, tolerances.circle),
-        hitObjectLabel: hitTestObjectLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current),
-      }),
+      resolveHits: (screen, e) => resolveCanvasHits(screen, e.clientX, e.clientY),
       decideMovePointerDown: (hits) =>
         decideMovePointerDown({
           ...hits,
@@ -345,11 +364,28 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       }
     };
 
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const screen = readScreen(e);
+      const hits = resolveCanvasHits(screen, e.clientX, e.clientY);
+      const target = resolveContextTarget(hits);
+      if (target) actions.setSelectedObject(target);
+      actions.openContextMenu?.({
+        clientX: e.clientX,
+        clientY: e.clientY,
+        screen,
+        world: camMath.screenToWorld(screen, camera, vp),
+        target,
+      });
+    };
+
     const unbind = bindCanvasEventLifecycle(canvas, {
       onDown,
       onMove,
       onFinish: finish,
       onDoubleClick,
+      onContextMenu,
       onLeave,
       onWheel,
     });

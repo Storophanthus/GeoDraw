@@ -98,10 +98,14 @@ export function PropertiesPanel({
   const updatePolygonStyleByIds = useGeoStore((store) => store.updatePolygonStyleByIds);
   const updateSelectedAngleStyle = useGeoStore((store) => store.updateSelectedAngleStyle);
   const updateAngleStyleByIds = useGeoStore((store) => store.updateAngleStyleByIds);
+  const updateSelectedSegmentFields = useGeoStore((store) => store.updateSelectedSegmentFields);
+  const updateSegmentFieldsByIds = useGeoStore((store) => store.updateSegmentFieldsByIds);
   const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
   const updateLineFieldsByIds = useGeoStore((store) => store.updateLineFieldsByIds);
   const convertSelectedLineToSegment = useGeoStore((store) => store.convertSelectedLineToSegment);
   const convertLinesToSegmentsByIds = useGeoStore((store) => store.convertLinesToSegmentsByIds);
+  const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
+  const updateCircleFieldsByIds = useGeoStore((store) => store.updateCircleFieldsByIds);
   const updateSelectedPolygonFields = useGeoStore((store) => store.updateSelectedPolygonFields);
   const updatePolygonFieldsByIds = useGeoStore((store) => store.updatePolygonFieldsByIds);
   const setSelectedPolygonOwnedSegmentsVisible = useGeoStore((store) => store.setSelectedPolygonOwnedSegmentsVisible);
@@ -392,6 +396,13 @@ export function PropertiesPanel({
     }
     updateSelectedSegmentStyle(next);
   };
+  const handleUpdateSelectedSegmentFields = (next: Parameters<typeof updateSelectedSegmentFields>[0]) => {
+    if (selectedObject?.type === "segment" && hasLinkedSelection) {
+      updateSegmentFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedSegmentFields(next);
+  };
   const handleUpdateSelectedLineStyle = (next: Parameters<typeof updateSelectedLineStyle>[0]) => {
     if (selectedObject?.type === "line" && hasLinkedSelection) {
       updateLineStyleByIds(linkedSameTypeIds, next);
@@ -412,6 +423,13 @@ export function PropertiesPanel({
       return;
     }
     updateSelectedCircleStyle(next);
+  };
+  const handleUpdateSelectedCircleFields = (next: Parameters<typeof updateSelectedCircleFields>[0]) => {
+    if (selectedObject?.type === "circle" && hasLinkedSelection) {
+      updateCircleFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedCircleFields(next);
   };
   const handleUpdateSelectedPolygonStyle = (next: Parameters<typeof updateSelectedPolygonStyle>[0]) => {
     if (selectedObject?.type === "polygon" && hasLinkedSelection) {
@@ -657,7 +675,9 @@ export function PropertiesPanel({
         updateSelectedCircleStyle={handleUpdateSelectedCircleStyle}
         updateSelectedPolygonStyle={handleUpdateSelectedPolygonStyle}
         updateSelectedAngleStyle={handleUpdateSelectedAngleStyle}
+        updateSelectedSegmentFields={handleUpdateSelectedSegmentFields}
         updateSelectedLineFields={handleUpdateSelectedLineFields}
+        updateSelectedCircleFields={handleUpdateSelectedCircleFields}
         canConvertSelectedLineToSegment={canConvertSelectedLineToSegment}
         convertSelectedLineToSegment={handleConvertSelectedLineToSegment}
         updateSelectedPolygonFields={handleUpdateSelectedPolygonFields}

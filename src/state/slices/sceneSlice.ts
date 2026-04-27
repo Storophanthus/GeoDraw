@@ -19,6 +19,7 @@ export const defaultRichTextToolStyle: SceneRichTextStyle = {
   textSize: profileDefaults.textboxToolDefaults.textSize,
   textAlign: "left",
   rotationDeg: 0,
+  labelGlow: false,
 };
 
 export function createSceneSliceState() {

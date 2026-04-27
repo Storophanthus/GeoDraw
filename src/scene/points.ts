@@ -27,7 +27,7 @@ import {
 import { evalPointUncheckedInSceneWithFacades } from "./eval/scenePointEvalFacade";
 import { evalPointWithCtxInScene } from "./eval/pointRuntime";
 import { type SceneEvalContext } from "./eval/sceneContextBuilder";
-import type { RichTextDocument, RichTextStyle } from "../richtext/model";
+import type { RichTextDocument, RichTextStyle } from "../text-editor/richTextModel";
 
 export {
   isNameUnique,
@@ -196,6 +196,7 @@ export type AngleStyle = {
   labelPosWorld: Vec2;
   showLabel: boolean;
   showValue: boolean;
+  labelGlow?: boolean;
   promoteToSolid?: boolean;
   arcArrowMark?: PathArrowMark;
   arcArrowMarks?: PathArrowMark[];
@@ -354,6 +355,21 @@ export type PointByReflection = {
   style: PointStyle;
 };
 
+export type PointByProjection = {
+  id: string;
+  kind: "pointByProjection";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  pointId: string;
+  axisAId: string;
+  axisBId: string;
+  style: PointStyle;
+};
+
 export type CircleCenterPoint = {
   id: string;
   kind: "circleCenter";
@@ -399,7 +415,10 @@ export type SceneGeometryLayerRef =
   | { type: "angle"; id: string };
 
 export type LineLikeObjectRef = { type: "line"; id: string } | { type: "segment"; id: string };
-export type ReflectionObjectRef = LineLikeObjectRef | { type: "point"; id: string };
+export type ReflectionObjectRef =
+  | LineLikeObjectRef
+  | { type: "point"; id: string }
+  | { type: "pointPair"; aId: string; bId: string };
 
 export type SceneVectorFromPoints = {
   id: string;
@@ -510,6 +529,7 @@ export type ScenePoint =
   | PointByTranslation
   | PointByDilation
   | PointByReflection
+  | PointByProjection
   | CircleCenterPoint
   | TriangleCenterPoint
   | IntersectionPoint
@@ -522,6 +542,7 @@ export type ObjectLabelFields = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
 };
 
 export type SceneSegment = {
@@ -538,6 +559,7 @@ export type SceneSegment = {
   showLabel: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -550,6 +572,7 @@ export type SceneLineTwoPoint = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -562,6 +585,7 @@ export type SceneLinePerpendicular = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -574,6 +598,7 @@ export type SceneLineParallel = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -587,6 +612,7 @@ export type SceneLineAngleBisector = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -600,6 +626,7 @@ export type SceneLineTangent = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -614,6 +641,7 @@ export type SceneLineCircleCircleTangent = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -634,6 +662,7 @@ export type SceneCircleTwoPoint = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: CircleStyle;
 };
 
@@ -647,6 +676,7 @@ export type SceneCircleThreePoint = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: CircleStyle;
 };
 
@@ -660,6 +690,7 @@ export type SceneCircleFixedRadius = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: CircleStyle;
 };
 
@@ -672,6 +703,7 @@ export type ScenePolygon = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: PolygonStyle;
 };
 
@@ -771,6 +803,7 @@ export type SceneTextLabelStyle = {
   boxWidthPx?: number;
   boxHeightPx?: number;
   rotationDeg?: number;
+  labelGlow?: boolean;
 };
 
 export type SceneTextLabel = {

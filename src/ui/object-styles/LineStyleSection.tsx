@@ -9,7 +9,7 @@ type LineStyleSectionProps = {
     selectedStyleAsDefault: boolean;
     onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedLineStyle: (style: Partial<LineStyle>) => void;
-    updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+    updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
     canConvertToSegment: boolean;
     convertSelectedLineToSegment: () => void;
 };
@@ -108,14 +108,24 @@ export function LineStyleSection({
                     Show Label
                 </label>
                 {Boolean(selectedLine.showLabel) && (
-                <div className="controlRow">
-                    <label className="controlLabel">Label Text</label>
-                    <input
-                        className="renameInput"
-                        value={selectedLine.labelText ?? ""}
-                        onChange={(e) => updateSelectedLineFields({ labelText: e.target.value })}
-                    />
-                </div>
+                    <>
+                        <label className="checkboxRow">
+                            <input
+                                type="checkbox"
+                                checked={selectedLine.labelGlow !== false}
+                                onChange={(e) => updateSelectedLineFields({ labelGlow: e.target.checked })}
+                            />
+                            Label Glow
+                        </label>
+                        <div className="controlRow">
+                            <label className="controlLabel">Label Text</label>
+                            <input
+                                className="renameInput"
+                                value={selectedLine.labelText ?? ""}
+                                onChange={(e) => updateSelectedLineFields({ labelText: e.target.value })}
+                            />
+                        </div>
+                    </>
                 )}
             </StyleControlGroup>
         </div>

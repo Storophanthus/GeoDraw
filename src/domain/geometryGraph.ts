@@ -95,8 +95,15 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
           ? key("line", p.axis.id)
           : p.axis.type === "segment"
             ? key("segment", p.axis.id)
-            : key("point", p.axis.id)
+            : p.axis.type === "point"
+              ? key("point", p.axis.id)
+              : key("point", p.axis.aId)
       );
+      if (p.axis.type === "pointPair") addDependency(graph, child, key("point", p.axis.bId));
+    } else if (p.kind === "pointByProjection") {
+      addDependency(graph, child, key("point", p.pointId));
+      addDependency(graph, child, key("point", p.axisAId));
+      addDependency(graph, child, key("point", p.axisBId));
     } else if (p.kind === "intersectionPoint") {
       addDependency(graph, child, objectRefToKey(p.objA));
       addDependency(graph, child, objectRefToKey(p.objB));

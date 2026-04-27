@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, type KeyboardEvent } from "react";
 import { type StructuredMathDocument } from "./structuredMath";
+import "./text-editor.css";
 
 type StructuredMathEditorProps = {
   sessionKey: string;

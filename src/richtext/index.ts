@@ -1,14 +1,16 @@
-export { RichTextCanvasEditor, type RichTextCanvasEditorProps } from "./RichTextCanvasEditor";
 export {
+  RichTextCanvasEditor,
+  type RichTextCanvasEditorProps,
   useRichTextToolController,
   type RichTextControllerResult,
   type RichTextEditorSession,
-} from "./useRichTextToolController";
-export { createRichTextOverlays, type RichTextOverlay } from "./overlays";
-export {
+  createRichTextOverlays,
+  type RichTextOverlay,
   createEmptyDocument,
   serializeRichTextDocumentToSource,
   serializeRichTextDocumentToTex,
   RICH_TEXT_SYMBOL_COMPLETIONS,
-} from "./document";
-export type { RichTextDocument, RichTextStyle, MathNode } from "./model";
+  type RichTextDocument,
+  type RichTextStyle,
+  type MathNode,
+} from "../text-editor";

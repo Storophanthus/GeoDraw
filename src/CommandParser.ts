@@ -9,6 +9,7 @@ import {
 } from "./scene/eval/scalarFunctionRegistry";
 import { evaluateScalarObjectMeasureArg } from "./scene/eval/scalarObjectMeasure";
 import { evaluateScalarExpressionWithRuntime } from "./scene/eval/scalarExpressionRuntime";
+import type { ReflectionObjectRef } from "./scene/points";
 
 const math = create(all, { number: "number", matrix: "Array", predictable: true });
 const MAX_INPUT_LENGTH = 300;
@@ -42,7 +43,8 @@ export type Command =
   | { type: "CreatePointByTranslation"; pointId: string; fromId: string; toId: string }
   | { type: "CreatePointByRotation"; pointId: string; centerId: string; angleDeg: number; angleExpr: string; direction: "CCW" | "CW" }
   | { type: "CreatePointByDilation"; pointId: string; centerId: string; factorExpr: string }
-  | { type: "CreatePointByReflection"; pointId: string; axis: { type: "line" | "segment" | "point"; id: string } }
+  | { type: "CreatePointByReflection"; pointId: string; axis: ReflectionObjectRef }
+  | { type: "CreatePointByProjection"; pointId: string; axisAId: string; axisBId: string }
   | { type: "CreateLineXY"; x1: number; y1: number; x2: number; y2: number }
   | { type: "CreateLineByPoints"; aId: string; bId: string }
   | { type: "CreatePerpendicularLine"; throughId: string; base: { type: "line" | "segment"; id: string } }
@@ -350,6 +352,38 @@ function resolveScalarIdentifier(label: string, ctx: ParseContext): { ok: true; 
   return { ok: true, value };
 }
 
+function resolvePointPairAxis(
+  aRaw: string,
+  bRaw: string,
+  ctx: ParseContext,
+  label: string
+): { ok: true; axis: Extract<ReflectionObjectRef, { type: "pointPair" }> } | { ok: false; message: string } {
+  const aLabel = asIdentifier(aRaw);
+  const bLabel = asIdentifier(bRaw);
+  if (!aLabel || !bLabel) return { ok: false, message: `${label}(A,B) expects point labels` };
+  const a = resolvePointIdentifier(aLabel, ctx);
+  if (!a.ok) return { ok: false, message: a.message };
+  const b = resolvePointIdentifier(bLabel, ctx);
+  if (!b.ok) return { ok: false, message: b.message };
+  if (a.id === b.id) return { ok: false, message: `${label} axis points must be distinct` };
+  return { ok: true, axis: { type: "pointPair", aId: a.id, bId: b.id } };
+}
+
+function parseInlinePointPairAxis(
+  raw: string,
+  ctx: ParseContext
+): { ok: true; axis: Extract<ReflectionObjectRef, { type: "pointPair" }> } | { ok: false; message: string } | null {
+  const commandMatch = raw.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
+  if (!commandMatch) return null;
+  const name = commandMatch[1];
+  if (name !== "Line" && name !== "Segment") {
+    return { ok: false, message: "Inline reflection target must be Line(A,B) or Segment(A,B)" };
+  }
+  const args = splitArgs(commandMatch[2]);
+  if (!args || args.length !== 2) return { ok: false, message: `${name}(A,B) expects 2 point labels` };
+  return resolvePointPairAxis(args[0], args[1], ctx, name);
+}
+
 function resolveDistanceArg(node: MathNode, ctx: ParseContext): { ok: true; value: DistanceArg } | { ok: false; error: string } {
   const unwrapped = unwrapParenthesisNode(node);
   const anyNode = unwrapped as unknown as { type?: string; name?: string };
@@ -591,12 +625,26 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
   }
 
   if (name === "Reflect") {
-    if (args.length !== 2) return err("Reflect(P, l|O) expects 2 arguments");
+    if (args.length !== 2 && args.length !== 3) return err("Reflect(P, l|O|A,B) expects 2 or 3 arguments");
     const pointLabel = asIdentifier(args[0]);
-    const axisLabel = asIdentifier(args[1]);
-    if (!pointLabel || !axisLabel) return err("Reflect(P, l|O) expects point and line/segment/point target");
+    if (!pointLabel) return err("Reflect(P, l|O|A,B) expects a point as first argument");
     const point = resolvePointIdentifier(pointLabel, ctx);
     if (!point.ok) return err(point.message);
+
+    if (args.length === 3) {
+      const axis = resolvePointPairAxis(args[1], args[2], ctx, "Reflect");
+      if (!axis.ok) return err(axis.message);
+      return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: axis.axis } };
+    }
+
+    const inlineAxis = parseInlinePointPairAxis(args[1], ctx);
+    if (inlineAxis) {
+      if (!inlineAxis.ok) return err(inlineAxis.message);
+      return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: inlineAxis.axis } };
+    }
+
+    const axisLabel = asIdentifier(args[1]);
+    if (!axisLabel) return err("Reflect(P, l|O|A,B) expects point, line/segment alias, or Line(A,B)/Segment(A,B) target");
     const axisPoint = resolvePointIdentifier(axisLabel, ctx);
     if (axisPoint.ok) {
       return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: { type: "point", id: axisPoint.id } } };
@@ -605,6 +653,22 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     if (!axisAlias) return err(`Unknown reflection target: ${axisLabel}`);
     if (axisAlias.type !== "line" && axisAlias.type !== "segment") return err(`Not a line/segment: ${axisLabel}`);
     return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: { type: axisAlias.type, id: axisAlias.id } } };
+  }
+
+  if (name === "Orthoproject" || name === "OrthoProject" || name === "OrthogonalProjection") {
+    if (args.length !== 3) return err("Orthoproject(X,A,B) expects 3 point labels");
+    const pointLabel = asIdentifier(args[0]);
+    const axisALabel = asIdentifier(args[1]);
+    const axisBLabel = asIdentifier(args[2]);
+    if (!pointLabel || !axisALabel || !axisBLabel) return err("Orthoproject(X,A,B) expects point labels");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const axisA = resolvePointIdentifier(axisALabel, ctx);
+    if (!axisA.ok) return err(axisA.message);
+    const axisB = resolvePointIdentifier(axisBLabel, ctx);
+    if (!axisB.ok) return err(axisB.message);
+    if (axisA.id === axisB.id) return err("Orthoproject axis points must be distinct");
+    return { kind: "cmd", cmd: { type: "CreatePointByProjection", pointId: point.id, axisAId: axisA.id, axisBId: axisB.id } };
   }
 
   if (name === "Line") {

@@ -207,6 +207,7 @@ function normalizeTextLabels(
           boxWidthPx,
           boxHeightPx,
           rotationDeg,
+          labelGlow: Boolean(label.style?.labelGlow),
         },
       };
     });
@@ -390,7 +391,11 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
           if (!pointIds.has(point.pointId)) return false;
           if (point.axis.type === "line") return nextLineIdsAfter.has(point.axis.id);
           if (point.axis.type === "segment") return nextSegmentIds.has(point.axis.id);
+          if (point.axis.type === "pointPair") return pointIds.has(point.axis.aId) && pointIds.has(point.axis.bId);
           return pointIds.has(point.axis.id);
+        }
+        if (point.kind === "pointByProjection") {
+          return pointIds.has(point.pointId) && pointIds.has(point.axisAId) && pointIds.has(point.axisBId);
         }
         if (point.kind === "circleLineIntersectionPoint") {
           return nextCircleIds.has(point.circleId) && nextLineIdsAfter.has(point.lineId);

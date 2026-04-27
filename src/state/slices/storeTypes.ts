@@ -297,6 +297,7 @@ export type GeoState = {
     richTextStyle: SceneRichTextStyle | null;
     pointShowLabel: ShowLabelMode | null;
     objectShowLabel: boolean | null;
+    objectLabelGlow: boolean | null;
   };
   canUndo: boolean;
   canRedo: boolean;
@@ -378,6 +379,7 @@ export type GeoActions = {
   createPointByTranslation: (pointId: string, fromId: string, toId: string) => string | null;
   createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
   createPointByReflection: (pointId: string, axis: ReflectionObjectRef) => string | null;
+  createPointByProjection: (pointId: string, axisAId: string, axisBId: string) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   createTriangleCenterPoint: (centerKind: TriangleCenterKind, aId: string, bId: string, cId: string) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
@@ -442,34 +444,34 @@ export type GeoActions = {
   updateSelectedAngleStyle: (next: Partial<AngleStyle>) => void;
   updateAngleStyleByIds: (ids: string[], next: Partial<AngleStyle>) => void;
   updateSelectedSegmentFields: (
-    next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   updateSegmentFieldsByIds: (
     ids: string[],
-    next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   updateSelectedLineFields: (
-    next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   convertSelectedLineToSegment: () => string | null;
   convertLinesToSegmentsByIds: (ids: string[]) => string[];
   updateLineFieldsByIds: (
     ids: string[],
-    next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   updateSelectedCircleFields: (
-    next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   updateCircleFieldsByIds: (
     ids: string[],
-    next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   updateSelectedPolygonFields: (
-    next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   updatePolygonFieldsByIds: (
     ids: string[],
-    next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
   updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;

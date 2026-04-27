@@ -153,6 +153,14 @@ export function AngleStyleSection({
           />
           Show Value (deg)
         </label>
+        <label className="checkboxRow">
+          <input
+            type="checkbox"
+            checked={Boolean(selectedAngle.style.labelGlow)}
+            onChange={(e) => updateSelectedAngleStyle({ labelGlow: e.target.checked })}
+          />
+          Label Glow
+        </label>
         <div className="controlRow">
           <label className="controlLabel">Label Text</label>
           <input

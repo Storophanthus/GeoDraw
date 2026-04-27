@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SceneModel } from "../../scene/points";
-import { parseRichTextSourceToDocument, serializeRichTextDocumentToSource } from "../../richtext/document";
+import { parseRichTextSourceToDocument, serializeRichTextDocumentToSource } from "../../text-editor/richTextDocument";
 import { ColorSwatchInput } from "../ColorField";
 import { formatRoundedDisplay } from "../displayFormat";
 import { StyleControlGroup } from "../StyleControlGroup";
@@ -97,6 +97,15 @@ export function RichTextStyleSection({
             onChange={(event) => updateSelectedRichTextStyle({ textColor: event.target.value })}
           />
         </div>
+
+        <label className="checkboxRow">
+          <input
+            type="checkbox"
+            checked={Boolean(selectedRichText.style.labelGlow)}
+            onChange={(event) => updateSelectedRichTextStyle({ labelGlow: event.target.checked })}
+          />
+          Label Glow
+        </label>
 
         <div className="controlRow controlRowWithNumeric">
           <label className="controlLabel">Text Size</label>

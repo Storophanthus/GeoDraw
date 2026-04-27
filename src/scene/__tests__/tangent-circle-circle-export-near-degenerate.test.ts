@@ -75,6 +75,16 @@ function assertNearDegenerateExportFails(
   }
 }
 
+function assertNearExternalOuterExports(name: string, rawScene: unknown): void {
+  const scene = hydrateMinimalScene(rawScene);
+  const tikz = exportTikz(scene);
+  assert(tikz.includes("\\tkzDrawLine"), `${name}: expected the valid outer tangent to be drawn`);
+  assert(
+    !tikz.includes("\\tkzDefIntSimilitudeCenter"),
+    `${name}: impossible near-external inner tangent should not be exported`
+  );
+}
+
 const nearExternalFixture = {
   scene: {
     points: [
@@ -84,7 +94,52 @@ const nearExternalFixture = {
       { id: "p4", kind: "free", name: "A2", captionTex: "A2", visible: true, showLabel: "name", position: { x: 7.0000005, y: 0 } },
     ],
     lines: [
-      { id: "l1", kind: "circleCircleTangent", circleAId: "c1", circleBId: "c2", family: "outer", branchIndex: 0, visible: true },
+      { id: "l1", kind: "circleCircleTangent", circleAId: "c1", circleBId: "c2", family: "inner", branchIndex: 0, visible: true },
+    ],
+    segments: [],
+    circles: [
+      { id: "c1", kind: "twoPoint", centerId: "p1", throughId: "p2", visible: true },
+      { id: "c2", kind: "twoPoint", centerId: "p3", throughId: "p4", visible: true },
+    ],
+    polygons: [],
+    angles: [],
+    numbers: [],
+  },
+};
+
+const nearExternalOuterFixture = {
+  scene: {
+    points: [
+      { id: "p1", kind: "free", name: "O1", captionTex: "O1", visible: true, showLabel: "name", position: { x: 0, y: 0 } },
+      { id: "p2", kind: "free", name: "A1", captionTex: "A1", visible: true, showLabel: "name", position: { x: 3, y: 0 } },
+      { id: "p3", kind: "free", name: "O2", captionTex: "O2", visible: true, showLabel: "name", position: { x: 4.9999995, y: 0 } },
+      { id: "p4", kind: "free", name: "A2", captionTex: "A2", visible: true, showLabel: "name", position: { x: 6.9999995, y: 0 } },
+      {
+        id: "p5",
+        kind: "circleLineIntersectionPoint",
+        name: "T1",
+        captionTex: "T1",
+        visible: true,
+        showLabel: "name",
+        circleId: "c1",
+        lineId: "lOuter",
+        branchIndex: 0,
+      },
+      {
+        id: "p6",
+        kind: "circleLineIntersectionPoint",
+        name: "T2",
+        captionTex: "T2",
+        visible: true,
+        showLabel: "name",
+        circleId: "c2",
+        lineId: "lOuter",
+        branchIndex: 0,
+      },
+    ],
+    lines: [
+      { id: "lOuter", kind: "circleCircleTangent", circleAId: "c1", circleBId: "c2", family: "outer", branchIndex: 0, visible: true },
+      { id: "lInner", kind: "circleCircleTangent", circleAId: "c1", circleBId: "c2", family: "inner", branchIndex: 0, visible: true },
     ],
     segments: [],
     circles: [
@@ -119,6 +174,10 @@ const nearInternalFixture = {
   },
 };
 
+assertNearExternalOuterExports(
+  "tangent-circle-circle-near-degenerate-external-outer",
+  nearExternalOuterFixture.scene
+);
 assertNearDegenerateExportFails(
   "tangent-circle-circle-near-degenerate-external",
   nearExternalFixture.scene,

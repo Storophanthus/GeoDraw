@@ -31,10 +31,12 @@ type ObjectStyleSectionsProps = {
   updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
   updateSelectedPolygonStyle: (style: Partial<ScenePolygon["style"]>) => void;
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
-  updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+  updateSelectedSegmentFields: (fields: Partial<Pick<SceneSegment, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
+  updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
+  updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
   canConvertSelectedLineToSegment: boolean;
   convertSelectedLineToSegment: () => void;
-  updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+  updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
   setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
   selectedStyleAsDefault: boolean;
   onMakeStyleDefaultChange: (checked: boolean) => void;
@@ -56,7 +58,9 @@ export function ObjectStyleSections({
   updateSelectedCircleStyle,
   updateSelectedPolygonStyle,
   updateSelectedAngleStyle,
+  updateSelectedSegmentFields,
   updateSelectedLineFields,
+  updateSelectedCircleFields,
   canConvertSelectedLineToSegment,
   convertSelectedLineToSegment,
   updateSelectedPolygonFields,
@@ -74,6 +78,7 @@ export function ObjectStyleSections({
           selectedStyleAsDefault={selectedStyleAsDefault}
           onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedSegmentStyle={updateSelectedSegmentStyle}
+          updateSelectedSegmentFields={updateSelectedSegmentFields}
         />
       )}
 
@@ -107,6 +112,7 @@ export function ObjectStyleSections({
           selectedStyleAsDefault={selectedStyleAsDefault}
           onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedCircleStyle={updateSelectedCircleStyle}
+          updateSelectedCircleFields={updateSelectedCircleFields}
         />
       )}
 

@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from "react";
 import { camera as cameraMath } from "../view/camera";
-import { getNumberValue, type SceneNumberDefinition } from "../scene/points";
+import { getNumberValue, type ReflectionObjectRef, type SceneNumberDefinition } from "../scene/points";
 import {
+  cloneHistorySnapshot,
+  takeHistorySnapshot,
+  type HistorySnapshot,
   type SetStateOptions,
 } from "./slices/historySlice";
 import { createInitialGeoState } from "./slices";
@@ -68,6 +71,15 @@ const commandBarObjectAliases = new Map<
   string,
   { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }
 >();
+
+export type GeoDocumentRuntimeState = {
+  snapshot: HistorySnapshot;
+  camera: GeoState["camera"];
+  undoStack: HistorySnapshot[];
+  redoStack: HistorySnapshot[];
+  lastHistoryActionKey: string | null;
+  commandAliases: Array<[string, CommandAliasTarget]>;
+};
 
 function edgeKey(aId: string, bId: string): string {
   return aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`;
@@ -456,6 +468,12 @@ export const commandBarApi = {
       }
       if (cmd.type === "CreatePointByReflection") {
         const id = commandBarApi.createPointByReflectionWithLabel(cmd.pointId, cmd.axis, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreatePointByProjection") {
+        const id = commandBarApi.createPointByProjectionWithLabel(cmd.pointId, cmd.axisAId, cmd.axisBId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         applyAssignedPointLabel(id, label);
         return { ok: true as const, mode: "created", objectType: "point", id };
@@ -1109,7 +1127,7 @@ export const commandBarApi = {
   },
   createPointByReflectionWithLabel(
     pointId: string,
-    axis: { type: "line" | "segment" | "point"; id: string },
+    axis: ReflectionObjectRef,
     label: string
   ): string | null {
     const name = label.trim();
@@ -1120,6 +1138,28 @@ export const commandBarApi = {
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
     const createdId = actions.createPointByReflection(pointId, axis);
+    if (!createdId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === createdId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
+  },
+  createPointByProjectionWithLabel(pointId: string, axisAId: string, axisBId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const createdId = actions.createPointByProjection(pointId, axisAId, axisBId);
     if (!createdId) return null;
     setState((prev) => ({
       ...prev,
@@ -1278,6 +1318,53 @@ function chooseCommandScalarNumberDefinition(params: {
 
 export function getGeoStore(): GeoStore {
   return { ...runtime.getState(), ...actions };
+}
+
+export function captureGeoDocumentRuntimeState(): GeoDocumentRuntimeState {
+  const state = runtime.getState();
+  pruneStaleCommandAliases(state.scene);
+  return {
+    snapshot: cloneHistorySnapshot(takeHistorySnapshot(state)),
+    camera: structuredClone(state.camera),
+    undoStack: runtime.history.undoStack.map(cloneHistorySnapshot),
+    redoStack: runtime.history.redoStack.map(cloneHistorySnapshot),
+    lastHistoryActionKey: runtime.history.getLastHistoryActionKey(),
+    commandAliases: Array.from(commandBarObjectAliases.entries()).map(([name, target]) => [name, { ...target }]),
+  };
+}
+
+export function restoreGeoDocumentRuntimeState(documentState: GeoDocumentRuntimeState): void {
+  runtime.history.undoStack.length = 0;
+  runtime.history.undoStack.push(...documentState.undoStack.map(cloneHistorySnapshot));
+  runtime.history.redoStack.length = 0;
+  runtime.history.redoStack.push(...documentState.redoStack.map(cloneHistorySnapshot));
+  runtime.history.setLastHistoryActionKey(documentState.lastHistoryActionKey);
+
+  commandBarObjectAliases.clear();
+  for (const [name, target] of documentState.commandAliases) {
+    commandBarObjectAliases.set(name, { ...target });
+  }
+
+  runtime.history.setIsRestoringHistory(true);
+  try {
+    setState(
+      (prev) => {
+        const restored = restoreGeoStateFromSnapshot(prev, documentState.snapshot);
+        const next = {
+          ...restored,
+          camera: structuredClone(documentState.camera),
+          canUndo: runtime.history.undoStack.length > 0,
+          canRedo: runtime.history.redoStack.length > 0,
+        };
+        rebuildRightAngleProvenance(next.scene);
+        pruneStaleCommandAliases(next.scene);
+        return next;
+      },
+      { history: "skip" }
+    );
+  } finally {
+    runtime.history.setIsRestoringHistory(false);
+  }
 }
 
 export function useGeoStore<T>(selector: (store: GeoStore) => T): T {

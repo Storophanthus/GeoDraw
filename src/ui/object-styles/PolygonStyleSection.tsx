@@ -19,7 +19,7 @@ type PolygonStyleSectionProps = {
     selectedStyleAsDefault: boolean;
     onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedPolygonStyle: (style: Partial<ScenePolygon["style"]>) => void;
-    updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "visible">>) => void;
+    updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
     setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
 };
 
@@ -166,14 +166,24 @@ export function PolygonStyleSection({
                     Show Label
                 </label>
                 {Boolean(selectedPolygon.showLabel) && (
-                    <div className="controlRow">
-                        <label className="controlLabel">Label Text</label>
-                        <input
-                            className="renameInput"
-                            value={selectedPolygon.labelText ?? ""}
-                            onChange={(e) => updateSelectedPolygonFields({ labelText: e.target.value })}
-                        />
-                    </div>
+                    <>
+                        <label className="checkboxRow">
+                            <input
+                                type="checkbox"
+                                checked={selectedPolygon.labelGlow !== false}
+                                onChange={(e) => updateSelectedPolygonFields({ labelGlow: e.target.checked })}
+                            />
+                            Label Glow
+                        </label>
+                        <div className="controlRow">
+                            <label className="controlLabel">Label Text</label>
+                            <input
+                                className="renameInput"
+                                value={selectedPolygon.labelText ?? ""}
+                                onChange={(e) => updateSelectedPolygonFields({ labelText: e.target.value })}
+                            />
+                        </div>
+                    </>
                 )}
             </StyleControlGroup>
         </div>

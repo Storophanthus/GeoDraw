@@ -63,6 +63,7 @@ export function createSceneCreationActions(
   | "createPointByTranslation"
   | "createPointByDilation"
   | "createPointByReflection"
+  | "createPointByProjection"
   | "createIntersectionPoint"
   | "createNumber"
 > {
@@ -556,10 +557,23 @@ export function createSceneCreationActions(
           ? prev.scene.lines.some((line) => line.id === axis.id)
           : axis.type === "segment"
             ? prev.scene.segments.some((seg) => seg.id === axis.id)
-            : prev.scene.points.some((p) => p.id === axis.id);
+            : axis.type === "point"
+              ? prev.scene.points.some((p) => p.id === axis.id)
+              : axis.aId !== axis.bId &&
+                prev.scene.points.some((p) => p.id === axis.aId) &&
+                prev.scene.points.some((p) => p.id === axis.bId);
         if (!axisExists) return prev;
         const pointWorld = getPointWorldPos(point, prev.scene);
         if (!pointWorld) return prev;
+        if (axis.type === "pointPair") {
+          const axisA = prev.scene.points.find((item) => item.id === axis.aId);
+          const axisB = prev.scene.points.find((item) => item.id === axis.bId);
+          if (!axisA || !axisB) return prev;
+          const axisAWorld = getPointWorldPos(axisA, prev.scene);
+          const axisBWorld = getPointWorldPos(axisB, prev.scene);
+          if (!axisAWorld || !axisBWorld) return prev;
+          if (Math.hypot(axisBWorld.x - axisAWorld.x, axisBWorld.y - axisAWorld.y) <= 1e-12) return prev;
+        }
         const name = nextUnusedPointName(prev);
         const id = `p_${prev.nextPointId}`;
         createdId = id;
@@ -580,6 +594,55 @@ export function createSceneCreationActions(
                 auxiliary: false,
                 pointId,
                 axis,
+                style: {
+                  ...point.style,
+                  labelOffsetPx: { ...point.style.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createPointByProjection(pointId, axisAId, axisBId) {
+      if (axisAId === axisBId) return null;
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const point = prev.scene.points.find((item) => item.id === pointId);
+        const axisA = prev.scene.points.find((item) => item.id === axisAId);
+        const axisB = prev.scene.points.find((item) => item.id === axisBId);
+        if (!point || !axisA || !axisB) return prev;
+        const pointWorld = getPointWorldPos(point, prev.scene);
+        const axisAWorld = getPointWorldPos(axisA, prev.scene);
+        const axisBWorld = getPointWorldPos(axisB, prev.scene);
+        if (!pointWorld || !axisAWorld || !axisBWorld) return prev;
+        if (Math.hypot(axisBWorld.x - axisAWorld.x, axisBWorld.y - axisAWorld.y) <= 1e-12) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "pointByProjection",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: prev.objectLabelDefaults.point,
+                locked: false,
+                auxiliary: false,
+                pointId,
+                axisAId,
+                axisBId,
                 style: {
                   ...point.style,
                   labelOffsetPx: { ...point.style.labelOffsetPx },

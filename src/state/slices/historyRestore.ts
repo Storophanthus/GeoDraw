@@ -77,6 +77,13 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     const n = Number(match[1]);
     if (Number.isFinite(n) && n >= inferredNextTextLabelId) inferredNextTextLabelId = n + 1;
   }
+  let inferredNextRichTextId = 1;
+  for (const node of sceneWithBranches.richTextNodes ?? []) {
+    const match = /^rt_(\d+)$/.exec(node.id);
+    if (!match) continue;
+    const n = Number(match[1]);
+    if (Number.isFinite(n) && n >= inferredNextRichTextId) inferredNextRichTextId = n + 1;
+  }
   return {
     ...prev,
     colorProfileId: snapshot.colorProfileId ?? DEFAULT_COLOR_PROFILE_ID,
@@ -103,6 +110,7 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     nextNumberId: snapshot.nextNumberId,
     nextVectorId: snapshot.nextVectorId ?? prev.nextVectorId,
     nextTextLabelId: snapshot.nextTextLabelId ?? Math.max(prev.nextTextLabelId, inferredNextTextLabelId),
+    nextRichTextId: snapshot.nextRichTextId ?? Math.max(prev.nextRichTextId, inferredNextRichTextId),
     pointDefaults: snapshot.pointDefaults ?? prev.pointDefaults,
     segmentDefaults: snapshot.segmentDefaults ?? prev.segmentDefaults,
     lineDefaults: snapshot.lineDefaults ?? prev.lineDefaults,
@@ -112,6 +120,7 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     objectLabelDefaults: snapshot.objectLabelDefaults ?? prev.objectLabelDefaults,
     labelToolDefaults: snapshot.labelToolDefaults ?? prev.labelToolDefaults,
     textboxToolDefaults: snapshot.textboxToolDefaults ?? prev.textboxToolDefaults,
+    richTextToolDefaults: snapshot.richTextToolDefaults ?? prev.richTextToolDefaults,
     angleFixedTool: snapshot.angleFixedTool ?? prev.angleFixedTool,
     circleFixedTool: snapshot.circleFixedTool ?? prev.circleFixedTool,
     transformTool: snapshot.transformTool ?? prev.transformTool,

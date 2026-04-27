@@ -3,6 +3,7 @@ import {
   endSceneEvalTick,
   getPointWorldPos,
   type GeometryObjectRef,
+  type ReflectionObjectRef,
   type SceneModel,
   type ScenePoint,
 } from "../scene/points";
@@ -20,7 +21,8 @@ export type SnapshotPointDefinition =
   | { kind: "triangleCenter"; centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter"; aId: string; bId: string; cId: string }
   | { kind: "pointByTranslation"; pointId: string; fromId: string; toId: string; vectorId?: string }
   | { kind: "pointByDilation"; pointId: string; centerId: string; factor?: number; factorExpr?: string }
-  | { kind: "pointByReflection"; pointId: string; axis: { type: "line" | "segment" | "point"; id: string } }
+  | { kind: "pointByReflection"; pointId: string; axis: ReflectionObjectRef }
+  | { kind: "pointByProjection"; pointId: string; axisAId: string; axisBId: string }
   | {
       kind: "pointByRotation";
       centerId: string;
@@ -375,6 +377,9 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
   if (point.kind === "pointByReflection") {
     return { kind: "pointByReflection", pointId: point.pointId, axis: point.axis };
   }
+  if (point.kind === "pointByProjection") {
+    return { kind: "pointByProjection", pointId: point.pointId, axisAId: point.axisAId, axisBId: point.axisBId };
+  }
   if (point.kind === "pointByRotation") {
     return {
       kind: "pointByRotation",
@@ -462,8 +467,10 @@ function pointDependsOn(point: ScenePoint): string[] {
   if (point.kind === "pointByDilation") return [point.pointId, point.centerId];
   if (point.kind === "pointByReflection") {
     if (point.axis.type === "point") return [point.pointId, point.axis.id];
+    if (point.axis.type === "pointPair") return [point.pointId, point.axis.aId, point.axis.bId];
     return [point.pointId, objectRefKey(point.axis)];
   }
+  if (point.kind === "pointByProjection") return [point.pointId, point.axisAId, point.axisBId];
   if (point.kind === "pointByRotation") return [point.centerId, point.pointId];
   if (point.kind === "circleLineIntersectionPoint") {
     const refs = [point.circleId, point.lineId];

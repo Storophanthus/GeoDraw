@@ -171,6 +171,15 @@ export function TextLabelStyleSection({
                 Visible
             </label>
 
+            <label className="checkboxRow">
+                <input
+                    type="checkbox"
+                    checked={Boolean(selectedTextLabel.style.labelGlow)}
+                    onChange={(e) => updateSelectedTextLabelStyle({ labelGlow: e.target.checked })}
+                />
+                Label Glow
+            </label>
+
             <div className="controlRow">
                 <label className="controlLabel">Text Color</label>
                 <ColorSwatchInput

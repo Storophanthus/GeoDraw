@@ -11,6 +11,7 @@ type SegmentStyleSectionProps = {
     selectedStyleAsDefault: boolean;
     onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedSegmentStyle: (style: Partial<LineStyle>) => void;
+    updateSelectedSegmentFields: (fields: Partial<Pick<SceneSegment, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
 };
 
 export function SegmentStyleSection({
@@ -18,6 +19,7 @@ export function SegmentStyleSection({
     selectedStyleAsDefault,
     onMakeStyleDefaultChange,
     updateSelectedSegmentStyle,
+    updateSelectedSegmentFields,
 }: SegmentStyleSectionProps) {
     const resolvedSegmentMarks = React.useMemo(() => {
         const source =
@@ -109,6 +111,37 @@ export function SegmentStyleSection({
                         onChange={(e) => updateSelectedSegmentStyle({ opacity: Number(e.target.value) })}
                     />
                 </div>
+            </StyleControlGroup>
+
+            <StyleControlGroup title="Label">
+                <label className="checkboxRow">
+                    <input
+                        type="checkbox"
+                        checked={Boolean(selectedSegment.showLabel)}
+                        onChange={(e) => updateSelectedSegmentFields({ showLabel: e.target.checked })}
+                    />
+                    Show Label
+                </label>
+                {Boolean(selectedSegment.showLabel) && (
+                    <>
+                        <label className="checkboxRow">
+                            <input
+                                type="checkbox"
+                                checked={selectedSegment.labelGlow !== false}
+                                onChange={(e) => updateSelectedSegmentFields({ labelGlow: e.target.checked })}
+                            />
+                            Label Glow
+                        </label>
+                        <div className="controlRow">
+                            <label className="controlLabel">Label Text</label>
+                            <input
+                                className="renameInput"
+                                value={selectedSegment.labelText ?? ""}
+                                onChange={(e) => updateSelectedSegmentFields({ labelText: e.target.value })}
+                            />
+                        </div>
+                    </>
+                )}
             </StyleControlGroup>
 
             <StyleControlGroup title="Mark">

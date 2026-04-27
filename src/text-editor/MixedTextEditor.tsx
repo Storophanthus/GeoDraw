@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, type KeyboardEvent } from "react";
 import { parseTextLabelRichText, type TextLabelRichTextSegment } from "../text/textLabelRichText";
 import { StructuredMathEditor } from "./StructuredMathEditor";
+import "./text-editor.css";
 import {
   parseStructuredMathContent,
   serializeStructuredMathContent,

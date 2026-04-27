@@ -47,6 +47,9 @@ export type AngleLabelOverlay = {
   html: string;
   textSize: number;
   textColor: string;
+  labelGlow: boolean;
+  labelHaloColor: string;
+  labelHaloWidthPx: number;
 };
 
 export type ObjectLabelOverlay = {
@@ -57,6 +60,9 @@ export type ObjectLabelOverlay = {
   html: string;
   textSize: number;
   textColor: string;
+  labelGlow: boolean;
+  labelHaloColor: string;
+  labelHaloWidthPx: number;
 };
 
 export type TextLabelOverlay = {
@@ -71,10 +77,14 @@ export type TextLabelOverlay = {
   textAlign: "left" | "center" | "right";
   boxWidthPx: number | null;
   boxHeightPx: number | null;
+  labelGlow: boolean;
+  labelHaloColor: string;
+  labelHaloWidthPx: number;
 };
 
 // Keep free text-label size visually closer to exported TikZ font size.
 export const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.8;
+export const LABEL_GLOW_WIDTH_PX = 3.5;
 
 function escapeHtml(value: string): string {
   return value
@@ -219,7 +229,8 @@ export function createPointLabelOverlays(
 export function createAngleLabelOverlays(
   resolvedAngles: ResolvedAngle[],
   camera: Camera,
-  vp: Viewport
+  vp: Viewport,
+  labelHaloColor: string
 ): AngleLabelOverlay[] {
   return resolvedAngles
     .filter(({ angle }) => angle.visible)
@@ -239,6 +250,9 @@ export function createAngleLabelOverlays(
         html,
         textSize: getAngleTextRenderSize(angle.style.textSize),
         textColor: angle.style.textColor,
+        labelGlow: Boolean(angle.style.labelGlow),
+        labelHaloColor,
+        labelHaloWidthPx: LABEL_GLOW_WIDTH_PX,
       };
     })
     .filter((item): item is AngleLabelOverlay => Boolean(item));
@@ -255,7 +269,9 @@ function buildObjectLabelOverlay(
   camera: Camera,
   vp: Viewport,
   textColor: string,
-  textSize: number
+  textSize: number,
+  labelGlow: boolean,
+  labelHaloColor: string
 ): ObjectLabelOverlay | null {
   if (!visible || !showLabel) return null;
   const fallbackText = defaultObjectLabelText({ type, id }, scene);
@@ -277,13 +293,17 @@ function buildObjectLabelOverlay(
     html,
     textSize,
     textColor,
+    labelGlow,
+    labelHaloColor,
+    labelHaloWidthPx: LABEL_GLOW_WIDTH_PX,
   };
 }
 
 export function createObjectLabelOverlays(
   scene: SceneModel,
   camera: Camera,
-  vp: Viewport
+  vp: Viewport,
+  labelHaloColor: string
 ): ObjectLabelOverlay[] {
   const overlays: ObjectLabelOverlay[] = [];
   for (const segment of scene.segments) {
@@ -298,7 +318,9 @@ export function createObjectLabelOverlays(
       camera,
       vp,
       segment.style.strokeColor,
-      16
+      16,
+      segment.labelGlow !== false,
+      labelHaloColor
     );
     if (overlay) overlays.push(overlay);
   }
@@ -314,7 +336,9 @@ export function createObjectLabelOverlays(
       camera,
       vp,
       line.style.strokeColor,
-      16
+      16,
+      line.labelGlow !== false,
+      labelHaloColor
     );
     if (overlay) overlays.push(overlay);
   }
@@ -330,7 +354,9 @@ export function createObjectLabelOverlays(
       camera,
       vp,
       circle.style.strokeColor,
-      16
+      16,
+      circle.labelGlow !== false,
+      labelHaloColor
     );
     if (overlay) overlays.push(overlay);
   }
@@ -346,7 +372,9 @@ export function createObjectLabelOverlays(
       camera,
       vp,
       polygon.style.strokeColor,
-      16
+      16,
+      polygon.labelGlow !== false,
+      labelHaloColor
     );
     if (overlay) overlays.push(overlay);
   }
@@ -356,7 +384,8 @@ export function createObjectLabelOverlays(
 export function createTextLabelOverlays(
   scene: SceneModel,
   camera: Camera,
-  vp: Viewport
+  vp: Viewport,
+  labelHaloColor: string
 ): TextLabelOverlay[] {
   const overlays: TextLabelOverlay[] = [];
   const labels = scene.textLabels ?? [];
@@ -382,6 +411,9 @@ export function createTextLabelOverlays(
       textAlign: resolveTextLabelAlignment(label.style),
       boxWidthPx: resolveTextLabelBoxWidthPx(label.style),
       boxHeightPx: resolveTextLabelBoxHeightPx(label.style),
+      labelGlow: Boolean(label.style.labelGlow),
+      labelHaloColor,
+      labelHaloWidthPx: LABEL_GLOW_WIDTH_PX,
     });
   }
   return overlays;

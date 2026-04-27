@@ -1,6 +1,6 @@
 import { exportTikz } from "../tikz.ts";
 import type { SceneModel } from "../../scene/points.ts";
-import { parseRichTextSourceToDocument } from "../../richtext/document.ts";
+import { parseRichTextSourceToDocument } from "../../text-editor/richTextDocument.ts";
 
 const scene: SceneModel = {
   points: [],

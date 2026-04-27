@@ -1,6 +1,7 @@
 import type { Vec2 } from "../../geo/vec2";
 import {
   evalPointByDilation,
+  evalPointByProjection,
   evalPointByReflection,
   evalMidpoint,
   evalPointByRotation,
@@ -20,6 +21,7 @@ import type {
   MidpointFromPoints,
   MidpointFromSegment,
   PointByDilation,
+  PointByProjection,
   PointByReflection,
   PointByRotation,
   PointByTranslation,
@@ -269,6 +271,12 @@ function resolveReflectionTarget(
     if (!center) return null;
     return { kind: "center", center };
   }
+  if (axis.type === "pointPair") {
+    const a = ops.getPointWorldById(axis.aId, scene, ctx);
+    const b = ops.getPointWorldById(axis.bId, scene, ctx);
+    if (!a || !b) return null;
+    return { kind: "axis", a, b };
+  }
   if (axis.type === "line") {
     const anchors = ops.resolveLineAnchorsById(axis.id, scene, ctx);
     if (!anchors) return null;
@@ -300,6 +308,22 @@ export function evalPointByReflectionPoint(
     return evalPointByDilation(base, axis.center, -1);
   }
   return evalPointByReflection(base, axis.a, axis.b);
+}
+
+export function evalPointByProjectionPoint(
+  point: PointByProjection,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+  }
+): Vec2 | null {
+  const base = ops.getPointWorldById(point.pointId, scene, ctx);
+  const axisA = ops.getPointWorldById(point.axisAId, scene, ctx);
+  const axisB = ops.getPointWorldById(point.axisBId, scene, ctx);
+  if (!base || !axisA || !axisB) return null;
+  ctx.stats.allocationsEstimate += 1;
+  return evalPointByProjection(base, axisA, axisB);
 }
 
 export function evalCircleCenterPointPoint(

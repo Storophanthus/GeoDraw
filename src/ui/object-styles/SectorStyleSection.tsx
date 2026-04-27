@@ -217,6 +217,14 @@ export function SectorStyleSection({
         />
         Show Label
       </label>
+      <label className="checkboxRow">
+        <input
+          type="checkbox"
+          checked={Boolean(selectedSector.style.labelGlow)}
+          onChange={(e) => updateSelectedAngleStyle({ labelGlow: e.target.checked })}
+        />
+        Label Glow
+      </label>
       <div className="controlRow">
         <label className="controlLabel">Label Text</label>
         <input

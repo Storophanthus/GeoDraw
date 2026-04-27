@@ -168,6 +168,25 @@ const reflectedCenter = mustCmd("Reflect(B,O)", baseCtx, "CreatePointByReflectio
 if (reflectedCenter.type !== "CreatePointByReflection" || reflectedCenter.pointId !== "pB" || reflectedCenter.axis.type !== "point" || reflectedCenter.axis.id !== "pO") {
   throw new Error("Reflect(B,O) mismatch");
 }
+const reflectedPair = mustCmd("Reflect(B,A,C)", baseCtx, "CreatePointByReflection");
+if (reflectedPair.type !== "CreatePointByReflection" || reflectedPair.axis.type !== "pointPair" || reflectedPair.axis.aId !== "pA" || reflectedPair.axis.bId !== "pC") {
+  throw new Error("Reflect(B,A,C) mismatch");
+}
+const reflectedInlineSegment = mustCmd("Reflect(B,Segment(A,C))", baseCtx, "CreatePointByReflection");
+if (
+  reflectedInlineSegment.type !== "CreatePointByReflection" ||
+  reflectedInlineSegment.axis.type !== "pointPair" ||
+  reflectedInlineSegment.axis.aId !== "pA" ||
+  reflectedInlineSegment.axis.bId !== "pC"
+) {
+  throw new Error("Reflect(B,Segment(A,C)) mismatch");
+}
+
+const projected = mustCmd("Orthoproject(C,A,B)", baseCtx, "CreatePointByProjection");
+if (projected.type !== "CreatePointByProjection" || projected.pointId !== "pC" || projected.axisAId !== "pA" || projected.axisBId !== "pB") {
+  throw new Error("Orthoproject(C,A,B) mismatch");
+}
+mustError("Orthoproject(C,A,A)", baseCtx, "axis points must be distinct");
 
 const circleOA = mustCmd("Circle(O,A)", baseCtx, "CreateCircleCenterThrough");
 if (circleOA.type !== "CreateCircleCenterThrough" || circleOA.centerId !== "pO" || circleOA.throughId !== "pA") {
@@ -186,6 +205,15 @@ if (
   circleODist.rExpr !== "Distance(A,B)"
 ) {
   throw new Error("Circle(A,Distance(A,B)) mismatch");
+}
+const circleOSymbolic = mustCmd("Circle(O,96*sqrt(5))", baseCtx, "CreateCircleCenterRadius");
+if (
+  circleOSymbolic.type !== "CreateCircleCenterRadius" ||
+  circleOSymbolic.centerId !== "pO" ||
+  Math.abs(circleOSymbolic.r - 96 * Math.sqrt(5)) > 1e-9 ||
+  circleOSymbolic.rExpr !== "96*sqrt(5)"
+) {
+  throw new Error("Circle(O,96*sqrt(5)) mismatch");
 }
 
 const circle3p = mustCmd("Circle3P(A,B,O)", baseCtx, "CreateCircleThreePoint");
@@ -492,6 +520,25 @@ if (
   assignReflectedCenter.axis.id !== "pO"
 ) {
   throw new Error("Q2 = Reflect(B,O) mismatch");
+}
+const assignReflectedInlineSegment = mustAssignObject("Q3 = Reflect(B,Segment(A,C))", baseCtx, "Q3", "CreatePointByReflection");
+if (
+  assignReflectedInlineSegment.type !== "CreatePointByReflection" ||
+  assignReflectedInlineSegment.axis.type !== "pointPair" ||
+  assignReflectedInlineSegment.axis.aId !== "pA" ||
+  assignReflectedInlineSegment.axis.bId !== "pC"
+) {
+  throw new Error("Q3 = Reflect(B,Segment(A,C)) mismatch");
+}
+
+const assignProjected = mustAssignObject("H = Orthoproject(C,A,B)", baseCtx, "H", "CreatePointByProjection");
+if (
+  assignProjected.type !== "CreatePointByProjection" ||
+  assignProjected.pointId !== "pC" ||
+  assignProjected.axisAId !== "pA" ||
+  assignProjected.axisBId !== "pB"
+) {
+  throw new Error("H = Orthoproject(C,A,B) mismatch");
 }
 
 const withScalarR: ParseContext = {

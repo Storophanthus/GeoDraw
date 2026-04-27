@@ -1,4 +1,5 @@
 import { constructFromClick } from "../../engine";
+import type { ReflectionObjectRef } from "../../scene/points";
 import type { ActiveTool, PendingSelection } from "../../state/slices/storeTypes";
 import type { ToolClickHits } from "../../tools/toolClick";
 
@@ -34,7 +35,7 @@ function makeHarness(activeTool: ActiveTool): {
     invert: Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; inversionCircleId: string }>;
     reflect: Array<{
       source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string };
-      axis: { type: "line" | "segment" | "point"; id: string };
+      axis: ReflectionObjectRef;
     }>;
   };
 } {
@@ -46,7 +47,7 @@ function makeHarness(activeTool: ActiveTool): {
     invert: [] as Array<{ source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }; inversionCircleId: string }>,
     reflect: [] as Array<{
       source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string };
-      axis: { type: "line" | "segment" | "point"; id: string };
+      axis: ReflectionObjectRef;
     }>,
   };
 

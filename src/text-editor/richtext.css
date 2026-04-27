@@ -1,0 +1,350 @@
+/* Rich Text Overlays (View) */
+.gdRichTextParagraph {
+  display: block;
+  min-height: 1.2em;
+  line-height: 1.18;
+  white-space: pre;
+  word-wrap: normal;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  width: max-content;
+}
+
+.gdRichTextDisplayBlock {
+  display: block;
+  text-align: center;
+  margin: 0.5em 0;
+  white-space: nowrap;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.gdRichTextOverlay {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.18;
+  white-space: pre;
+  width: max-content;
+}
+
+.gdRichTextSymbol,
+.gdRichTextInlineMathToken,
+.gdRichTextInlineMathTokenSurface {
+  display: inline-block;
+  padding: 0 0.12em;
+  vertical-align: -0.02em;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.gdRichTextInlineMathToken .katex,
+.gdRichTextInlineMathTokenSurface .katex,
+.gdRichTextDisplayBlock .katex,
+.gdRichTextDisplayMathTokenSurface .katex {
+  vertical-align: baseline;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.gdRichTextInlineMathTokenSurface .katex *,
+.gdRichTextDisplayMathTokenSurface .katex * {
+  user-select: text;
+  -webkit-user-select: text;
+  pointer-events: none;
+}
+
+/* Rich Text Editor */
+.gdRichTextEditorShell {
+  position: absolute;
+  display: inline-block;
+  width: max-content;
+  min-width: 1.6em;
+  max-width: none;
+  pointer-events: auto;
+  padding: 10px 12px;
+  border: 1px dashed color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 54%, var(--gd-ui-border, #cbbca3));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--gd-ui-surface, #fffaf0) 18%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 14%, transparent);
+  box-sizing: border-box;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.18;
+  white-space: pre;
+  overflow: visible;
+}
+
+.gdRichTextEditorBody {
+  position: relative;
+  display: block;
+  width: max-content;
+  min-width: 1.6em;
+  min-height: 1.18em;
+}
+
+.gdRichTextEditorPreview {
+  position: relative;
+  z-index: 3;
+  display: block;
+  width: max-content;
+  min-width: 1.6em;
+  min-height: 1.18em;
+  cursor: text;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.gdRichTextSourceInput {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--gd-rich-text-caret, currentColor);
+  pointer-events: none;
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  white-space: pre;
+}
+
+.gdRichTextSourceInput::selection {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: transparent;
+}
+
+.gdRichTextEditorSelection {
+  background: color-mix(in srgb, #8ec5ff 48%, transparent);
+  border-radius: 0.12em;
+}
+
+.gdRichTextPreviewPlaceholder {
+  color: color-mix(in srgb, currentColor 42%, transparent);
+}
+
+.gdRichTextParagraphRow {
+  display: block;
+  min-height: 1.2em;
+  line-height: 1.18;
+  white-space: pre;
+  width: max-content;
+}
+
+.gdRichTextEditorHost:focus {
+  outline: none;
+}
+
+.gdRichTextTextSegment {
+  white-space: pre;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.gdRichTextInlineMathClosed,
+.gdRichTextDisplayMathClosed {
+  display: inline-block;
+  color: inherit;
+  padding: 0 0.08em;
+  cursor: text;
+  border-radius: 0.4em;
+  vertical-align: -0.02em;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.gdRichTextDisplayMathClosed {
+  display: block;
+  margin: 0.24em 0;
+  text-align: center;
+  vertical-align: baseline;
+}
+
+.gdRichTextInlineMathClosed:hover,
+.gdRichTextDisplayMathClosed:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.gdRichTextEditorHost .gdRichTextInlineMathClosed,
+.gdRichTextEditorHost .gdRichTextDisplayMathClosed,
+.gdRichTextEditorHost .gdRichTextInlineMathClosed *,
+.gdRichTextEditorHost .gdRichTextDisplayMathClosed * {
+  pointer-events: none;
+}
+
+.gdRichTextInlineMathActive {
+  display: inline-block;
+  min-width: 0.5em;
+  padding: 0 0.18em;
+  border-radius: 0.38em;
+  background: color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 78%, black 18%);
+  color: white;
+  vertical-align: baseline;
+  white-space: pre;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.gdRichTextEditorMathActive {
+  background: color-mix(in srgb, var(--gd-ui-accent-bg, #ecd8b4) 42%, var(--gd-ui-surface, #fffaf0));
+  color: var(--gd-ui-text-strong, #2f281f);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 28%, transparent);
+}
+
+.gdRichTextEditorMathActive .katex,
+.gdRichTextEditorMathActive .katex * {
+  color: inherit !important;
+}
+
+.gdRichTextEditorMathRawSource {
+  display: inline-block;
+  min-width: 0.45em;
+  color: inherit;
+  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
+  white-space: pre;
+}
+
+.gdRichTextEditorMathCaret {
+  display: inline-block;
+  width: 0;
+  height: 1.12em;
+  margin: 0 1px;
+  border-left: 2px solid currentColor;
+  vertical-align: -0.14em;
+  animation: gdRichTextCaretBlink 1s steps(1, end) infinite;
+}
+
+@keyframes gdRichTextCaretBlink {
+  0%, 52% {
+    opacity: 1;
+  }
+  53%, 100% {
+    opacity: 0;
+  }
+}
+
+.gdRichTextEditorMathEditingSource {
+  padding: 0 !important;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  white-space: pre;
+}
+
+.gdRichTextEditorMathActiveStack {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+  color: inherit;
+}
+
+.gdRichTextEditorMathActiveStack.display {
+  display: inline-flex;
+  justify-content: center;
+}
+
+.gdRichTextEditorMathActiveRender {
+  display: inline-flex;
+  min-width: 0.45em;
+  color: inherit;
+}
+
+.gdRichTextEditorMathActiveSource {
+  display: inline-block;
+  color: color-mix(in srgb, var(--gd-ui-text-strong, #2f281f) 74%, var(--gd-ui-accent, #8b5a2b));
+  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 0.62em;
+  line-height: 1;
+  opacity: 0.88;
+  white-space: pre;
+}
+
+.gdRichTextEditorMathClosed {
+  pointer-events: none;
+}
+
+.gdRichTextEditorSuggestions {
+  z-index: 4;
+  min-width: 220px;
+}
+
+.gdRichTextSuggestionQuery {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--gd-ui-border, #cbbca3) 78%, transparent);
+  border-radius: 6px;
+  background: var(--gd-ui-surface, #fffaf0);
+  color: var(--gd-ui-text-strong, #2f281f);
+  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.gdRichTextSuggestionQueryCaret {
+  display: inline-block;
+  height: 1.15em;
+  margin-left: 1px;
+  border-left: 2px solid color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 72%, var(--gd-ui-text-strong, #2f281f));
+  animation: gdRichTextCaretBlink 1s steps(1, end) infinite;
+}
+
+.gdRichTextDisplayMathActive {
+  display: block;
+  min-width: 2em;
+  padding: 0.26em 0.36em;
+  margin: 0.24em 0;
+  border-radius: 0.48em;
+  background: color-mix(in srgb, var(--gd-ui-accent-bg, #ecd8b4) 48%, var(--gd-ui-surface, #fffaf0));
+  color: var(--gd-ui-text-strong, #2f281f);
+  white-space: pre;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.gdRichTextDisplayMathRenderRow {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  min-height: 1.5em;
+  color: inherit;
+}
+
+.gdRichTextDisplayMathPending {
+  display: inline-block;
+  min-width: 1em;
+}
+
+.gdRichTextDisplayMathSourceStrip {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.26em auto 0;
+  padding: 0.08em 0.38em;
+  border: 1px solid color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 24%, transparent);
+  border-radius: 0.36em;
+  background: color-mix(in srgb, var(--gd-ui-surface, #fffaf0) 86%, transparent);
+  color: var(--gd-ui-text-strong, #2f281f);
+  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 0.62em;
+  line-height: 1.18;
+  text-align: left;
+  overflow: hidden;
+}
+
+.gdRichTextInlineMathClosed .katex,
+.gdRichTextDisplayMathClosed .katex {
+  vertical-align: baseline;
+}

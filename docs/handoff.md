@@ -747,6 +747,141 @@
 
 
 ## Active Work (Open)
+- Big homework / next UX milestone: shared right-click context actions system
+  - Goal:
+    - make GeoDraw feel more desktop-native by using right-click for common object actions and scalar extraction shortcuts.
+    - this is a shared action system, not two separate menu implementations.
+  - Required entry points:
+    1. right-click on an object in the canvas
+    2. right-click on the same object in the Object Browser / right sidebar
+  - Core UX rule:
+    - both entry points must open the same action model for the same object kind.
+    - right-click should target the object under cursor even when a different object is currently selected.
+  - V1 scope (recommended):
+    - point:
+      - rename
+      - show/hide label
+      - delete
+    - segment:
+      - solid / dashed / dotted
+      - show/hide label
+      - create variable from length
+      - delete
+    - circle:
+      - solid / dashed / dotted
+      - show/hide label
+      - create variable from radius
+      - create variable from area
+      - delete
+    - angle:
+      - promote to solid
+      - show/hide label
+      - show/hide value
+      - create variable from angle
+      - delete
+    - polygon:
+      - show/hide label
+      - delete
+      - defer scalar extraction until real number definitions exist for polygon perimeter / area
+    - text / textbox / rich text:
+      - edit
+      - duplicate
+      - delete
+    - empty canvas:
+      - create point
+      - create text
+      - create textbox
+      - paste
+      - fit view
+      - clear selection
+  - Important naming decision:
+    - prefer user-facing labels like:
+      - `Create Variable from Length`
+      - `Create Variable from Angle`
+      - `Create Variable from Radius`
+      - `Create Variable from Area`
+    - do not use vague labels like `Extract value` if the object-specific meaning can be explicit.
+  - Existing implementation footholds:
+    - canvas interaction root:
+      - `src/view/useCanvasInteractionController.ts`
+      - `src/view/pointerEventController.ts`
+      - `src/view/canvasEventLifecycle.ts`
+    - object-row interaction root:
+      - `src/ui/ObjectBrowser.tsx`
+    - existing scalar creation actions already available:
+      - `segmentLength`
+      - `circleRadius`
+      - `circleArea`
+      - `angleDegrees`
+      - current UI reference: `src/ui/NumbersSection.tsx`
+  - Recommended architecture:
+    - add one shared resolver:
+      - e.g. `getContextActionsForObject(scene, selectedObject, stores/actions, location)`
+    - keep menu rendering separate from action resolution:
+      - shared action descriptors
+      - two openers (canvas, Object Browser)
+      - one presentational menu component
+    - avoid hardcoding action lists independently inside canvas and Object Browser.
+  - Suggested implementation slices:
+    1. add shared action descriptor model and resolver for `point`, `segment`, `circle`, `angle`, `polygon`, `textLabel`, `richText`
+    2. add canvas `contextmenu` handling and target resolution
+    3. add Object Browser row right-click handling
+    4. wire scalar extraction actions for segment / circle / angle using existing number creation actions
+    5. add empty-canvas menu
+    6. add polish:
+      - keyboard escape to close
+      - outside click close
+      - viewport clamping
+      - Mac ctrl-click parity
+  - 2026-04-26 implementation checkpoint:
+    - Done:
+      - Added shared action resolver/model in `src/ui/contextMenuActions.ts`.
+      - Added shared menu renderer/executor in `src/ui/GeoContextMenu.tsx`.
+      - Wired canvas `contextmenu` handling through:
+        - `src/view/canvasInteractionHelpers.ts`
+        - `src/view/canvasEventLifecycle.ts`
+        - `src/view/pointerEventController.ts`
+        - `src/view/useCanvasInteractionController.ts`
+        - `src/view/CanvasView.tsx`
+      - Wired Object Browser row right-click to the same menu in `src/ui/ObjectBrowser.tsx`.
+      - Added context menu CSS in `src/App.css`.
+      - Implemented V1 actions:
+        - point: rename, show/hide label, delete
+        - line/segment: solid/dashed/dotted, show/hide label, delete
+        - segment: create variable from length
+        - circle: solid/dashed/dotted, show/hide label, create variable from radius/area, delete
+        - polygon: solid/dashed/dotted, show/hide label, delete
+        - angle: promote to solid/use approximation dash, show/hide label, show/hide value, create variable from angle/sweep, delete
+        - text label/rich textbox: show/hide, delete
+        - empty canvas: create point, create text, create textbox, fit view, clear selection
+      - Right-click and Mac ctrl-click no longer start the normal pointer-drag/construction flow.
+      - Added focused tests:
+        - `src/ui/__tests__/contextMenuActions.test.ts`
+        - extended `src/view/__tests__/canvas-event-lifecycle.test.ts`
+    - Validation:
+      - `node --import tsx src/ui/__tests__/contextMenuActions.test.ts`
+      - `node --import tsx src/view/__tests__/canvas-event-lifecycle.test.ts`
+      - `npx tsc --noEmit`
+      - `npm run build`
+    - Next:
+      - Add richer text/textbox actions once editor entry points are settled: edit and duplicate remain deferred.
+      - Add paste once clipboard/object duplication semantics are explicit.
+      - Add polygon perimeter/area extraction only after real polygon number definitions exist.
+      - Do a browser/manual pass for canvas target priority, Object Browser menu placement, and ctrl-click on macOS.
+    - Risks:
+      - V1 point rename uses `window.prompt`; replace with an in-app rename affordance later if desired.
+      - This was implemented on top of a dirty worktree with unrelated local changes in `src/App.css`, `src/view/CanvasView.tsx`, and `src/ui/ObjectBrowser.tsx`; keep future commits carefully staged.
+  - Guardrails:
+    - do not let right-click start drag behavior
+    - do not fork behavior between canvas and Object Browser menus
+    - do not ship fake polygon scalar extraction until number definitions actually support it
+    - keep V1 compact; avoid turning the menu into a second tool palette
+  - Verification / manual checks when implementing:
+    1. right-click a segment on canvas -> `Create Variable from Length` creates the same number kind as the Numbers panel action
+    2. right-click the same segment in Object Browser -> same action list appears
+    3. right-click an angle after dashed segment styling -> promoted solid state still renders correctly
+    4. right-click empty canvas does not accidentally select or drag an object
+    5. ctrl-click on macOS triggers the same context flow
 - UX consistency update:
   - Grid lattice magnetism now follows Grid visibility: when `Grid` is off, free-point grid snapping is disabled even if `Snap` remains checked.
 - Intersection semantics hardening (completed this pass):

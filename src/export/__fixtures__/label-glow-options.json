@@ -1,0 +1,147 @@
+{
+  "scene": {
+    "points": [
+      {
+        "id": "pA",
+        "kind": "free",
+        "name": "A",
+        "captionTex": "A",
+        "visible": true,
+        "showLabel": "none",
+        "position": { "x": 0, "y": 0 }
+      },
+      {
+        "id": "pB",
+        "kind": "free",
+        "name": "B",
+        "captionTex": "B",
+        "visible": true,
+        "showLabel": "none",
+        "position": { "x": 2, "y": 0 }
+      },
+      {
+        "id": "pC",
+        "kind": "free",
+        "name": "C",
+        "captionTex": "C",
+        "visible": true,
+        "showLabel": "none",
+        "position": { "x": 0, "y": 2 }
+      }
+    ],
+    "numbers": [],
+    "segments": [],
+    "lines": [
+      {
+        "id": "l1",
+        "kind": "twoPoint",
+        "aId": "pA",
+        "bId": "pB",
+        "visible": true,
+        "showLabel": true,
+        "labelText": "Obj",
+        "labelPosWorld": { "x": 1, "y": -0.25 },
+        "labelGlow": true
+      }
+    ],
+    "circles": [],
+    "polygons": [],
+    "angles": [
+      {
+        "id": "ang1",
+        "kind": "angle",
+        "aId": "pB",
+        "bId": "pA",
+        "cId": "pC",
+        "visible": true,
+        "style": {
+          "strokeColor": "#0f172a",
+          "strokeWidth": 1,
+          "strokeDash": "solid",
+          "strokeOpacity": 1,
+          "textColor": "#0f172a",
+          "textSize": 16,
+          "fillEnabled": false,
+          "fillColor": "#f5f1e6",
+          "fillOpacity": 0.2,
+          "pattern": "",
+          "markStyle": "arc",
+          "markSymbol": "none",
+          "arcMultiplicity": 1,
+          "markPos": 0.5,
+          "markSize": 7.4,
+          "markColor": "#0f172a",
+          "arcRadius": 1.5,
+          "labelText": "Ang",
+          "labelPosWorld": { "x": 0.75, "y": 0.45 },
+          "showLabel": true,
+          "showValue": false,
+          "labelGlow": true
+        }
+      }
+    ],
+    "textLabels": [
+      {
+        "id": "txt_tex",
+        "name": "TTeX",
+        "text": "T",
+        "toolKind": "label",
+        "contentMode": "static",
+        "visible": true,
+        "positionWorld": { "x": 0.5, "y": 1.1 },
+        "style": {
+          "textColor": "#0f172a",
+          "textSize": 12,
+          "useTex": true,
+          "textMode": "tex",
+          "textAlign": "center",
+          "rotationDeg": 0,
+          "labelGlow": true
+        }
+      },
+      {
+        "id": "txt_plain",
+        "name": "TPlain",
+        "text": "Plain",
+        "toolKind": "label",
+        "contentMode": "static",
+        "visible": true,
+        "positionWorld": { "x": 0.5, "y": 1.45 },
+        "style": {
+          "textColor": "#0f172a",
+          "textSize": 12,
+          "useTex": false,
+          "textMode": "plain",
+          "textAlign": "center",
+          "rotationDeg": 0,
+          "labelGlow": true
+        }
+      }
+    ],
+    "richTextNodes": [
+      {
+        "id": "rich_1",
+        "type": "richText",
+        "name": "Rich",
+        "visible": true,
+        "positionWorld": { "x": 0.5, "y": 1.8 },
+        "document": {
+          "kind": "document",
+          "blocks": [
+            {
+              "kind": "paragraph",
+              "children": [{ "kind": "text", "text": "Rich" }]
+            }
+          ]
+        },
+        "style": {
+          "textColor": "#0f172a",
+          "textSize": 12,
+          "textAlign": "left",
+          "rotationDeg": 0,
+          "labelGlow": true
+        }
+      }
+    ]
+  }
+}

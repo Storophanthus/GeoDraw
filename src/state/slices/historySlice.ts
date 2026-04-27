@@ -1,4 +1,5 @@
 import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneModel, SceneTextLabelStyle } from "../../scene/points";
+import type { SceneRichTextStyle } from "../../scene/points";
 import type { ActiveTool, GeoState, ObjectLabelDefaults, SelectedObject } from "./storeTypes";
 import type { CanvasColorTheme, ColorProfileId } from "../colorProfiles";
 
@@ -26,6 +27,7 @@ export type HistorySnapshot = {
   nextNumberId: number;
   nextVectorId?: number;
   nextTextLabelId?: number;
+  nextRichTextId?: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
@@ -35,6 +37,7 @@ export type HistorySnapshot = {
   objectLabelDefaults: ObjectLabelDefaults;
   labelToolDefaults: SceneTextLabelStyle;
   textboxToolDefaults: SceneTextLabelStyle;
+  richTextToolDefaults?: SceneRichTextStyle;
   angleFixedTool: GeoState["angleFixedTool"];
   circleFixedTool: GeoState["circleFixedTool"];
   transformTool?: GeoState["transformTool"];
@@ -76,6 +79,7 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     nextNumberId: prev.nextNumberId,
     nextVectorId: prev.nextVectorId,
     nextTextLabelId: prev.nextTextLabelId,
+    nextRichTextId: prev.nextRichTextId,
     pointDefaults: prev.pointDefaults,
     segmentDefaults: prev.segmentDefaults,
     lineDefaults: prev.lineDefaults,
@@ -85,6 +89,7 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     objectLabelDefaults: prev.objectLabelDefaults,
     labelToolDefaults: prev.labelToolDefaults,
     textboxToolDefaults: prev.textboxToolDefaults,
+    richTextToolDefaults: prev.richTextToolDefaults,
     angleFixedTool: prev.angleFixedTool,
     circleFixedTool: prev.circleFixedTool,
     transformTool: prev.transformTool,
@@ -111,6 +116,7 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.nextNumberId !== next.nextNumberId ||
     prev.nextVectorId !== next.nextVectorId ||
     prev.nextTextLabelId !== next.nextTextLabelId ||
+    prev.nextRichTextId !== next.nextRichTextId ||
     prev.pointDefaults !== next.pointDefaults ||
     prev.segmentDefaults !== next.segmentDefaults ||
     prev.lineDefaults !== next.lineDefaults ||
@@ -120,6 +126,7 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.objectLabelDefaults !== next.objectLabelDefaults ||
     prev.labelToolDefaults !== next.labelToolDefaults ||
     prev.textboxToolDefaults !== next.textboxToolDefaults
+    || prev.richTextToolDefaults !== next.richTextToolDefaults
     || prev.exportClipWorld !== next.exportClipWorld
   );
 }

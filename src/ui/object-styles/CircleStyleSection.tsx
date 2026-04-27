@@ -19,6 +19,7 @@ type CircleStyleSectionProps = {
     selectedStyleAsDefault: boolean;
     onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
+    updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
 };
 
 export function CircleStyleSection({
@@ -26,6 +27,7 @@ export function CircleStyleSection({
     selectedStyleAsDefault,
     onMakeStyleDefaultChange,
     updateSelectedCircleStyle,
+    updateSelectedCircleFields,
 }: CircleStyleSectionProps) {
     const selectedAreaStyle = selectedCircle.style;
 
@@ -140,6 +142,37 @@ export function CircleStyleSection({
                             onChange={(e) => updateSelectedCircleStyle({ patternColor: e.target.value })}
                         />
                     </div>
+                )}
+            </StyleControlGroup>
+
+            <StyleControlGroup title="Label">
+                <label className="checkboxRow">
+                    <input
+                        type="checkbox"
+                        checked={Boolean(selectedCircle.showLabel)}
+                        onChange={(e) => updateSelectedCircleFields({ showLabel: e.target.checked })}
+                    />
+                    Show Label
+                </label>
+                {Boolean(selectedCircle.showLabel) && (
+                    <>
+                        <label className="checkboxRow">
+                            <input
+                                type="checkbox"
+                                checked={selectedCircle.labelGlow !== false}
+                                onChange={(e) => updateSelectedCircleFields({ labelGlow: e.target.checked })}
+                            />
+                            Label Glow
+                        </label>
+                        <div className="controlRow">
+                            <label className="controlLabel">Label Text</label>
+                            <input
+                                className="renameInput"
+                                value={selectedCircle.labelText ?? ""}
+                                onChange={(e) => updateSelectedCircleFields({ labelText: e.target.value })}
+                            />
+                        </div>
+                    </>
                 )}
             </StyleControlGroup>
 

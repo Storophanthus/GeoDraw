@@ -35,8 +35,8 @@ import {
 } from "../scene/objectLabels";
 import { angleBisectorRad, defaultAngleLabelDist, shortestAngleDiffRad } from "../scene/angleLabelPlacement";
 import { parseTextLabelRichText } from "../text/textLabelRichText";
-import { extractDisplayMathSource, extractInlineMathSource } from "../richtext/document";
-import type { RichTextDocument } from "../richtext/model";
+import { extractDisplayMathSource, extractInlineMathSource } from "../text-editor/richTextDocument";
+import type { RichTextDocument } from "../text-editor/richTextModel";
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
 import type { TikzRendererCapabilities } from "./tikz/renderCapabilities";
@@ -130,17 +130,25 @@ export type TikzCommand =
   | { kind: "DrawSegment"; a: string; b: string; style?: string }
   | { kind: "MarkSegment"; a: string; b: string; style: string }
   | { kind: "DrawRaw"; tex: string }
-  | { kind: "DrawLine"; a: string; b: string; addLeft: number; addRight: number; style?: string }
+  | {
+    kind: "DrawLine";
+    a: string;
+    b: string;
+    addLeft: number;
+    addRight: number;
+    style?: string;
+    finiteFallback?: { ax: number; ay: number; bx: number; by: number };
+  }
   | { kind: "DrawCircle"; o: string; x: string; style?: string }
   | { kind: "FillCircle"; o: string; x: string; style?: string }
-  | { kind: "DrawCircleRadius"; o: string; radius: number; style?: string }
-  | { kind: "FillCircleRadius"; o: string; radius: number; style?: string }
+  | { kind: "DrawCircleRadius"; o: string; radius: number; radiusExpr?: string; style?: string }
+  | { kind: "FillCircleRadius"; o: string; radius: number; radiusExpr?: string; style?: string }
   | { kind: "DrawSector"; o: string; a: string; b: string; style?: string }
   | { kind: "FillSector"; o: string; a: string; b: string; style?: string }
   | { kind: "FillAngle"; a: string; b: string; c: string; style?: string }
   | { kind: "MarkAngle"; a: string; b: string; c: string; style?: string }
   | { kind: "MarkRightAngle"; a: string; b: string; c: string; style?: string }
-  | { kind: "LabelAngle"; a: string; b: string; c: string; text: string; style?: string }
+  | { kind: "LabelAngle"; a: string; b: string; c: string; text: string; style?: string; useGlow?: boolean }
   | { kind: "DrawPoints"; style: string; points: string[] }
   | { kind: "LabelPoints"; points: string[] }
   | { kind: "LabelPoint"; name: string; text: string; options?: string; useGlow?: boolean }
@@ -247,6 +255,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     space: options.clipSpace ?? 0,
   });
   const globalAdd = options.globalLineAdd ?? 5;
+  const lineDrawClipBounds = lineDrawClipBoundsForOptions(viewport, options);
   defs.push({ kind: "SetupLine", addLeft: globalAdd, addRight: globalAdd });
   if (options.clipRectWorld) {
     // Slightly expand explicit clip rectangle to avoid antialias/stroke edge shaving.
@@ -482,9 +491,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         }
       }
       const simWorld = resolveCircleSimilitudeCenter(geomA.center, geomA.radius, geomB.center, geomB.radius, simMode);
+      const canUseOuterUnsafeFallback =
+        tangentTopology.kind === "disjoint" ||
+        tangentTopology.kind === "intersecting" ||
+        (tangentTopology.kind === "degenerateTangency" &&
+          tangentTopology.mode === "external" &&
+          line.family === "outer");
       if (
         line.family === "outer" &&
-        (tangentTopology.kind === "disjoint" || tangentTopology.kind === "intersecting") &&
+        canUseOuterUnsafeFallback &&
         simWorld &&
         isTkzUnsafePoint(simWorld) &&
         Math.abs(geomA.radius - geomB.radius) > 1e-12
@@ -667,20 +682,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (!circleA || !circleB) return false;
     const geomA = circleGeomById(circleA.id);
     const geomB = circleGeomById(circleB.id);
-    const topology = classifyCircleCircleTangentTopology(geomA, geomB);
-    switch (topology.kind) {
-      case "intersecting":
-        return line.family === "inner";
-      case "degenerateTangency":
-        if (topology.near) return false;
-        return topology.mode === "internal" && line.family === "inner";
-      case "contained":
-      case "concentricUnequal":
-      case "coincident":
-        return true;
-      case "disjoint":
-        return false;
-    }
+    return circleCircleTangentHasNoCurrentAnchors(line, geomA, geomB);
   };
 
   const resolveLineLikeNames = (ref: { type: "line" | "segment"; id: string }): { a: string; b: string } => {
@@ -1125,6 +1127,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           center: mustName(pointName, point.axis.id),
           factor: -1,
         });
+      } else if (point.axis.type === "pointPair") {
+        resolvePoint(point.axis.aId);
+        resolvePoint(point.axis.bId);
+        derivedAuxIndex += 1;
+        const footName = `tkzRefProj_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefPointByReflection",
+          name,
+          point: mustName(pointName, point.pointId),
+          axisA: mustName(pointName, point.axis.aId),
+          axisB: mustName(pointName, point.axis.bId),
+          footName,
+        });
       } else {
         const axis = resolveLineLikeNames(point.axis);
         derivedAuxIndex += 1;
@@ -1138,6 +1153,18 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           footName,
         });
       }
+      definedPointIds.add(point.id);
+    } else if (point.kind === "pointByProjection") {
+      resolvePoint(point.pointId);
+      resolvePoint(point.axisAId);
+      resolvePoint(point.axisBId);
+      constructions.push({
+        kind: "DefPointByProjection",
+        name,
+        point: mustName(pointName, point.pointId),
+        axisA: mustName(pointName, point.axisAId),
+        axisB: mustName(pointName, point.axisBId),
+      });
       definedPointIds.add(point.id);
     } else if (point.kind === "circleLineIntersectionPoint") {
       const circle = circleById.get(point.circleId);
@@ -1276,18 +1303,27 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         visited.add(pointId);
         return;
       }
-      if (roots.length === 1 && supportRoots.length > roots.length) {
-        throw new Error(
-          `Cannot export finite-domain single segment-circle intersection for ${point.name}: only one segment-domain root exists while tkzInterLC works on the support line.`
-        );
-      }
       if (!point.excludePointId && point.branchIndex === 1 && roots.length < 2) {
         visiting.delete(pointId);
         visited.add(pointId);
         return;
       }
+      const singleFiniteRootFactor = finiteSingleLineCircleRootFactor(roots, supportRoots);
       if (roots.length === 1) {
         if (singleLineCircleRootIsExcluded(roots, point.excludePointId, scene)) {
+          visiting.delete(pointId);
+          visited.add(pointId);
+          return;
+        }
+        if (singleFiniteRootFactor !== null) {
+          constructions.push({
+            kind: "DefPointByDilation",
+            name,
+            center: segAName,
+            point: segBName,
+            factor: singleFiniteRootFactor,
+          });
+          definedPointIds.add(point.id);
           visiting.delete(pointId);
           visited.add(pointId);
           return;
@@ -1635,13 +1671,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             visited.add(pointId);
             return;
           }
-          if (roots.length === 1 && supportRoots.length > roots.length) {
-            throw new Error(
-              `Cannot export finite-domain single segment-circle intersection for ${point.name}: only one segment-domain root exists while tkzInterLC works on the support line.`
-            );
-          }
+          const singleFiniteRootFactor = finiteSingleLineCircleRootFactor(roots, supportRoots);
           if (roots.length === 1) {
             if (singleLineCircleRootIsExcluded(roots, point.excludePointId, scene)) {
+              visiting.delete(pointId);
+              visited.add(pointId);
+              return;
+            }
+            if (singleFiniteRootFactor !== null) {
+              constructions.push({
+                kind: "DefPointByDilation",
+                name,
+                center: mixed.ll.a,
+                point: mixed.ll.b,
+                factor: singleFiniteRootFactor,
+              });
+              definedPointIds.add(point.id);
               visiting.delete(pointId);
               visited.add(pointId);
               return;
@@ -1829,6 +1874,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (line.kind === "circleCircleTangent" && isTopologicallyImpossibleCircleCircleTangent(line)) continue;
     const lineNames = resolveLineAnchorsById(line.id);
     const ext = computeLineDrawPlacement(scene, line);
+    const lineWorldAnchors = getLineWorldAnchors(line, scene);
+    if (!lineWorldAnchors) throw new Error(`Cannot export undefined line geometry: ${line.id}`);
     const circleCircleAnchorId = line.kind === "circleCircleTangent" ? `${line.id}#a` : null;
     const lineAnchorId =
       line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent"
@@ -1850,6 +1897,12 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         : ext.drawBId === lineAnchorId
           ? lineNames.a
           : pointName.get(ext.drawBId) ?? ext.drawBId;
+    const drawAWorld = resolveLineDrawReferenceWorld(scene, line, ext.drawAId, lineWorldAnchors);
+    const drawBWorld = resolveLineDrawReferenceWorld(scene, line, ext.drawBId, lineWorldAnchors);
+    const drawSpanWorld = drawAWorld && drawBWorld ? distance(drawAWorld, drawBWorld) : distance(lineWorldAnchors.a, lineWorldAnchors.b);
+    const finiteFallback = shouldUseFiniteLineDrawFallback(drawSpanWorld, globalAdd)
+      ? lineSegmentThroughRect(lineWorldAnchors.a, lineWorldAnchors.b, lineDrawClipBounds)
+      : null;
     pushGeometryCommands({ type: "line", id: line.id }, [{
       kind: "DrawLine",
       a: drawAName,
@@ -1857,6 +1910,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       addLeft: ext.addLeft,
       addRight: ext.addRight,
       style: lineStyleToTikz(line.style, options),
+      finiteFallback: finiteFallback ?? undefined,
     }]);
   }
   for (const circle of scene.circles) {
@@ -1871,11 +1925,13 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       if (!Number.isFinite(geom.radius) || geom.radius <= 0) {
         throw new Error(`Unsupported construction: CircleFixedRadius (invalid radius for ${circle.id})`);
       }
+      const radiusExpr = pgfSafeRadiusExpression(circle.radiusExpr);
       if (fillStyle) {
         circleBundle.push({
           kind: "FillCircleRadius",
           o: centerName,
           radius: geom.radius,
+          radiusExpr: radiusExpr ?? undefined,
           style: fillStyle,
         });
       }
@@ -1883,6 +1939,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         kind: "DrawCircleRadius",
         o: centerName,
         radius: geom.radius,
+        radiusExpr: radiusExpr ?? undefined,
         style: strokeStyle,
       });
     } else if (throughName) {
@@ -2136,7 +2193,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const labelText = buildAngleLabelTex(angle.style.labelText, angle.style.showLabel, angle.style.showValue, theta);
       if (labelText) {
         const labelStyle = angleLabelStyleToTikz(angle, aWorld, bWorld, cWorld, options, rightStatus !== "none");
-        drawLabelsLayer.push({ kind: "LabelAngle", a: aName, b: bName, c: cName, text: labelText, style: labelStyle });
+        drawLabelsLayer.push({
+          kind: "LabelAngle",
+          a: aName,
+          b: bName,
+          c: cName,
+          text: labelText,
+          style: labelStyle,
+          useGlow: (options.labelGlow ?? true) && Boolean(angle.style.labelGlow),
+        });
       }
     }
   }
@@ -2158,6 +2223,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     y: number;
     text: string;
     color: string;
+    useGlow: boolean;
   }> = [];
   const objectLabelGlowEnabled = options.labelGlow ?? true;
 
@@ -2200,6 +2266,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       y: labelPos.y,
       text,
       color: segment.style.strokeColor,
+      useGlow: objectLabelGlowEnabled && segment.labelGlow !== false,
     });
   }
 
@@ -2218,6 +2285,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       y: labelPos.y,
       text,
       color: line.style.strokeColor,
+      useGlow: objectLabelGlowEnabled && line.labelGlow !== false,
     });
   }
 
@@ -2235,6 +2303,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       y: labelPos.y,
       text,
       color: circle.style.strokeColor,
+      useGlow: objectLabelGlowEnabled && circle.labelGlow !== false,
     });
   }
 
@@ -2252,6 +2321,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       y: labelPos.y,
       text,
       color: polygon.style.strokeColor,
+      useGlow: objectLabelGlowEnabled && polygon.labelGlow !== false,
     });
   }
 
@@ -2289,7 +2359,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         ...(Math.abs(rotationDeg) > 1e-9 ? [`rotate=${fmt(rotationDeg)}`] : []),
       ].join(", "),
       textMode: renderMode === "tex" ? "math" : "raw",
-      useGlow: false,
+      useGlow: (options.labelGlow ?? true) && Boolean(label.style.labelGlow),
     });
   }
 
@@ -2315,7 +2385,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         ...(Math.abs(rotationDeg) > 1e-9 ? [`rotate=${fmt(rotationDeg)}`] : []),
       ].join(", "),
       textMode: "raw",
-      useGlow: false,
+      useGlow: (options.labelGlow ?? true) && Boolean(node.style.labelGlow),
     });
   }
 
@@ -2337,7 +2407,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       y: item.y,
       text: item.text,
       options: [`anchor=center`, `text=${rgbColorExpr(item.color)}`].join(", "),
-      useGlow: objectLabelGlowEnabled,
+      useGlow: item.useGlow,
     });
   }
 
@@ -2537,9 +2607,9 @@ export function renderTikz(
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint" || c.kind === "LabelAt");
   const drawPointLabels = drawLabels.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
   const drawOtherLabels = drawLabels.filter((c) => c.kind === "LabelAt");
-  const hasGlowLabels = drawLabels.some(
-    (c) => (c.kind === "LabelPoint" || c.kind === "LabelAt") && Boolean(c.useGlow)
-  );
+  const hasGlowLabels =
+    drawLabels.some((c) => (c.kind === "LabelPoint" || c.kind === "LabelAt") && Boolean(c.useGlow)) ||
+    drawAngleLabels.some((c) => Boolean(c.useGlow));
   const emitTkzSetup = options.emitTkzSetup ?? true;
   const groupMarkAngles = options.groupMarkAngles ?? false;
   const drawLayerBackend = options.drawLayerBackend ?? "tkz";
@@ -2668,6 +2738,20 @@ function fmt(v: number): string {
   return Number(v.toPrecision(15)).toString();
 }
 
+function pgfSafeRadiusExpression(exprRaw: string | undefined): string | null {
+  const expr = (exprRaw ?? "").trim();
+  if (!expr) return null;
+  if (Number.isFinite(Number(expr))) return null;
+  if (!/^[0-9A-Za-z_+\-*/^().,\s]+$/.test(expr)) return null;
+  const identifiers = expr.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) ?? [];
+  const allowed = new Set(["sqrt", "pow", "abs", "min", "max", "pi", "Pi", "PI", "e", "tau", "Tau", "TAU"]);
+  if (identifiers.some((id) => !allowed.has(id))) return null;
+  return expr
+    .replace(/\s+/g, "")
+    .replace(/\b(?:Pi|PI|pi)\b/g, "pi")
+    .replace(/\b(?:Tau|TAU|tau)\b/g, "(2*pi)");
+}
+
 function roundDecimal(v: number, decimals: number): number {
   if (!Number.isFinite(v)) return 0;
   const factor = 10 ** decimals;
@@ -2741,10 +2825,20 @@ type CircleCircleTangentTopology =
   | { kind: "coincident" }
   | { kind: "degenerateTangency"; mode: "external" | "internal"; near: boolean };
 
-function classifyCircleCircleTangentTopology(
+function circleCircleTangentMetrics(
   a: { center: { x: number; y: number }; radius: number },
   b: { center: { x: number; y: number }; radius: number }
-): CircleCircleTangentTopology {
+): {
+  d: number;
+  r1: number;
+  r2: number;
+  sum: number;
+  diff: number;
+  extGap: number;
+  intGap: number;
+  exactTol: number;
+  nearTol: number;
+} {
   const d = distance(a.center, b.center);
   const r1 = a.radius;
   const r2 = b.radius;
@@ -2755,6 +2849,14 @@ function classifyCircleCircleTangentTopology(
   const diff = Math.abs(r1 - r2);
   const extGap = d - sum;
   const intGap = d - diff;
+  return { d, r1, r2, sum, diff, extGap, intGap, exactTol, nearTol };
+}
+
+function classifyCircleCircleTangentTopology(
+  a: { center: { x: number; y: number }; radius: number },
+  b: { center: { x: number; y: number }; radius: number }
+): CircleCircleTangentTopology {
+  const { d, r1, r2, sum, diff, extGap, intGap, exactTol, nearTol } = circleCircleTangentMetrics(a, b);
 
   if (d <= exactTol) {
     if (Math.abs(r1 - r2) <= exactTol) return { kind: "coincident" };
@@ -2795,9 +2897,9 @@ function assertCircleCircleTangentExportable(
         `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for intersecting circles${diag}`
       );
     case "degenerateTangency":
+      if (topology.mode === "external" && line.family === "outer") return;
       if (!topology.near) {
         if (isExactDegenerateCircleCircleTangentFamily(line, topology)) return;
-        if (topology.mode === "external" && line.family === "outer") return;
         if (topology.mode === "internal" && line.family === "inner") {
           throw new Error(
             `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for internally tangent circles${diag}`
@@ -2822,14 +2924,20 @@ function circleCircleTangentDiagnosticsSuffix(
   a: { center: { x: number; y: number }; radius: number },
   b: { center: { x: number; y: number }; radius: number }
 ): string {
-  const d = distance(a.center, b.center);
-  const r1 = a.radius;
-  const r2 = b.radius;
-  const sum = r1 + r2;
-  const diff = Math.abs(r1 - r2);
-  const extGap = d - sum;
-  const intGap = d - diff;
+  const { d, r1, r2, extGap, intGap } = circleCircleTangentMetrics(a, b);
   return ` (d=${fmt(d)}, r1=${fmt(r1)}, r2=${fmt(r2)}, extGap=${fmt(extGap)}, intGap=${fmt(intGap)})`;
+}
+
+function circleCircleTangentHasNoCurrentAnchors(
+  line: Extract<SceneModel["lines"][number], { kind: "circleCircleTangent" }>,
+  a: { center: { x: number; y: number }; radius: number },
+  b: { center: { x: number; y: number }; radius: number }
+): boolean {
+  const { d, r1, r2, sum, diff, exactTol } = circleCircleTangentMetrics(a, b);
+  if (!(r1 > 1e-12) || !(r2 > 1e-12)) return true;
+  if (d <= exactTol) return true;
+  if (line.family === "inner") return d < sum - exactTol;
+  return d < diff - exactTol;
 }
 
 function isExactDegenerateCircleCircleTangentFamily(
@@ -3051,8 +3159,20 @@ function filterLineCircleBranchesToFiniteDomain(
   finite: boolean
 ): Array<{ point: { x: number; y: number }; t: number }> {
   if (!finite) return branches;
-  const DOMAIN_EPS = 1e-6;
-  return branches.filter((branch) => branch.t >= -DOMAIN_EPS && branch.t <= 1 + DOMAIN_EPS);
+  return branches.filter((branch) => branch.t >= -FINITE_DOMAIN_EPS && branch.t <= 1 + FINITE_DOMAIN_EPS);
+}
+
+const FINITE_DOMAIN_EPS = 1e-6;
+
+function finiteSingleLineCircleRootFactor(
+  roots: Array<{ point: { x: number; y: number }; t: number }>,
+  supportRoots: Array<{ point: { x: number; y: number }; t: number }>
+): number | null {
+  if (roots.length !== 1 || supportRoots.length <= roots.length) return null;
+  const t = roots[0].t;
+  if (t < 0 && t >= -FINITE_DOMAIN_EPS) return 0;
+  if (t > 1 && t <= 1 + FINITE_DOMAIN_EPS) return 1;
+  return t;
 }
 
 function inferLineCircleBranchFromExcludedRoots(
@@ -3217,6 +3337,129 @@ function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: numb
     xmax: maxX + pad,
     ymin: minY - pad,
     ymax: maxY + pad,
+  };
+}
+
+const TKZ_DRAW_LINE_SAFE_EXTENDED_LENGTH = 400;
+
+function lineDrawClipBoundsForOptions(
+  viewport: TikzExportViewport,
+  options: TikzExportOptions
+): TikzExportViewport {
+  const rawBounds = options.clipRectWorld
+    ? normalizeViewportRect(options.clipRectWorld)
+    : options.clipPolygonWorld && options.clipPolygonWorld.length >= 3
+      ? boundsForPoints(options.clipPolygonWorld)
+      : normalizeViewportRect(viewport);
+  const width = Math.max(1e-9, rawBounds.xmax - rawBounds.xmin);
+  const height = Math.max(1e-9, rawBounds.ymax - rawBounds.ymin);
+  const pad = Math.max(0.5, Math.abs(options.clipSpace ?? 0), 0.02 * Math.max(width, height));
+  return {
+    xmin: rawBounds.xmin - pad,
+    xmax: rawBounds.xmax + pad,
+    ymin: rawBounds.ymin - pad,
+    ymax: rawBounds.ymax + pad,
+  };
+}
+
+function normalizeViewportRect(rect: TikzExportViewport): TikzExportViewport {
+  return {
+    xmin: Math.min(rect.xmin, rect.xmax),
+    xmax: Math.max(rect.xmin, rect.xmax),
+    ymin: Math.min(rect.ymin, rect.ymax),
+    ymax: Math.max(rect.ymin, rect.ymax),
+  };
+}
+
+function boundsForPoints(points: Array<{ x: number; y: number }>): TikzExportViewport {
+  let xmin = Number.POSITIVE_INFINITY;
+  let xmax = Number.NEGATIVE_INFINITY;
+  let ymin = Number.POSITIVE_INFINITY;
+  let ymax = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+    xmin = Math.min(xmin, point.x);
+    xmax = Math.max(xmax, point.x);
+    ymin = Math.min(ymin, point.y);
+    ymax = Math.max(ymax, point.y);
+  }
+  if (!Number.isFinite(xmin) || !Number.isFinite(xmax) || !Number.isFinite(ymin) || !Number.isFinite(ymax)) {
+    return { xmin: -10, xmax: 10, ymin: -10, ymax: 10 };
+  }
+  return normalizeViewportRect({ xmin, xmax, ymin, ymax });
+}
+
+function shouldUseFiniteLineDrawFallback(drawSpanWorld: number, globalAdd: number): boolean {
+  if (!Number.isFinite(drawSpanWorld) || drawSpanWorld <= 1e-9) return true;
+  const extensionFactor = 1 + 2 * Math.max(0, globalAdd);
+  return drawSpanWorld * extensionFactor > TKZ_DRAW_LINE_SAFE_EXTENDED_LENGTH;
+}
+
+function resolveLineDrawReferenceWorld(
+  scene: SceneModel,
+  line: SceneModel["lines"][number],
+  id: string,
+  anchors: { a: { x: number; y: number }; b: { x: number; y: number } }
+): { x: number; y: number } | null {
+  if (id === line.id) return anchors.b;
+  if (line.kind === "circleCircleTangent" && id === `${line.id}#a`) return anchors.a;
+  return getPointWorldPosCached(scene, id);
+}
+
+function lineSegmentThroughRect(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  rect: TikzExportViewport
+): { ax: number; ay: number; bx: number; by: number } | null {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (!(len > 1e-12)) return null;
+
+  const candidates: Array<{ x: number; y: number; t: number }> = [];
+  const eps = 1e-7;
+  const addCandidate = (t: number) => {
+    if (!Number.isFinite(t)) return;
+    const x = a.x + t * dx;
+    const y = a.y + t * dy;
+    if (x < rect.xmin - eps || x > rect.xmax + eps || y < rect.ymin - eps || y > rect.ymax + eps) return;
+    if (candidates.some((candidate) => Math.hypot(candidate.x - x, candidate.y - y) <= 1e-6)) return;
+    candidates.push({ x, y, t });
+  };
+
+  if (Math.abs(dx) > 1e-12) {
+    addCandidate((rect.xmin - a.x) / dx);
+    addCandidate((rect.xmax - a.x) / dx);
+  }
+  if (Math.abs(dy) > 1e-12) {
+    addCandidate((rect.ymin - a.y) / dy);
+    addCandidate((rect.ymax - a.y) / dy);
+  }
+
+  if (candidates.length >= 2) {
+    candidates.sort((p, q) => p.t - q.t);
+    const first = candidates[0];
+    const last = candidates[candidates.length - 1];
+    return { ax: first.x, ay: first.y, bx: last.x, by: last.y };
+  }
+
+  const center = {
+    x: (rect.xmin + rect.xmax) / 2,
+    y: (rect.ymin + rect.ymax) / 2,
+  };
+  const tCenter = ((center.x - a.x) * dx + (center.y - a.y) * dy) / (len * len);
+  const nearest = {
+    x: a.x + tCenter * dx,
+    y: a.y + tCenter * dy,
+  };
+  const ux = dx / len;
+  const uy = dy / len;
+  const halfSpan = Math.hypot(rect.xmax - rect.xmin, rect.ymax - rect.ymin) / 2;
+  return {
+    ax: nearest.x - ux * halfSpan,
+    ay: nearest.y - uy * halfSpan,
+    bx: nearest.x + ux * halfSpan,
+    by: nearest.y + uy * halfSpan,
   };
 }
 

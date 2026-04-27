@@ -123,6 +123,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
   };
 
   const onDown = (e: PointerEvent) => {
+    if (e.button !== 0 || e.ctrlKey) return;
     cancelPendingHoverUpdate();
     const screen = deps.readScreen(e);
     deps.setHoverScreen(screen);

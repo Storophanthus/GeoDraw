@@ -25,11 +25,15 @@ import { resolveAngles } from "./angleResolution";
 import { CanvasLabelsLayer } from "./CanvasLabelsLayer";
 import { renderCanvasFrame } from "./renderFrame";
 import { useCanvasInteractionController, type PointerState } from "./useCanvasInteractionController";
+import { GeoContextMenu, type GeoContextMenuState } from "../ui/GeoContextMenu";
 import { isValidTarget } from "../tools/toolClick";
-import { CanvasTextEditor, useTextboxToolController } from "../textbox-tool";
-import { RichTextCanvasEditor } from "../richtext/RichTextCanvasEditor";
-import { useRichTextToolController } from "../richtext/useRichTextToolController";
-import { createRichTextOverlays } from "../richtext/overlays";
+import {
+  CanvasTextEditor,
+  createRichTextOverlays,
+  RichTextCanvasEditor,
+  useRichTextToolController,
+  useTextboxToolController,
+} from "../text-editor";
 import {
   applyDilationToObject,
   applyInversionToObject,
@@ -182,6 +186,7 @@ export function CanvasView() {
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
   const [snapDisabled, setSnapDisabled] = useState(false);
   const [dropTargetActive, setDropTargetActive] = useState(false);
+  const [contextMenu, setContextMenu] = useState<GeoContextMenuState | null>(null);
   const isTauriRuntime = useMemo(
     () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as object),
     []
@@ -461,20 +466,20 @@ export function CanvasView() {
     [resolvedPoints, camera, vp, canvasTheme.backgroundColor]
   );
   const angleLabelOverlays = useMemo(
-    () => createAngleLabelOverlays(resolvedAngles, camera, vp),
-    [resolvedAngles, camera, vp]
+    () => createAngleLabelOverlays(resolvedAngles, camera, vp, canvasTheme.backgroundColor),
+    [resolvedAngles, camera, vp, canvasTheme.backgroundColor]
   );
   const objectLabelOverlays = useMemo(
-    () => createObjectLabelOverlays(scene, camera, vp),
-    [scene, camera, vp]
+    () => createObjectLabelOverlays(scene, camera, vp, canvasTheme.backgroundColor),
+    [scene, camera, vp, canvasTheme.backgroundColor]
   );
   const textLabelOverlays = useMemo(
-    () => createTextLabelOverlays(scene, camera, vp),
-    [scene, camera, vp]
+    () => createTextLabelOverlays(scene, camera, vp, canvasTheme.backgroundColor),
+    [scene, camera, vp, canvasTheme.backgroundColor]
   );
   const richTextOverlays = useMemo(
-    () => createRichTextOverlays(scene, camera, vp),
-    [scene, camera, vp]
+    () => createRichTextOverlays(scene, camera, vp, canvasTheme.backgroundColor),
+    [scene, camera, vp, canvasTheme.backgroundColor]
   );
   const textboxTool = useTextboxToolController({
     activeTool,
@@ -670,6 +675,12 @@ export function CanvasView() {
       beginRichTextEditing: richTextTool.beginRichTextEditing,
       clearPendingSelection,
       zoomAtScreenPoint,
+      openContextMenu: ({ clientX, clientY, target, world }) =>
+        setContextMenu({
+          x: clientX,
+          y: clientY,
+          target: target ?? { type: "empty", world },
+        }),
     },
   });
 
@@ -833,6 +844,7 @@ export function CanvasView() {
           onCancel={richTextTool.editorSession.cancel}
         />
       )}
+      <GeoContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
     </div>
   );
 }

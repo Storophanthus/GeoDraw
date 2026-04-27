@@ -25,7 +25,7 @@ function styleOptions(style?: string): string {
 
 function renderLabelText(ctx: TikzRendererContext, text: string, useGlow?: boolean, textMode: "math" | "raw" = "math"): string {
   const escaped = ctx.capabilities.escapeTikzText(text);
-  if (textMode === "raw") return escaped;
+  if (textMode === "raw") return useGlow ? `\\gdLabelGlow{${escaped}}` : escaped;
   return useGlow ? `\\gdLabelGlow{$${escaped}$}` : `$${escaped}$`;
 }
 
@@ -38,6 +38,10 @@ function createTkzDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayerBa
       return [`\\tkzDrawSegment${styleOptions(cmd.style)}(${cmd.a},${cmd.b})`];
     },
     emitDrawLine: (cmd) => {
+      if (cmd.finiteFallback) {
+        const { ax, ay, bx, by } = cmd.finiteFallback;
+        return [`\\draw${styleOptions(cmd.style)} (${caps.fmt(ax)},${caps.fmt(ay)}) -- (${caps.fmt(bx)},${caps.fmt(by)});`];
+      }
       caps.assertTkzMacro("tkzDrawLine");
       return [`\\tkzDrawLine${styleOptions(cmd.style)}(${cmd.a},${cmd.b})`];
     },
@@ -66,10 +70,19 @@ function createPlainDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayer
   return {
     emitDrawRaw: (cmd) => [cmd.tex],
     emitDrawSegment: (cmd) => [`\\draw${styleOptions(cmd.style)} (${cmd.a}) -- (${cmd.b});`],
-    emitDrawLine: (cmd) => [
-      `% gd plain draw backend: DrawLine exported as anchor segment (${cmd.a},${cmd.b})`,
-      `\\draw${styleOptions(cmd.style)} (${cmd.a}) -- (${cmd.b});`,
-    ],
+    emitDrawLine: (cmd) => {
+      if (cmd.finiteFallback) {
+        const { ax, ay, bx, by } = cmd.finiteFallback;
+        return [
+          `% gd plain draw backend: DrawLine exported as finite viewport segment (${cmd.a},${cmd.b})`,
+          `\\draw${styleOptions(cmd.style)} (${caps.fmt(ax)},${caps.fmt(ay)}) -- (${caps.fmt(bx)},${caps.fmt(by)});`,
+        ];
+      }
+      return [
+        `% gd plain draw backend: DrawLine exported as anchor segment (${cmd.a},${cmd.b})`,
+        `\\draw${styleOptions(cmd.style)} (${cmd.a}) -- (${cmd.b});`,
+      ];
+    },
     emitDrawCircle: (cmd) => [`\\draw${styleOptions(cmd.style)} (${cmd.o}) circle [through=(${cmd.x})];`],
     emitFillCircle: (cmd) => [`\\fill${styleOptions(cmd.style)} (${cmd.o}) circle [through=(${cmd.x})];`],
     emitLabelPoint: (cmd) => {

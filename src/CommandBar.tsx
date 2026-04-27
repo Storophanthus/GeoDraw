@@ -101,6 +101,7 @@ export function CommandBar() {
   const createPointByRotation = useGeoStore((store) => store.createPointByRotation);
   const createPointByDilation = useGeoStore((store) => store.createPointByDilation);
   const createPointByReflection = useGeoStore((store) => store.createPointByReflection);
+  const createPointByProjection = useGeoStore((store) => store.createPointByProjection);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createTangentLines = useGeoStore((store) => store.createTangentLines);
@@ -311,6 +312,16 @@ export function CommandBar() {
       const pointId = createPointByReflection(cmd.pointId, cmd.axis);
       if (!pointId) {
         setStatus({ kind: "error", text: "Cannot construct reflected point" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePointByProjection") {
+      const pointId = createPointByProjection(cmd.pointId, cmd.axisAId, cmd.axisBId);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct projected point" });
         return;
       }
       setStatus({ kind: "ok", text: `Created point ${pointId}` });

@@ -47,6 +47,7 @@ export function createInteractionActions(
                 richTextStyle: null,
                 pointShowLabel: null,
                 objectShowLabel: null,
+                objectLabelGlow: null,
               },
         circleFixedTool: prev.circleFixedTool,
       }));

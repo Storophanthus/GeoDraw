@@ -62,6 +62,17 @@ export function evalPointByReflection(point: Vec2, axisA: Vec2, axisB: Vec2): Ve
   return { x: 2 * projX - point.x, y: 2 * projY - point.y };
 }
 
+export function evalPointByProjection(point: Vec2, axisA: Vec2, axisB: Vec2): Vec2 | null {
+  const dx = axisB.x - axisA.x;
+  const dy = axisB.y - axisA.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq <= 1e-12) return null;
+  const tx = point.x - axisA.x;
+  const ty = point.y - axisA.y;
+  const t = (tx * dx + ty * dy) / lenSq;
+  return { x: axisA.x + t * dx, y: axisA.y + t * dy };
+}
+
 function triangleArea2(a: Vec2, b: Vec2, c: Vec2): number {
   return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }

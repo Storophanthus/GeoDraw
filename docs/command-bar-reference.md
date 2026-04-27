@@ -53,6 +53,8 @@ Notes:
 - `Rotate(P,O,expr[,CW|CCW])`
 - `Dilate(P,O,k)`
 - `Reflect(P,l|s|O)` where `l/s` are named line/segment aliases, `O` is a point
+- `Reflect(P,A,B)`, `Reflect(P,Line(A,B))`, or `Reflect(P,Segment(A,B))` reflects across the line through `A` and `B`
+- `Orthoproject(X,A,B)` projects point `X` onto the line through `A` and `B`
 - `Line(x1,y1,x2,y2)`
 - `Line(A,B)`
 - `Perpendicular(P,l)` where `l` is a named line/segment alias
@@ -71,6 +73,7 @@ Notes:
 - `Circle3P(A,B,C)` (alias: `CircleThreePoint(A,B,C)`)
 - `Circle(O,A)`
 - `Circle(O,r)`
+- `Circle(O,96*sqrt(5))`
 - `Distance(...)` (returns number, creates nothing)
   - common forms: `Distance(A,B)`, `Distance(A,l)`, `Distance(l,A)`, `Distance(A,s)`, `Distance(s,A)`
 
@@ -90,6 +93,8 @@ Notes:
   - `R = Rotate(A,O,30,CW)`
   - `D = Dilate(A,O,2)`
   - `Q = Reflect(A,l)`
+  - `Q2 = Reflect(A,Segment(B,C))`
+  - `H = Orthoproject(X,A,B)`
   - `l = Line(A,B)`
   - `p = Perpendicular(A,l)`
   - `pb = PerpBisector(A,B)`
@@ -103,6 +108,7 @@ Notes:
   - `poly = Polygon(A,B,C,D)`
   - `rp = RegularPolygon(A,B,6)`
   - `c3 = Circle3P(A,B,C)`
+  - `cRad = Circle(O,96*sqrt(5))`
   - `c = Circle(O,r_1)` (`r_1` can come from "Store Radius")
 
 Redefine behavior (current):

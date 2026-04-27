@@ -120,6 +120,8 @@ input[type="range"] {
   overflow: auto;
   flex: 0 0 auto;
   min-width: 300px;
+  position: relative;
+  z-index: 50;
   transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1), padding 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -286,6 +288,7 @@ input[type="range"] {
   background: var(--gd-ui-canvas-bg, #ffffff);
   flex: 1 1 auto;
   position: relative;
+  overflow: hidden;
 }
 
 .drawingCanvas {
@@ -299,6 +302,7 @@ input[type="range"] {
   position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 
 .canvasStackDropActive::after {
@@ -636,1206 +640,6 @@ input[type="range"] {
 .iconActionButton:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-}
-
-.labelsLayer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.pointLabel {
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform: translate(0, 0);
-  color: var(--gd-ui-text-strong, #0f172a);
-  font-size: 12px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.pointLabel.plain {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  white-space: pre-wrap;
-  line-height: 1.18;
-  text-align: center;
-}
-
-.pointLabel.mixed {
-  white-space: normal;
-  line-height: 1.18;
-  text-align: center;
-}
-
-.pointLabel.tex .katex {
-  font-size: 0.95em;
-}
-
-.gdTextLabelMixed {
-  display: inline-block;
-  max-width: 100%;
-}
-
-.gdTextLabelInlineMath,
-.gdTextLabelDisplayMath {
-  border-radius: 0.4em;
-}
-
-.gdTextLabelInlineMath {
-  display: inline-block;
-  padding: 0 0.12em;
-}
-
-.gdTextLabelDisplayMath {
-  display: block;
-  margin: 0.14em 0;
-}
-
-.gdTextLabelInlineMath.active,
-.gdTextLabelDisplayMath.active {
-  background: color-mix(in srgb, var(--gd-ui-accent-bg, #ecd8b4) 62%, transparent);
-  box-shadow:
-    inset 0 -0.24em 0 color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 26%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 36%, transparent);
-}
-
-.pointLabel.selectedTextLabel {
-  border-radius: 12px;
-  outline: 1px dashed color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 74%, white);
-  outline-offset: 1px;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 24%, transparent);
-  background: color-mix(in srgb, var(--gd-ui-surface, #fffaf0) 18%, transparent);
-}
-
-.canvasTextLabelEditor,
-.gdTextEditorSource {
-  width: 100%;
-  min-width: 180px;
-  min-height: 56px;
-  max-width: 100%;
-  padding: 10px 12px;
-  border: 1px dashed color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 44%, var(--gd-ui-border, #cbbca3));
-  border-radius: 12px;
-  background: transparent;
-  color: inherit;
-  line-height: 1.4;
-  resize: none;
-  overflow: hidden;
-  white-space: pre-wrap;
-  text-align: left;
-  caret-color: currentColor;
-  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
-}
-
-.canvasTextLabelEditor:focus-visible,
-.gdTextEditorSource:focus-visible {
-  outline: 2px solid var(--gd-ui-focus-outline, rgba(122, 79, 36, 0.28));
-}
-
-.canvasTextLabelEditor::selection,
-.gdTextEditorSource::selection {
-  background: var(--gd-ui-accent-ring, rgba(122, 79, 36, 0.24));
-}
-
-.canvasTextLabelEditorShell,
-.gdTextEditorShell {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-width: 120px;
-  pointer-events: auto;
-  padding: 10px 12px;
-  border: 1px dashed color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 54%, var(--gd-ui-border, #cbbca3));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--gd-ui-surface, #fffaf0) 18%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 14%, transparent);
-  box-sizing: border-box;
-}
-
-.gdTextEditorShell.liveMixed {
-  position: absolute;
-  overflow: hidden;
-}
-
-.gdTextEditorLiveMixed {
-  position: absolute;
-  inset: 0;
-  padding: 2px 0;
-  color: inherit;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  pointer-events: none;
-  will-change: transform;
-}
-
-.gdTextEditorLiveMixed .gdTextLabelMixed {
-  display: block;
-  min-height: 100%;
-}
-
-.canvasTextLabelLivePreview,
-.gdTextEditorPreview {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--gd-ui-border, #cbbca3) 74%, transparent);
-  border-radius: 12px;
-  line-height: 1.22;
-  white-space: pre-wrap;
-  text-align: center;
-  pointer-events: none;
-  overflow-wrap: anywhere;
-  background: color-mix(in srgb, var(--gd-ui-surface, #fffaf0) 26%, transparent);
-}
-
-.canvasTextLabelLivePreview.mixed,
-.gdTextEditorPreview.mixed {
-  white-space: normal;
-}
-
-.canvasTextLabelLivePreview.mixed .gdTextLabelMixed,
-.gdTextEditorPreview.mixed .gdTextLabelMixed {
-  max-width: 100%;
-}
-
-/* Rich Text Overlays (View) */
-.gdRichTextParagraph {
-  display: block;
-  min-height: 1.2em;
-  line-height: 1.18;
-  white-space: pre;
-  word-wrap: normal;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  width: max-content;
-}
-.gdRichTextDisplayBlock {
-  display: block;
-  text-align: center;
-  margin: 0.5em 0;
-  white-space: nowrap;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-}
-.gdRichTextOverlay {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  line-height: 1.18;
-  white-space: pre;
-  width: max-content;
-}
-
-.gdRichTextSymbol,
-.gdRichTextInlineMathToken,
-.gdRichTextInlineMathTokenSurface {
-  display: inline-block;
-  padding: 0 0.12em;
-  vertical-align: -0.02em;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.gdRichTextInlineMathToken .katex,
-.gdRichTextInlineMathTokenSurface .katex,
-.gdRichTextDisplayBlock .katex,
-.gdRichTextDisplayMathTokenSurface .katex {
-  vertical-align: baseline;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.gdRichTextInlineMathTokenSurface .katex *,
-.gdRichTextDisplayMathTokenSurface .katex * {
-  user-select: text;
-  -webkit-user-select: text;
-  pointer-events: none;
-}
-
-/* Rich Text Editor */
-.gdRichTextEditorShell {
-  position: absolute;
-  display: inline-block;
-  width: max-content;
-  min-width: 1.6em;
-  max-width: none;
-  pointer-events: auto;
-  padding: 10px 12px;
-  border: 1px dashed color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 54%, var(--gd-ui-border, #cbbca3));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--gd-ui-surface, #fffaf0) 18%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 14%, transparent);
-  box-sizing: border-box;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  line-height: 1.18;
-  white-space: pre;
-  overflow: visible;
-}
-
-.gdRichTextEditorBody {
-  position: relative;
-  display: block;
-  width: max-content;
-  min-width: 1.6em;
-  min-height: 1.18em;
-}
-
-.gdRichTextEditorPreview {
-  position: relative;
-  z-index: 3;
-  display: block;
-  width: max-content;
-  min-width: 1.6em;
-  min-height: 1.18em;
-  cursor: text;
-  pointer-events: auto;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.gdRichTextSourceInput {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-width: 100%;
-  min-height: 100%;
-  margin: 0;
-  padding: 0;
-  border: none;
-  outline: none;
-  resize: none;
-  overflow: hidden;
-  background: transparent;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  caret-color: var(--gd-rich-text-caret, currentColor);
-  pointer-events: none;
-  font: inherit;
-  line-height: inherit;
-  letter-spacing: inherit;
-  text-align: inherit;
-  white-space: pre;
-}
-
-.gdRichTextSourceInput::selection {
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  background: transparent;
-}
-
-.gdRichTextEditorSelection {
-  background: color-mix(in srgb, #8ec5ff 48%, transparent);
-  border-radius: 0.12em;
-}
-
-.gdRichTextPreviewPlaceholder {
-  color: color-mix(in srgb, currentColor 42%, transparent);
-}
-
-.gdRichTextParagraphRow {
-  display: block;
-  min-height: 1.2em;
-  line-height: 1.18;
-  white-space: pre;
-  width: max-content;
-}
-
-.gdRichTextEditorHost:focus {
-  outline: none;
-}
-
-.gdRichTextTextSegment {
-  white-space: pre;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.gdRichTextInlineMathClosed,
-.gdRichTextDisplayMathClosed {
-  display: inline-block;
-  color: inherit;
-  padding: 0 0.08em;
-  cursor: text;
-  border-radius: 0.4em;
-  vertical-align: -0.02em;
-  user-select: text;
-  -webkit-user-select: text;
-}
-.gdRichTextDisplayMathClosed {
-  display: block;
-  margin: 0.24em 0;
-  text-align: center;
-  vertical-align: baseline;
-}
-.gdRichTextInlineMathClosed:hover,
-.gdRichTextDisplayMathClosed:hover {
-  background: rgba(0,0,0,0.05);
-}
-
-.gdRichTextEditorHost .gdRichTextInlineMathClosed,
-.gdRichTextEditorHost .gdRichTextDisplayMathClosed,
-.gdRichTextEditorHost .gdRichTextInlineMathClosed *,
-.gdRichTextEditorHost .gdRichTextDisplayMathClosed * {
-  pointer-events: none;
-}
-
-.gdRichTextInlineMathActive {
-  display: inline-block;
-  min-width: 0.5em;
-  padding: 0 0.18em;
-  border-radius: 0.38em;
-  background: color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 78%, black 18%);
-  color: white;
-  vertical-align: baseline;
-  white-space: pre;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.gdRichTextEditorMathActive {
-  background: color-mix(in srgb, var(--gd-ui-accent-bg, #ecd8b4) 42%, var(--gd-ui-surface, #fffaf0));
-  color: var(--gd-ui-text-strong, #2f281f);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 28%, transparent);
-}
-
-.gdRichTextEditorMathActive .katex,
-.gdRichTextEditorMathActive .katex * {
-  color: inherit !important;
-}
-
-.gdRichTextEditorMathRawSource {
-  display: inline-block;
-  min-width: 0.45em;
-  color: inherit;
-  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
-  white-space: pre;
-}
-
-.gdRichTextEditorMathCaret {
-  display: inline-block;
-  width: 0;
-  height: 1.12em;
-  margin: 0 1px;
-  border-left: 2px solid currentColor;
-  vertical-align: -0.14em;
-  animation: gdRichTextCaretBlink 1s steps(1, end) infinite;
-}
-
-@keyframes gdRichTextCaretBlink {
-  0%, 52% {
-    opacity: 1;
-  }
-  53%, 100% {
-    opacity: 0;
-  }
-}
-
-.gdRichTextEditorMathEditingSource {
-  padding: 0 !important;
-  font: inherit;
-  letter-spacing: inherit;
-  line-height: inherit;
-  white-space: pre;
-}
-
-.gdRichTextEditorMathActiveStack {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.3em;
-  color: inherit;
-}
-
-.gdRichTextEditorMathActiveStack.display {
-  display: inline-flex;
-  justify-content: center;
-}
-
-.gdRichTextEditorMathActiveRender {
-  display: inline-flex;
-  min-width: 0.45em;
-  color: inherit;
-}
-
-.gdRichTextEditorMathActiveSource {
-  display: inline-block;
-  color: color-mix(in srgb, var(--gd-ui-text-strong, #2f281f) 74%, var(--gd-ui-accent, #8b5a2b));
-  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
-  font-size: 0.62em;
-  line-height: 1;
-  opacity: 0.88;
-  white-space: pre;
-}
-
-.gdRichTextEditorMathClosed {
-  pointer-events: none;
-}
-
-.gdRichTextEditorSuggestions {
-  z-index: 4;
-  min-width: 220px;
-}
-
-.gdRichTextSuggestionQuery {
-  display: flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 4px 7px;
-  border: 1px solid color-mix(in srgb, var(--gd-ui-border, #cbbca3) 78%, transparent);
-  border-radius: 6px;
-  background: var(--gd-ui-surface, #fffaf0);
-  color: var(--gd-ui-text-strong, #2f281f);
-  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.gdRichTextSuggestionQueryCaret {
-  display: inline-block;
-  height: 1.15em;
-  margin-left: 1px;
-  border-left: 2px solid color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 72%, var(--gd-ui-text-strong, #2f281f));
-  animation: gdRichTextCaretBlink 1s steps(1, end) infinite;
-}
-
-.gdRichTextDisplayMathActive {
-  display: block;
-  min-width: 2em;
-  padding: 0.26em 0.36em;
-  margin: 0.24em 0;
-  border-radius: 0.48em;
-  background: color-mix(in srgb, var(--gd-ui-accent-bg, #ecd8b4) 48%, var(--gd-ui-surface, #fffaf0));
-  color: var(--gd-ui-text-strong, #2f281f);
-  white-space: pre;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.gdRichTextDisplayMathRenderRow {
-  display: flex;
-  justify-content: center;
-  align-items: baseline;
-  min-height: 1.5em;
-  color: inherit;
-}
-
-.gdRichTextDisplayMathPending {
-  display: inline-block;
-  min-width: 1em;
-}
-
-.gdRichTextDisplayMathSourceStrip {
-  display: block;
-  width: fit-content;
-  max-width: 100%;
-  margin: 0.26em auto 0;
-  padding: 0.08em 0.38em;
-  border: 1px solid color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 24%, transparent);
-  border-radius: 0.36em;
-  background: color-mix(in srgb, var(--gd-ui-surface, #fffaf0) 86%, transparent);
-  color: var(--gd-ui-text-strong, #2f281f);
-  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
-  font-size: 0.62em;
-  line-height: 1.18;
-  text-align: left;
-  overflow: hidden;
-}
-
-.gdRichTextInlineMathClosed .katex,
-.gdRichTextDisplayMathClosed .katex {
-  vertical-align: baseline;
-}
-
-.canvasTextLabelLivePreview.tex,
-.canvasTextLabelLivePreview.mixed,
-.canvasTextLabelLivePreview.plain,
-.gdTextEditorPreview.tex,
-.gdTextEditorPreview.mixed,
-.gdTextEditorPreview.plain {
-  color: inherit;
-}
-
-.canvasTextLabelPreviewPlaceholder {
-  color: color-mix(in srgb, currentColor 48%, transparent);
-}
-
-.gdTextEditorPane {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.gdTextEditorPaneTitle {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--gd-ui-title-tone, #7a6546);
-}
-
-.gdTextEditorSuggestions {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 8px);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: min(320px, 100%);
-  max-height: 184px;
-  overflow: auto;
-  padding: 6px;
-  border: 1px solid color-mix(in srgb, var(--gd-ui-border, #cbbca3) 70%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--gd-ui-surface, #fffaf0) 98%, transparent);
-}
-
-.gdTextEditorSuggestion {
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-  color: inherit;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  padding: 8px 10px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.gdTextEditorSuggestion.active,
-.gdTextEditorSuggestion:hover,
-.gdTextEditorSuggestion:focus-visible {
-  border-color: color-mix(in srgb, var(--gd-ui-accent, #8a5a2b) 28%, transparent);
-  background: color-mix(in srgb, var(--gd-ui-accent-bg, #ecd8b4) 34%, transparent);
-  outline: none;
-}
-
-.gdTextEditorSuggestionTrigger {
-  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.gdTextEditorSuggestionDetail {
-  font-size: 11px;
-  color: var(--gd-ui-text-subtle, #6f5f4c);
-}
-
-.gdTextEditorSuggestionPreview {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 24px;
-  color: inherit;
-}
-
-.gdTextEditorDiagnostics {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.gdTextEditorDiagnostic {
-  padding: 6px 10px;
-  border-radius: 10px;
-  font-size: 11px;
-}
-
-.gdTextEditorDiagnostic.info {
-  background: color-mix(in srgb, var(--gd-ui-surface-muted, #ede2cd) 70%, transparent);
-  color: var(--gd-ui-text-subtle, #6f5f4c);
-}
-
-.gdTextEditorDiagnostic.warning {
-  background: color-mix(in srgb, #f59e0b 18%, transparent);
-  color: color-mix(in srgb, #92400e 84%, black);
-}
-
-.gdTextEditorSource {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  min-width: 120px;
-  padding: 2px 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  line-height: 1.4;
-  resize: none;
-  overflow: auto;
-  white-space: pre-wrap;
-  text-align: left;
-  caret-color: currentColor;
-  font: inherit;
-  box-sizing: border-box;
-}
-
-.gdTextEditorSource.liveMixed {
-  color: transparent !important;
-  -webkit-text-fill-color: transparent;
-  caret-color: var(--gd-text-editor-caret, black);
-  background: transparent;
-}
-
-.gdEditableMathWrap {
-  position: relative;
-  display: inline-block;
-  vertical-align: baseline;
-}
-
-.gdEditableMathWrap.display {
-  display: block;
-  margin: 0.14em 0;
-}
-
-.gdEditableMathSource {
-  visibility: hidden;
-}
-
-.gdEditableMathRender {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  color: inherit;
-}
-
-.gdEditableMathRender.display {
-  justify-content: center;
-}
-
-.gdMixedContentEditable {
-  width: 100%;
-  min-width: 120px;
-  padding: 2px 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  text-align: left;
-  caret-color: currentColor;
-  font: inherit;
-  box-sizing: border-box;
-  outline: none;
-  cursor: text;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.gdMixedContentEditable.empty::before {
-  content: attr(data-placeholder);
-  color: color-mix(in srgb, currentColor 48%, transparent);
-  pointer-events: none;
-}
-
-.gdMixedContentEditable.empty:focus::before {
-  content: "";
-}
-
-.gdMixedRootText {
-  white-space: pre-wrap;
-}
-
-.gdMixedRootMathToken {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  vertical-align: -0.05em;
-  cursor: text;
-}
-
-.gdMixedRootMathToken * {
-  pointer-events: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.gdMixedRootMathToken.display {
-  display: flex;
-  justify-content: center;
-  margin: 0.18em 0;
-}
-
-.gdMixedRootMathActive {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0.9em;
-  padding: 0.04em 0.22em;
-  border-radius: 0.5em;
-  background: rgba(18, 18, 24, 0.94);
-  color: #f8fafc;
-  vertical-align: -0.05em;
-  overflow: hidden;
-}
-
-.gdMixedRootMathActive.display {
-  display: flex;
-  width: fit-content;
-  max-width: 100%;
-  margin: 0.18em 0;
-  padding: 0.22em 0.42em;
-}
-
-.gdMixedRootMathInput {
-  position: absolute;
-  inset: 0;
-  display: block;
-  min-width: 100%;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  caret-color: #f8fafc;
-  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
-  white-space: pre-wrap;
-  outline: none;
-  z-index: 2;
-}
-
-.gdMixedRootMathInput.display {
-  display: block;
-  width: 100%;
-  text-align: center;
-}
-
-.gdMixedRootMathPreview {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  color: inherit;
-  pointer-events: none;
-  user-select: none;
-  -webkit-user-select: none;
-  position: relative;
-  z-index: 1;
-}
-
-.gdMixedRootMathPreview.display {
-  display: flex;
-  justify-content: center;
-}
-
-.gdMixedMathActive {
-  display: inline;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--gd-ui-accent-bg, #ecd8b4) 58%, transparent);
-}
-
-.gdMixedMathRendered {
-  display: inline-flex;
-  align-items: center;
-  color: inherit;
-  vertical-align: middle;
-  cursor: text;
-}
-
-.gdMixedMathRendered.display {
-  display: flex;
-  justify-content: center;
-  margin: 0.18em 0;
-}
-
-.gdTextToolComposer {
-  position: relative;
-  width: 100%;
-  min-width: 120px;
-  padding: 2px 0;
-  background: transparent;
-  color: inherit;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  text-align: left;
-  font: inherit;
-  box-sizing: border-box;
-  cursor: text;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.gdTextToolComposer.empty::before {
-  content: attr(data-placeholder);
-  position: absolute;
-  left: 8px;
-  top: 2px;
-  color: color-mix(in srgb, currentColor 48%, transparent);
-  pointer-events: none;
-  white-space: pre-wrap;
-}
-
-.gdTextToolComposer.allSelected .gdTextToolRun,
-.gdTextToolComposer.allSelected .gdTextToolRunRenderedMath {
-  background: color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 18%, transparent);
-}
-
-.gdTextToolRun {
-  white-space: inherit;
-}
-
-.gdTextToolRunActive {
-  outline: none;
-}
-
-.gdTextToolRunActiveEmpty {
-  display: inline-block;
-  min-width: 0.4em;
-  white-space: pre;
-  line-height: inherit;
-  vertical-align: baseline;
-}
-
-.gdTextToolRunMath {
-  display: inline-block;
-  min-width: 0.8em;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--gd-ui-accent-bg, #ecd8b4) 58%, transparent);
-  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
-}
-
-.gdTextToolRunRenderedMath {
-  display: inline-block;
-  vertical-align: -0.05em;
-  cursor: text;
-}
-
-.gdTextToolRunRenderedMath * {
-  pointer-events: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.gdTextToolRunRenderedMath.display {
-  display: flex;
-  justify-content: center;
-  margin: 0.18em 0;
-}
-
-.gdMixedTextSurface,
-.gdStructuredMathSurface {
-  width: 100%;
-  min-width: 120px;
-  padding: 12px 14px;
-  border: 1px dashed color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 44%, var(--gd-ui-border, #cbbca3));
-  border-radius: 12px;
-  background: transparent;
-  box-sizing: border-box;
-}
-
-.gdMixedTextSurface {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: stretch;
-}
-
-.gdMixedTextRunsEditor {
-  width: 100%;
-  min-width: 120px;
-  min-height: 100%;
-  line-height: 1.4;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  cursor: text;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.gdMixedInlineText,
-.gdMixedInlineMathInput {
-  display: inline-block;
-  vertical-align: baseline;
-  field-sizing: content;
-  min-width: 0.45em;
-  max-width: 100%;
-  padding: 0;
-  margin: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
-  white-space: pre-wrap;
-  resize: none;
-  overflow: hidden;
-  outline: none;
-  box-sizing: border-box;
-}
-
-.gdMixedInlineText {
-  text-align: inherit;
-}
-
-.gdMixedInlineText::placeholder {
-  color: color-mix(in srgb, currentColor 48%, transparent);
-}
-
-.gdMixedInlineText.ghost {
-  min-width: 0.7em;
-}
-
-.gdMixedInlineMathEditor {
-  position: relative;
-  display: inline-block;
-  vertical-align: baseline;
-}
-
-.gdMixedInlineMathEditor.display {
-  display: block;
-  margin: 0.18em 0;
-}
-
-.gdMixedInlineMathInput {
-  min-width: 1.1em;
-  padding: 0 0.18em;
-  border-radius: 0.42em;
-  background: rgba(20, 20, 24, 0.92);
-  color: #f8fafc;
-  text-align: center;
-}
-
-.gdMixedInlineMathInput.display {
-  display: block;
-  min-width: min(260px, 100%);
-  margin: 0 auto;
-  padding: 0.24em 0.4em;
-}
-
-.gdMixedInlineMathToken {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0.12em;
-  border: none;
-  border-radius: 0.42em;
-  background: transparent;
-  color: inherit;
-  cursor: text;
-  vertical-align: baseline;
-}
-
-.gdMixedInlineMathToken.display {
-  display: flex;
-  width: 100%;
-  margin: 0.18em 0;
-  padding: 0;
-}
-
-.gdMixedInlineMathToken .katex {
-  vertical-align: baseline;
-}
-
-.gdMixedTextBlock,
-.gdMixedMathBlock {
-  width: 100%;
-  min-height: 34px;
-  padding: 2px 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  line-height: 1.35;
-  resize: none;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.gdMixedTextBlock {
-  text-align: left;
-  white-space: pre-wrap;
-}
-
-.gdMixedTextBlock.ghost {
-  color: color-mix(in srgb, currentColor 72%, transparent);
-}
-
-.gdMixedMathBlock {
-  text-align: center;
-  font-family: "SFMono-Regular", "Menlo", "Monaco", "Cascadia Mono", "Segoe UI Mono", monospace;
-  padding: 6px 0;
-}
-
-.gdMixedMathBlock.display {
-  min-height: 56px;
-}
-
-.gdMixedTextBlock:focus-visible,
-.gdMixedMathBlock:focus-visible,
-.gdStructuredMathSlot:focus-visible {
-  outline: 2px solid var(--gd-ui-focus-outline, rgba(122, 79, 36, 0.28));
-  outline-offset: 1px;
-}
-
-.gdStructuredMathSurface {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.gdStructuredMathSurface.compact {
-  padding: 6px 0;
-  border: none;
-  border-radius: 0;
-}
-
-.gdStructuredMathFraction {
-  flex-direction: column;
-  justify-content: center;
-}
-
-.gdStructuredMathCellTop,
-.gdStructuredMathCellBottom {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.gdStructuredMathBar {
-  width: min(100%, 240px);
-  height: 2px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.gdStructuredMathSlot {
-  min-width: 84px;
-  max-width: 100%;
-  padding: 4px 6px;
-  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  text-align: center;
-  font: inherit;
-  box-sizing: border-box;
-}
-
-.gdStructuredMathSlot::placeholder {
-  color: color-mix(in srgb, currentColor 34%, transparent);
-}
-
-.gdStructuredMathSqrt {
-  justify-content: flex-start;
-}
-
-.gdStructuredMathRootGlyph,
-.gdStructuredMathParen,
-.gdStructuredMathBrace {
-  font-size: 1.4em;
-  line-height: 1;
-}
-
-.gdStructuredMathIndexSlot {
-  min-width: 46px;
-  max-width: 80px;
-  align-self: flex-start;
-  transform: translateY(-14px);
-  font-size: 0.72em;
-}
-
-.gdStructuredMathRadicand {
-  border-top-width: 2px;
-  flex: 1 1 auto;
-}
-
-.gdStructuredMathBinom {
-  gap: 10px;
-}
-
-.gdStructuredMathStack {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.gdStructuredMathScript {
-  justify-content: flex-start;
-}
-
-.gdStructuredMathBaseSlot {
-  min-width: 72px;
-}
-
-.gdStructuredMathScriptStack {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 6px;
-}
-
-.gdStructuredMathScriptSlot {
-  min-width: 68px;
-  font-size: 0.72em;
-}
-
-.gdStructuredMathMatrix {
-  justify-content: flex-start;
-  align-items: stretch;
-}
-
-.gdStructuredMathGrid {
-  display: grid;
-  gap: 8px;
-  flex: 1 1 auto;
-}
-
-.gdStructuredMathCases {
-  justify-content: flex-start;
-  align-items: stretch;
-}
-
-.gdStructuredMathCasesRows {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1 1 auto;
-}
-
-.gdStructuredMathCaseRow {
-  display: grid;
-  grid-template-columns: minmax(80px, 1fr) minmax(110px, 1fr);
-  gap: 8px;
-}
-
-.canvasTextLabelResizeCorner {
-  position: absolute;
-  right: -10px;
-  bottom: -10px;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 55%, var(--gd-ui-border, #cbbca3));
-  background: color-mix(in srgb, var(--gd-ui-surface, #fffaf0) 82%, transparent);
-  box-shadow: 0 2px 10px var(--gd-ui-shadow, rgba(59, 43, 24, 0.14));
-  cursor: nwse-resize;
-}
-
-.canvasTextLabelResizeCorner::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--gd-ui-accent, #8a5a2b) 68%, white);
-  transform: translate(-50%, -50%);
-}
-
-.canvasTextLabelResizeCorner.active,
-.canvasTextLabelResizeCorner:hover {
-  box-shadow: 0 0 0 3px var(--gd-ui-accent-ring, rgba(122, 79, 36, 0.24));
 }
 
 .toolButtonWrap {
@@ -3963,6 +2767,107 @@ body.object-browser-dragging * {
   background: var(--gd-ui-surface-soft, #f8fafc);
   color: var(--gd-ui-text-strong, #0f172a);
   outline: none;
+}
+
+.geoContextMenu {
+  position: fixed;
+  z-index: 3200;
+  width: 244px;
+  max-width: calc(100vw - 16px);
+  border: 1px solid var(--gd-ui-border-panel, #d7dfe8);
+  border-radius: 8px;
+  background: var(--gd-ui-surface, #fff);
+  box-shadow: 0 10px 28px var(--gd-ui-shadow-strong, rgba(15, 23, 42, 0.2));
+  padding: 6px;
+}
+
+.geoContextMenuTitle {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 9px;
+  color: var(--gd-ui-text-muted, #475569);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geoContextMenuItems {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.geoContextMenuItem {
+  width: 100%;
+  min-height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gd-ui-text, #334155);
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.geoContextMenuItem.withSeparator {
+  margin-top: 5px;
+  position: relative;
+}
+
+.geoContextMenuItem.withSeparator::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -4px;
+  border-top: 1px solid var(--gd-ui-border-soft, #e2e8f0);
+}
+
+.geoContextMenuItem:hover:not(:disabled),
+.geoContextMenuItem:focus-visible:not(:disabled) {
+  background: var(--gd-ui-surface-soft, #f8fafc);
+  color: var(--gd-ui-text-strong, #0f172a);
+  outline: none;
+}
+
+.geoContextMenuItem.danger {
+  color: #b91c1c;
+}
+
+.geoContextMenuItem.danger:hover:not(:disabled),
+.geoContextMenuItem.danger:focus-visible:not(:disabled) {
+  background: rgba(239, 68, 68, 0.09);
+  color: #991b1b;
+}
+
+.geoContextMenuItem:disabled {
+  color: var(--gd-ui-text-subtle, #94a3b8);
+  cursor: default;
+}
+
+.geoContextMenuIcon {
+  width: 22px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.geoContextMenuLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .previewCodePane .previewEditorArea {

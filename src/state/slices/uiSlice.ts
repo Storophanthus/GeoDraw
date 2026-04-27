@@ -39,9 +39,10 @@ export type UiSliceState = {
     polygonStyle: import("../../scene/points").PolygonStyle | null;
     angleStyle: Partial<import("../../scene/points").AngleStyle> | null;
     textLabelStyle: import("../../scene/points").SceneTextLabelStyle | null;
-    richTextStyle: import("../../richtext/model").RichTextStyle | null;
+    richTextStyle: import("../../text-editor/richTextModel").RichTextStyle | null;
     pointShowLabel: import("../../scene/points").ShowLabelMode | null;
     objectShowLabel: boolean | null;
+    objectLabelGlow: boolean | null;
   };
 };
 
@@ -87,6 +88,7 @@ export function createUiSliceState(): UiSliceState {
       richTextStyle: null,
       pointShowLabel: null,
       objectShowLabel: null,
+      objectLabelGlow: null,
     },
   };
 }

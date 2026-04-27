@@ -1,0 +1,49 @@
+\contentsline {section}{\numberline {1}Purpose}{1}{section.1}%
+\contentsline {section}{\numberline {2}Interface Overview}{1}{section.2}%
+\contentsline {section}{\numberline {3}File Operations}{1}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Open / Save / Save As}{1}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Supported file types}{1}{subsection.3.2}%
+\contentsline {section}{\numberline {4}Navigation and Global Controls}{1}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Mouse}{1}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Keyboard shortcuts}{2}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Fit View}{2}{subsection.4.3}%
+\contentsline {section}{\numberline {5}Tool Palette}{2}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Move Group}{2}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Points Group}{2}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}Transform Group}{3}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.4}Lines Group}{3}{subsection.5.4}%
+\contentsline {subsection}{\numberline {5.5}Angle Group}{3}{subsection.5.5}%
+\contentsline {subsection}{\numberline {5.6}Circles Group}{3}{subsection.5.6}%
+\contentsline {subsection}{\numberline {5.7}Styles Group}{3}{subsection.5.7}%
+\contentsline {section}{\numberline {6}Objects Tab (Right Sidebar)}{4}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Top toggles}{4}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Object Browser}{4}{subsection.6.2}%
+\contentsline {section}{\numberline {7}Properties Panel}{4}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Linked object editing}{4}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Point properties}{4}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}Line/Segment properties}{5}{subsection.7.3}%
+\contentsline {subsection}{\numberline {7.4}Arrow controls}{5}{subsection.7.4}%
+\contentsline {subsection}{\numberline {7.5}Circle/Polygon/Sector properties}{5}{subsection.7.5}%
+\contentsline {subsection}{\numberline {7.6}Angle properties}{5}{subsection.7.6}%
+\contentsline {subsection}{\numberline {7.7}Marking controls}{5}{subsection.7.7}%
+\contentsline {subsection}{\numberline {7.8}Tool info panels}{6}{subsection.7.8}%
+\contentsline {section}{\numberline {8}Command Bar}{6}{section.8}%
+\contentsline {subsection}{\numberline {8.1}Input behavior}{6}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}Expression examples}{6}{subsection.8.2}%
+\contentsline {subsection}{\numberline {8.3}Supported construction commands}{6}{subsection.8.3}%
+\contentsline {subsection}{\numberline {8.4}Assignments}{6}{subsection.8.4}%
+\contentsline {subsection}{\numberline {8.5}Important assignment rule}{7}{subsection.8.5}%
+\contentsline {section}{\numberline {9}Export Tab}{7}{section.9}%
+\contentsline {subsection}{\numberline {9.1}TikZ export options}{7}{subsection.9.1}%
+\contentsline {subsection}{\numberline {9.2}Preview window (PDF + editable TikZ)}{7}{subsection.9.2}%
+\contentsline {subsection}{\numberline {9.3}JSON export}{8}{subsection.9.3}%
+\contentsline {section}{\numberline {10}Typical Workflows}{8}{section.10}%
+\contentsline {subsection}{\numberline {10.1}Workflow A: classic construction}{8}{subsection.10.1}%
+\contentsline {subsection}{\numberline {10.2}Workflow B: command-driven}{8}{subsection.10.2}%
+\contentsline {section}{\numberline {11}Troubleshooting}{8}{section.11}%
+\contentsline {subsection}{\numberline {11.1}I cannot select a tool variant}{8}{subsection.11.1}%
+\contentsline {subsection}{\numberline {11.2}Clip export does not apply}{8}{subsection.11.2}%
+\contentsline {subsection}{\numberline {11.3}Command reports unknown/ambiguous point}{8}{subsection.11.3}%
+\contentsline {subsection}{\numberline {11.4}Object is hidden unexpectedly}{8}{subsection.11.4}%
+\contentsline {section}{\numberline {12}Current Limits (User-visible)}{9}{section.12}%
+\contentsline {section}{\numberline {A}Screenshot Appendix Template}{9}{appendix.A}%

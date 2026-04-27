@@ -370,6 +370,12 @@ function describePointConstruction(
       circleById
     )}.`;
   }
+  if (point.kind === "pointByProjection") {
+    return `Orthogonal projection of ${pointLabel(point.pointId, pointNameById)} onto line ${pointLabel(
+      point.axisAId,
+      pointNameById
+    )}${pointLabel(point.axisBId, pointNameById)}.`;
+  }
   if (point.kind === "circleLineIntersectionPoint") {
     const circle = circleById.get(point.circleId);
     const line = lineById.get(point.lineId);
@@ -459,6 +465,9 @@ function describeReflectionRef(
   circleById: Map<string, SceneModel["circles"][number]>
 ): string {
   if (ref.type === "point") return `point ${pointLabel(ref.id, pointNameById)}`;
+  if (ref.type === "pointPair") {
+    return `line ${pointLabel(ref.aId, pointNameById)}${pointLabel(ref.bId, pointNameById)}`;
+  }
   return describeObjectRef(ref, pointNameById, lineById, segmentById, circleById);
 }
 
@@ -535,6 +544,12 @@ type PointTransformMeta =
       kind: "reflection";
       basePointId: string;
       axis: ReflectionObjectRef;
+    }
+  | {
+      kind: "projection";
+      basePointId: string;
+      axisAId: string;
+      axisBId: string;
     };
 
 function getPointTransformMeta(pointId: string, pointById: Map<string, ScenePoint>): PointTransformMeta | null {
@@ -566,6 +581,14 @@ function getPointTransformMeta(pointId: string, pointById: Map<string, ScenePoin
       axis: point.axis,
     };
   }
+  if (point.kind === "pointByProjection") {
+    return {
+      kind: "projection",
+      basePointId: point.pointId,
+      axisAId: point.axisAId,
+      axisBId: point.axisBId,
+    };
+  }
   return null;
 }
 
@@ -573,7 +596,23 @@ function sameTransformEnvelope(a: PointTransformMeta, b: PointTransformMeta): bo
   if (a.kind !== b.kind) return false;
   if (a.kind === "translation" && b.kind === "translation") return a.fromId === b.fromId && a.toId === b.toId;
   if (a.kind === "dilation" && b.kind === "dilation") return a.centerId === b.centerId && a.factorText === b.factorText;
-  if (a.kind === "reflection" && b.kind === "reflection") return a.axis.type === b.axis.type && a.axis.id === b.axis.id;
+  if (a.kind === "reflection" && b.kind === "reflection") {
+    if (a.axis.type !== b.axis.type) return false;
+    if (a.axis.type === "pointPair" && b.axis.type === "pointPair") {
+      return (
+        (a.axis.aId === b.axis.aId && a.axis.bId === b.axis.bId) ||
+        (a.axis.aId === b.axis.bId && a.axis.bId === b.axis.aId)
+      );
+    }
+    if (a.axis.type === "pointPair" || b.axis.type === "pointPair") return false;
+    return a.axis.id === b.axis.id;
+  }
+  if (a.kind === "projection" && b.kind === "projection") {
+    return (
+      (a.axisAId === b.axisAId && a.axisBId === b.axisBId) ||
+      (a.axisAId === b.axisBId && a.axisBId === b.axisAId)
+    );
+  }
   return false;
 }
 
@@ -608,8 +647,14 @@ function describeTransformAction(
   if (meta.kind === "dilation") {
     return `dilated about ${pointLabel(meta.centerId, pointNameById)} with factor ${meta.factorText}`;
   }
+  if (meta.kind === "projection") {
+    return `projected onto line ${pointLabel(meta.axisAId, pointNameById)}${pointLabel(meta.axisBId, pointNameById)}`;
+  }
   if (meta.axis.type === "point") {
     return `reflected about point ${pointLabel(meta.axis.id, pointNameById)}`;
+  }
+  if (meta.axis.type === "pointPair") {
+    return `reflected over line ${pointLabel(meta.axis.aId, pointNameById)}${pointLabel(meta.axis.bId, pointNameById)}`;
   }
   return `reflected over ${describeLineLikeCompact(meta.axis, pointNameById, lineById, segmentById, circleById)}`;
 }

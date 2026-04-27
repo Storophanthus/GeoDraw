@@ -8,7 +8,7 @@ import type {
   SceneModel,
   SceneTextLabelStyle,
 } from "../scene/points";
-import type { RichTextStyle } from "../richtext/model";
+import type { RichTextStyle } from "../text-editor/richTextModel";
 
 export type ColorProfileId = "classic" | "grayscale_white_dot" | "beige_light" | "dark_mode";
 export type UiColorProfileId = "vanilla" | "grayscale" | "beige" | "dark";
@@ -577,6 +577,7 @@ export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneSt
       labelPosWorld: { x: 0, y: 0 },
       showLabel: true,
       showValue: true,
+      labelGlow: false,
       promoteToSolid: false,
       arcArrowMark: {
         enabled: false,
@@ -599,6 +600,7 @@ export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneSt
       textMode: "tex",
       textAlign: "center",
       rotationDeg: 0,
+      labelGlow: false,
     },
     textboxToolDefaults: {
       textColor: palette.pointLabel,
@@ -608,12 +610,14 @@ export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneSt
       textAlign: "left",
       boxWidthPx: 220,
       rotationDeg: 0,
+      labelGlow: false,
     },
     richTextToolDefaults: {
       textColor: palette.pointLabel,
       textSize: 16,
       textAlign: "left",
       rotationDeg: 0,
+      labelGlow: false,
     },
   };
 }

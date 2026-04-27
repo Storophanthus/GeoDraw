@@ -46,6 +46,7 @@ const REQUIRED_PREAMBLE = `\\PassOptionsToPackage{dvipsnames}{xcolor}
 \\documentclass[tikz,border=2pt]{standalone}
 \\usepackage{tkz-euclide}
 \\usepackage{xfp}
+\\usepackage{contour}
 \\usetikzlibrary{arrows.meta,bending,decorations.markings,patterns,patterns.meta,shapes.geometric}`;
 
 export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
@@ -998,7 +999,9 @@ function buildStandaloneSource(tikzCode: string, optionalPreamble: string): stri
 function deriveDefaultOptionalPreamble(uiCssVariables: Record<string, string> | undefined): string {
   const normalizedHex = normalizeSceneBgHex(uiCssVariables?.["--gd-scene-bg"]);
   if (!normalizedHex || normalizedHex === "FFFFFF") return "";
-  return `\\pagecolor[HTML]{${normalizedHex}}`;
+  const rgb = hexToRgbTriplet(normalizedHex);
+  if (!rgb) return "";
+  return `\\usepackage{pagecolor}\n\\definecolor{gdPageColor}{RGB}{${rgb.join(",")}}\n\\pagecolor{gdPageColor}`;
 }
 
 function normalizeSceneBgHex(rawColor: string | undefined): string | null {
@@ -1019,6 +1022,15 @@ function normalizeSceneBgHex(rawColor: string | undefined): string | null {
     return hex.slice(0, 6).toUpperCase();
   }
   return hex.toUpperCase();
+}
+
+function hexToRgbTriplet(hex: string): [number, number, number] | null {
+  if (!/^[0-9A-F]{6}$/u.test(hex)) return null;
+  const r = Number.parseInt(hex.slice(0, 2), 16);
+  const g = Number.parseInt(hex.slice(2, 4), 16);
+  const b = Number.parseInt(hex.slice(4, 6), 16);
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return null;
+  return [r, g, b];
 }
 
 function looksLikeFullDocument(text: string): boolean {

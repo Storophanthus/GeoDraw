@@ -14,6 +14,17 @@ function approxEqual(a: number, b: number, eps = 1e-8): boolean {
   return Math.abs(a - b) <= eps;
 }
 
+function projectPointToLine(
+  point: { x: number; y: number },
+  axisA: { x: number; y: number },
+  axisB: { x: number; y: number }
+): { x: number; y: number } {
+  const dx = axisB.x - axisA.x;
+  const dy = axisB.y - axisA.y;
+  const t = ((point.x - axisA.x) * dx + (point.y - axisA.y) * dy) / (dx * dx + dy * dy);
+  return { x: axisA.x + t * dx, y: axisA.y + t * dy };
+}
+
 function pointIdByName(name: string): string {
   const point = getGeoStore().scene.points.find((p) => p.name === name);
   if (!point) fail(`Missing point ${name}`);
@@ -334,6 +345,33 @@ mustOk(commandBarApi.applyObjectAssignment("TT2", { type: "CreatePointByTranslat
   assert(!!point && point.kind === "pointByReflection", "point reflect assignment did not create constrained reflection point");
   assert(point.axis.type === "point" && point.axis.id === tb, "point reflect assignment target mismatch");
 }
+{
+  const parsed = parseCommandInput("TF3 = Reflect(TA,Segment(TB,TC))", buildParseContext());
+  if (parsed.kind !== "assignObject") fail(`unexpected parse kind for inline segment reflect: ${parsed.kind}`);
+  mustOk(commandBarApi.applyObjectAssignment(parsed.name, parsed.cmd), "apply inline segment reflect assignment");
+}
+{
+  const id = aliasId("TF3");
+  assertPointLabel(id, "TF3", "inline segment reflect assignment label");
+  const point = getGeoStore().scene.points.find((p) => p.id === id);
+  assert(!!point && point.kind === "pointByReflection", "inline segment reflect assignment did not create constrained reflection point");
+  assert(point.axis.type === "pointPair" && point.axis.aId === tb && point.axis.bId === tc, "inline segment reflect target mismatch");
+}
+{
+  const parsed = parseCommandInput("TP = Orthoproject(TC,TA,TB)", buildParseContext());
+  if (parsed.kind !== "assignObject") fail(`unexpected parse kind for projection: ${parsed.kind}`);
+  mustOk(commandBarApi.applyObjectAssignment(parsed.name, parsed.cmd), "apply projection assignment");
+}
+{
+  const id = aliasId("TP");
+  assertPointLabel(id, "TP", "projection assignment label");
+  const point = getGeoStore().scene.points.find((p) => p.id === id);
+  assert(!!point && point.kind === "pointByProjection", "projection assignment did not create constrained projection point");
+  assert(point.pointId === tc && point.axisAId === ta && point.axisBId === tb, "projection assignment references mismatch");
+  const expected = projectPointToLine(pointWorld(tc), pointWorld(ta), pointWorld(tb));
+  const actual = pointWorld(id);
+  assert(approxEqual(actual.x, expected.x) && approxEqual(actual.y, expected.y), "projected point world mismatch");
+}
 
 // constrained regression: transformed points must move with dependencies
 {
@@ -356,6 +394,12 @@ mustOk(commandBarApi.applyObjectAssignment("TT2", { type: "CreatePointByTranslat
   const reflected = pointWorld(reflectedId);
   const expected = { x: 2 * center.x - base.x, y: 2 * center.y - base.y };
   assert(approxEqual(reflected.x, expected.x) && approxEqual(reflected.y, expected.y), "point-centered reflected point did not stay constrained");
+}
+{
+  const projectedId = aliasId("TP");
+  const projected = pointWorld(projectedId);
+  const expected = projectPointToLine(pointWorld(tc), pointWorld(ta), pointWorld(tb));
+  assert(approxEqual(projected.x, expected.x) && approxEqual(projected.y, expected.y), "projected point did not stay constrained");
 }
 
 // stale alias safety: deleting aliased object then reassigning same alias should recreate, not fail.
