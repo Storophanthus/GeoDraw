@@ -1,31 +1,12 @@
 import { useEffect } from "react";
 import { useRef } from "react";
 import type { ActiveTool } from "../state/geoStore";
-import type { SceneModel } from "../scene/points";
-import type { SelectedObject } from "../state/slices/storeTypes";
-import type { Vec2 } from "../geo/vec2";
+import type { SelectedObject, TextClipboardObjectTarget } from "../state/slices/storeTypes";
 import { resolveRecentToolShortcut, shouldTrackRecentNonMoveTool } from "./toolHotkeyState";
-
-type TextLabelClipboardPayload = {
-  text: string;
-  toolKind?: "label" | "textbox";
-  contentMode?: "static" | "number" | "expression";
-  numberId?: string;
-  expr?: string;
-  visible: boolean;
-  style: {
-    textColor: string;
-    textSize: number;
-    useTex: boolean;
-    textMode?: "tex" | "plain" | "mixed";
-    rotationDeg?: number;
-  };
-};
 
 type GlobalHotkeysOptions = {
   activeTool: ActiveTool;
   selectedObject: SelectedObject;
-  textLabels: NonNullable<SceneModel["textLabels"]>;
   onSelectTool: (tool: ActiveTool) => void;
   onSetMoveTool: () => void;
   onClearCopyStyle: () => void;
@@ -33,13 +14,13 @@ type GlobalHotkeysOptions = {
   onUndo: () => void;
   onRedo: () => void;
   onFitView: () => void;
-  onPasteTextLabel: (payload: TextLabelClipboardPayload, world: Vec2) => void;
+  onCopyTextObjectToClipboard: (target: TextClipboardObjectTarget) => boolean;
+  onPasteTextClipboard: () => string | null;
 };
 
 export function useGlobalCanvasHotkeys({
   activeTool,
   selectedObject,
-  textLabels,
   onSelectTool,
   onSetMoveTool,
   onClearCopyStyle,
@@ -47,13 +28,9 @@ export function useGlobalCanvasHotkeys({
   onUndo,
   onRedo,
   onFitView,
-  onPasteTextLabel,
+  onCopyTextObjectToClipboard,
+  onPasteTextClipboard,
 }: GlobalHotkeysOptions) {
-  const copiedTextLabelRef = useRef<{
-    payload: TextLabelClipboardPayload;
-    origin: Vec2;
-    pasteCount: number;
-  } | null>(null);
   const recentNonMoveToolRef = useRef<ActiveTool | null>(null);
 
   useEffect(() => {
@@ -102,36 +79,12 @@ export function useGlobalCanvasHotkeys({
         return;
       }
       if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "c") {
-        if (selectedObject?.type !== "textLabel") return;
-        const label = textLabels.find((item) => item.id === selectedObject.id);
-        if (!label) return;
-        copiedTextLabelRef.current = {
-          payload: {
-            text: label.text,
-            toolKind: label.toolKind,
-            contentMode: label.contentMode ?? "static",
-            numberId: label.numberId,
-            expr: label.expr,
-            visible: label.visible,
-            style: { ...label.style },
-          },
-          origin: { ...label.positionWorld },
-          pasteCount: 0,
-        };
-        e.preventDefault();
+        if (selectedObject?.type !== "textLabel" && selectedObject?.type !== "richText") return;
+        if (onCopyTextObjectToClipboard(selectedObject)) e.preventDefault();
         return;
       }
       if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "v") {
-        const copied = copiedTextLabelRef.current;
-        if (!copied) return;
-        const nextPasteCount = copied.pasteCount + 1;
-        copied.pasteCount = nextPasteCount;
-        const step = 0.35;
-        onPasteTextLabel(copied.payload, {
-          x: copied.origin.x + step * nextPasteCount,
-          y: copied.origin.y - step * nextPasteCount,
-        });
-        e.preventDefault();
+        if (onPasteTextClipboard()) e.preventDefault();
         return;
       }
       if (!mod && !e.altKey && e.shiftKey && e.key.toLowerCase() === "f") {
@@ -151,12 +104,12 @@ export function useGlobalCanvasHotkeys({
   }, [
     activeTool,
     selectedObject,
-    textLabels,
     onSelectTool,
+    onCopyTextObjectToClipboard,
     onClearCopyStyle,
     onDeleteSelectedObject,
     onFitView,
-    onPasteTextLabel,
+    onPasteTextClipboard,
     onRedo,
     onSetMoveTool,
     onUndo,

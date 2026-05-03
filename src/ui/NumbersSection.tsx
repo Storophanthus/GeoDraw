@@ -11,6 +11,7 @@ type NumbersSectionProps = {
   setNewSliderMode: (next: "real" | "degree") => void;
   selectedSegmentId: string | null;
   selectedCircleId: string | null;
+  selectedPolygonId?: string | null;
   selectedAngleId: string | null;
   createNumber: (def:
     | { kind: "constant"; value: number }
@@ -18,6 +19,8 @@ type NumbersSectionProps = {
     | { kind: "segmentLength"; segId: string }
     | { kind: "circleRadius"; circleId: string }
     | { kind: "circleArea"; circleId: string }
+    | { kind: "polygonPerimeter"; polygonId: string }
+    | { kind: "polygonArea"; polygonId: string }
     | { kind: "angleDegrees"; angleId: string }) => string | null;
 };
 
@@ -34,6 +37,7 @@ export function NumbersSection({
   setNewSliderMode,
   selectedSegmentId,
   selectedCircleId,
+  selectedPolygonId = null,
   selectedAngleId,
   createNumber,
 }: NumbersSectionProps) {
@@ -127,6 +131,16 @@ export function NumbersSection({
         )}
         {selectedCircleId && (
           <button className="actionButton secondary" onClick={() => createNumber({ kind: "circleArea", circleId: selectedCircleId })}>
+            Store Area
+          </button>
+        )}
+        {selectedPolygonId && (
+          <button className="actionButton secondary" onClick={() => createNumber({ kind: "polygonPerimeter", polygonId: selectedPolygonId })}>
+            Store Perimeter
+          </button>
+        )}
+        {selectedPolygonId && (
+          <button className="actionButton secondary" onClick={() => createNumber({ kind: "polygonArea", polygonId: selectedPolygonId })}>
             Store Area
           </button>
         )}

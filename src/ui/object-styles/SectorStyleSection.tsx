@@ -2,7 +2,7 @@ import * as React from "react";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { type AngleMark, type AngleMarkSymbol, type AngleStyle, type PathArrowMark, type SceneAngle } from "../../scene/points";
 import { ColorSwatchInput } from "../ColorField";
-import { StyleControlGroup } from "../StyleControlGroup";
+import { StyleControlGroup, StyleControlTabbedGroups } from "../StyleControlGroup";
 import { StyleSectionHeader } from "../StyleSectionHeader";
 import { ArrowListControl, DEFAULT_PATH_ARROW_MARK } from "./ArrowListControl";
 import { MarkDistributionToggle } from "./MarkDistributionToggle";
@@ -38,6 +38,7 @@ type SectorStyleSectionProps = {
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
   deleteSelectedObject: () => void;
   deleteLabel?: string;
+  mode?: "object" | "toolDefault";
 };
 
 export function SectorStyleSection({
@@ -47,6 +48,7 @@ export function SectorStyleSection({
   updateSelectedAngleStyle,
   deleteSelectedObject,
   deleteLabel = "Delete",
+  mode = "object",
 }: SectorStyleSectionProps) {
   if (selectedSector.kind !== "sector") return null;
 
@@ -113,7 +115,9 @@ export function SectorStyleSection({
         title="Sector Style"
         selectedStyleAsDefault={selectedStyleAsDefault}
         onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+        mode={mode}
       />
+      <StyleControlTabbedGroups>
       <StyleControlGroup title="Stroke">
       <div className="controlRow">
         <label className="controlLabel">Stroke Color</label>
@@ -225,14 +229,16 @@ export function SectorStyleSection({
         />
         Label Glow
       </label>
-      <div className="controlRow">
-        <label className="controlLabel">Label Text</label>
-        <input
-          className="renameInput"
-          value={selectedSector.style.labelText ?? ""}
-          onChange={(e) => updateSelectedAngleStyle({ labelText: e.target.value })}
-        />
-      </div>
+      {mode === "object" && (
+        <div className="controlRow">
+          <label className="controlLabel">Label Text</label>
+          <input
+            className="renameInput"
+            value={selectedSector.style.labelText ?? ""}
+            onChange={(e) => updateSelectedAngleStyle({ labelText: e.target.value })}
+          />
+        </div>
+      )}
       <div className="controlRow">
         <label className="controlLabel">Text Color</label>
         <ColorSwatchInput
@@ -262,7 +268,7 @@ export function SectorStyleSection({
         />
       </div>
       </StyleControlGroup>
-      <StyleControlGroup title="Arc Arrow">
+      <StyleControlGroup title="Arrow">
       <ArrowListControl<PathArrowMark>
         arrows={
           selectedSector.style.arcArrowMarks ??
@@ -280,7 +286,7 @@ export function SectorStyleSection({
         onChange={(newArrows) => updateSelectedAngleStyle({ arcArrowMarks: newArrows })}
       />
       </StyleControlGroup>
-      <StyleControlGroup title="Arc Mark">
+      <StyleControlGroup title="Mark">
       <div
         className="arrowListHeader"
         style={{ display: "grid", gridTemplateColumns: "max-content 1fr", alignItems: "center", gap: "8px", marginTop: "4px" }}
@@ -609,9 +615,12 @@ export function SectorStyleSection({
         </div>
       )}
       </StyleControlGroup>
-      <button className="deleteButton" onClick={deleteSelectedObject}>
-        {deleteLabel}
-      </button>
+      </StyleControlTabbedGroups>
+      {mode === "object" && (
+        <button className="deleteButton" onClick={deleteSelectedObject}>
+          {deleteLabel}
+        </button>
+      )}
     </div>
   );
 }

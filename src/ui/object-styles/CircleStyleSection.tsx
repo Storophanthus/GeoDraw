@@ -1,7 +1,7 @@
 
 import { type CircleStyle, type SceneCircle } from "../../scene/points";
 import { ColorSwatchInput } from "../ColorField";
-import { StyleControlGroup } from "../StyleControlGroup";
+import { StyleControlGroup, StyleControlTabbedGroups } from "../StyleControlGroup";
 import { StyleSectionHeader } from "../StyleSectionHeader";
 import { ArrowListControl } from "./ArrowListControl";
 
@@ -20,6 +20,7 @@ type CircleStyleSectionProps = {
     onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
     updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
+    mode?: "object" | "toolDefault";
 };
 
 export function CircleStyleSection({
@@ -28,6 +29,7 @@ export function CircleStyleSection({
     onMakeStyleDefaultChange,
     updateSelectedCircleStyle,
     updateSelectedCircleFields,
+    mode = "object",
 }: CircleStyleSectionProps) {
     const selectedAreaStyle = selectedCircle.style;
 
@@ -37,7 +39,9 @@ export function CircleStyleSection({
                 title="Circle Style"
                 selectedStyleAsDefault={selectedStyleAsDefault}
                 onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+                mode={mode}
             />
+            <StyleControlTabbedGroups>
             <StyleControlGroup title="Stroke">
                 <div className="controlRow">
                     <label className="controlLabel">Stroke Color</label>
@@ -164,14 +168,16 @@ export function CircleStyleSection({
                             />
                             Label Glow
                         </label>
-                        <div className="controlRow">
-                            <label className="controlLabel">Label Text</label>
-                            <input
-                                className="renameInput"
-                                value={selectedCircle.labelText ?? ""}
-                                onChange={(e) => updateSelectedCircleFields({ labelText: e.target.value })}
-                            />
-                        </div>
+                        {mode === "object" && (
+                            <div className="controlRow">
+                                <label className="controlLabel">Label Text</label>
+                                <input
+                                    className="renameInput"
+                                    value={selectedCircle.labelText ?? ""}
+                                    onChange={(e) => updateSelectedCircleFields({ labelText: e.target.value })}
+                                />
+                            </div>
+                        )}
                     </>
                 )}
             </StyleControlGroup>
@@ -188,6 +194,7 @@ export function CircleStyleSection({
                     onChange={(newArrows) => updateSelectedCircleStyle({ arrowMarks: newArrows })}
                 />
             </StyleControlGroup>
+            </StyleControlTabbedGroups>
         </div>
     );
 }

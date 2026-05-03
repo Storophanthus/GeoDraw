@@ -207,6 +207,8 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
       addDependency(graph, child, key("segment", def.segId));
     } else if (def.kind === "circleRadius" || def.kind === "circleArea") {
       addDependency(graph, child, key("circle", def.circleId));
+    } else if (def.kind === "polygonPerimeter" || def.kind === "polygonArea") {
+      addDependency(graph, child, key("polygon", def.polygonId));
     } else if (def.kind === "angleDegrees") {
       addDependency(graph, child, key("angle", def.angleId));
     } else if (def.kind === "ratio") {

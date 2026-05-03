@@ -756,6 +756,16 @@ export type SceneNumberCircleArea = {
   circleId: string;
 };
 
+export type SceneNumberPolygonPerimeter = {
+  kind: "polygonPerimeter";
+  polygonId: string;
+};
+
+export type SceneNumberPolygonArea = {
+  kind: "polygonArea";
+  polygonId: string;
+};
+
 export type SceneNumberAngleDegrees = {
   kind: "angleDegrees";
   angleId: string;
@@ -779,6 +789,8 @@ export type SceneNumberDefinition =
   | SceneNumberSegmentLength
   | SceneNumberCircleRadius
   | SceneNumberCircleArea
+  | SceneNumberPolygonPerimeter
+  | SceneNumberPolygonArea
   | SceneNumberAngleDegrees
   | SceneNumberRatio
   | SceneNumberExpression;

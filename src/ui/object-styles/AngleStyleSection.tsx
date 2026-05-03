@@ -1,7 +1,7 @@
 import * as React from "react";
 import { type AngleMark, type AngleStyle, type SceneAngle } from "../../scene/points";
 import { ColorSwatchInput } from "../ColorField";
-import { StyleControlGroup } from "../StyleControlGroup";
+import { StyleControlGroup, StyleControlTabbedGroups } from "../StyleControlGroup";
 import { StyleSectionHeader } from "../StyleSectionHeader";
 import { AngleMarkControl, DEFAULT_ANGLE_MARK } from "./AngleMarkControl";
 
@@ -22,6 +22,7 @@ type AngleStyleSectionProps = {
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
   deleteSelectedObject: () => void;
   deleteLabel?: string;
+  mode?: "object" | "toolDefault";
 };
 
 export function AngleStyleSection({
@@ -32,6 +33,7 @@ export function AngleStyleSection({
   updateSelectedAngleStyle,
   deleteSelectedObject,
   deleteLabel = "Delete",
+  mode = "object",
 }: AngleStyleSectionProps) {
   if (selectedAngle.kind === "sector") return null;
 
@@ -83,7 +85,9 @@ export function AngleStyleSection({
         title="Angle Style"
         selectedStyleAsDefault={selectedStyleAsDefault}
         onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+        mode={mode}
       />
+      <StyleControlTabbedGroups>
       <StyleControlGroup title="Stroke">
         <div className="controlRow controlRowWithNumeric">
           <label className="controlLabel">Arc Radius</label>
@@ -161,14 +165,16 @@ export function AngleStyleSection({
           />
           Label Glow
         </label>
-        <div className="controlRow">
-          <label className="controlLabel">Label Text</label>
-          <input
-            className="renameInput"
-            value={selectedAngle.style.labelText ?? ""}
-            onChange={(e) => updateSelectedAngleStyle({ labelText: e.target.value })}
-          />
-        </div>
+        {mode === "object" && (
+          <div className="controlRow">
+            <label className="controlLabel">Label Text</label>
+            <input
+              className="renameInput"
+              value={selectedAngle.style.labelText ?? ""}
+              onChange={(e) => updateSelectedAngleStyle({ labelText: e.target.value })}
+            />
+          </div>
+        )}
         <div className="controlRow">
           <label className="controlLabel">Text Color</label>
           <ColorSwatchInput
@@ -252,7 +258,7 @@ export function AngleStyleSection({
         )}
       </StyleControlGroup>
 
-      <StyleControlGroup title={selectedAngleIsRight ? "Right Mark" : "Arc Mark"}>
+      <StyleControlGroup title="Mark">
         {selectedAngleIsRight ? (
           <div className="controlRow">
             <label className="controlLabel">Mark</label>
@@ -300,9 +306,12 @@ export function AngleStyleSection({
           />
         )}
       </StyleControlGroup>
-      <button className="deleteButton" onClick={deleteSelectedObject}>
-        {deleteLabel}
-      </button>
+      </StyleControlTabbedGroups>
+      {mode === "object" && (
+        <button className="deleteButton" onClick={deleteSelectedObject}>
+          {deleteLabel}
+        </button>
+      )}
     </div>
   );
 }

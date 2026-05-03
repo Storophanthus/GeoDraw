@@ -20,6 +20,13 @@ import { TextLabelStyleSection } from "./object-styles/TextLabelStyleSection";
 import { ObjectStyleSections } from "./ObjectStyleSections";
 import { PointPropertiesSection } from "./PointPropertiesSection";
 import { ToolInfoSection } from "./ToolInfoSection";
+import { ToolDefaultStyleSections } from "./ToolDefaultStyleSections";
+import {
+  getToolDefaultKind,
+  reconcileRecentCreatedPanelClaim,
+  shouldShowToolPreconfigurePanelForState,
+  type RecentCreatedPanelClaim,
+} from "./toolPreconfigure";
 import {
   angleStyleEqual,
   circleStyleEqual,
@@ -47,8 +54,11 @@ export function PropertiesPanel({
   setMultiSelectedObjects,
 }: PropertiesPanelProps) {
   const activeTool = useGeoStore((store) => store.activeTool);
+  const toolActivationVersion = useGeoStore((store) => store.toolActivationVersion);
+  const propertiesPanelIntent = useGeoStore((store) => store.propertiesPanelIntent);
   const scene = useGeoStore((store) => store.scene);
   const selectedObject = useGeoStore((store) => store.selectedObject);
+  const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
   const renameSelectedPoint = useGeoStore((store) => store.renameSelectedPoint);
   const deleteSelectedObject = useGeoStore((store) => store.deleteSelectedObject);
   const deleteObjects = useGeoStore((store) => store.deleteObjects);
@@ -231,6 +241,20 @@ export function PropertiesPanel({
     () => evaluateAngleExpressionDegrees(scene, transformTool.angleExpr),
     [scene, transformTool.angleExpr]
   );
+  const toolDefaultKind = useMemo(() => getToolDefaultKind(activeTool), [activeTool]);
+  const recentCreatedPanelClaimRef = useRef<RecentCreatedPanelClaim | null>(null);
+  const recentCreatedPanelState = reconcileRecentCreatedPanelClaim({
+    selectedObject,
+    recentCreatedObject,
+    previousClaim: recentCreatedPanelClaimRef.current,
+    toolActivationVersion,
+  });
+  recentCreatedPanelClaimRef.current = recentCreatedPanelState.claim;
+  const showToolPreconfigurePanel = shouldShowToolPreconfigurePanelForState({
+    activeTool,
+    propertiesPanelIntent,
+    recentCreatedOwnsPanel: recentCreatedPanelState.recentCreatedOwnsPanel,
+  });
   const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | null>(() => {
     if (selectedPoint) return "point";
     if (selectedSegment) return "segment";
@@ -248,10 +272,34 @@ export function PropertiesPanel({
   );
   const selectedStyleAsDefault = useMemo(() => {
     if (selectedPoint) return pointStyleEqual(pointDefaults, selectedPoint.style) && selectedPoint.showLabel === objectLabelDefaults.point;
-    if (selectedSegment) return lineStyleEqual(segmentDefaults, selectedSegment.style) && Boolean(selectedSegment.showLabel) === objectLabelDefaults.segment;
-    if (selectedLine) return lineStyleEqual(lineDefaults, selectedLine.style) && Boolean(selectedLine.showLabel) === objectLabelDefaults.line;
-    if (selectedCircle) return circleStyleEqual(circleDefaults, selectedCircle.style) && Boolean(selectedCircle.showLabel) === objectLabelDefaults.circle;
-    if (selectedPolygon) return polygonStyleEqual(polygonDefaults, selectedPolygon.style) && Boolean(selectedPolygon.showLabel) === objectLabelDefaults.polygon;
+    if (selectedSegment) {
+      return (
+        lineStyleEqual(segmentDefaults, selectedSegment.style) &&
+        Boolean(selectedSegment.showLabel) === objectLabelDefaults.segment &&
+        (selectedSegment.labelGlow !== false) === (objectLabelDefaults.segmentGlow ?? true)
+      );
+    }
+    if (selectedLine) {
+      return (
+        lineStyleEqual(lineDefaults, selectedLine.style) &&
+        Boolean(selectedLine.showLabel) === objectLabelDefaults.line &&
+        (selectedLine.labelGlow !== false) === (objectLabelDefaults.lineGlow ?? true)
+      );
+    }
+    if (selectedCircle) {
+      return (
+        circleStyleEqual(circleDefaults, selectedCircle.style) &&
+        Boolean(selectedCircle.showLabel) === objectLabelDefaults.circle &&
+        (selectedCircle.labelGlow !== false) === (objectLabelDefaults.circleGlow ?? true)
+      );
+    }
+    if (selectedPolygon) {
+      return (
+        polygonStyleEqual(polygonDefaults, selectedPolygon.style) &&
+        Boolean(selectedPolygon.showLabel) === objectLabelDefaults.polygon &&
+        (selectedPolygon.labelGlow !== false) === (objectLabelDefaults.polygonGlow ?? true)
+      );
+    }
     if (selectedAngle) return angleStyleEqual(angleDefaults, selectedAngle.style);
     if (selectedTextLabel) {
       const defaults = resolveTextLabelToolKind(selectedTextLabel) === "textbox" ? textboxToolDefaults : labelToolDefaults;
@@ -291,22 +339,34 @@ export function PropertiesPanel({
     }
     if (selectedStyleKind === "segment" && selectedSegment) {
       setSegmentDefaults({ ...selectedSegment.style });
-      setObjectLabelDefaults({ segment: Boolean(selectedSegment.showLabel) });
+      setObjectLabelDefaults({
+        segment: Boolean(selectedSegment.showLabel),
+        segmentGlow: selectedSegment.labelGlow !== false,
+      });
       return;
     }
     if (selectedStyleKind === "line" && selectedLine) {
       setLineDefaults({ ...selectedLine.style });
-      setObjectLabelDefaults({ line: Boolean(selectedLine.showLabel) });
+      setObjectLabelDefaults({
+        line: Boolean(selectedLine.showLabel),
+        lineGlow: selectedLine.labelGlow !== false,
+      });
       return;
     }
     if (selectedStyleKind === "circle" && selectedCircle) {
       setCircleDefaults({ ...selectedCircle.style });
-      setObjectLabelDefaults({ circle: Boolean(selectedCircle.showLabel) });
+      setObjectLabelDefaults({
+        circle: Boolean(selectedCircle.showLabel),
+        circleGlow: selectedCircle.labelGlow !== false,
+      });
       return;
     }
     if (selectedStyleKind === "polygon" && selectedPolygon) {
       setPolygonDefaults({ ...selectedPolygon.style });
-      setObjectLabelDefaults({ polygon: Boolean(selectedPolygon.showLabel) });
+      setObjectLabelDefaults({
+        polygon: Boolean(selectedPolygon.showLabel),
+        polygonGlow: selectedPolygon.labelGlow !== false,
+      });
       return;
     }
     if (selectedStyleKind === "angle" && selectedAngle) {
@@ -542,7 +602,7 @@ export function PropertiesPanel({
   return (
     <section className="sidebarSection">
       <h2 className="sectionTitle">Properties</h2>
-      {selectedConstructionText && (
+      {!showToolPreconfigurePanel && selectedConstructionText && (
         <div className="constructionInfo">
           <div className="constructionTitle">Construction</div>
           <div>{selectedConstructionText}</div>
@@ -576,7 +636,34 @@ export function PropertiesPanel({
         createCircleFixedRadius={createCircleFixedRadius}
         clearPendingSelection={clearPendingSelection}
       />
-      {selectedNumber && (
+      {showToolPreconfigurePanel && (
+        <>
+          <ToolDefaultStyleSections
+            kind={toolDefaultKind}
+            scene={scene}
+            pointDefaults={pointDefaults}
+            segmentDefaults={segmentDefaults}
+            lineDefaults={lineDefaults}
+            circleDefaults={circleDefaults}
+            polygonDefaults={polygonDefaults}
+            angleDefaults={angleDefaults}
+            objectLabelDefaults={objectLabelDefaults}
+            labelToolDefaults={labelToolDefaults}
+            richTextToolDefaults={richTextToolDefaults}
+            setPointDefaults={setPointDefaults}
+            setSegmentDefaults={setSegmentDefaults}
+            setLineDefaults={setLineDefaults}
+            setCircleDefaults={setCircleDefaults}
+            setPolygonDefaults={setPolygonDefaults}
+            setAngleDefaults={setAngleDefaults}
+            setObjectLabelDefaults={setObjectLabelDefaults}
+            setLabelToolDefaults={setLabelToolDefaults}
+            setRichTextToolDefaults={setRichTextToolDefaults}
+          />
+          {!toolDefaultKind && <div className="emptyState">Tool settings are shown above.</div>}
+        </>
+      )}
+      {!showToolPreconfigurePanel && selectedNumber && (
         <NumberStyleSection
           selectedNumber={selectedNumber}
           selectedNumberValue={selectedNumberValue}
@@ -585,10 +672,10 @@ export function PropertiesPanel({
           deleteLabel={deleteButtonLabel}
         />
       )}
-      {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedPolygon && !selectedAngle && !selectedTextLabel && !selectedRichText && !selectedNumber && (
+      {!showToolPreconfigurePanel && !selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedPolygon && !selectedAngle && !selectedTextLabel && !selectedRichText && !selectedNumber && (
         <div className="emptyState">Select an object to edit properties</div>
       )}
-      {selectedPoint && (
+      {!showToolPreconfigurePanel && selectedPoint && (
         <PointPropertiesSection
           selectedPoint={selectedPoint}
           selectedPointWorld={selectedPointWorld}
@@ -608,7 +695,7 @@ export function PropertiesPanel({
           deleteLabel={deleteButtonLabel}
         />
       )}
-      {selectedLine && (
+      {!showToolPreconfigurePanel && selectedLine && (
         <div className="toolInfo">
           <div className="subSectionTitle">Line</div>
           <div className="detailRow">
@@ -617,7 +704,7 @@ export function PropertiesPanel({
           </div>
         </div>
       )}
-      {selectedCircle && (
+      {!showToolPreconfigurePanel && selectedCircle && (
         <div className="toolInfo">
           <div className="subSectionTitle">Circle</div>
           <div className="detailRow">
@@ -626,7 +713,7 @@ export function PropertiesPanel({
           </div>
         </div>
       )}
-      {selectedAngle && (
+      {!showToolPreconfigurePanel && selectedAngle && (
         <div className="toolInfo">
           <div className="subSectionTitle">{selectedAngle.kind === "sector" ? "Sector" : "Angle"}</div>
           <div className="detailRow">
@@ -635,7 +722,7 @@ export function PropertiesPanel({
           </div>
         </div>
       )}
-      {selectedTextLabel && (
+      {!showToolPreconfigurePanel && selectedTextLabel && (
         <TextLabelStyleSection
           selectedTextLabel={selectedTextLabel}
           scene={scene}
@@ -649,7 +736,7 @@ export function PropertiesPanel({
           deleteLabel={deleteButtonLabel}
         />
       )}
-      {selectedRichText && (
+      {!showToolPreconfigurePanel && selectedRichText && (
         <RichTextStyleSection
           selectedRichText={selectedRichText}
           selectedStyleAsDefault={selectedStyleAsDefault}
@@ -661,32 +748,34 @@ export function PropertiesPanel({
           deleteLabel={deleteButtonLabel}
         />
       )}
-      <ObjectStyleSections
-        selectedPointPresent={Boolean(selectedPoint)}
-        selectedSegment={selectedSegment}
-        selectedLine={selectedLine}
-        selectedCircle={selectedCircle}
-        selectedPolygon={selectedPolygon}
-        selectedPolygonOwnedEdgesVisible={selectedPolygonOwnedEdgesVisible}
-        selectedAngle={selectedAngle}
-        selectedAngleRightStatus={selectedAngleRightStatus}
-        updateSelectedSegmentStyle={handleUpdateSelectedSegmentStyle}
-        updateSelectedLineStyle={handleUpdateSelectedLineStyle}
-        updateSelectedCircleStyle={handleUpdateSelectedCircleStyle}
-        updateSelectedPolygonStyle={handleUpdateSelectedPolygonStyle}
-        updateSelectedAngleStyle={handleUpdateSelectedAngleStyle}
-        updateSelectedSegmentFields={handleUpdateSelectedSegmentFields}
-        updateSelectedLineFields={handleUpdateSelectedLineFields}
-        updateSelectedCircleFields={handleUpdateSelectedCircleFields}
-        canConvertSelectedLineToSegment={canConvertSelectedLineToSegment}
-        convertSelectedLineToSegment={handleConvertSelectedLineToSegment}
-        updateSelectedPolygonFields={handleUpdateSelectedPolygonFields}
-        setSelectedPolygonOwnedSegmentsVisible={setSelectedPolygonOwnedSegmentsVisible}
-        selectedStyleAsDefault={selectedStyleAsDefault}
-        onMakeStyleDefaultChange={handleMakeStyleDefaultChange}
-        deleteSelectedObject={handleDeleteFromProperties}
-        deleteLabel={deleteButtonLabel}
-      />
+      {!showToolPreconfigurePanel && (
+        <ObjectStyleSections
+          selectedPointPresent={Boolean(selectedPoint)}
+          selectedSegment={selectedSegment}
+          selectedLine={selectedLine}
+          selectedCircle={selectedCircle}
+          selectedPolygon={selectedPolygon}
+          selectedPolygonOwnedEdgesVisible={selectedPolygonOwnedEdgesVisible}
+          selectedAngle={selectedAngle}
+          selectedAngleRightStatus={selectedAngleRightStatus}
+          updateSelectedSegmentStyle={handleUpdateSelectedSegmentStyle}
+          updateSelectedLineStyle={handleUpdateSelectedLineStyle}
+          updateSelectedCircleStyle={handleUpdateSelectedCircleStyle}
+          updateSelectedPolygonStyle={handleUpdateSelectedPolygonStyle}
+          updateSelectedAngleStyle={handleUpdateSelectedAngleStyle}
+          updateSelectedSegmentFields={handleUpdateSelectedSegmentFields}
+          updateSelectedLineFields={handleUpdateSelectedLineFields}
+          updateSelectedCircleFields={handleUpdateSelectedCircleFields}
+          canConvertSelectedLineToSegment={canConvertSelectedLineToSegment}
+          convertSelectedLineToSegment={handleConvertSelectedLineToSegment}
+          updateSelectedPolygonFields={handleUpdateSelectedPolygonFields}
+          setSelectedPolygonOwnedSegmentsVisible={setSelectedPolygonOwnedSegmentsVisible}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={handleMakeStyleDefaultChange}
+          deleteSelectedObject={handleDeleteFromProperties}
+          deleteLabel={deleteButtonLabel}
+        />
+      )}
     </section>
   );
 }

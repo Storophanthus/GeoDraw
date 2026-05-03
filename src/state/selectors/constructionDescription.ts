@@ -203,7 +203,7 @@ function describeSelectedConstruction(
   if (selectedObject.type === "number") {
     const num = numberById.get(selectedObject.id);
     if (!num) return null;
-    return describeNumberConstruction(num, pointNameById, segmentById, circleById, angleById, numberById);
+    return describeNumberConstruction(num, pointNameById, segmentById, circleById, polygonById, angleById, numberById);
   }
   if (selectedObject.type === "textLabel") {
     const label = (scene.textLabels ?? []).find((item) => item.id === selectedObject.id);
@@ -221,6 +221,7 @@ function describeNumberConstruction(
   pointNameById: Map<string, string>,
   segmentById: Map<string, SceneModel["segments"][number]>,
   circleById: Map<string, SceneModel["circles"][number]>,
+  polygonById: Map<string, SceneModel["polygons"][number]>,
   angleById: Map<string, SceneModel["angles"][number]>,
   numberById: Map<string, SceneModel["numbers"][number]>
 ): string {
@@ -253,6 +254,16 @@ function describeNumberConstruction(
     const circle = circleById.get(def.circleId);
     if (!circle) return `Area of circle ${def.circleId}.`;
     return `Area of ${describeCircleRef(circle, pointNameById)}.`;
+  }
+  if (def.kind === "polygonPerimeter") {
+    const polygon = polygonById.get(def.polygonId);
+    if (!polygon) return `Perimeter of polygon ${def.polygonId}.`;
+    return `Perimeter of polygon ${polygon.pointIds.map((id) => pointLabel(id, pointNameById)).join("")}.`;
+  }
+  if (def.kind === "polygonArea") {
+    const polygon = polygonById.get(def.polygonId);
+    if (!polygon) return `Area of polygon ${def.polygonId}.`;
+    return `Area of polygon ${polygon.pointIds.map((id) => pointLabel(id, pointNameById)).join("")}.`;
   }
   if (def.kind === "angleDegrees") {
     const angle = angleById.get(def.angleId);

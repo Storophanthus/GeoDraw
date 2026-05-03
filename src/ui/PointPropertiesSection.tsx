@@ -36,6 +36,7 @@ type PointPropertiesSectionProps = {
   updateSelectedPointStyle: (style: Partial<ScenePoint["style"]>) => void;
   deleteSelectedObject: () => void;
   deleteLabel?: string;
+  mode?: "object" | "toolDefault";
 };
 
 export function PointPropertiesSection({
@@ -55,50 +56,57 @@ export function PointPropertiesSection({
   updateSelectedPointStyle,
   deleteSelectedObject,
   deleteLabel = "Delete",
+  mode = "object",
 }: PointPropertiesSectionProps) {
   return (
     <>
-      <div className="toolInfo">
-        <div className="subSectionTitle">Point</div>
-        <div className="detailRow">
-          <span className="detailLabel">Position</span>
-          <span>
-            ({formatRoundedDisplay(selectedPointWorld?.x ?? 0, 3)}, {formatRoundedDisplay(selectedPointWorld?.y ?? 0, 3)})
-          </span>
+      {mode === "object" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Point</div>
+          <div className="detailRow">
+            <span className="detailLabel">Position</span>
+            <span>
+              ({formatRoundedDisplay(selectedPointWorld?.x ?? 0, 3)}, {formatRoundedDisplay(selectedPointWorld?.y ?? 0, 3)})
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="fieldBlock">
-        <label className="fieldLabel">Name</label>
-        <div className="renameRow">
+      {mode === "object" && (
+        <div className="fieldBlock">
+          <label className="fieldLabel">Name</label>
+          <div className="renameRow">
+            <input
+              className="renameInput"
+              value={nameInput}
+              onChange={(e) => {
+                setNameInput(e.target.value);
+                setRenameError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  applyRename();
+                }
+              }}
+            />
+            <button className="actionButton" onClick={applyRename}>
+              Apply
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === "object" && (
+        <div className="fieldBlock">
+          <label className="fieldLabel">Caption (TeX)</label>
           <input
             className="renameInput"
-            value={nameInput}
-            onChange={(e) => {
-              setNameInput(e.target.value);
-              setRenameError("");
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                applyRename();
-              }
-            }}
+            value={selectedPoint.captionTex}
+            onChange={(e) => updateSelectedPointFields({ captionTex: e.target.value })}
           />
-          <button className="actionButton" onClick={applyRename}>
-            Apply
-          </button>
         </div>
-      </div>
-
-      <div className="fieldBlock">
-        <label className="fieldLabel">Caption (TeX)</label>
-        <input
-          className="renameInput"
-          value={selectedPoint.captionTex}
-          onChange={(e) => updateSelectedPointFields({ captionTex: e.target.value })}
-        />
-      </div>
+      )}
 
       <div className="fieldBlock">
         <label className="fieldLabel">Show Label</label>
@@ -133,31 +141,36 @@ export function PointPropertiesSection({
         </>
       )}
 
-      <label className="checkboxRow">
-        <input
-          type="checkbox"
-          checked={Boolean(selectedPoint.locked)}
-          onChange={(e) => updateSelectedPointFields({ locked: e.target.checked })}
-        />
-        Fix Object
-      </label>
+      {mode === "object" && (
+        <>
+          <label className="checkboxRow">
+            <input
+              type="checkbox"
+              checked={Boolean(selectedPoint.locked)}
+              onChange={(e) => updateSelectedPointFields({ locked: e.target.checked })}
+            />
+            Fix Object
+          </label>
 
-      <label className="checkboxRow">
-        <input
-          type="checkbox"
-          checked={Boolean(selectedPoint.auxiliary)}
-          onChange={(e) => updateSelectedPointFields({ auxiliary: e.target.checked })}
-        />
-        Auxiliary Object
-      </label>
+          <label className="checkboxRow">
+            <input
+              type="checkbox"
+              checked={Boolean(selectedPoint.auxiliary)}
+              onChange={(e) => updateSelectedPointFields({ auxiliary: e.target.checked })}
+            />
+            Auxiliary Object
+          </label>
 
-      {renameError && <div className="errorText">{renameError}</div>}
+          {renameError && <div className="errorText">{renameError}</div>}
+        </>
+      )}
 
       <div className="cosmeticsBlock pointStyleBlock">
         <StyleSectionHeader
           title="Point Style"
           selectedStyleAsDefault={selectedStyleAsDefault}
           onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+          mode={mode}
         />
 
         <div className="fieldBlock" ref={shapePickerRef}>
@@ -271,9 +284,11 @@ export function PointPropertiesSection({
         </div>
       </div>
 
-      <button className="deleteButton" onClick={deleteSelectedObject}>
-        {deleteLabel}
-      </button>
+      {mode === "object" && (
+        <button className="deleteButton" onClick={deleteSelectedObject}>
+          {deleteLabel}
+        </button>
+      )}
     </>
   );
 }

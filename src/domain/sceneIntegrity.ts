@@ -440,6 +440,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       if (def.kind === "distancePoints") return nextPointIds.has(def.aId) && nextPointIds.has(def.bId);
       if (def.kind === "segmentLength") return nextSegmentIdsAfter.has(def.segId);
       if (def.kind === "circleRadius" || def.kind === "circleArea") return nextCircleIdsAfter.has(def.circleId);
+      if (def.kind === "polygonPerimeter" || def.kind === "polygonArea") return nextPolygonIds.has(def.polygonId);
       if (def.kind === "angleDegrees") return nextAngleIds.has(def.angleId);
       return true;
     });

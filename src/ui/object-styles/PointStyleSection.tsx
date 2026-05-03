@@ -1,7 +1,7 @@
 
 import { type PointStyle, type ScenePoint } from "../../scene/points";
 import { ColorSwatchInput } from "../ColorField";
-import { StyleControlGroup } from "../StyleControlGroup";
+import { StyleControlGroup, StyleControlTabbedGroups } from "../StyleControlGroup";
 
 const POINT_MARK_OPTIONS = ["x", "+", "o", "bullet", "square"] as const;
 
@@ -19,6 +19,7 @@ export function PointStyleSection({
     return (
         <div className="cosmeticsBlock">
             <div className="subSectionTitle">Point Style</div>
+            <StyleControlTabbedGroups>
             <StyleControlGroup title="Label">
                 <label className="checkboxRow">
                     <input
@@ -84,6 +85,7 @@ export function PointStyleSection({
                     </select>
                 </div>
             </StyleControlGroup>
+            </StyleControlTabbedGroups>
         </div>
     );
 }

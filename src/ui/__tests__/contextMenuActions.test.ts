@@ -85,8 +85,42 @@ const scene: SceneModel = {
   polygons: [{ id: "poly_1", pointIds: ["p_a", "p_b", "p_c"], visible: true, showLabel: false, style: polygonStyle }],
   angles: [{ id: "ang_1", aId: "p_a", bId: "p_b", cId: "p_c", visible: true, style: angleStyle }],
   numbers: [],
-  textLabels: [],
-  richTextNodes: [],
+  textLabels: [
+    {
+      id: "txt_1",
+      name: "T1",
+      text: "hello",
+      toolKind: "label",
+      contentMode: "static",
+      visible: true,
+      positionWorld: { x: 0, y: 0 },
+      style: {
+        textColor: "#000000",
+        textSize: 16,
+        useTex: false,
+      },
+    },
+  ],
+  richTextNodes: [
+    {
+      id: "rt_1",
+      type: "richText",
+      name: "rt_1",
+      visible: true,
+      positionWorld: { x: 0, y: 0 },
+      style: {
+        textColor: "#000000",
+        textSize: 16,
+        rotationDeg: 0,
+        textAlign: "left",
+      },
+      document: {
+        kind: "document",
+        blocks: [{ kind: "paragraph", children: [{ kind: "text", text: "hello" }] }],
+      },
+      boundsPx: { widthPx: 100, heightPx: 20 },
+    },
+  ],
 };
 
 {
@@ -109,13 +143,37 @@ const scene: SceneModel = {
 
 {
   const ids = actionIds(scene, { type: "polygon", id: "poly_1" });
-  assert(!ids.some((id) => id.startsWith("create-variable")), "Polygon context menu should not fake scalar extraction yet.");
+  assert(ids.includes("create-variable-perimeter"), "Polygon context menu should offer perimeter variable extraction.");
+  assert(ids.includes("create-variable-area"), "Polygon context menu should offer area variable extraction.");
 }
 
 {
-  const ids = actionIds(scene, { type: "empty", world: { x: 1, y: 2 } });
+  const actions = getContextActionsForTarget(scene, { type: "empty", world: { x: 1, y: 2 } });
+  const ids = actions.map((action) => action.id);
   assert(ids.includes("create-point"), "Empty canvas context menu should offer point creation.");
   assert(ids.includes("create-textbox"), "Empty canvas context menu should offer textbox creation.");
+  const paste = actions.find((action) => action.id === "paste-clipboard");
+  assert(Boolean(paste?.disabled), "Empty canvas paste should be disabled when the app clipboard is empty.");
+}
+
+{
+  const actions = getContextActionsForTarget(scene, { type: "empty", world: { x: 1, y: 2 } }, { canPaste: true });
+  const paste = actions.find((action) => action.id === "paste-clipboard");
+  assert(Boolean(paste && !paste.disabled), "Empty canvas paste should be enabled when the app clipboard has content.");
+}
+
+{
+  const ids = actionIds(scene, { type: "textLabel", id: "txt_1" });
+  assert(ids.includes("edit-text"), "Text label context menu should offer editing.");
+  assert(ids.includes("copy-object"), "Text label context menu should offer copying.");
+  assert(ids.includes("duplicate-object"), "Text label context menu should offer duplication.");
+}
+
+{
+  const ids = actionIds(scene, { type: "richText", id: "rt_1" });
+  assert(ids.includes("edit-text"), "Rich textbox context menu should offer editing.");
+  assert(ids.includes("copy-object"), "Rich textbox context menu should offer copying.");
+  assert(ids.includes("duplicate-object"), "Rich textbox context menu should offer duplication.");
 }
 
 console.log("contextMenuActions: ok");

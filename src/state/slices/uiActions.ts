@@ -41,6 +41,8 @@ export function createUiActions(
   | "setDependencyGlowEnabled"
   | "setExportClipWorld"
   | "clearExportClipWorld"
+  | "requestTextEdit"
+  | "clearTextEditRequest"
 > {
   return {
     setPointDefaults(next) {
@@ -416,6 +418,34 @@ export function createUiActions(
         ...prev,
         exportClipWorld: null,
       }));
+    },
+
+    requestTextEdit(target) {
+      ctx.setState(
+        (prev) => ({
+          ...prev,
+          activeTool: "move",
+          selectedObject: { type: target.type, id: target.id },
+          textEditRequest: {
+            ...target,
+            requestId: (prev.textEditRequest?.requestId ?? 0) + 1,
+          },
+        }),
+        { history: "skip" }
+      );
+    },
+
+    clearTextEditRequest(requestId) {
+      ctx.setState(
+        (prev) => {
+          if (prev.textEditRequest?.requestId !== requestId) return prev;
+          return {
+            ...prev,
+            textEditRequest: null,
+          };
+        },
+        { history: "skip" }
+      );
     },
   };
 }

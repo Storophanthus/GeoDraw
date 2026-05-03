@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import {
   Circle,
+  Copy,
   Eye,
   EyeOff,
   Hash,
@@ -34,12 +35,19 @@ const MENU_MARGIN_PX = 8;
 export function GeoContextMenu({ menu, onClose }: GeoContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const scene = useGeoStore((store) => store.scene);
+  const camera = useGeoStore((store) => store.camera);
+  const textClipboard = useGeoStore((store) => store.textClipboard);
   const setSelectedObject = useGeoStore((store) => store.setSelectedObject);
   const clearPendingSelection = useGeoStore((store) => store.clearPendingSelection);
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
   const createTextLabel = useGeoStore((store) => store.createTextLabel);
   const createRichTextNode = useGeoStore((store) => store.createRichTextNode);
+  const duplicateTextLabel = useGeoStore((store) => store.duplicateTextLabel);
+  const duplicateRichTextNode = useGeoStore((store) => store.duplicateRichTextNode);
+  const copyTextObjectToClipboard = useGeoStore((store) => store.copyTextObjectToClipboard);
+  const pasteTextClipboard = useGeoStore((store) => store.pasteTextClipboard);
   const createNumber = useGeoStore((store) => store.createNumber);
+  const requestTextEdit = useGeoStore((store) => store.requestTextEdit);
   const fitViewToScene = useGeoStore((store) => store.fitViewToScene);
   const renameSelectedPoint = useGeoStore((store) => store.renameSelectedPoint);
   const updatePointFieldsByIds = useGeoStore((store) => store.updatePointFieldsByIds);
@@ -57,8 +65,8 @@ export function GeoContextMenu({ menu, onClose }: GeoContextMenuProps) {
   const deleteObjects = useGeoStore((store) => store.deleteObjects);
 
   const actions = useMemo(
-    () => (menu ? getContextActionsForTarget(scene, menu.target) : []),
-    [menu, scene]
+    () => (menu ? getContextActionsForTarget(scene, menu.target, { canPaste: Boolean(textClipboard) }) : []),
+    [menu, scene, textClipboard]
   );
   const title = useMemo(
     () => (menu ? getContextMenuTitle(scene, menu.target) : ""),
@@ -93,12 +101,18 @@ export function GeoContextMenu({ menu, onClose }: GeoContextMenuProps) {
     if (action.disabled) return;
     executeContextAction(action.id, menu.target, {
       scene,
+      duplicateOffsetWorld: getDuplicateOffsetWorld(camera.zoom),
       setSelectedObject,
       clearPendingSelection,
       createFreePoint,
       createTextLabel,
       createRichTextNode,
+      duplicateTextLabel,
+      duplicateRichTextNode,
+      copyTextObjectToClipboard,
+      pasteTextClipboard,
       createNumber,
+      requestTextEdit,
       fitViewToScene,
       renameSelectedPoint,
       updatePointFieldsByIds,
@@ -156,12 +170,18 @@ export function GeoContextMenu({ menu, onClose }: GeoContextMenuProps) {
 
 type ContextActionRuntime = {
   scene: GeoStore["scene"];
+  duplicateOffsetWorld: { x: number; y: number };
   setSelectedObject: GeoStore["setSelectedObject"];
   clearPendingSelection: GeoStore["clearPendingSelection"];
   createFreePoint: GeoStore["createFreePoint"];
   createTextLabel: GeoStore["createTextLabel"];
   createRichTextNode: GeoStore["createRichTextNode"];
+  duplicateTextLabel: GeoStore["duplicateTextLabel"];
+  duplicateRichTextNode: GeoStore["duplicateRichTextNode"];
+  copyTextObjectToClipboard: GeoStore["copyTextObjectToClipboard"];
+  pasteTextClipboard: GeoStore["pasteTextClipboard"];
   createNumber: GeoStore["createNumber"];
+  requestTextEdit: GeoStore["requestTextEdit"];
   fitViewToScene: GeoStore["fitViewToScene"];
   renameSelectedPoint: GeoStore["renameSelectedPoint"];
   updatePointFieldsByIds: GeoStore["updatePointFieldsByIds"];
@@ -188,6 +208,7 @@ function executeContextAction(actionId: ContextMenuActionId, target: ContextMenu
     if (actionId === "create-point" && target.world) runtime.createFreePoint(target.world);
     if (actionId === "create-text" && target.world) runtime.createTextLabel(target.world, "label");
     if (actionId === "create-textbox" && target.world) runtime.createRichTextNode(target.world);
+    if (actionId === "paste-clipboard" && target.world) runtime.pasteTextClipboard(target.world);
     if (actionId === "fit-view") {
       const canvas = document.querySelector<HTMLCanvasElement>(".drawingCanvas");
       const rect = canvas?.getBoundingClientRect();
@@ -264,6 +285,8 @@ function executeContextAction(actionId: ContextMenuActionId, target: ContextMenu
     if (actionId === "set-polygon-dashed") runtime.updatePolygonStyleByIds([target.id], { strokeDash: "dashed" });
     if (actionId === "set-polygon-dotted") runtime.updatePolygonStyleByIds([target.id], { strokeDash: "dotted" });
     if (actionId === "toggle-object-label") runtime.updatePolygonFieldsByIds([target.id], { showLabel: !polygon.showLabel });
+    if (actionId === "create-variable-perimeter") runtime.createNumber({ kind: "polygonPerimeter", polygonId: target.id });
+    if (actionId === "create-variable-area") runtime.createNumber({ kind: "polygonArea", polygonId: target.id });
     return;
   }
 
@@ -282,15 +305,36 @@ function executeContextAction(actionId: ContextMenuActionId, target: ContextMenu
   if (target.type === "textLabel") {
     const label = runtime.scene.textLabels?.find((item) => item.id === target.id);
     if (!label) return;
+    if (actionId === "edit-text") {
+      const next = window.prompt("Text", label.text);
+      if (next == null) return;
+      runtime.updateTextLabelFieldsByIds([target.id], { text: next, contentMode: "static" });
+      return;
+    }
     if (actionId === "toggle-text-visibility") runtime.updateTextLabelFieldsByIds([target.id], { visible: !label.visible });
+    if (actionId === "copy-object") runtime.copyTextObjectToClipboard({ type: "textLabel", id: target.id });
+    if (actionId === "duplicate-object") runtime.duplicateTextLabel(target.id, runtime.duplicateOffsetWorld);
     return;
   }
 
   if (target.type === "richText") {
     const node = runtime.scene.richTextNodes?.find((item) => item.id === target.id);
     if (!node) return;
+    if (actionId === "edit-text") {
+      runtime.requestTextEdit({ type: "richText", id: target.id });
+      return;
+    }
     if (actionId === "toggle-text-visibility") runtime.updateRichTextFieldsByIds([target.id], { visible: !node.visible });
+    if (actionId === "copy-object") runtime.copyTextObjectToClipboard({ type: "richText", id: target.id });
+    if (actionId === "duplicate-object") runtime.duplicateRichTextNode(target.id, runtime.duplicateOffsetWorld);
   }
+}
+
+function getDuplicateOffsetWorld(zoom: number): { x: number; y: number } {
+  const screenOffsetPx = 24;
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 80;
+  const worldOffset = screenOffsetPx / safeZoom;
+  return { x: worldOffset, y: -worldOffset };
 }
 
 function clampContextMenuPosition(x: number, y: number, actionCount: number): CSSProperties {
@@ -301,11 +345,12 @@ function clampContextMenuPosition(x: number, y: number, actionCount: number): CS
 }
 
 function iconForAction(actionId: ContextMenuActionId): LucideIcon | null {
-  if (actionId === "create-text" || actionId === "create-textbox") return Type;
+  if (actionId === "create-text" || actionId === "create-textbox" || actionId === "paste-clipboard") return Type;
   if (actionId.startsWith("create-variable")) return Hash;
   if (actionId.startsWith("create-")) return Plus;
+  if (actionId === "duplicate-object" || actionId === "copy-object") return Copy;
   if (actionId === "delete-object") return Trash2;
-  if (actionId === "rename-point") return PenLine;
+  if (actionId === "rename-point" || actionId === "edit-text") return PenLine;
   if (actionId.includes("label") || actionId.includes("visibility")) return actionId.includes("toggle") ? Eye : EyeOff;
   if (actionId.includes("angle-promote")) return Circle;
   return null;

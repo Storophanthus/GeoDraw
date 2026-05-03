@@ -13,6 +13,7 @@ const store = getGeoStore();
 store.setObjectLabelDefaults({
   point: "caption",
   segment: true,
+  segmentGlow: false,
 });
 
 const p1 = store.createFreePoint({ x: 0, y: 0 });
@@ -25,6 +26,7 @@ const point1 = state.scene.points.find((point) => point.id === p1);
 const segment1 = state.scene.segments.find((segment) => segment.id === s1);
 assert(point1?.showLabel === "caption", "new points should honor the default point label mode");
 assert(segment1?.showLabel === true, "new segments should honor the default object label visibility");
+assert(segment1?.labelGlow === false, "new segments should honor the default label glow setting");
 
 const p3 = store.createFreePoint({ x: 8, y: 0 });
 store.updatePointFieldsByIds([p3], { showLabel: "none" });
@@ -46,5 +48,6 @@ store.applyCopyStyleTo({ type: "segment", id: s2 });
 state = getGeoStore();
 const segment2 = state.scene.segments.find((segment) => segment.id === s2);
 assert(segment2?.showLabel === true, "copy style should copy label visibility for label-bearing objects");
+assert(segment2?.labelGlow === false, "copy style should copy label glow for label-bearing objects");
 
 console.log("label-visibility-defaults-and-copy-style: ok");

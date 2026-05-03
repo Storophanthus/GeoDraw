@@ -18,6 +18,7 @@ type ConstructionPreferencesState = Pick<
   | "objectLabelDefaults"
   | "labelToolDefaults"
   | "textboxToolDefaults"
+  | "richTextToolDefaults"
   | "angleFixedTool"
   | "circleFixedTool"
   | "regularPolygonTool"
@@ -108,7 +109,17 @@ function normalizeCanvasThemeOverrides(raw: unknown): ConstructionPreferencesSta
 
 function normalizeObjectLabelDefaults(raw: unknown): ConstructionPreferencesState["objectLabelDefaults"] {
   if (!isRecord(raw)) {
-    return { point: "name", segment: false, line: false, circle: false, polygon: false };
+    return {
+      point: "name",
+      segment: false,
+      line: false,
+      circle: false,
+      polygon: false,
+      segmentGlow: true,
+      lineGlow: true,
+      circleGlow: true,
+      polygonGlow: true,
+    };
   }
   const point = raw.point === "none" || raw.point === "caption" ? raw.point : "name";
   return {
@@ -117,6 +128,10 @@ function normalizeObjectLabelDefaults(raw: unknown): ConstructionPreferencesStat
     line: typeof raw.line === "boolean" ? raw.line : false,
     circle: typeof raw.circle === "boolean" ? raw.circle : false,
     polygon: typeof raw.polygon === "boolean" ? raw.polygon : false,
+    segmentGlow: typeof raw.segmentGlow === "boolean" ? raw.segmentGlow : true,
+    lineGlow: typeof raw.lineGlow === "boolean" ? raw.lineGlow : true,
+    circleGlow: typeof raw.circleGlow === "boolean" ? raw.circleGlow : true,
+    polygonGlow: typeof raw.polygonGlow === "boolean" ? raw.polygonGlow : true,
   };
 }
 
@@ -143,6 +158,7 @@ export function captureConstructionPreferences(state: ConstructionPreferencesSta
     objectLabelDefaults: state.objectLabelDefaults,
     labelToolDefaults: state.labelToolDefaults,
     textboxToolDefaults: state.textboxToolDefaults,
+    richTextToolDefaults: state.richTextToolDefaults,
     angleFixedTool: state.angleFixedTool,
     circleFixedTool: state.circleFixedTool,
     regularPolygonTool: state.regularPolygonTool,
@@ -183,6 +199,7 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
     !isRecord(value.angleDefaults) ||
     (value.labelToolDefaults !== undefined && !isRecord(value.labelToolDefaults)) ||
     (value.textboxToolDefaults !== undefined && !isRecord(value.textboxToolDefaults)) ||
+    (value.richTextToolDefaults !== undefined && !isRecord(value.richTextToolDefaults)) ||
     !isRecord(value.angleFixedTool) ||
     !isRecord(value.circleFixedTool) ||
     !isRecord(value.regularPolygonTool) ||
@@ -214,6 +231,7 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
     objectLabelDefaults: normalizeObjectLabelDefaults(value.objectLabelDefaults),
     labelToolDefaults: value.labelToolDefaults as ConstructionPreferencesState["labelToolDefaults"],
     textboxToolDefaults: value.textboxToolDefaults as ConstructionPreferencesState["textboxToolDefaults"],
+    richTextToolDefaults: value.richTextToolDefaults as ConstructionPreferencesState["richTextToolDefaults"],
     angleFixedTool: value.angleFixedTool as ConstructionPreferencesState["angleFixedTool"],
     circleFixedTool: value.circleFixedTool as ConstructionPreferencesState["circleFixedTool"],
     regularPolygonTool: value.regularPolygonTool as ConstructionPreferencesState["regularPolygonTool"],

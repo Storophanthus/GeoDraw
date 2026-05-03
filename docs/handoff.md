@@ -25,6 +25,28 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-05-03 Multiple canvas tab shell wired:
+  - Added visible canvas tabs above the drawing area using the existing document runtime capture/restore path.
+  - Each tab now keeps its own:
+    - scene/history/camera runtime
+    - command aliases
+    - save target metadata (`FileSystemFileHandle` or Tauri path)
+    - display title derived from opened/saved file names
+  - `Open` now creates a new canvas tab instead of replacing the active canvas.
+  - Drag-dropping `.geodraw` / `.json` files on the canvas also opens them into a new tab.
+  - `Save` / `Save As` operate on the active tab only.
+  - `+` creates a blank canvas tab; close resets the last remaining tab to a blank canvas.
+  - Validation:
+    - `npx tsc --noEmit`
+    - `npm run build`
+    - `npm run check:handoff`
+  - Next:
+    - add dirty/unsaved indicators per tab
+    - add close-confirm behavior for dirty tabs
+    - consider tab reorder once the base workflow has settled
+  - Risks:
+    - browser download fallback can only remember the suggested file name, not a writable handle
+    - tab runtime is in-memory only; app restart still depends on explicit file saves
 - 2026-03-30 TikZ export fixture sweep restored to green:
   - `node --import tsx scripts/test-export.ts` now passes fully (`All 90 export fixtures compiled successfully.`).
   - Closed stale export-test drift:
@@ -864,13 +886,65 @@
       - `npx tsc --noEmit`
       - `npm run build`
     - Next:
-      - Add richer text/textbox actions once editor entry points are settled: edit and duplicate remain deferred.
       - Add paste once clipboard/object duplication semantics are explicit.
       - Add polygon perimeter/area extraction only after real polygon number definitions exist.
       - Do a browser/manual pass for canvas target priority, Object Browser menu placement, and ctrl-click on macOS.
     - Risks:
       - V1 point rename uses `window.prompt`; replace with an in-app rename affordance later if desired.
       - This was implemented on top of a dirty worktree with unrelated local changes in `src/App.css`, `src/view/CanvasView.tsx`, and `src/ui/ObjectBrowser.tsx`; keep future commits carefully staged.
+  - 2026-04-27 text context-menu follow-up:
+    - Done:
+      - Added `Edit Text` and `Duplicate` actions for text labels.
+      - Added `Edit Textbox` and `Duplicate` actions for rich textboxes.
+      - Added shared `Copy` actions for text labels and rich textboxes.
+      - Added empty-canvas `Paste`, enabled only when GeoDraw's internal text clipboard has content.
+      - Refactored `Cmd+C` / `Cmd+V` text-object copy-paste to use the same store-backed clipboard as the context menu.
+      - Text-label edit currently uses a compact `window.prompt` path because the legacy text-label canvas editor is intentionally disabled after the rich-text rewrite.
+      - Rich-textbox edit uses a transient store-level edit request consumed by `CanvasView`, so canvas and Object Browser context menus both open the same rich-text editor.
+      - Added store-level duplication actions:
+        - `duplicateTextLabel`
+        - `duplicateRichTextNode`
+      - Added store-level text clipboard actions:
+        - `copyTextObjectToClipboard`
+        - `pasteTextClipboard`
+      - Duplicates preserve content/style, deep-clone rich-text documents, offset the copy, and select the new object.
+      - Follow-up fix: duplicate offset is now camera-aware (`24px / zoom`) instead of a fixed world-unit offset, so copies appear near the original on canvas rather than only appearing in Object Browser on normal zoom levels.
+    - Validation:
+      - `node --import tsx src/ui/__tests__/contextMenuActions.test.ts`
+      - `node --import tsx src/state/__tests__/text-duplication.test.ts`
+      - `npx tsc --noEmit`
+      - `npm run build`
+    - Next:
+      - Do a browser/manual pass for canvas target priority, Object Browser menu placement, duplicate/paste visibility, rich-text edit opening, and ctrl-click on macOS.
+    - Risks:
+      - Text-label edit is prompt-based; upgrade to an in-app plain-label editor only if/when plain labels get a new editor path.
+      - Rich-textbox edit depends on `CanvasView` being mounted, which is true in the current app shell.
+      - Paste currently uses GeoDraw's internal text-object clipboard, not arbitrary OS clipboard content.
+  - 2026-04-27 polygon scalar extraction follow-up:
+    - Done:
+      - Added first-class number definition kinds:
+        - `polygonPerimeter`
+        - `polygonArea`
+      - Polygon values are evaluated directly from current polygon vertices:
+        - perimeter sums closed-edge distances
+        - area uses absolute shoelace area
+      - Added dependency/integrity support so polygon scalar variables:
+        - are deleted with their source polygon
+        - are filtered if the source polygon is stale/missing
+        - have construction descriptions
+      - Added shared context-menu actions for polygons:
+        - `Create Variable from Perimeter`
+        - `Create Variable from Area`
+      - Added polygon scalar quick actions to the number flyout.
+    - Validation:
+      - `node --import tsx src/scene/__tests__/polygon-number-definitions.test.ts`
+      - `node --import tsx src/scene/__tests__/geometry-graph-delete-regression.test.ts`
+      - `node --import tsx src/ui/__tests__/contextMenuActions.test.ts`
+      - `node --import tsx src/state/__tests__/text-duplication.test.ts`
+      - `npx tsc --noEmit`
+      - `npm run build`
+    - Next:
+      - Do a browser/manual pass for canvas target priority, Object Browser menu placement, duplicate/paste visibility, rich-text edit opening, polygon scalar extraction, and ctrl-click on macOS.
   - Guardrails:
     - do not let right-click start drag behavior
     - do not fork behavior between canvas and Object Browser menus
@@ -3610,6 +3684,58 @@ Acceptance checks:
 
 ### Homework Update (Current Active Priorities)
 Date updated: February 23, 2026
+
+### Tool Preconfiguration Panel Update
+Date updated: May 3, 2026
+
+- Selecting a non-move tool now gives the right Properties panel to the tool instead of the previously selected object.
+- A newly created object now takes the Properties panel back immediately, even while the construction tool remains active; click the active tool again to reopen that tool's default-style editor.
+- Construction tools map to their default style target:
+  - point/midpoint -> point defaults
+  - segment -> segment defaults
+  - line/perpendicular/parallel/tangent/bisector -> line defaults
+  - circle tools -> circle defaults
+  - polygon tools -> polygon defaults
+  - angle tools -> angle defaults
+  - sector -> shared angle/sector style defaults
+  - label -> label text defaults
+  - textbox -> current rich-text textbox defaults
+- The default editor reuses existing style sections in `toolDefault` mode, hiding object-only controls such as delete buttons, convert-line actions, generated label text, names, and positions.
+- Object-label glow is now stored in `objectLabelDefaults` for segment/line/circle/polygon so preconfigured `Label Glow` applies to newly created objects.
+- Move/select mode still shows selected-object properties as before.
+- Follow-up UI clarity:
+  - tool-default mode now uses a highlighted notice explaining that edits affect newly created objects
+  - arrow tip picker glyphs are larger and show only the actual tip shape instead of tiny shafted arrows
+  - style option groups now render as contained folder-style tabs for crowded panels (stroke/fill/label/arrow/marks), reducing right-sidebar scrolling while keeping the existing controls and state paths
+  - active-tool clicks carry a `toolActivationVersion`; Properties uses it to distinguish "new object should be edited now" from "user explicitly reopened tool defaults"
+  - object selections now carry a separate Properties-panel intent, so clicking an object on canvas/Object Browser switches back from `Editing tool defaults` to that object's properties
+- Regression checks added:
+  - `src/ui/__tests__/toolPreconfigure.test.ts`
+  - `src/scene/__tests__/label-visibility-defaults-and-copy-style.test.ts` now checks default/copy label glow.
+
+### Preferences Construction UX Update
+Date updated: May 3, 2026
+
+- Construction preferences no longer use one flat token list for object defaults.
+- The Construction tab is grouped into human-facing categories:
+  - Canvas
+  - Points
+  - Lines
+  - Shapes
+  - Angles
+  - Text
+- Color controls now foreground a swatch and human-readable color name, with exact values secondary.
+- The right side of the Construction preferences panel shows a live SVG preview of the selected category, so users can see what point/line/shape/angle/text changes affect.
+- Preview grid is only shown for the Canvas category; object previews use a cleaner background.
+- Preferences dialog ignores clicks inside floating color-picker popovers so choosing a color does not close the dialog.
+- Each Construction category has a `Reset to default` action; object categories reset to the active construction palette defaults, Canvas clears canvas overrides.
+- Construction previews start zoomed in for object categories and support mouse-wheel zoom plus +/- controls.
+- Construction preset persistence now includes `richTextToolDefaults`, matching the state/apply-preferences path.
+- UI Theme preferences received the same usability pass:
+  - categories: App, Panels, Text, Accent, Preview, Status
+  - color controls show swatch + human-readable color name with exact values secondary
+  - each UI category has `Reset to default`
+  - right preview shows a mini GeoDraw interface that updates live for UI theme tokens
 
 1. Scalar function extensibility (cross-layer)
 - Goal:

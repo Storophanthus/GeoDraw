@@ -32,6 +32,8 @@ export function createInteractionActions(
       ctx.setState((prev) => ({
         ...prev,
         activeTool: tool,
+        toolActivationVersion: prev.toolActivationVersion + 1,
+        propertiesPanelIntent: tool === "move" ? "object" : "toolDefault",
         pendingSelection: null,
         copyStyle:
           tool === "copyStyle"
@@ -54,10 +56,13 @@ export function createInteractionActions(
     },
 
     setSelectedObject(selected) {
-      if (isSameSelectedObject(ctx.getState().selectedObject, selected)) return;
+      const current = ctx.getState();
+      const nextIntent = selected ? "object" : current.activeTool === "move" ? "object" : "toolDefault";
+      if (isSameSelectedObject(current.selectedObject, selected) && current.propertiesPanelIntent === nextIntent) return;
       ctx.setState((prev) => ({
         ...prev,
         selectedObject: selected,
+        propertiesPanelIntent: selected ? "object" : prev.activeTool === "move" ? "object" : "toolDefault",
         recentCreatedObject:
           prev.recentCreatedObject &&
           selected &&

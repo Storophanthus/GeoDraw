@@ -20,6 +20,9 @@ export function isValidNumberDefinition(def: SceneNumberDefinition, scene: Scene
   if (def.kind === "circleRadius" || def.kind === "circleArea") {
     return scene.circles.some((c) => c.id === def.circleId);
   }
+  if (def.kind === "polygonPerimeter" || def.kind === "polygonArea") {
+    return scene.polygons.some((p) => p.id === def.polygonId);
+  }
   if (def.kind === "angleDegrees") {
     return scene.angles.some((a) => a.id === def.angleId);
   }
@@ -42,6 +45,8 @@ export function numberPrefixForDefinition(def: SceneNumberDefinition): string {
   if (def.kind === "distancePoints" || def.kind === "segmentLength") return "l";
   if (def.kind === "circleRadius") return "r";
   if (def.kind === "circleArea") return "Area";
+  if (def.kind === "polygonPerimeter") return "Perim";
+  if (def.kind === "polygonArea") return "Area";
   if (def.kind === "angleDegrees") return "ang";
   return "n";
 }

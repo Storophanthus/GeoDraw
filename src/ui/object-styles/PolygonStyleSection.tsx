@@ -1,7 +1,7 @@
 
 import { type ScenePolygon } from "../../scene/points";
 import { ColorSwatchInput } from "../ColorField";
-import { StyleControlGroup } from "../StyleControlGroup";
+import { StyleControlGroup, StyleControlTabbedGroups } from "../StyleControlGroup";
 import { StyleSectionHeader } from "../StyleSectionHeader";
 
 const FILL_PATTERN_OPTIONS = [
@@ -21,6 +21,7 @@ type PolygonStyleSectionProps = {
     updateSelectedPolygonStyle: (style: Partial<ScenePolygon["style"]>) => void;
     updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
     setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
+    mode?: "object" | "toolDefault";
 };
 
 export function PolygonStyleSection({
@@ -31,6 +32,7 @@ export function PolygonStyleSection({
     updateSelectedPolygonStyle,
     updateSelectedPolygonFields,
     setSelectedPolygonOwnedSegmentsVisible,
+    mode = "object",
 }: PolygonStyleSectionProps) {
     const selectedAreaStyle = selectedPolygon.style;
 
@@ -40,16 +42,20 @@ export function PolygonStyleSection({
                 title="Polygon Style"
                 selectedStyleAsDefault={selectedStyleAsDefault}
                 onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+                mode={mode}
             />
+            <StyleControlTabbedGroups>
             <StyleControlGroup title="Edges">
-                <label className="checkboxRow">
-                    <input
-                        type="checkbox"
-                        checked={selectedPolygonOwnedEdgesVisible}
-                        onChange={(e) => setSelectedPolygonOwnedSegmentsVisible(e.target.checked)}
-                    />
-                    Show Edges
-                </label>
+                {mode === "object" && (
+                    <label className="checkboxRow">
+                        <input
+                            type="checkbox"
+                            checked={selectedPolygonOwnedEdgesVisible}
+                            onChange={(e) => setSelectedPolygonOwnedSegmentsVisible(e.target.checked)}
+                        />
+                        Show Edges
+                    </label>
+                )}
                 <div className="controlRow">
                     <label className="controlLabel">Edge Color</label>
                     <ColorSwatchInput
@@ -175,17 +181,20 @@ export function PolygonStyleSection({
                             />
                             Label Glow
                         </label>
-                        <div className="controlRow">
-                            <label className="controlLabel">Label Text</label>
-                            <input
-                                className="renameInput"
-                                value={selectedPolygon.labelText ?? ""}
-                                onChange={(e) => updateSelectedPolygonFields({ labelText: e.target.value })}
-                            />
-                        </div>
+                        {mode === "object" && (
+                            <div className="controlRow">
+                                <label className="controlLabel">Label Text</label>
+                                <input
+                                    className="renameInput"
+                                    value={selectedPolygon.labelText ?? ""}
+                                    onChange={(e) => updateSelectedPolygonFields({ labelText: e.target.value })}
+                                />
+                            </div>
+                        )}
                     </>
                 )}
             </StyleControlGroup>
+            </StyleControlTabbedGroups>
         </div>
     );
 }

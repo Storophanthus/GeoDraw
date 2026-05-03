@@ -17,9 +17,13 @@ export type ContextMenuActionId =
   | "create-point"
   | "create-text"
   | "create-textbox"
+  | "paste-clipboard"
   | "fit-view"
   | "clear-selection"
   | "rename-point"
+  | "edit-text"
+  | "copy-object"
+  | "duplicate-object"
   | "toggle-point-label"
   | "toggle-object-label"
   | "toggle-text-visibility"
@@ -37,6 +41,7 @@ export type ContextMenuActionId =
   | "toggle-angle-value"
   | "create-variable-length"
   | "create-variable-radius"
+  | "create-variable-perimeter"
   | "create-variable-area"
   | "create-variable-angle"
   | "delete-object";
@@ -74,12 +79,17 @@ export function getContextMenuTitle(scene: SceneModel, target: ContextMenuTarget
   return "Object";
 }
 
-export function getContextActionsForTarget(scene: SceneModel, target: ContextMenuTarget): ContextMenuAction[] {
+export function getContextActionsForTarget(
+  scene: SceneModel,
+  target: ContextMenuTarget,
+  options: { canPaste?: boolean } = {}
+): ContextMenuAction[] {
   if (target.type === "empty") {
     return [
       { id: "create-point", label: "Create Point", disabled: !target.world },
       { id: "create-text", label: "Create Text", disabled: !target.world },
       { id: "create-textbox", label: "Create Textbox", disabled: !target.world },
+      { id: "paste-clipboard", label: "Paste", disabled: !target.world || !options.canPaste, separatorBefore: true },
       { id: "fit-view", label: "Fit View", separatorBefore: true },
       { id: "clear-selection", label: "Clear Selection" },
     ];
@@ -134,6 +144,8 @@ export function getContextActionsForTarget(scene: SceneModel, target: ContextMen
     return [
       ...strokeDashActions(polygon.style.strokeDash, "polygon"),
       { id: "toggle-object-label", label: polygon.showLabel ? "Hide Label" : "Show Label", separatorBefore: true },
+      { id: "create-variable-perimeter", label: "Create Variable from Perimeter", separatorBefore: true },
+      { id: "create-variable-area", label: "Create Variable from Area" },
       deleteAction(),
     ];
   }
@@ -163,7 +175,10 @@ export function getContextActionsForTarget(scene: SceneModel, target: ContextMen
     const label = scene.textLabels?.find((item) => item.id === target.id);
     if (!label) return [];
     return [
+      { id: "edit-text", label: "Edit Text" },
       { id: "toggle-text-visibility", label: label.visible ? "Hide Text" : "Show Text" },
+      { id: "copy-object", label: "Copy", separatorBefore: true },
+      { id: "duplicate-object", label: "Duplicate" },
       deleteAction(),
     ];
   }
@@ -172,7 +187,10 @@ export function getContextActionsForTarget(scene: SceneModel, target: ContextMen
     const node = scene.richTextNodes?.find((item) => item.id === target.id);
     if (!node) return [];
     return [
+      { id: "edit-text", label: "Edit Textbox" },
       { id: "toggle-text-visibility", label: node.visible ? "Hide Textbox" : "Show Textbox" },
+      { id: "copy-object", label: "Copy", separatorBefore: true },
+      { id: "duplicate-object", label: "Duplicate" },
       deleteAction(),
     ];
   }

@@ -68,6 +68,43 @@ export type SelectedObject =
   | { type: "number"; id: string }
   | null;
 
+export type TextEditTarget = {
+  type: "textLabel" | "richText";
+  id: string;
+};
+
+export type TextEditRequest = (TextEditTarget & { requestId: number }) | null;
+
+export type TextClipboardObjectTarget = {
+  type: "textLabel" | "richText";
+  id: string;
+};
+
+export type TextClipboardPayload =
+  | {
+      type: "textLabel";
+      text: string;
+      toolKind?: TextLabelToolKind;
+      contentMode?: "static" | "number" | "expression";
+      numberId?: string;
+      expr?: string;
+      visible: boolean;
+      style: SceneTextLabelStyle;
+    }
+  | {
+      type: "richText";
+      visible: boolean;
+      document: NonNullable<SceneModel["richTextNodes"]>[number]["document"];
+      style: SceneRichTextStyle;
+      boundsPx?: NonNullable<SceneModel["richTextNodes"]>[number]["boundsPx"];
+    };
+
+export type TextClipboardState = {
+  payload: TextClipboardPayload;
+  origin: Vec2;
+  pasteCount: number;
+} | null;
+
 export type HoveredHit =
   | { type: "point"; id: string }
   | { type: "segment"; id: string }
@@ -229,7 +266,13 @@ export type ObjectLabelDefaults = {
   line: boolean;
   circle: boolean;
   polygon: boolean;
+  segmentGlow?: boolean;
+  lineGlow?: boolean;
+  circleGlow?: boolean;
+  polygonGlow?: boolean;
 };
+
+export type PropertiesPanelIntent = "object" | "toolDefault";
 
 export type GeoState = {
   camera: Camera;
@@ -241,9 +284,13 @@ export type GeoState = {
   axesEnabled: boolean;
   gridSnapEnabled: boolean;
   activeTool: ActiveTool;
+  toolActivationVersion: number;
+  propertiesPanelIntent: PropertiesPanelIntent;
   scene: SceneModel;
   selectedObject: SelectedObject;
   recentCreatedObject: SelectedObject;
+  textEditRequest: TextEditRequest;
+  textClipboard: TextClipboardState;
   hoveredHit: HoveredHit;
   cursorWorld: Vec2 | null;
   pendingSelection: PendingSelection;
@@ -386,7 +433,13 @@ export type GeoActions = {
   createNumber: (definition: SceneNumberDefinition, preferredName?: string) => string | null;
   createTextLabel: (world: Vec2, preset?: TextLabelToolKind) => string;
   createRichTextNode: (world: Vec2) => string;
+  duplicateTextLabel: (id: string, offsetWorld?: Vec2) => string | null;
+  duplicateRichTextNode: (id: string, offsetWorld?: Vec2) => string | null;
+  copyTextObjectToClipboard: (target: TextClipboardObjectTarget) => boolean;
+  pasteTextClipboard: (world?: Vec2, offsetWorld?: Vec2) => string | null;
   migrateTextLabelToRichTextNode: (id: string) => string | null;
+  requestTextEdit: (target: TextEditTarget) => void;
+  clearTextEditRequest: (requestId: number) => void;
 
   movePointTo: (id: string, world: Vec2) => void;
   movePolygonByWorldDelta: (id: string, deltaWorld: Vec2) => void;

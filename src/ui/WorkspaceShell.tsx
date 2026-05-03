@@ -2,10 +2,13 @@ import type { ActiveTool } from "../state/geoStore";
 import { useState, type CSSProperties, type PointerEventHandler } from "react";
 import { CanvasView } from "../view/CanvasView";
 import { CommandBar } from "../CommandBar";
+import { DocumentTabs } from "./DocumentTabs";
 import { FileControls } from "./FileControls";
 import { HistoryControls } from "./HistoryControls";
 import { RightSidebar } from "./RightSidebar";
 import { ToolPalette } from "./ToolPalette";
+import type { DocumentFilePatch, DocumentFileState, GeoDocumentTab } from "./useDocumentTabs";
+import type { HistorySnapshot } from "../state/slices/historySlice";
 
 export type WorkspaceShellProps = {
   activeTool: ActiveTool;
@@ -25,6 +28,16 @@ export type WorkspaceShellProps = {
   onStartResizeLeft: PointerEventHandler<HTMLDivElement>;
   onStartResizeRight: PointerEventHandler<HTMLDivElement>;
   uiCssVariables?: CSSProperties;
+  documents: GeoDocumentTab[];
+  activeDocumentId: string;
+  activeDocumentFile: DocumentFileState;
+  onCreateDocument: () => void;
+  onSelectDocument: (id: string) => void;
+  onCloseDocument: (id: string) => void;
+  onRenameDocument: (id: string, title: string) => void;
+  onUpdateActiveDocumentFile: (patch: DocumentFilePatch) => void;
+  onOpenSnapshotAsDocument: (snapshot: HistorySnapshot, file?: DocumentFilePatch) => void;
+  onBuildActiveSnapshotJson: () => string;
 };
 
 export function WorkspaceShell({
@@ -45,6 +58,16 @@ export function WorkspaceShell({
   onStartResizeLeft,
   onStartResizeRight,
   uiCssVariables,
+  documents,
+  activeDocumentId,
+  activeDocumentFile,
+  onCreateDocument,
+  onSelectDocument,
+  onCloseDocument,
+  onRenameDocument,
+  onUpdateActiveDocumentFile,
+  onOpenSnapshotAsDocument,
+  onBuildActiveSnapshotJson,
 }: WorkspaceShellProps) {
   const [leftFlyoutOpen, setLeftFlyoutOpen] = useState(false);
 
@@ -66,10 +89,23 @@ export function WorkspaceShell({
       />
 
       <main className="canvasPane">
-        <div style={{ position: "absolute", inset: "0 0 64px 0" }}>
-          <FileControls />
+        <DocumentTabs
+          documents={documents}
+          activeDocumentId={activeDocumentId}
+          onCreateDocument={onCreateDocument}
+          onSelectDocument={onSelectDocument}
+          onCloseDocument={onCloseDocument}
+          onRenameDocument={onRenameDocument}
+        />
+        <div className="canvasDocumentArea">
+          <FileControls
+            activeFile={activeDocumentFile}
+            updateActiveDocumentFile={onUpdateActiveDocumentFile}
+            openSnapshotAsDocument={onOpenSnapshotAsDocument}
+            buildActiveSnapshotJson={onBuildActiveSnapshotJson}
+          />
           <HistoryControls canUndo={canUndo} canRedo={canRedo} onUndo={onUndo} onRedo={onRedo} onFitView={onFitView} />
-          <CanvasView />
+          <CanvasView openSnapshotAsDocument={onOpenSnapshotAsDocument} />
         </div>
         <CommandBar />
       </main>

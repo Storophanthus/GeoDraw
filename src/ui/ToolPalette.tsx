@@ -193,6 +193,8 @@ export function ToolPalette({
       | { kind: "segmentLength"; segId: string }
       | { kind: "circleRadius"; circleId: string }
       | { kind: "circleArea"; circleId: string }
+      | { kind: "polygonPerimeter"; polygonId: string }
+      | { kind: "polygonArea"; polygonId: string }
       | { kind: "angleDegrees"; angleId: string },
     preferredName?: string
   ) => {
@@ -224,6 +226,7 @@ export function ToolPalette({
 
   const selectedSegmentId = selectedObject?.type === "segment" ? selectedObject.id : null;
   const selectedCircleId = selectedObject?.type === "circle" ? selectedObject.id : null;
+  const selectedPolygonId = selectedObject?.type === "polygon" ? selectedObject.id : null;
   const selectedAngleId = selectedObject?.type === "angle" ? selectedObject.id : null;
 
   return (
@@ -457,6 +460,24 @@ export function ToolPalette({
                   type="button"
                   className="actionButton secondary"
                   onClick={() => createAndSelectNumber({ kind: "circleArea", circleId: selectedCircleId }, numberName)}
+                >
+                  Area
+                </button>
+              )}
+              {selectedPolygonId && (
+                <button
+                  type="button"
+                  className="actionButton secondary"
+                  onClick={() => createAndSelectNumber({ kind: "polygonPerimeter", polygonId: selectedPolygonId }, numberName)}
+                >
+                  Perim
+                </button>
+              )}
+              {selectedPolygonId && (
+                <button
+                  type="button"
+                  className="actionButton secondary"
+                  onClick={() => createAndSelectNumber({ kind: "polygonArea", polygonId: selectedPolygonId }, numberName)}
                 >
                   Area
                 </button>

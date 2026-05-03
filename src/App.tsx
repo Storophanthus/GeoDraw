@@ -10,6 +10,7 @@ import {
 import { TikzPreviewWindow } from "./ui/TikzPreviewWindow";
 import { WorkspaceShell } from "./ui/WorkspaceShell";
 import { useAppShellController } from "./ui/useAppShellController";
+import { useDocumentTabs } from "./ui/useDocumentTabs";
 
 export default function App() {
   const previewToken = getPreviewTokenFromLocation();
@@ -21,6 +22,7 @@ export default function App() {
 
 function WorkspaceApp() {
   const shell = useAppShellController();
+  const documentTabs = useDocumentTabs();
   const applyAppPreferences = useGeoStore((store) => store.applyAppPreferences);
   const uiColorProfileId = useGeoStore((store) => store.uiColorProfileId);
   const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
@@ -63,7 +65,22 @@ function WorkspaceApp() {
     );
   }, [uiColorProfileId, uiCssOverrides, uiPrefsHydrated]);
 
-  return <WorkspaceShell {...shell} uiCssVariables={uiCssVariables} />;
+  return (
+    <WorkspaceShell
+      {...shell}
+      uiCssVariables={uiCssVariables}
+      documents={documentTabs.documents}
+      activeDocumentId={documentTabs.activeDocumentId}
+      activeDocumentFile={documentTabs.activeDocument.file}
+      onCreateDocument={documentTabs.createDocument}
+      onSelectDocument={documentTabs.selectDocument}
+      onCloseDocument={documentTabs.closeDocument}
+      onRenameDocument={documentTabs.renameDocument}
+      onUpdateActiveDocumentFile={documentTabs.updateActiveDocumentFile}
+      onOpenSnapshotAsDocument={documentTabs.openSnapshotAsDocument}
+      onBuildActiveSnapshotJson={documentTabs.buildActiveSnapshotJson}
+    />
+  );
 }
 
 function getPreviewTokenFromLocation(): string | null {

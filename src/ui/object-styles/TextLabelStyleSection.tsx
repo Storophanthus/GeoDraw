@@ -16,6 +16,7 @@ type TextLabelStyleSectionProps = {
     updateSelectedTextLabelStyle: (patch: Partial<TextLabel["style"]>) => void;
     deleteSelectedObject: () => void;
     deleteLabel?: string;
+    mode?: "object" | "toolDefault";
 };
 
 export function TextLabelStyleSection({
@@ -29,6 +30,7 @@ export function TextLabelStyleSection({
     updateSelectedTextLabelStyle,
     deleteSelectedObject,
     deleteLabel = "Delete",
+    mode = "object",
 }: TextLabelStyleSectionProps) {
     const renderMode = resolveTextLabelRenderMode(selectedTextLabel.style);
     return (
@@ -37,60 +39,65 @@ export function TextLabelStyleSection({
                 title="Text Label"
                 selectedStyleAsDefault={selectedStyleAsDefault}
                 onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+                mode={mode}
             />
-            <div className="statusText">
-                Position: ({formatRoundedDisplay(selectedTextLabel.positionWorld.x, 3)}, {formatRoundedDisplay(selectedTextLabel.positionWorld.y, 3)})
-            </div>
+            {mode === "object" && (
+                <>
+                    <div className="statusText">
+                        Position: ({formatRoundedDisplay(selectedTextLabel.positionWorld.x, 3)}, {formatRoundedDisplay(selectedTextLabel.positionWorld.y, 3)})
+                    </div>
 
-            <div className="fieldBlock">
-                <label className="fieldLabel">Name</label>
-                <input
-                    className="renameInput"
-                    value={selectedTextLabel.name}
-                    onChange={(e) => updateSelectedTextLabelFields({ name: e.target.value })}
-                />
-            </div>
+                    <div className="fieldBlock">
+                        <label className="fieldLabel">Name</label>
+                        <input
+                            className="renameInput"
+                            value={selectedTextLabel.name}
+                            onChange={(e) => updateSelectedTextLabelFields({ name: e.target.value })}
+                        />
+                    </div>
 
-            <div className="fieldBlock">
-                <label className="fieldLabel">Text</label>
-                <textarea
-                    className="renameInput textLabelTextareaInput"
-                    value={selectedTextLabel.text}
-                    rows={3}
-                    disabled={selectedTextLabel.contentMode === "number" || selectedTextLabel.contentMode === "expression"}
-                    onChange={(e) => updateSelectedTextLabelFields({ text: e.target.value })}
-                />
-            </div>
+                    <div className="fieldBlock">
+                        <label className="fieldLabel">Text</label>
+                        <textarea
+                            className="renameInput textLabelTextareaInput"
+                            value={selectedTextLabel.text}
+                            rows={3}
+                            disabled={selectedTextLabel.contentMode === "number" || selectedTextLabel.contentMode === "expression"}
+                            onChange={(e) => updateSelectedTextLabelFields({ text: e.target.value })}
+                        />
+                    </div>
 
-            <div className="controlRow">
-                <label className="controlLabel">Content</label>
-                <select
-                    className="selectInput"
-                    value={
-                        selectedTextLabel.contentMode === "number"
-                            ? "number"
-                            : selectedTextLabel.contentMode === "expression"
-                                ? "expression"
-                                : "static"
-                    }
-                    onChange={(e) => {
-                        const nextMode = e.target.value === "number" ? "number" : e.target.value === "expression" ? "expression" : "static";
-                        const firstNumberId = scene.numbers[0]?.id;
-                        updateSelectedTextLabelFields({
-                            contentMode: nextMode,
-                            ...(nextMode === "number" && !selectedTextLabel.numberId && firstNumberId ? { numberId: firstNumberId } : {}),
-                            ...(nextMode !== "number" ? { numberId: undefined } : {}),
-                            ...(nextMode !== "expression" ? { expr: undefined } : {}),
-                        });
-                    }}
-                >
-                    <option value="static">Static Text</option>
-                    <option value="number">Dynamic Number</option>
-                    <option value="expression">Dynamic Expression</option>
-                </select>
-            </div>
+                    <div className="controlRow">
+                        <label className="controlLabel">Content</label>
+                        <select
+                            className="selectInput"
+                            value={
+                                selectedTextLabel.contentMode === "number"
+                                    ? "number"
+                                    : selectedTextLabel.contentMode === "expression"
+                                        ? "expression"
+                                        : "static"
+                            }
+                            onChange={(e) => {
+                                const nextMode = e.target.value === "number" ? "number" : e.target.value === "expression" ? "expression" : "static";
+                                const firstNumberId = scene.numbers[0]?.id;
+                                updateSelectedTextLabelFields({
+                                    contentMode: nextMode,
+                                    ...(nextMode === "number" && !selectedTextLabel.numberId && firstNumberId ? { numberId: firstNumberId } : {}),
+                                    ...(nextMode !== "number" ? { numberId: undefined } : {}),
+                                    ...(nextMode !== "expression" ? { expr: undefined } : {}),
+                                });
+                            }}
+                        >
+                            <option value="static">Static Text</option>
+                            <option value="number">Dynamic Number</option>
+                            <option value="expression">Dynamic Expression</option>
+                        </select>
+                    </div>
+                </>
+            )}
 
-            {selectedTextLabel.contentMode === "number" && (
+            {mode === "object" && selectedTextLabel.contentMode === "number" && (
                 <>
                     <div className="controlRow">
                         <label className="controlLabel">Number</label>
@@ -117,7 +124,7 @@ export function TextLabelStyleSection({
                 </>
             )}
 
-            {selectedTextLabel.contentMode === "expression" && (
+            {mode === "object" && selectedTextLabel.contentMode === "expression" && (
                 <>
                     <div className="fieldBlock">
                         <label className="fieldLabel">Expression</label>
@@ -162,14 +169,16 @@ export function TextLabelStyleSection({
                 </div>
             )}
 
-            <label className="checkboxRow">
-                <input
-                    type="checkbox"
-                    checked={selectedTextLabel.visible}
-                    onChange={(e) => updateSelectedTextLabelFields({ visible: e.target.checked })}
-                />
-                Visible
-            </label>
+            {mode === "object" && (
+                <label className="checkboxRow">
+                    <input
+                        type="checkbox"
+                        checked={selectedTextLabel.visible}
+                        onChange={(e) => updateSelectedTextLabelFields({ visible: e.target.checked })}
+                    />
+                    Visible
+                </label>
+            )}
 
             <label className="checkboxRow">
                 <input
@@ -248,9 +257,11 @@ export function TextLabelStyleSection({
                 </select>
             </div>
 
-            <button className="deleteButton" onClick={deleteSelectedObject}>
-                {deleteLabel}
-            </button>
+            {mode === "object" && (
+                <button className="deleteButton" onClick={deleteSelectedObject}>
+                    {deleteLabel}
+                </button>
+            )}
         </div>
     );
 }

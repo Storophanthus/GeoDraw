@@ -75,6 +75,7 @@ const commandBarObjectAliases = new Map<
 export type GeoDocumentRuntimeState = {
   snapshot: HistorySnapshot;
   camera: GeoState["camera"];
+  propertiesPanelIntent: GeoState["propertiesPanelIntent"];
   undoStack: HistorySnapshot[];
   redoStack: HistorySnapshot[];
   lastHistoryActionKey: string | null;
@@ -691,6 +692,7 @@ export const commandBarApi = {
             ownedByPolygonIds: [polygonId],
             visible: true,
             showLabel: prev.objectLabelDefaults.segment,
+            labelGlow: prev.objectLabelDefaults.segmentGlow ?? true,
             style: { ...prev.segmentDefaults },
           });
           currentEdgeIndexByKey.set(key, newSegments.length - 1);
@@ -810,6 +812,7 @@ export const commandBarApi = {
               ownedBySectorIds: [angleId],
               visible: true,
               showLabel: prev.objectLabelDefaults.segment,
+              labelGlow: prev.objectLabelDefaults.segmentGlow ?? true,
               style: { ...prev.segmentDefaults },
             });
             edgeIndexByKey.set(key, newSegments.length - 1);
@@ -1326,6 +1329,7 @@ export function captureGeoDocumentRuntimeState(): GeoDocumentRuntimeState {
   return {
     snapshot: cloneHistorySnapshot(takeHistorySnapshot(state)),
     camera: structuredClone(state.camera),
+    propertiesPanelIntent: state.propertiesPanelIntent,
     undoStack: runtime.history.undoStack.map(cloneHistorySnapshot),
     redoStack: runtime.history.redoStack.map(cloneHistorySnapshot),
     lastHistoryActionKey: runtime.history.getLastHistoryActionKey(),
@@ -1353,6 +1357,7 @@ export function restoreGeoDocumentRuntimeState(documentState: GeoDocumentRuntime
         const next = {
           ...restored,
           camera: structuredClone(documentState.camera),
+          propertiesPanelIntent: documentState.propertiesPanelIntent,
           canUndo: runtime.history.undoStack.length > 0,
           canRedo: runtime.history.redoStack.length > 0,
         };

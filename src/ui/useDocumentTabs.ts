@@ -75,6 +75,7 @@ function createBlankRuntimeState(): GeoDocumentRuntimeState {
   return {
     snapshot: takeHistorySnapshot(state),
     camera: structuredClone(blank.camera),
+    propertiesPanelIntent: "object",
     undoStack: [],
     redoStack: [],
     lastHistoryActionKey: null,
@@ -87,6 +88,7 @@ function createRuntimeStateFromSnapshot(snapshot: HistorySnapshot): GeoDocumentR
   return {
     snapshot: structuredClone(snapshot),
     camera: structuredClone(blank.camera),
+    propertiesPanelIntent: snapshot.selectedObject || snapshot.activeTool === "move" ? "object" : "toolDefault",
     undoStack: [],
     redoStack: [],
     lastHistoryActionKey: null,

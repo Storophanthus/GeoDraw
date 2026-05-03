@@ -5,17 +5,17 @@ import { type PathArrowMark, type SegmentArrowMark, type ArrowDirection, type Ar
 import { ColorSwatchInput } from "../ColorField";
 
 const ARROW_DIRECTION_OPTIONS: Array<{ value: ArrowDirection; label: string }> = [
-    { value: "->", label: "─▶" },
-    { value: "<-", label: "◀─" },
-    { value: "<->", label: "◀─▶" },
-    { value: ">-<", label: "▶─◀" },
+    { value: "->", label: ">" },
+    { value: "<-", label: "<" },
+    { value: "<->", label: "< >" },
+    { value: ">-<", label: "> <" },
 ];
 const ARROW_TIP_OPTIONS: Array<{ value: ArrowTipStyle; label: string }> = [
-    { value: "Stealth", label: "─➤" },
-    { value: "Latex", label: "─❯" },
-    { value: "Triangle", label: "─▶" },
-    { value: "Dot", label: "─●" },
-    { value: "OpenDot", label: "─○" },
+    { value: "Stealth", label: "Stealth" },
+    { value: "Latex", label: "Latex" },
+    { value: "Triangle", label: "Triangle" },
+    { value: "Dot", label: "Dot" },
+    { value: "OpenDot", label: "Open Dot" },
 ];
 
 export const DEFAULT_PATH_ARROW_UI = 1.0;
@@ -256,10 +256,10 @@ export function ArrowListControl<T extends PathArrowMark>({
                                 <label className="controlLabel">Tip Style</label>
                                 <div style={{ position: "relative", width: "100%" }}>
                                     <button
-                                        className="shapeButton"
+                                        className="shapeButton arrowTipButton"
                                         onClick={() => setIsTipPickerOpen((v) => !v)}
                                         type="button"
-                                        style={{ height: "36px", justifyContent: "center", padding: "0 4px" }}
+                                        style={{ height: "46px", justifyContent: "center", padding: "0 4px" }}
                                     >
                                         <ArrowTipGlyph tip={selectedArrow.tip ?? "Stealth"} />
                                     </button>
@@ -270,7 +270,7 @@ export function ArrowListControl<T extends PathArrowMark>({
                                                 return (
                                                     <button
                                                         key={tip.value}
-                                                        className={`shapeCell ${isActive ? "active" : ""}`}
+                                                        className={`shapeCell arrowTipCell ${isActive ? "active" : ""}`}
                                                         onClick={() => {
                                                             updateSelectedArrow({ tip: tip.value });
                                                             setIsTipPickerOpen(false);
@@ -530,30 +530,29 @@ export function ArrowListControl<T extends PathArrowMark>({
 }
 
 function ArrowTipGlyph({ tip }: { tip: ArrowTipStyle }) {
+    const resolvedTip = tip ?? "Stealth";
     return (
-        <svg className="arrowControlGlyph" viewBox="0 0 112 32" aria-hidden="true">
-            <line x1="16" y1="16" x2="72" y2="16" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" />
-            {tip === "Dot" ? (
-                <circle cx="82" cy="16" r="6.5" fill="currentColor" />
-            ) : tip === "OpenDot" ? (
-                <circle cx="82" cy="16" r="6.2" fill="none" stroke="currentColor" strokeWidth="3.2" />
-            ) : tip === "Latex" ? (
-                <path d="M82 16 L67 8.5 M82 16 L67 23.5" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-            ) : tip === "Triangle" ? (
-                <path d="M90 16 L68 5.5 L68 26.5 Z" fill="currentColor" />
+        <svg className="arrowControlGlyph arrowTipGlyph" viewBox="0 0 80 48" aria-hidden="true">
+            {resolvedTip === "Dot" ? (
+                <circle cx="44" cy="24" r="9.5" fill="currentColor" />
+            ) : resolvedTip === "OpenDot" ? (
+                <circle cx="44" cy="24" r="9" fill="none" stroke="currentColor" strokeWidth="4.5" />
+            ) : resolvedTip === "Latex" ? (
+                <path d="M58 24 L24 9 M58 24 L24 39" fill="none" stroke="currentColor" strokeWidth="6.4" strokeLinecap="round" strokeLinejoin="round" />
+            ) : resolvedTip === "Triangle" ? (
+                <path d="M61 24 L22 7 L22 41 Z" fill="currentColor" />
             ) : (
-                <path d="M92 16 L68 4.5 L74 16 L68 27.5 Z" fill="currentColor" />
+                <path d="M62 24 L21 7 L36 24 L21 41 Z" fill="currentColor" />
             )}
         </svg>
     );
 }
 
 function ArrowDirectionGlyph({ direction }: { direction: ArrowDirection }) {
-    const leftHead = <path d="M18 16 L40 5.5 L34 16 L40 26.5 Z" fill="currentColor" />;
-    const rightHead = <path d="M94 16 L72 5.5 L78 16 L72 26.5 Z" fill="currentColor" />;
+    const leftHead = <path d="M24 16 L58 4 L46 16 L58 28 Z" fill="currentColor" />;
+    const rightHead = <path d="M88 16 L54 4 L66 16 L54 28 Z" fill="currentColor" />;
     return (
         <svg className="arrowControlGlyph" viewBox="0 0 112 32" aria-hidden="true">
-            <line x1="26" y1="16" x2="86" y2="16" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" />
             {(direction === "<-" || direction === "<->" || direction === ">-<") && leftHead}
             {(direction === "->" || direction === "<->" || direction === ">-<") && rightHead}
         </svg>

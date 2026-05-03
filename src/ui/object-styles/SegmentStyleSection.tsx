@@ -1,7 +1,7 @@
 import * as React from "react";
 import { type LineStyle, type SceneSegment, type SegmentArrowMark, type SegmentMark } from "../../scene/points";
 import { ColorSwatchInput } from "../ColorField";
-import { StyleControlGroup } from "../StyleControlGroup";
+import { StyleControlGroup, StyleControlTabbedGroups } from "../StyleControlGroup";
 import { StyleSectionHeader } from "../StyleSectionHeader";
 import { ArrowListControl, DEFAULT_SEGMENT_ARROW_MARK } from "./ArrowListControl";
 import { DEFAULT_SEGMENT_MARK, SegmentMarkControl } from "./SegmentMarkControl";
@@ -12,6 +12,7 @@ type SegmentStyleSectionProps = {
     onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedSegmentStyle: (style: Partial<LineStyle>) => void;
     updateSelectedSegmentFields: (fields: Partial<Pick<SceneSegment, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
+    mode?: "object" | "toolDefault";
 };
 
 export function SegmentStyleSection({
@@ -20,6 +21,7 @@ export function SegmentStyleSection({
     onMakeStyleDefaultChange,
     updateSelectedSegmentStyle,
     updateSelectedSegmentFields,
+    mode = "object",
 }: SegmentStyleSectionProps) {
     const resolvedSegmentMarks = React.useMemo(() => {
         const source =
@@ -57,7 +59,9 @@ export function SegmentStyleSection({
                 title="Segment Style"
                 selectedStyleAsDefault={selectedStyleAsDefault}
                 onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+                mode={mode}
             />
+            <StyleControlTabbedGroups>
             <StyleControlGroup title="Stroke">
                 <div className="controlRow">
                     <label className="controlLabel">Stroke Color</label>
@@ -132,14 +136,16 @@ export function SegmentStyleSection({
                             />
                             Label Glow
                         </label>
-                        <div className="controlRow">
-                            <label className="controlLabel">Label Text</label>
-                            <input
-                                className="renameInput"
-                                value={selectedSegment.labelText ?? ""}
-                                onChange={(e) => updateSelectedSegmentFields({ labelText: e.target.value })}
-                            />
-                        </div>
+                        {mode === "object" && (
+                            <div className="controlRow">
+                                <label className="controlLabel">Label Text</label>
+                                <input
+                                    className="renameInput"
+                                    value={selectedSegment.labelText ?? ""}
+                                    onChange={(e) => updateSelectedSegmentFields({ labelText: e.target.value })}
+                                />
+                            </div>
+                        )}
                     </>
                 )}
             </StyleControlGroup>
@@ -172,6 +178,7 @@ export function SegmentStyleSection({
                     onChange={(newArrows) => updateSelectedSegmentStyle({ segmentArrowMarks: newArrows })}
                 />
             </StyleControlGroup>
+            </StyleControlTabbedGroups>
         </div>
     );
 }

@@ -1,5 +1,13 @@
 import type { Camera } from "../../view/camera";
-import type { ActiveTool, AngleFixedDirection, SelectedObject, TransformToolMode } from "./storeTypes";
+import type {
+  ActiveTool,
+  AngleFixedDirection,
+  PropertiesPanelIntent,
+  SelectedObject,
+  TextClipboardState,
+  TextEditRequest,
+  TransformToolMode,
+} from "./storeTypes";
 import { DEFAULT_COLOR_PROFILE_ID, DEFAULT_UI_COLOR_PROFILE_ID } from "../colorProfiles";
 
 export type UiSliceState = {
@@ -12,6 +20,10 @@ export type UiSliceState = {
   axesEnabled: boolean;
   gridSnapEnabled: boolean;
   activeTool: ActiveTool;
+  toolActivationVersion: number;
+  propertiesPanelIntent: PropertiesPanelIntent;
+  textEditRequest: TextEditRequest;
+  textClipboard: TextClipboardState;
   angleFixedTool: {
     angleExpr: string;
     direction: AngleFixedDirection;
@@ -58,6 +70,10 @@ export function createUiSliceState(): UiSliceState {
     axesEnabled: true,
     gridSnapEnabled: true,
     activeTool: "move",
+    toolActivationVersion: 0,
+    propertiesPanelIntent: "object",
+    textEditRequest: null,
+    textClipboard: null,
     angleFixedTool: {
       angleExpr: "30",
       direction: "CCW",

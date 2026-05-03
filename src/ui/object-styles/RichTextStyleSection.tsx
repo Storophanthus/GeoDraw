@@ -3,7 +3,7 @@ import type { SceneModel } from "../../scene/points";
 import { parseRichTextSourceToDocument, serializeRichTextDocumentToSource } from "../../text-editor/richTextDocument";
 import { ColorSwatchInput } from "../ColorField";
 import { formatRoundedDisplay } from "../displayFormat";
-import { StyleControlGroup } from "../StyleControlGroup";
+import { StyleControlGroup, StyleControlTabbedGroups } from "../StyleControlGroup";
 import { StyleSectionHeader } from "../StyleSectionHeader";
 
 type RichTextNode = NonNullable<SceneModel["richTextNodes"]>[number];
@@ -19,6 +19,7 @@ type RichTextStyleSectionProps = {
   updateSelectedRichTextDocument: (document: RichTextNode["document"]) => void;
   deleteSelectedObject: () => void;
   deleteLabel?: string;
+  mode?: "object" | "toolDefault";
 };
 
 export function RichTextStyleSection({
@@ -30,6 +31,7 @@ export function RichTextStyleSection({
   updateSelectedRichTextDocument,
   deleteSelectedObject,
   deleteLabel = "Delete",
+  mode = "object",
 }: RichTextStyleSectionProps) {
   const serializedSource = useMemo(
     () => serializeRichTextDocumentToSource(selectedRichText.document),
@@ -47,47 +49,53 @@ export function RichTextStyleSection({
         title="Textbox"
         selectedStyleAsDefault={selectedStyleAsDefault}
         onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+        mode={mode}
       />
-      <StyleControlGroup title="Object">
-        <div className="statusText">
-          Position: ({formatRoundedDisplay(selectedRichText.positionWorld.x, 3)}, {formatRoundedDisplay(selectedRichText.positionWorld.y, 3)})
-        </div>
-        <div className="fieldBlock">
-          <label className="fieldLabel">Name</label>
-          <input
-            className="renameInput"
-            value={selectedRichText.name}
-            onChange={(event) => updateSelectedRichTextFields({ name: event.target.value })}
-          />
-        </div>
-        <label className="checkboxRow">
-          <input
-            type="checkbox"
-            checked={selectedRichText.visible}
-            onChange={(event) => updateSelectedRichTextFields({ visible: event.target.checked })}
-          />
-          Visible
-        </label>
-      </StyleControlGroup>
+      <StyleControlTabbedGroups>
+        {mode === "object" && (
+          <StyleControlGroup title="Object">
+            <div className="statusText">
+              Position: ({formatRoundedDisplay(selectedRichText.positionWorld.x, 3)}, {formatRoundedDisplay(selectedRichText.positionWorld.y, 3)})
+            </div>
+            <div className="fieldBlock">
+              <label className="fieldLabel">Name</label>
+              <input
+                className="renameInput"
+                value={selectedRichText.name}
+                onChange={(event) => updateSelectedRichTextFields({ name: event.target.value })}
+              />
+            </div>
+            <label className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={selectedRichText.visible}
+                onChange={(event) => updateSelectedRichTextFields({ visible: event.target.checked })}
+              />
+              Visible
+            </label>
+          </StyleControlGroup>
+        )}
 
-      <StyleControlGroup title="Text">
-        <div className="fieldBlock">
-          <label className="fieldLabel">Text</label>
-          <textarea
-            className="renameInput textLabelTextareaInput"
-            value={sourceText}
-            rows={4}
-            onChange={(event) => {
-              const next = event.target.value;
-              setSourceText(next);
-              updateSelectedRichTextDocument(parseRichTextSourceToDocument(next));
-            }}
-          />
-        </div>
-        <div className="statusText">
-          Use <code>$...$</code> inline, <code>$$...$$</code> display.
-        </div>
-      </StyleControlGroup>
+        {mode === "object" && (
+          <StyleControlGroup title="Text">
+            <div className="fieldBlock">
+              <label className="fieldLabel">Text</label>
+              <textarea
+                className="renameInput textLabelTextareaInput"
+                value={sourceText}
+                rows={4}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setSourceText(next);
+                  updateSelectedRichTextDocument(parseRichTextSourceToDocument(next));
+                }}
+              />
+            </div>
+            <div className="statusText">
+              Use <code>$...$</code> inline, <code>$$...$$</code> display.
+            </div>
+          </StyleControlGroup>
+        )}
 
       <StyleControlGroup title="Style">
         <div className="controlRow">
@@ -168,10 +176,13 @@ export function RichTextStyleSection({
           </select>
         </div>
       </StyleControlGroup>
+      </StyleControlTabbedGroups>
 
-      <button className="deleteButton" onClick={deleteSelectedObject}>
-        {deleteLabel}
-      </button>
+      {mode === "object" && (
+        <button className="deleteButton" onClick={deleteSelectedObject}>
+          {deleteLabel}
+        </button>
+      )}
     </div>
   );
 }

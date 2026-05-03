@@ -64,6 +64,16 @@ const GRID_SETTINGS_BASE = {
 
 const ANGLE_STROKE_RENDER_SCALE = 3.25 / 1.8;
 
+type OpenSnapshotFilePatch = {
+  savedName?: string | null;
+  fileHandle?: FileSystemFileHandle | null;
+  tauriPath?: string | null;
+};
+
+type CanvasViewProps = {
+  openSnapshotAsDocument?: (snapshot: HistorySnapshot, file?: OpenSnapshotFilePatch) => void;
+};
+
 function getAngleStrokeRenderWidth(rawStrokeWidth: number): number {
   return rawStrokeWidth * ANGLE_STROKE_RENDER_SCALE;
 }
@@ -74,7 +84,7 @@ function parsePositiveNumber(raw: string, fallback: number): number {
   return value;
 }
 
-export function CanvasView() {
+export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const labelsLayerRef = useRef<HTMLDivElement | null>(null);
   const pointerRef = useRef<PointerState>({
@@ -105,6 +115,7 @@ export function CanvasView() {
   const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
   const selectedObject = useGeoStore((store) => store.selectedObject);
   const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
+  const textEditRequest = useGeoStore((store) => store.textEditRequest);
   const hoveredHit = useGeoStore((store) => store.hoveredHit);
   const cursorWorld = useGeoStore((store) => store.cursorWorld);
   const pendingSelection = useGeoStore((store) => store.pendingSelection);
@@ -175,6 +186,7 @@ export function CanvasView() {
   const updateRichTextFieldsByIds = useGeoStore((store) => store.updateRichTextFieldsByIds);
   const updateRichTextStyleByIds = useGeoStore((store) => store.updateRichTextStyleByIds);
   const deleteSelectedObject = useGeoStore((store) => store.deleteSelectedObject);
+  const clearTextEditRequest = useGeoStore((store) => store.clearTextEditRequest);
   const loadSnapshot = useGeoStore((store) => store.loadSnapshot);
   const fitViewToScene = useGeoStore((store) => store.fitViewToScene);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
@@ -507,6 +519,16 @@ export function CanvasView() {
   });
 
   useEffect(() => {
+    if (!textEditRequest) return;
+    if (textEditRequest.type === "richText") {
+      richTextTool.beginRichTextEditing(textEditRequest.id);
+    } else {
+      textboxTool.beginTextLabelEditing(textEditRequest.id);
+    }
+    clearTextEditRequest(textEditRequest.requestId);
+  }, [clearTextEditRequest, richTextTool, textboxTool, textEditRequest]);
+
+  useEffect(() => {
     const legacyTextboxLabels = (scene.textLabels ?? []).filter((label) => resolveTextLabelToolKind(label) === "textbox");
     if (legacyTextboxLabels.length === 0) return;
     for (const label of legacyTextboxLabels) {
@@ -697,21 +719,25 @@ export function CanvasView() {
   }, [fitViewToScene]);
 
   const loadDroppedSnapshotText = useCallback(
-    (text: string, source: string) => {
+    (text: string, source: string, file: OpenSnapshotFilePatch = {}) => {
       try {
         const parsed = JSON.parse(text) as HistorySnapshot;
         if (!isValidSnapshotPayload(parsed)) {
           alert("Unsupported file format. Use a GeoDraw .geodraw/.json snapshot file.");
           return;
         }
-        loadSnapshot(parsed);
+        if (openSnapshotAsDocument) {
+          openSnapshotAsDocument(parsed, { savedName: baseName(source), ...file });
+        } else {
+          loadSnapshot(parsed);
+        }
         scheduleFitView();
       } catch (err) {
         console.error(`Failed to open dropped file (${source}):`, err);
         alert("Failed to open dropped file. It may be corrupted or incompatible.");
       }
     },
-    [loadSnapshot, scheduleFitView]
+    [loadSnapshot, openSnapshotAsDocument, scheduleFitView]
   );
 
   useEffect(() => {
@@ -740,7 +766,11 @@ export function CanvasView() {
         try {
           const text = await readTextFile(path);
           if (disposed) return;
-          loadDroppedSnapshotText(text, path);
+          loadDroppedSnapshotText(text, path, {
+            fileHandle: null,
+            savedName: baseName(path),
+            tauriPath: path,
+          });
         } catch (err) {
           console.error("Failed to read dropped file path:", err);
           alert("Failed to open dropped file. Check file permissions and try again.");
@@ -795,7 +825,7 @@ export function CanvasView() {
     const file = Array.from(files).find(isSupportedSnapshotFile);
     if (!file) return;
     const text = await file.text();
-    loadDroppedSnapshotText(text, file.name);
+    loadDroppedSnapshotText(text, file.name, { fileHandle: null, savedName: file.name, tauriPath: null });
   };
 
   return (
@@ -857,6 +887,12 @@ function isSupportedSnapshotFile(file: File): boolean {
 function isSupportedSnapshotPath(path: string): boolean {
   const normalized = path.replace(/\\/g, "/").toLowerCase();
   return normalized.endsWith(".geodraw") || normalized.endsWith(".json");
+}
+
+function baseName(path: string): string {
+  const norm = path.replace(/\\/g, "/");
+  const idx = norm.lastIndexOf("/");
+  return idx >= 0 ? norm.slice(idx + 1) : norm;
 }
 
 function hasFileDragPayload(dataTransfer: DataTransfer): boolean {

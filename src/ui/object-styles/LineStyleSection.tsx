@@ -1,7 +1,7 @@
 
 import { type LineStyle, type SceneLine } from "../../scene/points";
 import { ColorSwatchInput } from "../ColorField";
-import { StyleControlGroup } from "../StyleControlGroup";
+import { StyleControlGroup, StyleControlTabbedGroups } from "../StyleControlGroup";
 import { StyleSectionHeader } from "../StyleSectionHeader";
 
 type LineStyleSectionProps = {
@@ -12,6 +12,7 @@ type LineStyleSectionProps = {
     updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
     canConvertToSegment: boolean;
     convertSelectedLineToSegment: () => void;
+    mode?: "object" | "toolDefault";
 };
 
 export function LineStyleSection({
@@ -22,6 +23,7 @@ export function LineStyleSection({
     updateSelectedLineFields,
     canConvertToSegment,
     convertSelectedLineToSegment,
+    mode = "object",
 }: LineStyleSectionProps) {
     return (
         <div className="cosmeticsBlock">
@@ -29,19 +31,23 @@ export function LineStyleSection({
                 title="Line Style"
                 selectedStyleAsDefault={selectedStyleAsDefault}
                 onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+                mode={mode}
             />
-            <StyleControlGroup title="Line">
-                <button
-                    type="button"
-                    className="actionButton secondary"
-                    style={{ width: "100%" }}
-                    onClick={convertSelectedLineToSegment}
-                    disabled={!canConvertToSegment}
-                    title={canConvertToSegment ? "Hide this line and create segment AB with same style" : "Available for Line(A,B) only"}
-                >
-                    Convert
-                </button>
-            </StyleControlGroup>
+            <StyleControlTabbedGroups>
+            {mode === "object" && (
+                <StyleControlGroup title="Line">
+                    <button
+                        type="button"
+                        className="actionButton secondary"
+                        style={{ width: "100%" }}
+                        onClick={convertSelectedLineToSegment}
+                        disabled={!canConvertToSegment}
+                        title={canConvertToSegment ? "Hide this line and create segment AB with same style" : "Available for Line(A,B) only"}
+                    >
+                        Convert
+                    </button>
+                </StyleControlGroup>
+            )}
 
             <StyleControlGroup title="Stroke">
                 <div className="controlRow">
@@ -117,17 +123,20 @@ export function LineStyleSection({
                             />
                             Label Glow
                         </label>
-                        <div className="controlRow">
-                            <label className="controlLabel">Label Text</label>
-                            <input
-                                className="renameInput"
-                                value={selectedLine.labelText ?? ""}
-                                onChange={(e) => updateSelectedLineFields({ labelText: e.target.value })}
-                            />
-                        </div>
+                        {mode === "object" && (
+                            <div className="controlRow">
+                                <label className="controlLabel">Label Text</label>
+                                <input
+                                    className="renameInput"
+                                    value={selectedLine.labelText ?? ""}
+                                    onChange={(e) => updateSelectedLineFields({ labelText: e.target.value })}
+                                />
+                            </div>
+                        )}
                     </>
                 )}
             </StyleControlGroup>
+            </StyleControlTabbedGroups>
         </div>
     );
 }
