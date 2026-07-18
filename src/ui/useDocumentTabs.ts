@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   captureGeoDocumentRuntimeState,
-  getGeoStore,
   restoreGeoDocumentRuntimeState,
+  subscribeGeoStore,
   type GeoDocumentRuntimeState,
 } from "../state/geoStore";
+import { loadStoredConstructionPreferences } from "../state/appPreferences";
 import { createInitialGeoState } from "../state/slices";
 import { takeHistorySnapshot, type HistorySnapshot } from "../state/slices/historySlice";
 
@@ -29,6 +30,35 @@ const emptyFileState: DocumentFileState = {
   tauriPath: null,
 };
 
+const DOCUMENT_TABS_STORAGE_KEY = "geodraw.documentTabs.v1";
+const DOCUMENT_TABS_STORAGE_VERSION = 1;
+
+type PersistedDocumentFileState = {
+  savedName: string | null;
+  tauriPath: string | null;
+};
+
+type PersistedDocumentTab = {
+  id: string;
+  title: string;
+  file: PersistedDocumentFileState;
+  runtime: GeoDocumentRuntimeState;
+};
+
+type PersistedDocumentTabsState = {
+  version: typeof DOCUMENT_TABS_STORAGE_VERSION;
+  activeDocumentId: string;
+  nextIndex: number;
+  documents: PersistedDocumentTab[];
+};
+
+type InitialDocumentTabsState = {
+  documents: GeoDocumentTab[];
+  activeDocumentId: string;
+  nextIndex: number;
+  restoreRuntime: GeoDocumentRuntimeState | null;
+};
+
 function baseTitleFromFileName(fileName: string | null | undefined): string | null {
   if (!fileName) return null;
   const trimmed = fileName.trim();
@@ -44,34 +74,193 @@ function makeUntitledTitle(nextIndex: number): string {
   return `Figure ${nextIndex}`;
 }
 
-function createBlankRuntimeState(): GeoDocumentRuntimeState {
-  const current = getGeoStore();
-  const blank = createInitialGeoState();
-  const state = {
-    ...blank,
-    colorProfileId: current.colorProfileId,
-    canvasThemeOverrides: current.canvasThemeOverrides,
-    uiColorProfileId: current.uiColorProfileId,
-    uiCssOverrides: current.uiCssOverrides,
-    gridEnabled: current.gridEnabled,
-    axesEnabled: current.axesEnabled,
-    gridSnapEnabled: current.gridSnapEnabled,
-    pointDefaults: current.pointDefaults,
-    segmentDefaults: current.segmentDefaults,
-    lineDefaults: current.lineDefaults,
-    circleDefaults: current.circleDefaults,
-    polygonDefaults: current.polygonDefaults,
-    angleDefaults: current.angleDefaults,
-    objectLabelDefaults: current.objectLabelDefaults,
-    labelToolDefaults: current.labelToolDefaults,
-    textboxToolDefaults: current.textboxToolDefaults,
-    richTextToolDefaults: current.richTextToolDefaults,
-    angleFixedTool: current.angleFixedTool,
-    circleFixedTool: current.circleFixedTool,
-    regularPolygonTool: current.regularPolygonTool,
-    transformTool: current.transformTool,
-    dependencyGlowEnabled: current.dependencyGlowEnabled,
+function canUseLocalStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isValidSnapshot(data: unknown): data is HistorySnapshot {
+  if (!isRecord(data)) return false;
+  if (!isRecord(data.scene)) return false;
+  if (typeof data.activeTool !== "string") return false;
+  const scene = data.scene;
+  return (
+    Array.isArray(scene.points) &&
+    Array.isArray(scene.lines) &&
+    Array.isArray(scene.circles) &&
+    Array.isArray(scene.segments)
+  );
+}
+
+function sanitizeCamera(raw: unknown): GeoDocumentRuntimeState["camera"] {
+  const fallback = structuredClone(createInitialGeoState().camera);
+  if (!isRecord(raw) || !isRecord(raw.pos)) return fallback;
+  const x = raw.pos.x;
+  const y = raw.pos.y;
+  const zoom = raw.zoom;
+  const logZoom = raw.logZoom;
+  if (
+    typeof x !== "number" ||
+    typeof y !== "number" ||
+    typeof zoom !== "number" ||
+    typeof logZoom !== "number" ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(zoom) ||
+    !Number.isFinite(logZoom)
+  ) {
+    return fallback;
+  }
+  return { pos: { x, y }, zoom, logZoom };
+}
+
+function sanitizeRuntime(raw: unknown): GeoDocumentRuntimeState | null {
+  if (!isRecord(raw) || !isValidSnapshot(raw.snapshot)) return null;
+  const undoStack = Array.isArray(raw.undoStack) ? raw.undoStack.filter(isValidSnapshot) : [];
+  const redoStack = Array.isArray(raw.redoStack) ? raw.redoStack.filter(isValidSnapshot) : [];
+  return {
+    snapshot: structuredClone(raw.snapshot),
+    camera: sanitizeCamera(raw.camera),
+    propertiesPanelIntent: raw.propertiesPanelIntent === "toolDefault" ? "toolDefault" : "object",
+    undoStack: structuredClone(undoStack),
+    redoStack: structuredClone(redoStack),
+    lastHistoryActionKey: typeof raw.lastHistoryActionKey === "string" ? raw.lastHistoryActionKey : null,
+    commandAliases: Array.isArray(raw.commandAliases)
+      ? (structuredClone(raw.commandAliases) as GeoDocumentRuntimeState["commandAliases"])
+      : [],
   };
+}
+
+function sanitizePersistedDocument(raw: unknown): GeoDocumentTab | null {
+  if (!isRecord(raw)) return null;
+  const id = typeof raw.id === "string" && raw.id.trim() ? raw.id : null;
+  if (!id) return null;
+  const runtime = sanitizeRuntime(raw.runtime);
+  if (!runtime) return null;
+  const file = isRecord(raw.file) ? raw.file : {};
+  const savedName = typeof file.savedName === "string" && file.savedName.trim() ? file.savedName : null;
+  const tauriPath = typeof file.tauriPath === "string" && file.tauriPath.trim() ? file.tauriPath : null;
+  const title =
+    typeof raw.title === "string" && raw.title.trim()
+      ? raw.title.trim()
+      : baseTitleFromFileName(savedName) ?? "Figure";
+  return {
+    id,
+    title,
+    file: { savedName, tauriPath, fileHandle: null },
+    runtime,
+  };
+}
+
+function nextDocumentIndexFromTabs(tabs: GeoDocumentTab[]): number {
+  let next = tabs.length + 1;
+  for (const tab of tabs) {
+    const match = /^doc_(\d+)$/.exec(tab.id);
+    if (!match) continue;
+    const value = Number(match[1]);
+    if (Number.isFinite(value)) next = Math.max(next, value + 1);
+  }
+  return Math.max(2, next);
+}
+
+function loadPersistedDocumentTabsState(): InitialDocumentTabsState | null {
+  if (!canUseLocalStorage()) return null;
+  try {
+    const raw = window.localStorage.getItem(DOCUMENT_TABS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed) || parsed.version !== DOCUMENT_TABS_STORAGE_VERSION || !Array.isArray(parsed.documents)) {
+      return null;
+    }
+    const seen = new Set<string>();
+    const documents: GeoDocumentTab[] = [];
+    for (const item of parsed.documents) {
+      const doc = sanitizePersistedDocument(item);
+      if (!doc || seen.has(doc.id)) continue;
+      seen.add(doc.id);
+      documents.push(doc);
+    }
+    if (documents.length === 0) return null;
+    const activeDocumentId =
+      typeof parsed.activeDocumentId === "string" && documents.some((doc) => doc.id === parsed.activeDocumentId)
+        ? parsed.activeDocumentId
+        : documents[0].id;
+    const activeDocument = documents.find((doc) => doc.id === activeDocumentId) ?? documents[0];
+    const storedNextIndex = typeof parsed.nextIndex === "number" && Number.isFinite(parsed.nextIndex)
+      ? parsed.nextIndex
+      : 2;
+    return {
+      documents,
+      activeDocumentId,
+      nextIndex: Math.max(storedNextIndex, nextDocumentIndexFromTabs(documents)),
+      restoreRuntime: activeDocument.runtime,
+    };
+  } catch (err) {
+    console.warn("Failed to restore GeoDraw canvas tabs:", err);
+    return null;
+  }
+}
+
+function createInitialDocumentTabsState(): InitialDocumentTabsState {
+  const persisted = loadPersistedDocumentTabsState();
+  if (persisted) return persisted;
+  const initialDocument: GeoDocumentTab = {
+    id: "doc_1",
+    title: "Figure 1",
+    file: { ...emptyFileState },
+    runtime: captureGeoDocumentRuntimeState(),
+  };
+  return {
+    documents: [initialDocument],
+    activeDocumentId: initialDocument.id,
+    nextIndex: 2,
+    restoreRuntime: null,
+  };
+}
+
+function toPersistedDocument(tab: GeoDocumentTab): PersistedDocumentTab {
+  return {
+    id: tab.id,
+    title: tab.title,
+    file: {
+      savedName: tab.file.savedName,
+      tauriPath: tab.file.tauriPath,
+    },
+    runtime: tab.runtime,
+  };
+}
+
+function savePersistedDocumentTabsState(
+  documents: GeoDocumentTab[],
+  activeDocumentId: string,
+  nextIndex: number
+): void {
+  if (!canUseLocalStorage()) return;
+  try {
+    const payload: PersistedDocumentTabsState = {
+      version: DOCUMENT_TABS_STORAGE_VERSION,
+      activeDocumentId,
+      nextIndex,
+      documents: documents.map(toPersistedDocument),
+    };
+    window.localStorage.setItem(DOCUMENT_TABS_STORAGE_KEY, JSON.stringify(payload));
+  } catch (err) {
+    console.warn("Failed to save GeoDraw canvas tabs:", err);
+  }
+}
+
+function createBlankRuntimeState(): GeoDocumentRuntimeState {
+  const blank = createInitialGeoState();
+  const constructionPreset = loadStoredConstructionPreferences();
+  const state = constructionPreset
+    ? {
+        ...blank,
+        ...structuredClone(constructionPreset),
+      }
+    : blank;
   return {
     snapshot: takeHistorySnapshot(state),
     camera: structuredClone(blank.camera),
@@ -97,18 +286,12 @@ function createRuntimeStateFromSnapshot(snapshot: HistorySnapshot): GeoDocumentR
 }
 
 export function useDocumentTabs() {
-  const nextIndexRef = useRef(2);
-  const initialDocument = useMemo<GeoDocumentTab>(
-    () => ({
-      id: "doc_1",
-      title: "Figure 1",
-      file: { ...emptyFileState },
-      runtime: captureGeoDocumentRuntimeState(),
-    }),
-    []
-  );
-  const [documents, setDocuments] = useState<GeoDocumentTab[]>([initialDocument]);
-  const [activeDocumentId, setActiveDocumentId] = useState(initialDocument.id);
+  const initialState = useMemo(createInitialDocumentTabsState, []);
+  const nextIndexRef = useRef(initialState.nextIndex);
+  const initialRestoreRuntimeRef = useRef(initialState.restoreRuntime);
+  const persistTimerRef = useRef<number | null>(null);
+  const [documents, setDocuments] = useState<GeoDocumentTab[]>(initialState.documents);
+  const [activeDocumentId, setActiveDocumentId] = useState(initialState.activeDocumentId);
   const documentsRef = useRef(documents);
   const activeDocumentIdRef = useRef(activeDocumentId);
   documentsRef.current = documents;
@@ -120,6 +303,50 @@ export function useDocumentTabs() {
       tab.id === activeId ? { ...tab, runtime: captureGeoDocumentRuntimeState() } : tab
     );
   }, []);
+
+  const persistCurrentDocuments = useCallback(() => {
+    const captured = captureActiveDocument(documentsRef.current);
+    savePersistedDocumentTabsState(captured, activeDocumentIdRef.current, nextIndexRef.current);
+  }, [captureActiveDocument]);
+
+  const schedulePersistCurrentDocuments = useCallback(() => {
+    if (!canUseLocalStorage()) return;
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = window.setTimeout(() => {
+      persistTimerRef.current = null;
+      persistCurrentDocuments();
+    }, 250);
+  }, [persistCurrentDocuments]);
+
+  useEffect(() => {
+    const runtime = initialRestoreRuntimeRef.current;
+    if (!runtime) return;
+    initialRestoreRuntimeRef.current = null;
+    restoreGeoDocumentRuntimeState(runtime);
+  }, []);
+
+  useEffect(() => {
+    schedulePersistCurrentDocuments();
+  }, [activeDocumentId, documents, schedulePersistCurrentDocuments]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeGeoStore(schedulePersistCurrentDocuments);
+    const handleBeforeUnload = () => {
+      if (persistTimerRef.current !== null) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      persistCurrentDocuments();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      handleBeforeUnload();
+    };
+  }, [persistCurrentDocuments, schedulePersistCurrentDocuments]);
 
   const activeDocument = useMemo(
     () => documents.find((tab) => tab.id === activeDocumentId) ?? documents[0],
@@ -236,6 +463,7 @@ export function useDocumentTabs() {
     documents,
     activeDocument,
     activeDocumentId,
+    restoredFromSession: Boolean(initialState.restoreRuntime),
     createDocument,
     selectDocument,
     closeDocument,

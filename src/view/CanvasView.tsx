@@ -148,6 +148,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const createAuxiliaryCircle = useGeoStore((store) => store.createAuxiliaryCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
+  const createEllipseFociPoint = useGeoStore((store) => store.createEllipseFociPoint);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createTangentLines = useGeoStore((store) => store.createTangentLines);
@@ -244,8 +245,8 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const constructClickIo = useMemo<ConstructClickIo>(
     () => {
       const cloneObjectStyle = (
-        source: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string },
-        target: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }
+        source: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string },
+        target: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }
       ) => {
         setCopyStyleSource(source);
         applyCopyStyleTo(target);
@@ -265,6 +266,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
         createAuxiliaryCircle,
         createCircleThreePoint,
         createCircleFixedRadius,
+        createEllipseFociPoint,
         createPerpendicularLine,
         createParallelLine,
         createTangentLines,
@@ -421,6 +423,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
       createAuxiliaryCircle,
       createCircleThreePoint,
       createCircleFixedRadius,
+      createEllipseFociPoint,
       createPerpendicularLine,
       createParallelLine,
       createTangentLines,

@@ -12,6 +12,7 @@ import {
   evaluateAngleExpressionDegrees,
   evaluateNumberExpression,
   getCircleWorldGeometry,
+  getEllipseWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
   resolveTextLabelAlignment,
@@ -20,6 +21,7 @@ import {
   resolveTextLabelRenderMode,
   type GeometryObjectRef,
   type SceneGeometryLayerRef,
+  type SceneCircle,
   SceneModel,
   ScenePoint,
   SegmentArrowMark,
@@ -81,6 +83,12 @@ export type TikzExportOptions = {
   rightAngleStrokeScale?: number;
   rightAngleSizeScale?: number;
   autoScaleToFitCm?: { maxWidthCm: number; maxHeightCm: number };
+  // When true, every point is emitted as a literal `\tkzDefPoint` at the position
+  // the app computes (full double precision), instead of being re-derived in TeX
+  // via tkz construction macros. The output is no longer parametric/editable, but
+  // it is pixel-faithful to the canvas and immune to tkz-euclide's fixed-point
+  // intersection drift and `common=` ordering fragility.
+  bakePointCoordinates?: boolean;
 };
 
 export type TikzCommand =
@@ -177,15 +185,23 @@ const PATH_ARROW_WIDTH_EXPORT_SCALE = 0.6 / 7.6;
 // Arrow width UI is stored as lineWidthPt = sliderValue * 8.
 const PATH_ARROW_WIDTH_UI_FACTOR = 8;
 const DEFAULT_PATH_ARROW_UI = 1.3;
-// Approximate conversion for tip geometry parity (canvas px -> TikZ pt).
-// 16.8px (Canvas) * 0.5 = 8.4pt base -> 10.08pt tip length (Stealth).
-const CANVAS_PX_TO_TIKZ_PT = 0.5;
+// Fallback only. Normal arrow export computes px->pt from the actual
+// canvas zoom and final TikZ coordinate scale.
+const FALLBACK_CANVAS_PX_TO_TIKZ_PT = 0.5;
+const TIKZ_PT_PER_CM = 72.27 / 2.54;
+
+type PathArrowExportMetrics = {
+  pathLengthWorld?: number;
+  screenPxPerWorld?: number;
+  canvasPxToTikzPt?: number;
+};
 
 function edgeKey(aId: string, bId: string): string {
   return aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`;
 }
 
 export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}): TikzCommand[] {
+  const bakePointCoordinates = options.bakePointCoordinates ?? false;
   const pointById = new Map(scene.points.map((p) => [p.id, p]));
   const lineById = new Map(scene.lines.map((l) => [l.id, l]));
   const segById = new Map(scene.segments.map((s) => [s.id, s]));
@@ -240,10 +256,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const worldHeight = Math.max(1e-9, Math.abs(viewport.ymax - viewport.ymin));
   const fitScale = Math.min(maxWidthCm / worldWidth, maxHeightCm / worldHeight);
   coordScale = clampPositive(coordScale * fitScale, 0.01, 100);
-  // Calculate effective pixels per world unit for TikZ metric mapping.
-  // 1cm (TikZ default unit) approx equals 37.8px (at 96 DPI).
-  // This ensures gap pixels (defined in screen px) map to correct physical length in TikZ.
-  const arrowMetricPxPerWorld = coordScale * 37.8;
+  const canvasPxToTikzPt = (coordScale * TIKZ_PT_PER_CM) / exportPxPerWorld;
   defs.push({ kind: "SetupUnits", scale: coordScale });
   defs.push({ kind: "SetupLabelScale", scale: labelScale });
   defs.push({
@@ -354,13 +367,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     resolvePoint(circle.cId);
     derivedAuxIndex += 1;
     const centerName = `tkzCircum_${derivedAuxIndex}`;
-    constructions.push({
-      kind: "DefCircleCircumCenter",
-      centerName,
-      a: mustName(pointName, circle.aId),
-      b: mustName(pointName, circle.bId),
-      c: mustName(pointName, circle.cId),
-    });
+    if (bakePointCoordinates) {
+      // Bake the circumcenter to a literal point so the drawn circle is exact.
+      const center = circleGeomById(circle.id).center;
+      constructions.push({ kind: "DefPoint", name: centerName, x: center.x, y: center.y });
+    } else {
+      constructions.push({
+        kind: "DefCircleCircumCenter",
+        centerName,
+        a: mustName(pointName, circle.aId),
+        b: mustName(pointName, circle.bId),
+        c: mustName(pointName, circle.cId),
+      });
+    }
     circleCenterNameById.set(circleId, centerName);
     return centerName;
   };
@@ -949,6 +968,28 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
     const name = mustName(pointName, point.id);
 
+    if (bakePointCoordinates) {
+      // Baked-coordinate export: emit the app-computed position as a literal point
+      // instead of re-deriving it in TeX. No dependency recursion is needed.
+      const world = getPointWorldPosCached(scene, point.id);
+      if (!world) {
+        // No evaluated position (e.g. a dynamic intersection currently off-domain).
+        // It is not drawn on the canvas, so leave it undefined like the constructive path.
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
+      if (point.kind === "free") {
+        freeItems.push({ name, x: world.x, y: world.y });
+      } else {
+        constructions.push({ kind: "DefPoint", name, x: world.x, y: world.y });
+      }
+      definedPointIds.add(point.id);
+      visiting.delete(pointId);
+      visited.add(pointId);
+      return;
+    }
+
     if (point.kind === "free") {
       freeItems.push({ name, x: point.position.x, y: point.position.y });
       definedPointIds.add(point.id);
@@ -1219,7 +1260,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         branch,
         scene,
         definedPointIds,
-        pointName
+        pointName,
+        circle
       );
       if (!commonName) {
         const sibling = scene.points.find(
@@ -1238,7 +1280,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             branch,
             scene,
             definedPointIds,
-            pointName
+            pointName,
+            circle
           );
         }
       }
@@ -1353,7 +1396,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         branch,
         scene,
         definedPointIds,
-        pointName
+        pointName,
+        circle
       );
       if (!commonName) {
         const sibling = scene.points.find(
@@ -1372,7 +1416,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             branch,
             scene,
             definedPointIds,
-            pointName
+            pointName,
+            circle
           );
         }
       }
@@ -1848,7 +1893,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       },
       {
         pathLengthWorld: segmentLengthWorld,
-        screenPxPerWorld: arrowMetricPxPerWorld,
+        screenPxPerWorld: exportPxPerWorld,
+        canvasPxToTikzPt,
       },
       options.pathDotMarkSizeScale
     );
@@ -2011,7 +2057,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       0.5,
       {
         pathLengthWorld: 2 * Math.PI * circleGeom.radius,
-        screenPxPerWorld: arrowMetricPxPerWorld,
+        screenPxPerWorld: exportPxPerWorld,
+        canvasPxToTikzPt,
       },
       undefined, // arcDef undefined -> Use markings (Decoration)
       { bend: true }, // Circle arrows use bend
@@ -2021,6 +2068,34 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       circleBundle.push({ kind: "DrawRaw", tex: circleArrowOverlay });
     }
     pushGeometryCommands({ type: "circle", id: circle.id }, circleBundle);
+  }
+  for (const ellipse of scene.ellipses ?? []) {
+    if (!ellipse.visible) continue;
+    if (
+      !definedPointIds.has(ellipse.focusAId) ||
+      !definedPointIds.has(ellipse.focusBId) ||
+      !definedPointIds.has(ellipse.throughId)
+    ) {
+      throw new Error(`Cannot export undefined ellipse geometry: ${ellipse.id}`);
+    }
+    const geom = getEllipseWorldGeometry(ellipse, scene);
+    if (!geom) throw new Error(`Cannot export undefined ellipse geometry: ${ellipse.id}`);
+    const ellipseArrows = ellipse.style.arrowMarks ?? (ellipse.style.arrowMark ? [ellipse.style.arrowMark] : []);
+    if (ellipseArrows.some((arrow) => Boolean(arrow?.enabled))) {
+      throw new Error(`Unsupported Ellipse style: arrow marks (${ellipse.id})`);
+    }
+    const fillStyle = circleFillStyleToTikz(ellipse.style);
+    const strokeStyle = circleStrokeStyleToTikz(ellipse.style, options);
+    const transformStyle = ellipseRotationStyleToTikz(geom.center, geom.rotationRad);
+    const ellipsePath = `(${fmt(geom.center.x)},${fmt(geom.center.y)}) ellipse[x radius=${fmt(geom.semiMajor)}, y radius=${fmt(geom.semiMinor)}]`;
+    const ellipseBundle: TikzCommand[] = [];
+    if (fillStyle) {
+      const fillOpts = [fillStyle, transformStyle].filter(Boolean).join(", ");
+      ellipseBundle.push({ kind: "DrawRaw", tex: `\\fill[${fillOpts}] ${ellipsePath};` });
+    }
+    const drawOpts = [strokeStyle, transformStyle].filter(Boolean).join(", ");
+    ellipseBundle.push({ kind: "DrawRaw", tex: `\\draw[${drawOpts}] ${ellipsePath};` });
+    pushGeometryCommands({ type: "ellipse", id: ellipse.id }, ellipseBundle);
   }
   for (const polygon of scene.polygons) {
     if (!polygon.visible) continue;
@@ -2100,7 +2175,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         angle.style.markPos ?? 0.5,
         {
           pathLengthWorld: Math.abs(theta) * sectorRadius,
-          screenPxPerWorld: arrowMetricPxPerWorld,
+          screenPxPerWorld: exportPxPerWorld,
+          canvasPxToTikzPt,
         },
         {
           center: bWorld,
@@ -2173,7 +2249,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         angle.style.markPos ?? 0.5,
         {
           pathLengthWorld: Math.abs(theta) * arcRadius,
-          screenPxPerWorld: arrowMetricPxPerWorld,
+          screenPxPerWorld: exportPxPerWorld,
+          canvasPxToTikzPt,
         },
         {
           center: bWorld,
@@ -2217,7 +2294,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const labelPlacementById = computeLabelPlacementMap(scene, options);
   const labels: Array<{ name: string; text: string; options?: string; useGlow?: boolean }> = [];
   const objectLabels: Array<{
-    type: "segment" | "line" | "circle" | "polygon";
+    type: "segment" | "line" | "circle" | "ellipse" | "polygon";
     id: string;
     x: number;
     y: number;
@@ -2304,6 +2381,24 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       text,
       color: circle.style.strokeColor,
       useGlow: objectLabelGlowEnabled && circle.labelGlow !== false,
+    });
+  }
+
+  for (const ellipse of scene.ellipses ?? []) {
+    if (!ellipse.visible || !ellipse.showLabel) continue;
+    const fallbackText = defaultObjectLabelText({ type: "ellipse", id: ellipse.id }, scene);
+    const text = resolveObjectLabelText(ellipse.labelText, fallbackText);
+    const fallbackPos = defaultObjectLabelPosWorld({ type: "ellipse", id: ellipse.id }, scene);
+    const labelPos = isFiniteLabelPosWorld(ellipse.labelPosWorld) ? ellipse.labelPosWorld : fallbackPos;
+    if (!labelPos) continue;
+    objectLabels.push({
+      type: "ellipse",
+      id: ellipse.id,
+      x: labelPos.x,
+      y: labelPos.y,
+      text,
+      color: ellipse.style.strokeColor,
+      useGlow: objectLabelGlowEnabled && ellipse.labelGlow !== false,
     });
   }
 
@@ -2394,8 +2489,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     drawLabelsLayer.push({ kind: "LabelPoint", name: item.name, text: item.text, options: item.options, useGlow: item.useGlow });
   }
   objectLabels.sort((a, b) => {
-    const typeOrder = (type: "segment" | "line" | "circle" | "polygon") =>
-      type === "segment" ? 0 : type === "line" ? 1 : type === "circle" ? 2 : 3;
+    const typeOrder = (type: "segment" | "line" | "circle" | "ellipse" | "polygon") =>
+      type === "segment" ? 0 : type === "line" ? 1 : type === "circle" ? 2 : type === "ellipse" ? 3 : 4;
     const byType = typeOrder(a.type) - typeOrder(b.type);
     if (byType !== 0) return byType;
     return a.id.localeCompare(b.id);
@@ -3204,15 +3299,46 @@ function lineCircleRootMatchIndex(
   return null;
 }
 
+// Whether a point lies on `circle` by construction (not merely by numeric
+// coincidence). Only such points are safe to pass to tkz-euclide's `common=`:
+// that option matches the shared point against the freshly computed intersections
+// using an absolute tolerance, so when the picture is scaled it silently fails for
+// points that sit on the circle only approximately (e.g. an incenter that lies on
+// the circle by a theorem, or a free point dropped onto it). On that failure tkz
+// falls back to plain geometric ordering, which swaps the two `\tkzGetPoints`
+// slots relative to what `common=` promises. Genuine on-circle points match
+// robustly at any scale, so we keep `common=` only for them.
+function isPointConstructedOnCircle(pointId: string, circle: SceneCircle, scene: SceneModel): boolean {
+  if (circle.kind === "threePoint") {
+    if (pointId === circle.aId || pointId === circle.bId || pointId === circle.cId) return true;
+  } else if (circle.kind === "fixedRadius") {
+    // Only the center is named; nothing lies on the circle by construction.
+  } else if (pointId === circle.throughId) {
+    // twoPoint circle: the "through" point is on the circle (the center is not).
+    return true;
+  }
+  const point = scene.points.find((candidate) => candidate.id === pointId);
+  if (!point) return false;
+  if (point.kind === "pointOnCircle") return point.circleId === circle.id;
+  if (point.kind === "circleLineIntersectionPoint") return point.circleId === circle.id;
+  if (point.kind === "circleSegmentIntersectionPoint") return point.circleId === circle.id;
+  if (point.kind === "circleCircleIntersectionPoint") {
+    return point.circleAId === circle.id || point.circleBId === circle.id;
+  }
+  return false;
+}
+
 function validDefinedLineCircleCommonPointName(
   pointId: string | undefined,
   roots: Array<{ point: { x: number; y: number }; t: number }>,
   selectedBranch: 0 | 1,
   scene: SceneModel,
   definedPointIds: Set<string>,
-  pointName: Map<string, string>
+  pointName: Map<string, string>,
+  circle?: SceneCircle
 ): string | undefined {
   if (!pointId || !definedPointIds.has(pointId) || roots.length < 2) return undefined;
+  if (circle && !isPointConstructedOnCircle(pointId, circle, scene)) return undefined;
   const pointWorld = getPointWorldPosCached(scene, pointId);
   const match = lineCircleRootMatchIndex(roots, pointWorld);
   if (match === null || match === selectedBranch) return undefined;
@@ -3297,6 +3423,17 @@ function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: numb
     if (!Number.isFinite(r)) continue;
     add(center.x - r, center.y - r);
     add(center.x + r, center.y + r);
+  }
+
+  for (const ellipse of scene.ellipses ?? []) {
+    const geom = getEllipseWorldGeometry(ellipse, scene);
+    if (!geom) continue;
+    const cos = Math.cos(geom.rotationRad);
+    const sin = Math.sin(geom.rotationRad);
+    const rx = Math.sqrt(geom.semiMajor * geom.semiMajor * cos * cos + geom.semiMinor * geom.semiMinor * sin * sin);
+    const ry = Math.sqrt(geom.semiMajor * geom.semiMajor * sin * sin + geom.semiMinor * geom.semiMinor * cos * cos);
+    add(geom.center.x - rx, geom.center.y - ry);
+    add(geom.center.x + rx, geom.center.y + ry);
   }
 
   for (const angle of scene.angles) {
@@ -3891,7 +4028,7 @@ function segmentArrowsToTikz(
     segmentStrokeWidthPt: number;
     segmentStrokeCarrierKey: string | null;
   },
-  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number },
+  metrics?: PathArrowExportMetrics,
   dotSizeScale?: number
 ): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
   const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
@@ -3929,7 +4066,7 @@ function segmentArrowsToTikz(
         `(${aName}) -- (${bName})`,
         base,
         effectiveArrow.pos ?? 0.5,
-        metrics as { pathLengthWorld: number; screenPxPerWorld: number },
+        metrics,
         undefined,
         undefined,
         dotSizeScale
@@ -3955,20 +4092,19 @@ function segmentArrowsToTikz(
       effectiveArrow.mode === "end" &&
       (isCarrierArrow || hasSameColorCarrier);
     const arrowWidth = useSegmentStrokeWidthForEndpoint ? base.segmentStrokeWidthPt : overlayArrowWidthPt;
-    // Keep endpoint-arrow defaults aligned with decoration arrows.
-    const effectiveScale = clampPositive(effectiveArrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.75;
     const arrowWidthUi = resolvePathArrowWidthUi(effectiveArrow.lineWidthPt);
+    const canvasPxToTikzPt = resolveCanvasPxToTikzPt(metrics);
     const tipMetrics = resolvePathArrowTipMetricsPx(
       tip,
-      1.0,
+      effectiveArrow.sizeScale,
       arrowWidthUi,
       "PathArrowMark",
       effectiveArrow.arrowLength
     );
     const tipSpec = resolveArrowTipSpec(
       tip,
-      tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
-      tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale
+      tipMetrics.lengthPx * canvasPxToTikzPt,
+      tipMetrics.widthPx * canvasPxToTikzPt
     );
     const drawStyleBase = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,line cap=butt${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
       }`;
@@ -3980,7 +4116,7 @@ function segmentArrowsToTikz(
       (metrics?.screenPxPerWorld as number) > 0
         ? (metrics?.pathLengthWorld as number) * (metrics?.screenPxPerWorld as number)
         : NaN;
-    const tipLengthPx = tipMetrics.lengthPx * effectiveScale;
+    const tipLengthPx = tipMetrics.lengthPx;
     const shortTailFrac = Number.isFinite(pathLengthPx)
       ? Math.max(0.01, Math.min(0.35, (tipLengthPx * 1.1) / (pathLengthPx as number)))
       : 0.06;
@@ -4009,7 +4145,7 @@ function segmentArrowsToTikz(
     } else {
       // >-< inward endpoint arrows need a short extension outside each endpoint
       // to orient arrowheads toward the segment interior.
-      const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * effectiveScale));
+      const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * clampPositive(effectiveArrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20)));
       const tNeg = fmt(-tailFrac);
       rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${aName})!${tNeg}!(${bName})$,${aName})`);
       rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${bName})!${tNeg}!(${aName})$,${bName})`);
@@ -4026,7 +4162,7 @@ function segmentDotArrowOverlaysToTikz(
   aName: string,
   bName: string,
   base: { strokeColor: string; strokeWidth: number; opacity: number },
-  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number },
+  metrics?: PathArrowExportMetrics,
   dotSizeScale?: number
 ): string[] {
   const pathExpr = `(${aName}) -- (${bName})`;
@@ -4238,9 +4374,9 @@ function pathArrowOverlayToTikz(
   pathExpr: string,
   base: { strokeColor: string; strokeWidth: number; opacity: number },
   fallbackPos: number,
-  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number },
-  arcDef?: { center: { x: number; y: number }; radius: number; startRad: number; sweepRad: number },
-  arrowTipOptions?: { bend?: boolean; flex?: boolean },
+  metrics?: PathArrowExportMetrics,
+  _arcDef?: { center: { x: number; y: number }; radius: number; startRad: number; sweepRad: number },
+  _arrowTipOptions?: { bend?: boolean; flex?: boolean },
   dotSizeScale?: number
 ): string | null {
   const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
@@ -4253,33 +4389,28 @@ function pathArrowOverlayToTikz(
     const isDotTip = isDotArrowTip(tip);
     const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
     const opacity = normalizedOpacity(base.opacity);
-    const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
-    const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
-    // User snippet requires scale=0.75 for arcs/paths.
-    const effectiveScale = clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.75;
     const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
+    const canvasPxToTikzPt = resolveCanvasPxToTikzPt(metrics);
     const resolvedDotSizeScale = clampPositive(dotSizeScale ?? 1, 0.05, 20);
 
-    // Bending fix: Use scale=1.0 for the arrow command so TikZ bending calculations
-    // see the true physical size relative to the path. Bake the scale into dimensions.
-    const arrowScaleCommand = 1.0;
     const marks: string[] = [];
-    const paths: string[] = [];
     let pairDelta = 0;
     let markerCmd = "";
     let forwardCmd = "";
     let reverseCmd = "";
-    let tipSpec = "";
-    let arrowOptsConstructive = "";
 
     if (isDotTip) {
-      const dotMetrics = resolvePathDotMarkMetricsPx(arrowWidthUi, effectiveScale * resolvedDotSizeScale, arrow.arrowLength);
+      const dotMetrics = resolvePathDotMarkMetricsPx(
+        arrowWidthUi,
+        clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * resolvedDotSizeScale,
+        arrow.arrowLength
+      );
       markerCmd = dotMarkCommandToTikz(
         tip,
         arrowColor,
         opacity,
-        dotMetrics.radiusPx * CANVAS_PX_TO_TIKZ_PT,
-        dotMetrics.strokePx * CANVAS_PX_TO_TIKZ_PT
+        dotMetrics.radiusPx * canvasPxToTikzPt,
+        dotMetrics.strokePx * canvasPxToTikzPt
       );
       pairDelta = computePathArrowPairDelta(
         dotMetrics.pairSeparationPx,
@@ -4288,27 +4419,17 @@ function pathArrowOverlayToTikz(
         arrow.pairGapPx
       );
     } else {
-      const tipMetrics = resolvePathArrowTipMetricsPx(tip, 1.0, arrowWidthUi, "PathArrowMark", arrow.arrowLength);
-      tipSpec = resolveArrowTipSpec(
+      const tipMetrics = resolvePathArrowTipMetricsPx(
         tip,
-        tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
-        tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
-        { ...arrowTipOptions, opacity: arcDef ? opacity : undefined }
+        arrow.sizeScale,
+        arrowWidthUi,
+        "PathArrowMark",
+        arrow.arrowLength
       );
-
-      // Standard opts for Markings (Deco)
-      const arrowOptsMarking = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScaleCommand)}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
-        }`;
-
-      // Opts for Constructive Path (Flex)
-      arrowOptsConstructive = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(
-        arrowScaleCommand
-      )},draw opacity=0`;
-
-      forwardCmd = `\\arrow[${arrowOptsMarking}]{${tipSpec}}`;
-      reverseCmd = `\\arrowreversed[${arrowOptsMarking}]{${tipSpec}}`;
+      forwardCmd = pathArrowGlyphCommandToTikz(tip, arrowColor, opacity, tipMetrics, canvasPxToTikzPt, false);
+      reverseCmd = pathArrowGlyphCommandToTikz(tip, arrowColor, opacity, tipMetrics, canvasPxToTikzPt, true);
       pairDelta = computePathArrowPairDelta(
-        tipMetrics.pairSeparationPx * effectiveScale,
+        tipMetrics.pairSeparationPx,
         metrics?.pathLengthWorld,
         metrics?.screenPxPerWorld,
         arrow.pairGapPx
@@ -4318,24 +4439,6 @@ function pathArrowOverlayToTikz(
 
     const addMark = (pos: number, command: string) => {
       marks.push(`mark=at position ${fmt(clamp01(pos))} with {${command}}`);
-    };
-
-    const addConstructivePath = (pos: number, reversed: boolean) => {
-      if (!arcDef) return;
-      const isCCW = arcDef.sweepRad >= 0;
-      const targetRad = arcDef.startRad + arcDef.sweepRad * clamp01(pos);
-      const epsilon = 0.2;
-      const aEnd = targetRad;
-      const aStart = targetRad - (isCCW ? epsilon : -epsilon);
-      const pCenter = arcDef.center;
-      const r = arcDef.radius;
-      const startDeg = (aStart * 180) / Math.PI;
-      const endDeg = (aEnd * 180) / Math.PI;
-      const arcPath = `(${fmt(pCenter.x + Math.cos(aStart) * r)},${fmt(
-        pCenter.y + Math.sin(aStart) * r
-      )}) arc (${fmt(startDeg)}:${fmt(endDeg)}:${fmt(r)})`;
-      const finalTipSpec = reversed ? tipSpec.replace(/\]$/, ",reversed]") : tipSpec;
-      paths.push(`\\draw[${arrowOptsConstructive}, -{${finalTipSpec}}] ${arcPath};`);
     };
 
     for (let i = 0; i < positions.length; i += 1) {
@@ -4350,35 +4453,20 @@ function pathArrowOverlayToTikz(
         continue;
       }
       if (arrow.direction === "->") {
-        if (arcDef) addConstructivePath(p, false);
-        else addMark(p, forwardCmd);
+        addMark(p, forwardCmd);
       } else if (arrow.direction === "<-") {
-        if (arcDef) addConstructivePath(p, true);
-        else addMark(p, reverseCmd);
+        addMark(p, reverseCmd);
       } else if (arrow.direction === "<->") {
-        if (arcDef) {
-          addConstructivePath(p - pairDelta, true);
-          addConstructivePath(p + pairDelta, false);
-        } else {
-          addMark(p - pairDelta, reverseCmd);
-          addMark(p + pairDelta, forwardCmd);
-        }
+        addMark(p - pairDelta, reverseCmd);
+        addMark(p + pairDelta, forwardCmd);
       } else {
-        if (arcDef) {
-          addConstructivePath(p - pairDelta, false);
-          addConstructivePath(p + pairDelta, true);
-        } else {
-          addMark(p - pairDelta, forwardCmd);
-          addMark(p + pairDelta, reverseCmd);
-        }
+        addMark(p - pairDelta, forwardCmd);
+        addMark(p + pairDelta, reverseCmd);
       }
     }
 
-    if (arcDef && !isDotTip) {
-      results.push(paths.join("\n"));
-    } else if (marks.length > 0) {
+    if (marks.length > 0) {
       const opts: string[] = ["postaction=decorate", `decoration={markings,${marks.join(",")}}`];
-      if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
       results.push(`\\path[${opts.join(", ")}] ${pathExpr};`);
     }
   }
@@ -4400,7 +4488,7 @@ function sectorMarksToTikz(
     const mark = marks[i];
     const markCommand = sectorMarkSymbolCommandToTikz(
       mark.markSymbol,
-      Math.max(0.2, (mark.markSize ?? 1.2) * CANVAS_PX_TO_TIKZ_PT),
+      Math.max(0.2, (mark.markSize ?? 1.2) * FALLBACK_CANVAS_PX_TO_TIKZ_PT),
       rgbColorExpr(mark.markColor ?? style.markColor ?? base.strokeColor),
       lineWidthPt,
       normalizedOpacity(base.opacity)
@@ -4529,49 +4617,81 @@ function resolveArrowTipSpec(
   return `${tip}[length=${fmt(Math.max(0.5, lengthPt))}pt,width=${fmt(Math.max(0.4, widthPt))}pt${extra}]`;
 }
 
+function resolveCanvasPxToTikzPt(metrics: PathArrowExportMetrics | undefined): number {
+  const value = metrics?.canvasPxToTikzPt;
+  if (Number.isFinite(value) && (value as number) > 0) return value as number;
+  return FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+}
+
 function resolvePathArrowWidthUi(lineWidthPt: unknown): number {
   if (!Number.isFinite(lineWidthPt) || (lineWidthPt as number) <= 0) return DEFAULT_PATH_ARROW_UI;
   return clampPositive((lineWidthPt as number) / PATH_ARROW_WIDTH_UI_FACTOR, 0.2, 12);
 }
 
+type PathArrowTipMetricsPx = {
+  lengthPx: number;
+  widthPx: number;
+  halfWidthPx: number;
+  notchDistancePx: number;
+  lineWidthPx: number;
+  pairSeparationPx: number;
+};
+
 function resolvePathArrowTipMetricsPx(
   tip: "Stealth" | "Latex" | "Triangle",
-  _arrowScale: number,
+  sizeScale: unknown,
   widthUi: number,
-  context: "SegmentArrowMark" | "PathArrowMark",
+  _context: "SegmentArrowMark" | "PathArrowMark",
   arrowLength?: number
-): { lengthPx: number; widthPx: number; pairSeparationPx: number } {
-  // If arrowLength is provided, use it as the base size (uncoupled from scale).
-  // Base length: arrowLength is now a multiplier (default 1.0).
-  // 1.0 corresponds to 16.8px, matching the tuned `(1,1,3) -> 15.12pt` visually.
-  // For PathArrowMark (Arcs), reduce by 0.9x to match user requirement (9pt vs 10pt).
-  const contextScale = context === "PathArrowMark" ? 0.9 : 1.0;
-  const baseSize = (arrowLength ?? 1.0) * 16.8 * contextScale;
-
-  const widthScale = Math.sqrt(Math.max(0.2, Math.min(12, widthUi)));
+): PathArrowTipMetricsPx {
+  const numericSizeScale =
+    typeof sizeScale === "number" && Number.isFinite(sizeScale) ? sizeScale : DEFAULT_PATH_ARROW_UI;
+  const scale = clampPositive(numericSizeScale, 0.2, 8);
+  const normalizedWidthUi = Math.max(0.2, Math.min(12, widthUi));
+  const baseLength = (arrowLength ?? 1.0) * 16.8;
+  const headSize = Math.max(4, baseLength * scale);
+  const referenceSize = 24 * scale;
+  const widthScale = Math.sqrt(normalizedWidthUi) * (referenceSize / headSize);
   const profile =
     tip === "Latex"
-      ? { lengthMul: 0.95, wingMul: 0.34 }
+      ? { lengthMul: 0.95, wingMul: 0.34, notchMul: 0 }
       : tip === "Triangle"
-        ? { lengthMul: 1.071, wingMul: 0.56 } // Tuned to 9.0pt (from 8.4pt)
-        : { lengthMul: 1.2, wingMul: 0.44 };
-
-  // If arrowLength is explicit, we don't multiply by profile.lengthMul because 
-  // the user likely interprets "Length" as the total length.
-  // But for "Stealth", the visual length including notch might differ.
-  // Let's stick to using baseSize as the driver.
-  const lengthPx = Math.max(4, baseSize * profile.lengthMul);
-
-  // Width calculation
-  // We want width to be independent of length (matching Canvas logic).
-  // Canvas uses a fixed reference size (24) equivalent.
-  // Here we use the raw definition: 16.8 base size (unscaled by arrowLength).
-  const widthBase = 16.8;
-  const halfWidthPx = Math.max(1.2, widthBase * profile.wingMul * widthScale);
+        ? { lengthMul: 1.0, wingMul: 0.56, notchMul: 0 }
+        : { lengthMul: 1.2, wingMul: 0.44, notchMul: 0.34 };
+  const lengthPx = headSize * profile.lengthMul;
+  const halfWidthPx = headSize * profile.wingMul * widthScale;
   const widthPx = halfWidthPx * 2;
+  const notchDistancePx = lengthPx * (1 - profile.notchMul);
+  const pairSeparationPx = Math.max(3, Math.max(headSize * 1.45, headSize * 1.05 * widthScale));
+  const lineWidthPx = Math.max(0.8, normalizedWidthUi * 1.35);
+  return { lengthPx, widthPx, halfWidthPx, notchDistancePx, lineWidthPx, pairSeparationPx };
+}
 
-  const pairSeparationPx = Math.max(3, Math.max(baseSize * 0.9, baseSize * 0.65 * widthScale));
-  return { lengthPx, widthPx, pairSeparationPx };
+function pathArrowGlyphCommandToTikz(
+  tip: "Stealth" | "Latex" | "Triangle",
+  colorExpr: string,
+  opacity: number,
+  metrics: PathArrowTipMetricsPx,
+  pxToPt: number,
+  reversed: boolean
+): string {
+  const len = Math.max(0.5, metrics.lengthPx * pxToPt);
+  const wing = Math.max(0.3, metrics.halfWidthPx * pxToPt);
+  const notch = Math.max(0, metrics.notchDistancePx * pxToPt);
+  const stroke = Math.max(0.1, metrics.lineWidthPx * pxToPt);
+  const opacityOpt = opacity < 0.999 ? `,opacity=${fmt(opacity)}` : "";
+  const x = (value: number) => fmt(reversed ? value : -value);
+  const y = (value: number) => fmt(reversed ? -value : value);
+
+  if (tip === "Latex") {
+    return `\\draw[color=${colorExpr},line width=${fmt(stroke)}pt,line cap=round,line join=round${opacityOpt}] (${x(len)}pt,${y(wing)}pt) -- (0pt,0pt) -- (${x(len)}pt,${y(-wing)}pt);`;
+  }
+
+  const middle =
+    tip === "Stealth"
+      ? ` -- (${x(notch)}pt,0pt)`
+      : "";
+  return `\\fill[color=${colorExpr}${opacityOpt}] (0pt,0pt) -- (${x(len)}pt,${y(wing)}pt)${middle} -- (${x(len)}pt,${y(-wing)}pt) -- cycle;`;
 }
 
 function resolvePathDotMarkMetricsPx(
@@ -4669,6 +4789,12 @@ function circleFillStyleToTikz(style: SceneModel["circles"][number]["style"]): s
     if (pattern.patternColorExpr) parts.push(pattern.patternColorExpr);
   }
   return parts.join(", ");
+}
+
+function ellipseRotationStyleToTikz(center: { x: number; y: number }, rotationRad: number): string {
+  const rotationDeg = (rotationRad * 180) / Math.PI;
+  if (!Number.isFinite(rotationDeg) || Math.abs(rotationDeg) <= 1e-9) return "";
+  return `rotate around={${fmt(rotationDeg)}:(${fmt(center.x)},${fmt(center.y)})}`;
 }
 
 function polygonStrokeStyleToTikz(style: SceneModel["polygons"][number]["style"], options: TikzExportOptions): string {

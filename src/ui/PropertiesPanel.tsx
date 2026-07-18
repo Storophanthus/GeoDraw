@@ -7,6 +7,7 @@ import {
   evaluateAngleExpressionDegrees,
   evaluateNumberExpression,
   getCircleWorldGeometry,
+  getEllipseWorldGeometry,
   getLineWorldAnchors,
   getNumberValue,
   getPointWorldPos,
@@ -67,6 +68,7 @@ export function PropertiesPanel({
   const segmentDefaults = useGeoStore((store) => store.segmentDefaults);
   const lineDefaults = useGeoStore((store) => store.lineDefaults);
   const circleDefaults = useGeoStore((store) => store.circleDefaults);
+  const ellipseDefaults = useGeoStore((store) => store.ellipseDefaults);
   const polygonDefaults = useGeoStore((store) => store.polygonDefaults);
   const angleDefaults = useGeoStore((store) => store.angleDefaults);
   const objectLabelDefaults = useGeoStore((store) => store.objectLabelDefaults);
@@ -82,6 +84,7 @@ export function PropertiesPanel({
   const setSegmentDefaults = useGeoStore((store) => store.setSegmentDefaults);
   const setLineDefaults = useGeoStore((store) => store.setLineDefaults);
   const setCircleDefaults = useGeoStore((store) => store.setCircleDefaults);
+  const setEllipseDefaults = useGeoStore((store) => store.setEllipseDefaults);
   const setPolygonDefaults = useGeoStore((store) => store.setPolygonDefaults);
   const setAngleDefaults = useGeoStore((store) => store.setAngleDefaults);
   const setObjectLabelDefaults = useGeoStore((store) => store.setObjectLabelDefaults);
@@ -104,6 +107,8 @@ export function PropertiesPanel({
   const updateLineStyleByIds = useGeoStore((store) => store.updateLineStyleByIds);
   const updateSelectedCircleStyle = useGeoStore((store) => store.updateSelectedCircleStyle);
   const updateCircleStyleByIds = useGeoStore((store) => store.updateCircleStyleByIds);
+  const updateSelectedEllipseStyle = useGeoStore((store) => store.updateSelectedEllipseStyle);
+  const updateEllipseStyleByIds = useGeoStore((store) => store.updateEllipseStyleByIds);
   const updateSelectedPolygonStyle = useGeoStore((store) => store.updateSelectedPolygonStyle);
   const updatePolygonStyleByIds = useGeoStore((store) => store.updatePolygonStyleByIds);
   const updateSelectedAngleStyle = useGeoStore((store) => store.updateSelectedAngleStyle);
@@ -116,6 +121,8 @@ export function PropertiesPanel({
   const convertLinesToSegmentsByIds = useGeoStore((store) => store.convertLinesToSegmentsByIds);
   const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
   const updateCircleFieldsByIds = useGeoStore((store) => store.updateCircleFieldsByIds);
+  const updateSelectedEllipseFields = useGeoStore((store) => store.updateSelectedEllipseFields);
+  const updateEllipseFieldsByIds = useGeoStore((store) => store.updateEllipseFieldsByIds);
   const updateSelectedPolygonFields = useGeoStore((store) => store.updateSelectedPolygonFields);
   const updatePolygonFieldsByIds = useGeoStore((store) => store.updatePolygonFieldsByIds);
   const setSelectedPolygonOwnedSegmentsVisible = useGeoStore((store) => store.setSelectedPolygonOwnedSegmentsVisible);
@@ -146,6 +153,10 @@ export function PropertiesPanel({
   const selectedCircle = useMemo(
     () => (selectedObject?.type === "circle" ? scene.circles.find((item) => item.id === selectedObject.id) ?? null : null),
     [scene.circles, selectedObject]
+  );
+  const selectedEllipse = useMemo(
+    () => (selectedObject?.type === "ellipse" ? (scene.ellipses ?? []).find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.ellipses, selectedObject]
   );
   const selectedPolygon = useMemo(
     () => (selectedObject?.type === "polygon" ? scene.polygons.find((item) => item.id === selectedObject.id) ?? null : null),
@@ -191,6 +202,12 @@ export function PropertiesPanel({
     if (!geometry || !Number.isFinite(geometry.radius) || geometry.radius < 0) return null;
     return formatCircleEquation(geometry.center.x, geometry.center.y, geometry.radius);
   }, [scene, selectedCircle]);
+  const selectedEllipseDescription = useMemo(() => {
+    if (!selectedEllipse) return null;
+    const geometry = getEllipseWorldGeometry(selectedEllipse, scene);
+    if (!geometry) return null;
+    return `a=${formatRoundedDisplay(geometry.semiMajor, 2)}, b=${formatRoundedDisplay(geometry.semiMinor, 2)}`;
+  }, [scene, selectedEllipse]);
   const selectedAngleDegrees = useMemo(() => {
     if (!selectedAngle) return null;
     const aPoint = scene.points.find((point) => point.id === selectedAngle.aId);
@@ -255,17 +272,18 @@ export function PropertiesPanel({
     propertiesPanelIntent,
     recentCreatedOwnsPanel: recentCreatedPanelState.recentCreatedOwnsPanel,
   });
-  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | null>(() => {
+  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | null>(() => {
     if (selectedPoint) return "point";
     if (selectedSegment) return "segment";
     if (selectedLine) return "line";
     if (selectedCircle) return "circle";
+    if (selectedEllipse) return "ellipse";
     if (selectedPolygon) return "polygon";
     if (selectedAngle) return "angle";
     if (selectedTextLabel) return "textLabel";
     if (selectedRichText) return "richText";
     return null;
-  }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedPolygon, selectedRichText, selectedSegment, selectedTextLabel]);
+  }, [selectedAngle, selectedCircle, selectedEllipse, selectedLine, selectedPoint, selectedPolygon, selectedRichText, selectedSegment, selectedTextLabel]);
   const selectedAngleRightStatus = useMemo<"none" | "approx" | "exact">(
     () => (selectedAngle ? resolveAngleRightStatus(scene, selectedAngle) : "none"),
     [scene, selectedAngle]
@@ -293,6 +311,13 @@ export function PropertiesPanel({
         (selectedCircle.labelGlow !== false) === (objectLabelDefaults.circleGlow ?? true)
       );
     }
+    if (selectedEllipse) {
+      return (
+        circleStyleEqual(ellipseDefaults, selectedEllipse.style) &&
+        Boolean(selectedEllipse.showLabel) === objectLabelDefaults.ellipse &&
+        (selectedEllipse.labelGlow !== false) === (objectLabelDefaults.ellipseGlow ?? true)
+      );
+    }
     if (selectedPolygon) {
       return (
         polygonStyleEqual(polygonDefaults, selectedPolygon.style) &&
@@ -310,6 +335,7 @@ export function PropertiesPanel({
   }, [
     angleDefaults,
     circleDefaults,
+    ellipseDefaults,
     labelToolDefaults,
     lineDefaults,
     objectLabelDefaults,
@@ -319,6 +345,7 @@ export function PropertiesPanel({
     segmentDefaults,
     selectedAngle,
     selectedCircle,
+    selectedEllipse,
     selectedLine,
     selectedPoint,
     selectedPolygon,
@@ -358,6 +385,14 @@ export function PropertiesPanel({
       setObjectLabelDefaults({
         circle: Boolean(selectedCircle.showLabel),
         circleGlow: selectedCircle.labelGlow !== false,
+      });
+      return;
+    }
+    if (selectedStyleKind === "ellipse" && selectedEllipse) {
+      setEllipseDefaults({ ...selectedEllipse.style });
+      setObjectLabelDefaults({
+        ellipse: Boolean(selectedEllipse.showLabel),
+        ellipseGlow: selectedEllipse.labelGlow !== false,
       });
       return;
     }
@@ -490,6 +525,20 @@ export function PropertiesPanel({
       return;
     }
     updateSelectedCircleFields(next);
+  };
+  const handleUpdateSelectedEllipseStyle = (next: Parameters<typeof updateSelectedEllipseStyle>[0]) => {
+    if (selectedObject?.type === "ellipse" && hasLinkedSelection) {
+      updateEllipseStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedEllipseStyle(next);
+  };
+  const handleUpdateSelectedEllipseFields = (next: Parameters<typeof updateSelectedEllipseFields>[0]) => {
+    if (selectedObject?.type === "ellipse" && hasLinkedSelection) {
+      updateEllipseFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedEllipseFields(next);
   };
   const handleUpdateSelectedPolygonStyle = (next: Parameters<typeof updateSelectedPolygonStyle>[0]) => {
     if (selectedObject?.type === "polygon" && hasLinkedSelection) {
@@ -645,6 +694,7 @@ export function PropertiesPanel({
             segmentDefaults={segmentDefaults}
             lineDefaults={lineDefaults}
             circleDefaults={circleDefaults}
+            ellipseDefaults={ellipseDefaults}
             polygonDefaults={polygonDefaults}
             angleDefaults={angleDefaults}
             objectLabelDefaults={objectLabelDefaults}
@@ -654,6 +704,7 @@ export function PropertiesPanel({
             setSegmentDefaults={setSegmentDefaults}
             setLineDefaults={setLineDefaults}
             setCircleDefaults={setCircleDefaults}
+            setEllipseDefaults={setEllipseDefaults}
             setPolygonDefaults={setPolygonDefaults}
             setAngleDefaults={setAngleDefaults}
             setObjectLabelDefaults={setObjectLabelDefaults}
@@ -672,7 +723,7 @@ export function PropertiesPanel({
           deleteLabel={deleteButtonLabel}
         />
       )}
-      {!showToolPreconfigurePanel && !selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedPolygon && !selectedAngle && !selectedTextLabel && !selectedRichText && !selectedNumber && (
+      {!showToolPreconfigurePanel && !selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedEllipse && !selectedPolygon && !selectedAngle && !selectedTextLabel && !selectedRichText && !selectedNumber && (
         <div className="emptyState">Select an object to edit properties</div>
       )}
       {!showToolPreconfigurePanel && selectedPoint && (
@@ -710,6 +761,15 @@ export function PropertiesPanel({
           <div className="detailRow">
             <span className="detailLabel">Equation</span>
             <span>{selectedCircleEquation ?? "undefined"}</span>
+          </div>
+        </div>
+      )}
+      {!showToolPreconfigurePanel && selectedEllipse && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Ellipse</div>
+          <div className="detailRow">
+            <span className="detailLabel">Semiaxes</span>
+            <span>{selectedEllipseDescription ?? "undefined"}</span>
           </div>
         </div>
       )}
@@ -754,6 +814,7 @@ export function PropertiesPanel({
           selectedSegment={selectedSegment}
           selectedLine={selectedLine}
           selectedCircle={selectedCircle}
+          selectedEllipse={selectedEllipse}
           selectedPolygon={selectedPolygon}
           selectedPolygonOwnedEdgesVisible={selectedPolygonOwnedEdgesVisible}
           selectedAngle={selectedAngle}
@@ -761,11 +822,13 @@ export function PropertiesPanel({
           updateSelectedSegmentStyle={handleUpdateSelectedSegmentStyle}
           updateSelectedLineStyle={handleUpdateSelectedLineStyle}
           updateSelectedCircleStyle={handleUpdateSelectedCircleStyle}
+          updateSelectedEllipseStyle={handleUpdateSelectedEllipseStyle}
           updateSelectedPolygonStyle={handleUpdateSelectedPolygonStyle}
           updateSelectedAngleStyle={handleUpdateSelectedAngleStyle}
           updateSelectedSegmentFields={handleUpdateSelectedSegmentFields}
           updateSelectedLineFields={handleUpdateSelectedLineFields}
           updateSelectedCircleFields={handleUpdateSelectedCircleFields}
+          updateSelectedEllipseFields={handleUpdateSelectedEllipseFields}
           canConvertSelectedLineToSegment={canConvertSelectedLineToSegment}
           convertSelectedLineToSegment={handleConvertSelectedLineToSegment}
           updateSelectedPolygonFields={handleUpdateSelectedPolygonFields}

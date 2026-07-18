@@ -5,7 +5,7 @@ type PointerStateLike = {
   active: boolean;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | "richText" | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "textLabel" | "richText" | null;
 };
 
 export type DragBufferAccess = {
@@ -28,7 +28,7 @@ type DragUpdateOps = {
   movePointLabelBy: (pointId: string, delta: Vec2) => void;
   moveAngleLabelTo: (angleId: string, world: Vec2) => void;
   moveObjectLabelTo: (
-    obj: { type: "segment" | "line" | "circle" | "polygon"; id: string },
+    obj: { type: "segment" | "line" | "circle" | "ellipse" | "polygon"; id: string },
     world: Vec2
   ) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
@@ -85,6 +85,7 @@ export function applyBufferedDragUpdate(
       st.objectType !== "segment"
       && st.objectType !== "line"
       && st.objectType !== "circle"
+      && st.objectType !== "ellipse"
       && st.objectType !== "polygon"
     ) {
       return;

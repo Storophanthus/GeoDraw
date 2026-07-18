@@ -1,4 +1,5 @@
 export { drawCircles, drawCircleObject } from "./circles";
+export { drawEllipseObject } from "./ellipses";
 export { drawLines, drawLineObject } from "./lines";
 export { drawSegments, drawSegmentObject } from "./segments";
 export { drawPolygons, drawPolygonObject } from "./polygons";

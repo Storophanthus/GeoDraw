@@ -10,7 +10,7 @@ export type ToolClickHits = {
   hitSegmentId: string | null;
   hitTextLabelId?: string | null;
   hitRichTextNodeId?: string | null;
-  hitObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "richText"; id: string } | null;
+  hitObject: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "richText"; id: string } | null;
   shiftKey: boolean;
   hasCopyStyleSource: boolean;
   snap: SnapCandidate | null;
@@ -30,6 +30,7 @@ export type ToolClickIO = {
   createCircle: (centerId: string, throughId: string) => string | null;
   createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
+  createEllipseFociPoint: (focusAId: string, focusBId: string, throughId: string) => string | null;
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createTangentLines: (throughId: string, circleId: string) => string[];
@@ -71,10 +72,10 @@ export type ToolClickIO = {
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
-  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText"; id: string } | null) => void;
-  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText"; id: string }) => void;
-  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText"; id: string }) => void;
-  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
+  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText"; id: string } | null) => void;
+  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText"; id: string }) => void;
+  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText"; id: string }) => void;
+  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }) => void;
   beginTextLabelEditing?: (id: string) => boolean;
   beginRichTextEditing?: (id: string) => boolean;
   textLabels?: NonNullable<SceneModel["textLabels"]>;
@@ -577,6 +578,29 @@ export function handleToolClick(
     return;
   }
 
+  if (activeTool === "ellipse_foci_point") {
+    if (!pendingSelection || pendingSelection.tool !== "ellipse_foci_point") {
+      io.setPendingSelection({ tool: "ellipse_foci_point", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+    if (pendingSelection.step === 2) {
+      const focusBId = resolveOrCreatePointAtCursor();
+      if (focusBId === pendingSelection.first.id) return;
+      io.setPendingSelection({
+        tool: "ellipse_foci_point",
+        step: 3,
+        first: pendingSelection.first,
+        second: { type: "point", id: focusBId },
+      });
+      return;
+    }
+    const throughId = resolveOrCreatePointAtCursor();
+    const created = io.createEllipseFociPoint(pendingSelection.first.id, pendingSelection.second.id, throughId);
+    if (!created) return;
+    io.clearPendingSelection();
+    return;
+  }
+
   if (activeTool === "circle_fixed") {
     if (!pendingSelection || pendingSelection.tool !== "circle_fixed") {
       io.setPendingSelection({ tool: "circle_fixed", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
@@ -882,6 +906,7 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     activeTool === "circle_cp" ||
     activeTool === "circle_3p" ||
     activeTool === "circle_fixed" ||
+    activeTool === "ellipse_foci_point" ||
     activeTool === "polygon" ||
     activeTool === "regular_polygon" ||
     activeTool === "sector" ||
@@ -897,7 +922,7 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
 export function isValidTarget(
   activeTool: ActiveTool,
   pendingSelection: PendingSelection,
-  hoveredHit: { type: "point" | "segment" | "line2p" | "circle" | "polygon" | "angle"; id: string } | null,
+  hoveredHit: { type: "point" | "segment" | "line2p" | "circle" | "ellipse" | "polygon" | "angle"; id: string } | null,
   hoverSnap: SnapCandidate | null = null
 ): boolean {
   const hasSectorArcSnap = hoverSnap?.kind === "onSectorArc";
@@ -910,6 +935,7 @@ export function isValidTarget(
   if (activeTool === "circle_cp") return hoveredHit.type === "point";
   if (activeTool === "circle_3p") return hoveredHit.type === "point";
   if (activeTool === "circle_fixed") return hoveredHit.type === "point";
+  if (activeTool === "ellipse_foci_point") return hoveredHit.type === "point";
   if (activeTool === "polygon") return hoveredHit.type === "point";
   if (activeTool === "regular_polygon") return hoveredHit.type === "point";
   if (activeTool === "translate") {

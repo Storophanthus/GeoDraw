@@ -17,7 +17,7 @@ function buildParseContext(
   scene: SceneModel,
   ans: number | null,
   scalarVars: Record<string, number>,
-  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }>
+  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }>
 ): ParseContext {
   const symbolsByLabel = new Map<string, Symbol[]>();
   const add = (symbol: Symbol) => {
@@ -94,6 +94,7 @@ export function CommandBar() {
   const createCircle = useGeoStore((store) => store.createCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
+  const createEllipseFociPoint = useGeoStore((store) => store.createEllipseFociPoint);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
   const createTriangleCenterPoint = useGeoStore((store) => store.createTriangleCenterPoint);
@@ -436,6 +437,16 @@ export function CommandBar() {
         return;
       }
       setStatus({ kind: "ok", text: `Created circle ${circleId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateEllipseFociPoint") {
+      const ellipseId = createEllipseFociPoint(cmd.focusAId, cmd.focusBId, cmd.throughId);
+      if (!ellipseId) {
+        setStatus({ kind: "error", text: "Cannot construct ellipse" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created ellipse ${ellipseId}` });
       return;
     }
 

@@ -69,7 +69,7 @@ const runtime = createStoreRuntime({
 const setState: (updater: (prev: GeoState) => GeoState, options?: SetStateOptions) => void = runtime.setState;
 const commandBarObjectAliases = new Map<
   string,
-  { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }
+  { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }
 >();
 
 export type GeoDocumentRuntimeState = {
@@ -91,6 +91,7 @@ function isAliasTargetAlive(scene: GeoState["scene"], target: CommandAliasTarget
   if (target.type === "segment") return scene.segments.some((s) => s.id === target.id);
   if (target.type === "line") return scene.lines.some((l) => l.id === target.id);
   if (target.type === "circle") return scene.circles.some((c) => c.id === target.id);
+  if (target.type === "ellipse") return (scene.ellipses ?? []).some((e) => e.id === target.id);
   if (target.type === "polygon") return scene.polygons.some((pg) => pg.id === target.id);
   return scene.angles.some((a) => a.id === target.id);
 }
@@ -297,7 +298,7 @@ export const commandBarApi = {
     if (!created) return { ok: false as const, error: `Name already used: ${trimmed}` };
     return { ok: true as const, mode: "created", id: created };
   },
-  getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }> {
+  getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }> {
     pruneStaleCommandAliases(runtime.getState().scene);
     return Object.fromEntries(commandBarObjectAliases.entries());
   },
@@ -337,7 +338,7 @@ export const commandBarApi = {
   applyObjectAssignment(
     name: string,
     cmd: Command
-  ): { ok: true; mode: "created" | "updated"; objectType: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | { ok: false; error: string } {
+  ): { ok: true; mode: "created" | "updated"; objectType: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string } | { ok: false; error: string } {
     const label = name.trim();
     if (!label) return { ok: false as const, error: "Assignment name is empty" };
     const scene = runtime.getState().scene;
@@ -415,6 +416,11 @@ export const commandBarApi = {
         const id = commandBarApi.createCircleThreePointWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         return { ok: true as const, mode: "created", objectType: "circle", id };
+      }
+      if (cmd.type === "CreateEllipseFociPoint") {
+        const id = commandBarApi.createEllipseFociPointWithLabel(cmd.focusAId, cmd.focusBId, cmd.throughId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "ellipse", id };
       }
       if (cmd.type === "CreateAngle") {
         const id = commandBarApi.createAngleWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
@@ -639,6 +645,39 @@ export const commandBarApi = {
       return updated
         ? { ok: true as const, mode: "updated", objectType: "circle", id: existing.id }
         : { ok: false as const, error: `Cannot redefine circle ${label} with this command` };
+    }
+
+    if (existing.type === "ellipse") {
+      if (cmd.type !== "CreateEllipseFociPoint") return { ok: false as const, error: `Cannot redefine ellipse ${label} with this command` };
+      let updated = false;
+      setState((prev) => {
+        const oldEllipse = (prev.scene.ellipses ?? []).find((e) => e.id === existing.id);
+        if (!oldEllipse) return prev;
+        const hasPoint = (id: string) => prev.scene.points.some((p) => p.id === id);
+        if (cmd.focusAId === cmd.focusBId || !hasPoint(cmd.focusAId) || !hasPoint(cmd.focusBId) || !hasPoint(cmd.throughId)) return prev;
+        updated = true;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses: (prev.scene.ellipses ?? []).map((ellipse) =>
+              ellipse.id === oldEllipse.id
+                ? {
+                  ...oldEllipse,
+                  focusAId: cmd.focusAId,
+                  focusBId: cmd.focusBId,
+                  throughId: cmd.throughId,
+                }
+                : ellipse
+            ),
+          },
+          selectedObject: { type: "ellipse", id: oldEllipse.id },
+          recentCreatedObject: { type: "ellipse", id: oldEllipse.id },
+        };
+      });
+      return updated
+        ? { ok: true as const, mode: "updated", objectType: "ellipse", id: existing.id }
+        : { ok: false as const, error: `Cannot redefine ellipse ${label} with this command` };
     }
 
     if (existing.type === "polygon") {
@@ -1202,6 +1241,19 @@ export const commandBarApi = {
     commandBarObjectAliases.set(name, { type: "circle", id: circleId });
     return circleId;
   },
+  createEllipseFociPointWithLabel(focusAId: string, focusBId: string, throughId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const ellipseId = actions.createEllipseFociPoint(focusAId, focusBId, throughId);
+    if (!ellipseId) return null;
+    commandBarObjectAliases.set(name, { type: "ellipse", id: ellipseId });
+    return ellipseId;
+  },
   createCircleCenterRadiusWithLabel(centerId: string, r: number, label: string, rExpr?: string): string | null {
     const name = label.trim();
     if (!name || !Number.isFinite(r) || r <= 0) return null;
@@ -1374,6 +1426,10 @@ export function restoreGeoDocumentRuntimeState(documentState: GeoDocumentRuntime
 
 export function useGeoStore<T>(selector: (store: GeoStore) => T): T {
   return useSyncExternalStore(runtime.subscribe, () => selector(getGeoStore()), () => selector(getGeoStore()));
+}
+
+export function subscribeGeoStore(listener: () => void): () => void {
+  return runtime.subscribe(listener);
 }
 
 export { geoStoreHelpers };

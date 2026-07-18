@@ -44,6 +44,7 @@ export type ActiveTool =
   | "circle_cp"
   | "circle_3p"
   | "circle_fixed"
+  | "ellipse_foci_point"
   | "polygon"
   | "regular_polygon"
   | "sector"
@@ -61,6 +62,7 @@ export type SelectedObject =
   | { type: "segment"; id: string }
   | { type: "line"; id: string }
   | { type: "circle"; id: string }
+  | { type: "ellipse"; id: string }
   | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
   | { type: "textLabel"; id: string }
@@ -110,6 +112,7 @@ export type HoveredHit =
   | { type: "segment"; id: string }
   | { type: "line2p"; id: string }
   | { type: "circle"; id: string }
+  | { type: "ellipse"; id: string }
   | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
   | null;
@@ -205,6 +208,17 @@ export type PendingSelection =
     second: { type: "point"; id: string };
   }
   | {
+    tool: "ellipse_foci_point";
+    step: 2;
+    first: { type: "point"; id: string };
+  }
+  | {
+    tool: "ellipse_foci_point";
+    step: 3;
+    first: { type: "point"; id: string };
+    second: { type: "point"; id: string };
+  }
+  | {
     tool: "circle_fixed";
     step: 2;
     first: { type: "point"; id: string };
@@ -265,10 +279,12 @@ export type ObjectLabelDefaults = {
   segment: boolean;
   line: boolean;
   circle: boolean;
+  ellipse: boolean;
   polygon: boolean;
   segmentGlow?: boolean;
   lineGlow?: boolean;
   circleGlow?: boolean;
+  ellipseGlow?: boolean;
   polygonGlow?: boolean;
 };
 
@@ -298,6 +314,7 @@ export type GeoState = {
   nextSegmentId: number;
   nextLineId: number;
   nextCircleId: number;
+  nextEllipseId: number;
   nextPolygonId: number;
   nextAngleId: number;
   nextNumberId: number;
@@ -308,6 +325,7 @@ export type GeoState = {
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
+  ellipseDefaults: CircleStyle;
   polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
   objectLabelDefaults: ObjectLabelDefaults;
@@ -363,6 +381,7 @@ export type AppPreferencesState = Pick<
   | "segmentDefaults"
   | "lineDefaults"
   | "circleDefaults"
+  | "ellipseDefaults"
   | "polygonDefaults"
   | "angleDefaults"
   | "objectLabelDefaults"
@@ -411,6 +430,7 @@ export type GeoActions = {
   createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
   createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
+  createEllipseFociPoint: (focusAId: string, focusBId: string, throughId: string) => string | null;
   createPolygon: (pointIds: string[]) => string | null;
   createRegularPolygon: (aId: string, bId: string, sides: number, direction: AngleFixedDirection) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
@@ -445,17 +465,18 @@ export type GeoActions = {
   movePolygonByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   movePointLabelBy: (id: string, deltaPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
-  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon" | "angle"; id: string }, world: Vec2) => void;
+  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }, world: Vec2) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
   moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   moveRichTextNodeTo: (id: string, world: Vec2) => void;
   moveRichTextNodeByWorldDelta: (id: string, deltaWorld: Vec2) => void;
-  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
+  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }) => void;
 
   setPointDefaults: (next: Partial<PointStyle>) => void;
   setSegmentDefaults: (next: Partial<LineStyle>) => void;
   setLineDefaults: (next: Partial<LineStyle>) => void;
   setCircleDefaults: (next: Partial<CircleStyle>) => void;
+  setEllipseDefaults: (next: Partial<CircleStyle>) => void;
   setPolygonDefaults: (next: Partial<PolygonStyle>) => void;
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
   setObjectLabelDefaults: (next: Partial<ObjectLabelDefaults>) => void;
@@ -492,6 +513,8 @@ export type GeoActions = {
   updateLineStyleByIds: (ids: string[], next: Partial<LineStyle>) => void;
   updateSelectedCircleStyle: (next: Partial<CircleStyle>) => void;
   updateCircleStyleByIds: (ids: string[], next: Partial<CircleStyle>) => void;
+  updateSelectedEllipseStyle: (next: Partial<CircleStyle>) => void;
+  updateEllipseStyleByIds: (ids: string[], next: Partial<CircleStyle>) => void;
   updateSelectedPolygonStyle: (next: Partial<PolygonStyle>) => void;
   updatePolygonStyleByIds: (ids: string[], next: Partial<PolygonStyle>) => void;
   updateSelectedAngleStyle: (next: Partial<AngleStyle>) => void;
@@ -518,6 +541,13 @@ export type GeoActions = {
   updateCircleFieldsByIds: (
     ids: string[],
     next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
+  ) => void;
+  updateSelectedEllipseFields: (
+    next: Partial<Pick<NonNullable<SceneModel["ellipses"]>[number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
+  ) => void;
+  updateEllipseFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<NonNullable<SceneModel["ellipses"]>[number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   updateSelectedPolygonFields: (
     next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>

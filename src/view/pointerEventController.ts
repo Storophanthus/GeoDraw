@@ -7,7 +7,7 @@ type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | "richText" | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "textLabel" | "richText" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -29,10 +29,12 @@ type PointerHits = {
   hitSegmentId: string | null;
   hitLineId: string | null;
   hitCircleId: string | null;
+  hitEllipseId: string | null;
   hitObjectLabel:
     | { type: "segment"; id: string }
     | { type: "line"; id: string }
     | { type: "circle"; id: string }
+    | { type: "ellipse"; id: string }
     | { type: "polygon"; id: string }
     | null;
 };
@@ -40,12 +42,13 @@ type PointerHits = {
 type MoveDecision = {
   mode: PointerMode;
   pointId: string | null;
-  dragObjectType: "segment" | "line" | "circle" | "polygon" | null;
+  dragObjectType: "segment" | "line" | "circle" | "ellipse" | "polygon" | null;
   selectedObject:
     | { type: "point"; id: string }
     | { type: "segment"; id: string }
     | { type: "line"; id: string }
     | { type: "circle"; id: string }
+    | { type: "ellipse"; id: string }
     | { type: "polygon"; id: string }
     | { type: "angle"; id: string }
     | { type: "textLabel"; id: string }
@@ -62,9 +65,9 @@ type CreatePointerHandlersDeps = {
   dragBuffers: DragBufferAccess;
   clickEpsilonPx: number;
   readScreen: (e: PointerEvent) => Vec2;
-  computeHoveredHit: (screen: Vec2) => { type: "point" | "angle" | "segment" | "line2p" | "circle" | "polygon"; id: string } | null;
+  computeHoveredHit: (screen: Vec2) => { type: "point" | "angle" | "segment" | "line2p" | "circle" | "ellipse" | "polygon"; id: string } | null;
   applyCursor: (
-    hovered: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "polygon"; id: string } | null,
+    hovered: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "ellipse" | "polygon"; id: string } | null,
     modeOverride?: PointerMode
   ) => void;
   scheduleDragUpdate: () => void;
@@ -72,13 +75,14 @@ type CreatePointerHandlersDeps = {
   setHoverScreen: (screen: Vec2) => void;
   setSnapDisabled: (disabled: boolean) => void;
   setCursorWorldFromScreen: (screen: Vec2) => void;
-  setHoveredHit: (hit: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "polygon"; id: string } | null) => void;
+  setHoveredHit: (hit: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "ellipse" | "polygon"; id: string } | null) => void;
   setSelectedObject: (
     obj:
       | { type: "point"; id: string }
       | { type: "segment"; id: string }
       | { type: "line"; id: string }
       | { type: "circle"; id: string }
+      | { type: "ellipse"; id: string }
       | { type: "polygon"; id: string }
       | { type: "angle"; id: string }
       | { type: "textLabel"; id: string }
@@ -272,7 +276,7 @@ type CreateCanvasAuxHandlersDeps = {
   setHoverScreen: (screen: Vec2 | null) => void;
   setCursorWorldFromScreen: (screen: Vec2) => void;
   setCursorWorldNull: () => void;
-  setHoveredHit: (hit: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "polygon"; id: string } | null) => void;
+  setHoveredHit: (hit: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "ellipse" | "polygon"; id: string } | null) => void;
   zoomAtScreenPoint: (screen: Vec2, zoomFactor: number) => void;
 };
 

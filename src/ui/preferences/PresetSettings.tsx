@@ -19,6 +19,7 @@ export function PresetSettings() {
     const segmentDefaults = useGeoStore((state) => state.segmentDefaults);
     const lineDefaults = useGeoStore((state) => state.lineDefaults);
     const circleDefaults = useGeoStore((state) => state.circleDefaults);
+    const ellipseDefaults = useGeoStore((state) => state.ellipseDefaults);
     const polygonDefaults = useGeoStore((state) => state.polygonDefaults);
     const angleDefaults = useGeoStore((state) => state.angleDefaults);
     const objectLabelDefaults = useGeoStore((state) => state.objectLabelDefaults);
@@ -46,6 +47,7 @@ export function PresetSettings() {
                 segmentDefaults,
                 lineDefaults,
                 circleDefaults,
+                ellipseDefaults,
                 polygonDefaults,
                 angleDefaults,
                 objectLabelDefaults,
@@ -68,6 +70,7 @@ export function PresetSettings() {
             segmentDefaults,
             lineDefaults,
             circleDefaults,
+            ellipseDefaults,
             polygonDefaults,
             angleDefaults,
             objectLabelDefaults,

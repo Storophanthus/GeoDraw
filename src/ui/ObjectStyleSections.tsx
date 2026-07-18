@@ -5,6 +5,7 @@ import {
   type LineStyle,
   type SceneAngle,
   type SceneCircle,
+  type SceneEllipse,
   type SceneLine,
   type ScenePolygon,
   type SceneSegment,
@@ -22,6 +23,7 @@ type ObjectStyleSectionsProps = {
   selectedSegment: SceneSegment | null;
   selectedLine: SceneLine | null;
   selectedCircle: SceneCircle | null;
+  selectedEllipse: SceneEllipse | null;
   selectedPolygon: ScenePolygon | null;
   selectedPolygonOwnedEdgesVisible: boolean;
   selectedAngle: SceneAngle | null;
@@ -29,11 +31,13 @@ type ObjectStyleSectionsProps = {
   updateSelectedSegmentStyle: (style: Partial<LineStyle>) => void;
   updateSelectedLineStyle: (style: Partial<LineStyle>) => void;
   updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
+  updateSelectedEllipseStyle: (style: Partial<CircleStyle>) => void;
   updateSelectedPolygonStyle: (style: Partial<ScenePolygon["style"]>) => void;
   updateSelectedAngleStyle: (style: Partial<AngleStyle>) => void;
   updateSelectedSegmentFields: (fields: Partial<Pick<SceneSegment, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
   updateSelectedLineFields: (fields: Partial<Pick<SceneLine, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
   updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
+  updateSelectedEllipseFields: (fields: Partial<Pick<SceneEllipse, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
   canConvertSelectedLineToSegment: boolean;
   convertSelectedLineToSegment: () => void;
   updateSelectedPolygonFields: (fields: Partial<Pick<ScenePolygon, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
@@ -49,6 +53,7 @@ export function ObjectStyleSections({
   selectedSegment,
   selectedLine,
   selectedCircle,
+  selectedEllipse,
   selectedPolygon,
   selectedPolygonOwnedEdgesVisible,
   selectedAngle,
@@ -56,11 +61,13 @@ export function ObjectStyleSections({
   updateSelectedSegmentStyle,
   updateSelectedLineStyle,
   updateSelectedCircleStyle,
+  updateSelectedEllipseStyle,
   updateSelectedPolygonStyle,
   updateSelectedAngleStyle,
   updateSelectedSegmentFields,
   updateSelectedLineFields,
   updateSelectedCircleFields,
+  updateSelectedEllipseFields,
   canConvertSelectedLineToSegment,
   convertSelectedLineToSegment,
   updateSelectedPolygonFields,
@@ -113,6 +120,18 @@ export function ObjectStyleSections({
           onMakeStyleDefaultChange={onMakeStyleDefaultChange}
           updateSelectedCircleStyle={updateSelectedCircleStyle}
           updateSelectedCircleFields={updateSelectedCircleFields}
+        />
+      )}
+
+      {!selectedPointPresent && !selectedAngle && !selectedPolygon && !selectedCircle && selectedEllipse && (
+        <CircleStyleSection
+          selectedCircle={selectedEllipse}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+          updateSelectedCircleStyle={updateSelectedEllipseStyle}
+          updateSelectedCircleFields={updateSelectedEllipseFields}
+          title="Ellipse Style"
+          showArrow={false}
         />
       )}
 

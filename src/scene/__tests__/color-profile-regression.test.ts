@@ -1,8 +1,9 @@
 import { type SceneModel } from "../points";
-import { applyProfileColorsToDefaults, recolorSceneForProfile } from "../../state/colorProfiles";
+import { applyProfileColorsToDefaults, buildDefaultStylesForProfile, recolorSceneForProfile } from "../../state/colorProfiles";
 import {
   defaultAngleStyle,
     defaultCircleStyle,
+    defaultEllipseStyle,
     defaultLabelToolStyle,
     defaultLineStyle,
     defaultPointStyle,
@@ -26,6 +27,7 @@ const defaults = applyProfileColorsToDefaults(
     segmentDefaults: { ...defaultSegmentStyle },
     lineDefaults: { ...defaultLineStyle },
     circleDefaults: { ...defaultCircleStyle },
+    ellipseDefaults: { ...defaultEllipseStyle },
     polygonDefaults: { ...defaultPolygonStyle },
     angleDefaults: { ...defaultAngleStyle, labelPosWorld: { ...defaultAngleStyle.labelPosWorld } },
     labelToolDefaults: { ...defaultLabelToolStyle },
@@ -43,6 +45,7 @@ assert(defaults.angleDefaults.fillColor === "#bfbfbf", "profile should update de
 assert(defaults.angleDefaults.strokeWidth === defaultAngleStyle.strokeWidth, "profile should preserve default angle stroke width");
 assert(defaults.textboxToolDefaults.boxWidthPx === 220, "profile should preserve default textbox width");
 
+const classicDefaults = buildDefaultStylesForProfile("classic");
 const scene: SceneModel = {
   points: [
     {
@@ -54,8 +57,8 @@ const scene: SceneModel = {
       showLabel: "name",
       position: { x: 0, y: 0 },
       style: {
-        ...defaultPointStyle,
-        labelOffsetPx: { ...defaultPointStyle.labelOffsetPx },
+        ...classicDefaults.pointDefaults,
+        labelOffsetPx: { ...classicDefaults.pointDefaults.labelOffsetPx },
       },
     },
   ],
@@ -68,7 +71,7 @@ const scene: SceneModel = {
       visible: true,
       showLabel: false,
       style: {
-        ...defaultSegmentStyle,
+        ...classicDefaults.segmentDefaults,
         strokeColor: "#123456",
       },
     },
@@ -80,7 +83,7 @@ const scene: SceneModel = {
       aId: "p1",
       bId: "p1",
       visible: true,
-      style: { ...defaultLineStyle },
+      style: { ...classicDefaults.lineDefaults },
     },
   ],
   circles: [
@@ -91,8 +94,8 @@ const scene: SceneModel = {
       throughId: "p1",
       visible: true,
       style: {
-        ...defaultCircleStyle,
-        fillColor: defaultPolygonStyle.fillColor,
+        ...classicDefaults.circleDefaults,
+        fillColor: classicDefaults.polygonDefaults.fillColor,
       },
     },
   ],
@@ -101,7 +104,7 @@ const scene: SceneModel = {
       id: "pg1",
       pointIds: ["p1", "p1", "p1"],
       visible: true,
-      style: { ...defaultPolygonStyle },
+      style: { ...classicDefaults.polygonDefaults },
     },
   ],
   angles: [
@@ -113,8 +116,8 @@ const scene: SceneModel = {
       cId: "p1",
       visible: true,
       style: {
-        ...defaultAngleStyle,
-        labelPosWorld: { ...defaultAngleStyle.labelPosWorld },
+        ...classicDefaults.angleDefaults,
+        labelPosWorld: { ...classicDefaults.angleDefaults.labelPosWorld },
       },
     },
   ],

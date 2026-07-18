@@ -6,6 +6,7 @@ import type {
   PointStyle,
   SceneAngle,
   SceneCircle,
+  SceneEllipse,
   SceneLine,
   SceneModel,
   ScenePoint,
@@ -33,6 +34,7 @@ type ToolDefaultStyleSectionsProps = {
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
+  ellipseDefaults: CircleStyle;
   polygonDefaults: ScenePolygon["style"];
   angleDefaults: AngleStyle;
   objectLabelDefaults: ObjectLabelDefaults;
@@ -42,6 +44,7 @@ type ToolDefaultStyleSectionsProps = {
   setSegmentDefaults: (next: Partial<LineStyle>) => void;
   setLineDefaults: (next: Partial<LineStyle>) => void;
   setCircleDefaults: (next: Partial<CircleStyle>) => void;
+  setEllipseDefaults: (next: Partial<CircleStyle>) => void;
   setPolygonDefaults: (next: Partial<ScenePolygon["style"]>) => void;
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
   setObjectLabelDefaults: (next: Partial<ObjectLabelDefaults>) => void;
@@ -56,6 +59,7 @@ export function ToolDefaultStyleSections({
   segmentDefaults,
   lineDefaults,
   circleDefaults,
+  ellipseDefaults,
   polygonDefaults,
   angleDefaults,
   objectLabelDefaults,
@@ -65,6 +69,7 @@ export function ToolDefaultStyleSections({
   setSegmentDefaults,
   setLineDefaults,
   setCircleDefaults,
+  setEllipseDefaults,
   setPolygonDefaults,
   setAngleDefaults,
   setObjectLabelDefaults,
@@ -127,6 +132,21 @@ export function ToolDefaultStyleSections({
       style: circleDefaults,
     }),
     [circleDefaults, objectLabelDefaults.circle, objectLabelDefaults.circleGlow]
+  );
+
+  const ellipse = useMemo<SceneEllipse>(
+    () => ({
+      id: "__tool_default_ellipse__",
+      kind: "fociPoint",
+      focusAId: "__tool_default_a__",
+      focusBId: "__tool_default_b__",
+      throughId: "__tool_default_c__",
+      visible: true,
+      showLabel: objectLabelDefaults.ellipse,
+      labelGlow: objectLabelDefaults.ellipseGlow ?? true,
+      style: ellipseDefaults,
+    }),
+    [ellipseDefaults, objectLabelDefaults.ellipse, objectLabelDefaults.ellipseGlow]
   );
 
   const polygon = useMemo<ScenePolygon>(
@@ -275,6 +295,24 @@ export function ToolDefaultStyleSections({
           if (fields.labelGlow !== undefined) setObjectLabelDefaults({ circleGlow: fields.labelGlow });
         }}
         mode="toolDefault"
+      />
+    );
+  }
+
+  if (kind === "ellipse") {
+    return (
+      <CircleStyleSection
+        selectedCircle={ellipse}
+        selectedStyleAsDefault
+        onMakeStyleDefaultChange={() => {}}
+        updateSelectedCircleStyle={setEllipseDefaults}
+        updateSelectedCircleFields={(fields) => {
+          if (fields.showLabel !== undefined) setObjectLabelDefaults({ ellipse: Boolean(fields.showLabel) });
+          if (fields.labelGlow !== undefined) setObjectLabelDefaults({ ellipseGlow: fields.labelGlow });
+        }}
+        mode="toolDefault"
+        title="Ellipse Style"
+        showArrow={false}
       />
     );
   }

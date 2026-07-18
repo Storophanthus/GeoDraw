@@ -4,6 +4,7 @@ import { getGeometryLayerOrder } from "../scene/geometryLayerOrder";
 import {
   computeOrientedAngleRad,
   getCircleWorldGeometry,
+  getEllipseWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
   type SceneModel,
@@ -22,6 +23,7 @@ export type EngineHit =
   | { type: "segment"; id: string }
   | { type: "line"; id: string }
   | { type: "circle"; id: string }
+  | { type: "ellipse"; id: string }
   | null;
 
 export type HitTestOptions = {
@@ -30,6 +32,7 @@ export type HitTestOptions = {
   segmentTolPx?: number;
   lineTolPx?: number;
   circleTolPx?: number;
+  ellipseTolPx?: number;
 };
 
 export type ResolvedPoint = { point: ScenePoint; world: Vec2 };
@@ -65,7 +68,7 @@ export function resolveVisibleAngles(scene: SceneModel): ResolvedAngle[] {
 
 function orderedGeometryIdsForType(
   scene: SceneModel,
-  type: "segment" | "line" | "circle" | "polygon" | "angle"
+  type: "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"
 ): string[] {
   const ordered = getGeometryLayerOrder(scene)
     .filter((ref) => ref.type === type)
@@ -78,9 +81,11 @@ function orderedGeometryIdsForType(
         ? scene.lines
         : type === "circle"
           ? scene.circles
-          : type === "polygon"
-            ? scene.polygons
-            : scene.angles;
+          : type === "ellipse"
+            ? (scene.ellipses ?? [])
+            : type === "polygon"
+              ? scene.polygons
+              : scene.angles;
   for (const item of source) {
     if (seen.has(item.id)) continue;
     ordered.push(item.id);
@@ -225,6 +230,41 @@ export function hitTestCircleId(
   return bestId;
 }
 
+export function hitTestEllipseId(
+  screenPoint: Vec2,
+  scene: SceneModel,
+  camera: Camera,
+  vp: Viewport,
+  tolerancePx: number,
+  orderedIds?: string[]
+): string | null {
+  let bestId: string | null = null;
+  let best = tolerancePx;
+
+  const ellipses = orderedIds
+    ? orderedIds
+      .map((id) => (scene.ellipses ?? []).find((item) => item.id === id) ?? null)
+      .filter((ellipse): ellipse is NonNullable<SceneModel["ellipses"]>[number] => Boolean(ellipse))
+    : [...(scene.ellipses ?? [])].reverse();
+
+  for (const ellipse of ellipses) {
+    if (!ellipse.visible) continue;
+    const geom = getEllipseWorldGeometry(ellipse, scene);
+    if (!geom) continue;
+    const center = camMath.worldToScreen(geom.center, camera, vp);
+    const rx = geom.semiMajor * camera.zoom;
+    const ry = geom.semiMinor * camera.zoom;
+    if (!Number.isFinite(rx) || !Number.isFinite(ry) || rx <= 1e-9 || ry <= 1e-9) continue;
+    const d = distanceToEllipseBoundary(screenPoint, center, rx, ry, -geom.rotationRad);
+    if (d < best || (bestId === null && d <= best)) {
+      best = d;
+      bestId = ellipse.id;
+    }
+  }
+
+  return bestId;
+}
+
 export function hitTestAngleId(
   screenPoint: Vec2,
   resolvedAngles: ResolvedAngle[],
@@ -324,6 +364,7 @@ export function hitTestTopObject(
   const segmentTolPx = opts.segmentTolPx ?? 8;
   const lineTolPx = opts.lineTolPx ?? 8;
   const circleTolPx = opts.circleTolPx ?? 8;
+  const ellipseTolPx = opts.ellipseTolPx ?? circleTolPx;
 
   const resolvedPoints: ResolvedPoint[] = [];
   for (let i = 0; i < scene.points.length; i += 1) {
@@ -339,6 +380,7 @@ export function hitTestTopObject(
   const orderedSegmentIds = orderedGeometryIdsForType(scene, "segment");
   const orderedLineIds = orderedGeometryIdsForType(scene, "line");
   const orderedCircleIds = orderedGeometryIdsForType(scene, "circle");
+  const orderedEllipseIds = orderedGeometryIdsForType(scene, "ellipse");
   const orderedPolygonIds = orderedGeometryIdsForType(scene, "polygon");
   const angleId = hitTestAngleId(screenPoint, resolveVisibleAngles(scene), camera, vp, angleTolPx, orderedAngleIds);
   const segmentId = hitTestSegmentId(screenPoint, scene, camera, vp, segmentTolPx, orderedSegmentIds);
@@ -351,10 +393,24 @@ export function hitTestTopObject(
   if (lineId) return { type: "line", id: lineId };
   const circleId = hitTestCircleId(screenPoint, scene, camera, vp, circleTolPx, orderedCircleIds);
   if (circleId) return { type: "circle", id: circleId };
+  const ellipseId = hitTestEllipseId(screenPoint, scene, camera, vp, ellipseTolPx, orderedEllipseIds);
+  if (ellipseId) return { type: "ellipse", id: ellipseId };
   const polygonId = hitTestPolygonId(screenPoint, scene, camera, vp, segmentTolPx, orderedPolygonIds);
   if (polygonId) return { type: "polygon", id: polygonId };
 
   return null;
+}
+
+function distanceToEllipseBoundary(point: Vec2, center: Vec2, rx: number, ry: number, rotationRad: number): number {
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  const cos = Math.cos(rotationRad);
+  const sin = Math.sin(rotationRad);
+  const localX = cos * dx + sin * dy;
+  const localY = -sin * dx + cos * dy;
+  const normalized = Math.hypot(localX / rx, localY / ry);
+  if (!Number.isFinite(normalized)) return Number.POSITIVE_INFINITY;
+  return Math.abs(normalized - 1) * Math.min(rx, ry);
 }
 
 function isSectorAngle(scene: SceneModel, angleId: string): boolean {

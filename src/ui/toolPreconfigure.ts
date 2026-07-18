@@ -5,6 +5,7 @@ export type ToolDefaultKind =
   | "segment"
   | "line"
   | "circle"
+  | "ellipse"
   | "polygon"
   | "angle"
   | "sector"
@@ -31,6 +32,9 @@ export function getToolDefaultKind(activeTool: ActiveTool): ToolDefaultKind | nu
     case "circle_3p":
     case "circle_fixed":
       return "circle";
+
+    case "ellipse_foci_point":
+      return "ellipse";
 
     case "polygon":
     case "regular_polygon":

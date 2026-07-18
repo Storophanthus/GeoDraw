@@ -40,6 +40,8 @@ mustOk(
   commandBarApi.applyObjectAssignment("circSymX", { type: "CreateCircleCenterRadius", centerId: a, r: 96 * Math.sqrt(5), rExpr: "96*sqrt(5)" }),
   "create symbolic fixed-radius circle"
 );
+mustOk(commandBarApi.applyObjectAssignment("ellX", { type: "CreateEllipseFociPoint", focusAId: a, focusBId: b, throughId: c }), "create ellX");
+mustOk(commandBarApi.applyObjectAssignment("ellX", { type: "CreateEllipseFociPoint", focusAId: b, focusBId: c, throughId: d }), "redefine ellX");
 
 mustOk(commandBarApi.applyObjectAssignment("lineX", { type: "CreateLineByPoints", aId: a, bId: b }), "create lineX");
 mustOk(commandBarApi.applyObjectAssignment("lineX", { type: "CreateLineByPoints", aId: b, bId: d }), "redefine lineX");
@@ -86,6 +88,7 @@ assert(!/\(X_A\)\s*--\s*\(X_B\)\s*--\s*\(X_C\)\s*--\s*cycle;/.test(tikz), "Found
 assert(/\\tkzDefCircle\[R\]\(X_C,2\)/.test(tikz), "Expected redefined fixed-radius circle in export");
 assert(/\\pgfmathsetmacro\{\\gdDrawCircleRadius\}\{96\*sqrt\(5\)\}/.test(tikz), "Expected symbolic fixed-radius circle expression in export");
 assert(/\\tkzDefCircle\[R\]\(X_A,\\gdDrawCircleRadius\)/.test(tikz), "Expected fixed-radius circle to use symbolic radius macro");
+assert(/\\draw\[[^\]]*rotate around=\{[^}]+:\([^)]*\)\}[^\]]*\]\s*\([^)]*\) ellipse\[x radius=[^,]+, y radius=[^\]]+\];/.test(tikz), "Expected redefined ellipse to export as rotated TikZ ellipse path");
 
 // Redefined angle alias should export as sector
 assert(/\\tkzDrawSector/.test(tikz), "Expected redefined sector alias to emit \\\\tkzDrawSector");

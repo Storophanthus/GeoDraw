@@ -411,6 +411,7 @@ export type SceneGeometryLayerRef =
   | { type: "segment"; id: string }
   | { type: "line"; id: string }
   | { type: "circle"; id: string }
+  | { type: "ellipse"; id: string }
   | { type: "polygon"; id: string }
   | { type: "angle"; id: string };
 
@@ -696,6 +697,22 @@ export type SceneCircleFixedRadius = {
 
 export type SceneCircle = SceneCircleTwoPoint | SceneCircleThreePoint | SceneCircleFixedRadius;
 
+export type SceneEllipseFociPoint = {
+  id: string;
+  kind: "fociPoint";
+  focusAId: string;
+  focusBId: string;
+  throughId: string;
+  visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
+  labelGlow?: boolean;
+  style: CircleStyle;
+};
+
+export type SceneEllipse = SceneEllipseFociPoint;
+
 export type ScenePolygon = {
   id: string;
   pointIds: string[];
@@ -853,6 +870,7 @@ export type SceneModel = {
   segments: SceneSegment[];
   lines: SceneLine[];
   circles: SceneCircle[];
+  ellipses?: SceneEllipse[];
   polygons: ScenePolygon[];
   angles: SceneAngle[];
   numbers: SceneNumber[];
@@ -928,6 +946,55 @@ export function getCircleWorldGeometry(circle: SceneCircle, scene: SceneModel): 
     getPointWorldById,
     evaluateNumberExpressionWithCtx,
   });
+}
+
+export type EllipseWorldGeometry = {
+  center: Vec2;
+  focusA: Vec2;
+  focusB: Vec2;
+  through: Vec2;
+  semiMajor: number;
+  semiMinor: number;
+  focalDistance: number;
+  rotationRad: number;
+};
+
+export function getEllipseWorldGeometry(ellipse: SceneEllipse, scene: SceneModel): EllipseWorldGeometry | null {
+  const focusA = scene.points.find((point) => point.id === ellipse.focusAId);
+  const focusB = scene.points.find((point) => point.id === ellipse.focusBId);
+  const through = scene.points.find((point) => point.id === ellipse.throughId);
+  if (!focusA || !focusB || !through) return null;
+
+  const aWorld = getPointWorldPos(focusA, scene);
+  const bWorld = getPointWorldPos(focusB, scene);
+  const throughWorld = getPointWorldPos(through, scene);
+  if (!aWorld || !bWorld || !throughWorld) return null;
+
+  const dx = bWorld.x - aWorld.x;
+  const dy = bWorld.y - aWorld.y;
+  const focusDistance = Math.hypot(dx, dy);
+  if (!Number.isFinite(focusDistance) || focusDistance <= 1e-12) return null;
+
+  const semiMajor = (Math.hypot(throughWorld.x - aWorld.x, throughWorld.y - aWorld.y) + Math.hypot(throughWorld.x - bWorld.x, throughWorld.y - bWorld.y)) / 2;
+  const focalDistance = focusDistance / 2;
+  if (!Number.isFinite(semiMajor) || semiMajor <= focalDistance + 1e-9) return null;
+
+  const semiMinorSq = semiMajor * semiMajor - focalDistance * focalDistance;
+  if (!Number.isFinite(semiMinorSq) || semiMinorSq <= 1e-18) return null;
+
+  return {
+    center: {
+      x: (aWorld.x + bWorld.x) / 2,
+      y: (aWorld.y + bWorld.y) / 2,
+    },
+    focusA: aWorld,
+    focusB: bWorld,
+    through: throughWorld,
+    semiMajor,
+    semiMinor: Math.sqrt(semiMinorSq),
+    focalDistance,
+    rotationRad: Math.atan2(dy, dx),
+  };
 }
 
 export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel): number | null {

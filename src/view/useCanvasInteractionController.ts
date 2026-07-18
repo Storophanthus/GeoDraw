@@ -33,6 +33,7 @@ import {
 import {
   hitTestAngleId as engineHitTestAngleId,
   hitTestCircleId as engineHitTestCircleId,
+  hitTestEllipseId as engineHitTestEllipseId,
   hitTestLineId as engineHitTestLineId,
   hitTestPolygonId as engineHitTestPolygonId,
   hitTestPointId as engineHitTestPointId,
@@ -51,7 +52,7 @@ export type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | "richText" | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "textLabel" | "richText" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -74,7 +75,7 @@ type InteractionActions = {
   movePolygonByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   movePointLabelBy: (id: string, deltaScreenPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
-  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon"; id: string }, world: Vec2) => void;
+  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "ellipse" | "polygon"; id: string }, world: Vec2) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
   moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   moveRichTextNodeByWorldDelta: (id: string, deltaWorld: Vec2) => void;
@@ -82,7 +83,7 @@ type InteractionActions = {
   setSnapDisabled: (value: boolean) => void;
   setCursorWorld: (value: Vec2 | null) => void;
   setHoveredHit: (hit: HoveredHit) => void;
-  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null) => void;
+  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null) => void;
   beginTextLabelEditing?: (id: string) => boolean;
   beginRichTextEditing?: (id: string) => boolean;
   clearPendingSelection: () => void;
@@ -103,14 +104,14 @@ type InteractionDeps = {
   dragBuffers: DragBufferRefs;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
   scene: SceneModel;
   camera: Camera;
   vp: Viewport;
   resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>;
   resolvedAngles: ResolvedAngle[];
   hoveredHit: HoveredHit;
-  selectedObject: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
+  selectedObject: { type: "point" | "line" | "segment" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
   pointLabelOffsetPx: Vec2;
   angleFixedTool: AngleFixedToolState;
   circleFixedTool: CircleFixedToolState;
@@ -246,6 +247,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       hitPolygonId: engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment),
       hitLineId: engineHitTestLineId(screen, scene, camera, vp, tolerances.line),
       hitCircleId: engineHitTestCircleId(screen, scene, camera, vp, tolerances.circle),
+      hitEllipseId: engineHitTestEllipseId(screen, scene, camera, vp, tolerances.circle),
       hitObjectLabel: hitTestObjectLabelFromDom(clientX, clientY, labelsLayerRef.current),
     });
 

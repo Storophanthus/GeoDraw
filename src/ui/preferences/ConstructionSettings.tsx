@@ -206,6 +206,7 @@ export function ConstructionSettings() {
     const segmentDefaults = useGeoStore((state) => state.segmentDefaults);
     const lineDefaults = useGeoStore((state) => state.lineDefaults);
     const circleDefaults = useGeoStore((state) => state.circleDefaults);
+    const ellipseDefaults = useGeoStore((state) => state.ellipseDefaults);
     const polygonDefaults = useGeoStore((state) => state.polygonDefaults);
     const angleDefaults = useGeoStore((state) => state.angleDefaults);
     const labelToolDefaults = useGeoStore((state) => state.labelToolDefaults);
@@ -258,6 +259,7 @@ export function ConstructionSettings() {
         if (category === "shapes") {
             applyAppPreferences({
                 circleDefaults: defaultStyles.circleDefaults,
+                ellipseDefaults: defaultStyles.ellipseDefaults,
                 polygonDefaults: defaultStyles.polygonDefaults,
             });
             return;
@@ -290,6 +292,9 @@ export function ConstructionSettings() {
     };
     const setCircleDefault = (next: Partial<typeof circleDefaults>) => {
         applyAppPreferences({ circleDefaults: { ...circleDefaults, ...next } });
+    };
+    const setEllipseDefault = (next: Partial<typeof ellipseDefaults>) => {
+        applyAppPreferences({ ellipseDefaults: { ...ellipseDefaults, ...next } });
     };
     const setPolygonDefault = (next: Partial<typeof polygonDefaults>) => {
         applyAppPreferences({ polygonDefaults: { ...polygonDefaults, ...next } });
@@ -381,6 +386,10 @@ export function ConstructionSettings() {
                     <PreferenceColorControl label="Circle outline" value={circleDefaults.strokeColor} onChange={(nextValue) => setCircleDefault({ strokeColor: nextValue })} />
                     <PreferenceColorControl label="Circle fill" value={circleDefaults.fillColor ?? "#ffffff"} onChange={(nextValue) => setCircleDefault({ fillColor: nextValue })} />
                     <PreferenceNumberControl label="Circle fill opacity" value={circleDefaults.fillOpacity ?? 0} min={0} max={1} step={0.05} onChange={(nextValue) => setCircleDefault({ fillOpacity: nextValue })} />
+                    <PreferenceNumberControl label="Ellipse outline width" value={ellipseDefaults.strokeWidth} min={0} step={0.1} onChange={(nextValue) => setEllipseDefault({ strokeWidth: nextValue })} />
+                    <PreferenceColorControl label="Ellipse outline" value={ellipseDefaults.strokeColor} onChange={(nextValue) => setEllipseDefault({ strokeColor: nextValue })} />
+                    <PreferenceColorControl label="Ellipse fill" value={ellipseDefaults.fillColor ?? "#ffffff"} onChange={(nextValue) => setEllipseDefault({ fillColor: nextValue })} />
+                    <PreferenceNumberControl label="Ellipse fill opacity" value={ellipseDefaults.fillOpacity ?? 0} min={0} max={1} step={0.05} onChange={(nextValue) => setEllipseDefault({ fillOpacity: nextValue })} />
                     <PreferenceNumberControl label="Polygon edge width" value={polygonDefaults.strokeWidth} min={0} step={0.1} onChange={(nextValue) => setPolygonDefault({ strokeWidth: nextValue })} />
                     <PreferenceColorControl label="Polygon edge" value={polygonDefaults.strokeColor} onChange={(nextValue) => setPolygonDefault({ strokeColor: nextValue })} />
                     <PreferenceColorControl label="Polygon fill" value={polygonDefaults.fillColor ?? "#ffffff"} onChange={(nextValue) => setPolygonDefault({ fillColor: nextValue })} />
@@ -459,6 +468,7 @@ export function ConstructionSettings() {
                         segmentDefaults={segmentDefaults}
                         lineDefaults={lineDefaults}
                         circleDefaults={circleDefaults}
+                        ellipseDefaults={ellipseDefaults}
                         polygonDefaults={polygonDefaults}
                         angleDefaults={angleDefaults}
                         labelToolDefaults={labelToolDefaults}
@@ -478,6 +488,7 @@ type ConstructionPreferencePreviewProps = {
     segmentDefaults: LineStyle;
     lineDefaults: LineStyle;
     circleDefaults: CircleStyle;
+    ellipseDefaults: CircleStyle;
     polygonDefaults: PolygonStyle;
     angleDefaults: AngleStyle;
     labelToolDefaults: SceneTextLabelStyle;
@@ -492,6 +503,7 @@ function ConstructionPreferencePreview({
     segmentDefaults,
     lineDefaults,
     circleDefaults,
+    ellipseDefaults,
     polygonDefaults,
     angleDefaults,
     labelToolDefaults,
@@ -538,7 +550,7 @@ function ConstructionPreferencePreview({
                 {category === "canvas" && <CanvasPreview canvasTheme={canvasTheme} />}
                 {category === "points" && <PointPreview pointDefaults={pointDefaults} />}
                 {category === "lines" && <LinePreview segmentDefaults={segmentDefaults} lineDefaults={lineDefaults} />}
-                {category === "shapes" && <ShapePreview circleDefaults={circleDefaults} polygonDefaults={polygonDefaults} />}
+                {category === "shapes" && <ShapePreview circleDefaults={circleDefaults} ellipseDefaults={ellipseDefaults} polygonDefaults={polygonDefaults} />}
                 {category === "angles" && <AnglePreview angleDefaults={angleDefaults} />}
                 {category === "text" && (
                     <TextPreview
@@ -660,9 +672,11 @@ function LinePreview({
 
 function ShapePreview({
     circleDefaults,
+    ellipseDefaults,
     polygonDefaults,
 }: {
     circleDefaults: ConstructionPreferencePreviewProps["circleDefaults"];
+    ellipseDefaults: ConstructionPreferencePreviewProps["ellipseDefaults"];
     polygonDefaults: ConstructionPreferencePreviewProps["polygonDefaults"];
 }) {
     return (
@@ -685,6 +699,17 @@ function ShapePreview({
                 strokeWidth={Math.max(1, polygonDefaults.strokeWidth)}
                 strokeLinejoin="round"
                 strokeDasharray={polygonDefaults.strokeDash === "dashed" ? "10 8" : polygonDefaults.strokeDash === "dotted" ? "2 8" : undefined}
+            />
+            <ellipse
+                cx="176"
+                cy="74"
+                rx="34"
+                ry="20"
+                fill={svgColor(ellipseDefaults.fillColor, "#ffffff")}
+                fillOpacity={ellipseDefaults.fillOpacity ?? 0}
+                stroke={svgColor(ellipseDefaults.strokeColor, "#000000")}
+                strokeWidth={Math.max(1, ellipseDefaults.strokeWidth)}
+                strokeDasharray={ellipseDefaults.strokeDash === "dashed" ? "10 8" : ellipseDefaults.strokeDash === "dotted" ? "2 8" : undefined}
             />
         </g>
     );

@@ -34,7 +34,7 @@ function WorkspaceApp() {
 
   useEffect(() => {
     const storedUi = loadStoredUiPreferences();
-    const storedConstruction = loadStoredConstructionPreferences();
+    const storedConstruction = documentTabs.restoredFromSession ? null : loadStoredConstructionPreferences();
     const merged = (() => {
       if (!storedUi && !storedConstruction) return null;
       if (storedConstruction && !storedUi) {
@@ -53,7 +53,7 @@ function WorkspaceApp() {
     }
     const timer = window.setTimeout(() => setUiPrefsHydrated(true), 0);
     return () => window.clearTimeout(timer);
-  }, [applyAppPreferences]);
+  }, [applyAppPreferences, documentTabs.restoredFromSession]);
 
   useEffect(() => {
     if (!uiPrefsHydrated) return;

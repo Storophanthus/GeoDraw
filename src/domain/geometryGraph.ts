@@ -1,7 +1,7 @@
 import type { GeometryObjectRef, SceneModel } from "../scene/points";
 import type { SelectedObject } from "../state/slices/storeTypes";
 
-type NodeType = "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | "number";
+type NodeType = "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | "number";
 type NodeKey = `${NodeType}:${string}`;
 
 type Graph = {
@@ -23,6 +23,7 @@ function selectedToKey(selected: Exclude<SelectedObject, null>): NodeKey {
   if (selected.type === "line") return key("line", selected.id);
   if (selected.type === "segment") return key("segment", selected.id);
   if (selected.type === "circle") return key("circle", selected.id);
+  if (selected.type === "ellipse") return key("ellipse", selected.id);
   if (selected.type === "polygon") return key("polygon", selected.id);
   if (selected.type === "point") return key("point", selected.id);
   if (selected.type === "angle") return key("angle", selected.id);
@@ -178,6 +179,14 @@ export function buildDependencyGraph(scene: SceneModel): Graph {
     }
   }
 
+  for (const ellipse of scene.ellipses ?? []) {
+    const child = key("ellipse", ellipse.id);
+    ensureNode(graph, child);
+    addDependency(graph, child, key("point", ellipse.focusAId));
+    addDependency(graph, child, key("point", ellipse.focusBId));
+    addDependency(graph, child, key("point", ellipse.throughId));
+  }
+
   for (const a of scene.angles) {
     const child = key("angle", a.id);
     ensureNode(graph, child);
@@ -290,13 +299,14 @@ export function applyDeletion(scene: SceneModel, deleted: Set<NodeKey>): SceneMo
   const segments = scene.segments.filter((s) => !drop("segment", s.id));
   const lines = scene.lines.filter((l) => !drop("line", l.id));
   const circles = scene.circles.filter((c) => !drop("circle", c.id));
+  const ellipses = (scene.ellipses ?? []).filter((e) => !drop("ellipse", e.id));
   const polygons = scene.polygons.filter((p) => !drop("polygon", p.id));
   const angles = scene.angles.filter((a) => !drop("angle", a.id));
   const textLabels = (scene.textLabels ?? []).filter((label) => !drop("textLabel", label.id));
   const richTextNodes = (scene.richTextNodes ?? []).filter((node) => !drop("richText", node.id));
   const numbers = scene.numbers.filter((n) => !drop("number", n.id));
 
-  return { ...scene, points, segments, lines, circles, polygons, angles, textLabels, richTextNodes, numbers };
+  return { ...scene, points, segments, lines, circles, ellipses, polygons, angles, textLabels, richTextNodes, numbers };
 }
 
 export function isSelectedObjectAlive(scene: SceneModel, selected: SelectedObject): boolean {
@@ -305,6 +315,7 @@ export function isSelectedObjectAlive(scene: SceneModel, selected: SelectedObjec
   if (selected.type === "segment") return scene.segments.some((s) => s.id === selected.id);
   if (selected.type === "line") return scene.lines.some((l) => l.id === selected.id);
   if (selected.type === "circle") return scene.circles.some((c) => c.id === selected.id);
+  if (selected.type === "ellipse") return (scene.ellipses ?? []).some((e) => e.id === selected.id);
   if (selected.type === "polygon") return scene.polygons.some((p) => p.id === selected.id);
   if (selected.type === "angle") return scene.angles.some((a) => a.id === selected.id);
   if (selected.type === "textLabel") return (scene.textLabels ?? []).some((label) => label.id === selected.id);

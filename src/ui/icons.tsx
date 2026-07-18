@@ -205,6 +205,15 @@ export const IconCircleRadius = createIcon(() => (
     </>
 ), "IconCircleRadius");
 
+export const IconEllipseFociPoint = createIcon(() => (
+    <>
+        <ellipse cx="12" cy="12" rx="10" ry="6.5" strokeWidth={2} />
+        <circle cx="8" cy="12" r="2.2" fill="currentColor" stroke="none" />
+        <circle cx="16" cy="12" r="2.2" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="5.5" r="2.2" fill="currentColor" stroke="none" />
+    </>
+), "IconEllipseFociPoint");
+
 export const IconSector = createIcon(() => (
     <>
         <path d="M4 20 L 20 20 A 16 16 0 0 0 4 4 Z" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" />

@@ -61,6 +61,7 @@ function objectFromRowKey(key: string): SelectedObjectRef | null {
         type !== "segment" &&
         type !== "line" &&
         type !== "circle" &&
+        type !== "ellipse" &&
         type !== "polygon" &&
         type !== "angle" &&
         type !== "textLabel" &&
@@ -77,6 +78,7 @@ function geometryLayerRefFromSelectedObject(obj: SelectedObjectRef): SceneGeomet
         obj.type === "segment" ||
         obj.type === "line" ||
         obj.type === "circle" ||
+        obj.type === "ellipse" ||
         obj.type === "polygon" ||
         obj.type === "angle"
     ) {
@@ -101,6 +103,7 @@ function tabForSelectedObject(selected: SelectedObject | null, scene?: SceneMode
         case "line":
             return "lines";
         case "circle":
+        case "ellipse":
         case "polygon":
             return "circles";
         case "angle": {
@@ -229,6 +232,7 @@ export function ObjectBrowser({
     const lineById = useMemo(() => new Map(scene.lines.map((l) => [l.id, l])), [scene.lines]);
     const segmentById = useMemo(() => new Map(scene.segments.map((s) => [s.id, s])), [scene.segments]);
     const circleById = useMemo(() => new Map(scene.circles.map((c) => [c.id, c])), [scene.circles]);
+    const ellipseById = useMemo(() => new Map((scene.ellipses ?? []).map((e) => [e.id, e])), [scene.ellipses]);
     const polygonById = useMemo(() => new Map(scene.polygons.map((p) => [p.id, p])), [scene.polygons]);
     const angleById = useMemo(() => new Map(scene.angles.map((a) => [a.id, a])), [scene.angles]);
     const commandAliases = useMemo(() => commandBarApi.getCommandObjectAliases(), [scene]);
@@ -283,7 +287,7 @@ export function ObjectBrowser({
         }
     };
 
-    const withAliasPrefix = (objectType: "point" | "segment" | "line" | "circle" | "polygon" | "angle", objectId: string, commandText: string): string => {
+    const withAliasPrefix = (objectType: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle", objectId: string, commandText: string): string => {
         const alias = aliasByObjectKey.get(`${objectType}:${objectId}`);
         return alias ? `${alias} = ${commandText}` : commandText;
     };
@@ -491,7 +495,7 @@ export function ObjectBrowser({
     );
 
     const tabs: Array<{ id: TabId; icon: React.ElementType; label: string; description: string; count: number }> = [
-        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + scene.polygons.length + scene.angles.length + (scene.textLabels?.length ?? 0) + (scene.richTextNodes?.length ?? 0) + scene.numbers.length },
+        { id: "all", icon: Layers, label: "All", description: "Show all objects", count: scene.points.length + scene.segments.length + scene.lines.length + scene.circles.length + (scene.ellipses?.length ?? 0) + scene.polygons.length + scene.angles.length + (scene.textLabels?.length ?? 0) + (scene.richTextNodes?.length ?? 0) + scene.numbers.length },
         {
             id: "points",
             icon: IconPoint as React.ElementType,
@@ -504,8 +508,8 @@ export function ObjectBrowser({
             id: "circles",
             icon: IconCircleRadius as React.ElementType,
             label: "Shapes",
-            description: "Filter by Circles/Polygons/Sectors",
-            count: scene.circles.length + scene.polygons.length + scene.angles.filter((angle) => angle.kind === "sector").length,
+            description: "Filter by Circles/Ellipses/Polygons/Sectors",
+            count: scene.circles.length + (scene.ellipses?.length ?? 0) + scene.polygons.length + scene.angles.filter((angle) => angle.kind === "sector").length,
         },
         {
             id: "angles",
@@ -610,6 +614,19 @@ export function ObjectBrowser({
             reorderable: activeTab === "circles",
         });
 
+        const buildEllipseRow = (ellipse: NonNullable<SceneModel["ellipses"]>[number]): ObjectRowDescriptor => ({
+            key: `ellipse:${ellipse.id}`,
+            object: { type: "ellipse", id: ellipse.id },
+            title: `Ellipse ${ellipse.id}`,
+            commandText: withAliasPrefix(
+                "ellipse",
+                ellipse.id,
+                `Ellipse(${pointLabel(ellipse.focusAId)},${pointLabel(ellipse.focusBId)},${pointLabel(ellipse.throughId)})`
+            ),
+            visible: ellipse.visible,
+            reorderable: activeTab === "circles",
+        });
+
         const buildPolygonRow = (polygon: SceneModel["polygons"][number]): ObjectRowDescriptor => ({
             key: `polygon:${polygon.id}`,
             object: { type: "polygon", id: polygon.id },
@@ -675,6 +692,10 @@ export function ObjectBrowser({
                 const circle = circleById.get(ref.id);
                 return circle ? buildCircleRow(circle) : null;
             }
+            if (ref.type === "ellipse") {
+                const ellipse = ellipseById.get(ref.id);
+                return ellipse ? buildEllipseRow(ellipse) : null;
+            }
             if (ref.type === "polygon") {
                 const polygon = polygonById.get(ref.id);
                 return polygon ? buildPolygonRow(polygon) : null;
@@ -703,7 +724,7 @@ export function ObjectBrowser({
         }
         if (activeTab === "text") return [...(scene.textLabels ?? []).map(buildTextLabelRow), ...(scene.richTextNodes ?? []).map(buildRichTextRow)];
         return scene.numbers.map(buildNumberRow);
-    }, [activeTab, angleById, circleById, lineById, polygonById, scene, segmentById]);
+    }, [activeTab, angleById, circleById, ellipseById, lineById, polygonById, scene, segmentById]);
 
     const reorderableTab = activeTab === "lines" || activeTab === "circles" || activeTab === "angles" ? activeTab : null;
     const reorderableRowKeys = useMemo(
@@ -831,6 +852,7 @@ export function ObjectBrowser({
             scene.segments.length === 0 &&
             scene.lines.length === 0 &&
             scene.circles.length === 0 &&
+            (scene.ellipses?.length ?? 0) === 0 &&
             scene.polygons.length === 0 &&
             scene.angles.length === 0 &&
             (scene.textLabels?.length ?? 0) === 0 &&
@@ -838,7 +860,7 @@ export function ObjectBrowser({
             scene.numbers.length === 0) ||
         (activeTab === "points" && scene.points.length === 0) ||
         (activeTab === "lines" && scene.segments.length === 0 && scene.lines.length === 0) ||
-        (activeTab === "circles" && scene.circles.length === 0 && scene.polygons.length === 0 && !scene.angles.some((angle) => angle.kind === "sector")) ||
+        (activeTab === "circles" && scene.circles.length === 0 && (scene.ellipses?.length ?? 0) === 0 && scene.polygons.length === 0 && !scene.angles.some((angle) => angle.kind === "sector")) ||
         (activeTab === "angles" && !scene.angles.some((angle) => angle.kind !== "sector")) ||
         (activeTab === "text" && (scene.textLabels?.length ?? 0) === 0 && (scene.richTextNodes?.length ?? 0) === 0) ||
         (activeTab === "numbers" && scene.numbers.length === 0);

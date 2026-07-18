@@ -15,6 +15,8 @@ type ExportPanelProps = {
   visible: boolean;
 };
 
+type TikzExportMode = "visualExact" | "reconstructible";
+
 export function ExportPanel({ visible }: ExportPanelProps) {
   const scene = useGeoStore((store) => store.scene);
   const camera = useGeoStore((store) => store.camera);
@@ -35,6 +37,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [exportEfficient, setExportEfficient] = useState(true);
   const [exportEmitTkzSetupManual, setExportEmitTkzSetupManual] = useState<boolean | null>(null);
   const [exportLabelGlow, setExportLabelGlow] = useState(true);
+  const [tikzExportMode, setTikzExportMode] = useState<TikzExportMode>("visualExact");
   const [exportGlobalScale, setExportGlobalScale] = useState("1");
   const [exportPointScale, setExportPointScale] = useState("1");
   const [exportLineScale, setExportLineScale] = useState("1");
@@ -59,13 +62,14 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     [scene.lines]
   );
   const exportEmitTkzSetup = exportEmitTkzSetupManual ?? hasVisibleLineObject;
+  const exportBakeCoordinates = tikzExportMode === "visualExact";
 
   const clipSig = exportClipWorld
     ? exportClipWorld.kind === "rect"
       ? `rect:${exportClipWorld.xmin},${exportClipWorld.xmax},${exportClipWorld.ymin},${exportClipWorld.ymax}`
       : `poly:${exportClipWorld.points.map((p) => `${p.x},${p.y}`).join(";")}`
     : "none";
-  const currentTikzOptionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
+  const currentTikzOptionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${tikzExportMode}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
   const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
   const tikzStatusText = useMemo(
     () =>
@@ -82,7 +86,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     const lineScale = Number(exportLineScale);
     const labelScale = Number(exportLabelScale);
     const globalScale = Number(exportGlobalScale);
-    const optionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
+    const optionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${tikzExportMode}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
     const viewport = exportUseCurrentView ? getViewportFromCanvas(camera) : undefined;
     const clipRect =
       exportUseClipSelection && exportClipWorld?.kind === "rect" ? exportClipWorld : undefined;
@@ -101,6 +105,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       screenPxPerWorld: camera.zoom,
       emitTkzSetup: exportEmitTkzSetup,
       labelGlow: exportLabelGlow,
+      bakePointCoordinates: exportBakeCoordinates,
       pointStrokeScale: TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
       pointInnerSepFixedPt: getPointInnerSepFixedPt(),
       pointInnerSepScale: TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
@@ -267,6 +272,31 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             />
             Label glow
           </label>
+          <div className="exportModeBlock">
+            <div className="subSectionTitle">TikZ Mode</div>
+            <div className="exportModeSegmented" role="radiogroup" aria-label="TikZ export mode">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={tikzExportMode === "visualExact"}
+                className={tikzExportMode === "visualExact" ? "exportModeButton active" : "exportModeButton"}
+                title="Uses GeoDraw's evaluated point coordinates for canvas-faithful output."
+                onClick={() => setTikzExportMode("visualExact")}
+              >
+                Visual Exact
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={tikzExportMode === "reconstructible"}
+                className={tikzExportMode === "reconstructible" ? "exportModeButton active" : "exportModeButton"}
+                title="Rebuilds geometry with tkz-euclide construction commands where possible."
+                onClick={() => setTikzExportMode("reconstructible")}
+              >
+                Reconstructible TikZ
+              </button>
+            </div>
+          </div>
         </div>
         <div className="scaleBlock">
           <div className="subSectionTitle">Scale Modifiers</div>

@@ -32,9 +32,9 @@ runTest("formats numbers (scale, coordinates, pt values)", () => {
     `.trim();
 
     const expected = `
-\\begin{tikzpicture}[scale=1.5,line cap=round]
+\\begin{tikzpicture}[scale=1.50000000000000001,line cap=round]
 \\tkzInit[xmin=-5,xmax=5.5,ymin=-3.12,ymax=4]
-\\tkzDefPoints{1/2.12/A, 0/-3/B}
+\\tkzDefPoints{1.00/2.123456/A, -0.00000001/-3.0/B}
 \\draw[line width=0.6pt] (0,0) -- (1,1);
 \\tkzDrawSegment[dotted, dash pattern=on 2pt off 3.5pt](A,B)
 \\end{tikzpicture}
@@ -124,16 +124,26 @@ runTest("hoists shared gdLabelGlow wrapper outside grouped foreach tuples", () =
     assertOk(!output.includes("A/above left/{\\gdLabelGlow{$A$}}"), "Expected tuple payload to avoid repeated gdLabelGlow wrapper.");
 });
 
-runTest("rounds angle-label options and angle keyword syntax", () => {
+runTest("preserves construction angles while rounding label options", () => {
     const input = `
 \\tkzDefPointOnCircle[through = center O angle -150.161929357818 point tkzCircleR_1]
 \\tkzLabelAngle[dist=0.376926862445237, angle=24.0822396243238, text=black](Y,A,D){$30^{\\circ}$}
     `.trim();
     const expected = `
-\\tkzDefPointOnCircle[through = center O angle -150.16 point tkzCircleR_1]
+\\tkzDefPointOnCircle[through = center O angle -150.161929357818 point tkzCircleR_1]
 \\tkzLabelAngle[dist=0.38, angle=24.08, text=black](Y,A,D){$30^{\\circ}$}
     `.trim();
     assertEqual(makeEfficientTikz(input), expected);
+});
+
+runTest("preserves near-tangent construction coordinates", () => {
+    const input = `
+\\tkzDefPoints{0/0/O,1/0/X,-2/0.9996/A,2/0.9996/B}
+\\tkzInterLC[near](A,B)(O,X) \\tkzGetPoints{P}{Q}
+    `.trim();
+    const output = makeEfficientTikz(input);
+    assertOk(output.includes("-2/0.9996/A"), "Construction rounding must not collapse a secant into a tangent.");
+    assertOk(output.includes("2/0.9996/B"), "Construction rounding must retain both exact line anchors.");
 });
 
 console.log("All tests passed");

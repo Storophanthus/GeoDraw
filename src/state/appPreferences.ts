@@ -13,6 +13,7 @@ type ConstructionPreferencesState = Pick<
   | "segmentDefaults"
   | "lineDefaults"
   | "circleDefaults"
+  | "ellipseDefaults"
   | "polygonDefaults"
   | "angleDefaults"
   | "objectLabelDefaults"
@@ -114,10 +115,12 @@ function normalizeObjectLabelDefaults(raw: unknown): ConstructionPreferencesStat
       segment: false,
       line: false,
       circle: false,
+      ellipse: false,
       polygon: false,
       segmentGlow: true,
       lineGlow: true,
       circleGlow: true,
+      ellipseGlow: true,
       polygonGlow: true,
     };
   }
@@ -127,10 +130,12 @@ function normalizeObjectLabelDefaults(raw: unknown): ConstructionPreferencesStat
     segment: typeof raw.segment === "boolean" ? raw.segment : false,
     line: typeof raw.line === "boolean" ? raw.line : false,
     circle: typeof raw.circle === "boolean" ? raw.circle : false,
+    ellipse: typeof raw.ellipse === "boolean" ? raw.ellipse : false,
     polygon: typeof raw.polygon === "boolean" ? raw.polygon : false,
     segmentGlow: typeof raw.segmentGlow === "boolean" ? raw.segmentGlow : true,
     lineGlow: typeof raw.lineGlow === "boolean" ? raw.lineGlow : true,
     circleGlow: typeof raw.circleGlow === "boolean" ? raw.circleGlow : true,
+    ellipseGlow: typeof raw.ellipseGlow === "boolean" ? raw.ellipseGlow : true,
     polygonGlow: typeof raw.polygonGlow === "boolean" ? raw.polygonGlow : true,
   };
 }
@@ -153,6 +158,7 @@ export function captureConstructionPreferences(state: ConstructionPreferencesSta
     segmentDefaults: state.segmentDefaults,
     lineDefaults: state.lineDefaults,
     circleDefaults: state.circleDefaults,
+    ellipseDefaults: state.ellipseDefaults,
     polygonDefaults: state.polygonDefaults,
     angleDefaults: state.angleDefaults,
     objectLabelDefaults: state.objectLabelDefaults,
@@ -195,6 +201,7 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
     !isRecord(value.segmentDefaults) ||
     !isRecord(value.lineDefaults) ||
     !isRecord(value.circleDefaults) ||
+    (value.ellipseDefaults !== undefined && !isRecord(value.ellipseDefaults)) ||
     !isRecord(value.polygonDefaults) ||
     !isRecord(value.angleDefaults) ||
     (value.labelToolDefaults !== undefined && !isRecord(value.labelToolDefaults)) ||
@@ -226,6 +233,7 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
     segmentDefaults: value.segmentDefaults as ConstructionPreferencesState["segmentDefaults"],
     lineDefaults: value.lineDefaults as ConstructionPreferencesState["lineDefaults"],
     circleDefaults: value.circleDefaults as ConstructionPreferencesState["circleDefaults"],
+    ellipseDefaults: (value.ellipseDefaults ?? value.circleDefaults) as ConstructionPreferencesState["ellipseDefaults"],
     polygonDefaults: value.polygonDefaults as ConstructionPreferencesState["polygonDefaults"],
     angleDefaults: value.angleDefaults as ConstructionPreferencesState["angleDefaults"],
     objectLabelDefaults: normalizeObjectLabelDefaults(value.objectLabelDefaults),

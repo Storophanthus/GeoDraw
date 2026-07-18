@@ -16,7 +16,7 @@ import {
   type RegularPolygonToolState,
   type TransformToolState,
 } from "./previews/pendingPreview";
-import { drawAngleObject, drawCircleObject, drawLineObject, drawPoints, drawPolygonObject, drawSegmentObject } from "./renderers";
+import { drawAngleObject, drawCircleObject, drawEllipseObject, drawLineObject, drawPoints, drawPolygonObject, drawSegmentObject } from "./renderers";
 import type { DrawableObjectSelection } from "./renderers/types";
 import type { ResolvedAngle } from "./labelOverlays";
 import { drawInteractionHighlights } from "./interactionHighlights";
@@ -126,6 +126,8 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       const ref = geometryLayerOrder[i];
       if (ref.type === "circle") {
         drawCircleObject(ctx, scene, ref.id, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
+      } else if (ref.type === "ellipse") {
+        drawEllipseObject(ctx, scene, ref.id, camera, vp, selectedDrawableObject, recentDrawableObject, copySourceDrawable);
       } else if (ref.type === "polygon") {
         drawPolygonObject(
           ctx,

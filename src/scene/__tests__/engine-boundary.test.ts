@@ -111,6 +111,9 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     createCircleThreePoint() {
       return null;
     },
+    createEllipseFociPoint() {
+      return null;
+    },
     createPolygon() {
       return null;
     },

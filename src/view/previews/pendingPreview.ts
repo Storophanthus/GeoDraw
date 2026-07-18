@@ -65,6 +65,24 @@ function circumcircleFromThreePoints(a: Vec2, b: Vec2, c: Vec2): { center: Vec2;
   return { center, radius };
 }
 
+function ellipseFromFociPoint(focusA: Vec2, focusB: Vec2, through: Vec2): { center: Vec2; semiMajor: number; semiMinor: number; rotationRad: number } | null {
+  const dx = focusB.x - focusA.x;
+  const dy = focusB.y - focusA.y;
+  const focusDistance = Math.hypot(dx, dy);
+  if (!Number.isFinite(focusDistance) || focusDistance <= 1e-12) return null;
+  const semiMajor = (Math.hypot(through.x - focusA.x, through.y - focusA.y) + Math.hypot(through.x - focusB.x, through.y - focusB.y)) / 2;
+  const focalDistance = focusDistance / 2;
+  if (!Number.isFinite(semiMajor) || semiMajor <= focalDistance + 1e-9) return null;
+  const semiMinorSq = semiMajor * semiMajor - focalDistance * focalDistance;
+  if (!Number.isFinite(semiMinorSq) || semiMinorSq <= 1e-18) return null;
+  return {
+    center: { x: (focusA.x + focusB.x) / 2, y: (focusA.y + focusB.y) / 2 },
+    semiMajor,
+    semiMinor: Math.sqrt(semiMinorSq),
+    rotationRad: Math.atan2(dy, dx),
+  };
+}
+
 function rotateAround(center: Vec2, p: Vec2, angleRad: number): Vec2 {
   const dx = p.x - center.x;
   const dy = p.y - center.y;
@@ -355,6 +373,32 @@ export function drawPendingPreview(
         ctx.lineWidth = previewTheme.lineWidthPx;
         ctx.beginPath();
         ctx.arc(c.x, c.y, geom.radius * camera.zoom, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  if (p1 && pendingSelection.tool === "ellipse_foci_point" && pendingSelection.step === 2 && cursorScreen) {
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = previewTheme.lineWidthPx;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(cursorScreen.x, cursorScreen.y);
+    ctx.stroke();
+  }
+
+  if (pendingSelection.tool === "ellipse_foci_point" && pendingSelection.step === 3 && firstWorld && pendingSelection.second && cursorScreen) {
+    const focusBPoint = scene.points.find((p) => p.id === pendingSelection.second.id);
+    const focusBWorld = focusBPoint ? getPointWorldPos(focusBPoint, scene) : null;
+    const throughWorld = camMath.screenToWorld(cursorScreen, camera, vp);
+    if (focusBWorld) {
+      const geom = ellipseFromFociPoint(firstWorld, focusBWorld, throughWorld);
+      if (geom) {
+        const c = camMath.worldToScreen(geom.center, camera, vp);
+        ctx.globalAlpha = 0.45;
+        ctx.lineWidth = previewTheme.lineWidthPx;
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, geom.semiMajor * camera.zoom, geom.semiMinor * camera.zoom, -geom.rotationRad, 0, Math.PI * 2);
         ctx.stroke();
       }
     }

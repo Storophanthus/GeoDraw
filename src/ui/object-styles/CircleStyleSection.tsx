@@ -1,5 +1,5 @@
 
-import { type CircleStyle, type SceneCircle } from "../../scene/points";
+import { type CircleStyle, type SceneCircle, type SceneEllipse } from "../../scene/points";
 import { ColorSwatchInput } from "../ColorField";
 import { StyleControlGroup, StyleControlTabbedGroups } from "../StyleControlGroup";
 import { StyleSectionHeader } from "../StyleSectionHeader";
@@ -15,12 +15,14 @@ const FILL_PATTERN_OPTIONS = [
 ] as const;
 
 type CircleStyleSectionProps = {
-    selectedCircle: SceneCircle;
+    selectedCircle: SceneCircle | SceneEllipse;
     selectedStyleAsDefault: boolean;
     onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedCircleStyle: (style: Partial<CircleStyle>) => void;
-    updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
+    updateSelectedCircleFields: (fields: Partial<Pick<SceneCircle | SceneEllipse, "showLabel" | "labelText" | "labelPosWorld" | "labelGlow" | "visible">>) => void;
     mode?: "object" | "toolDefault";
+    title?: string;
+    showArrow?: boolean;
 };
 
 export function CircleStyleSection({
@@ -30,13 +32,15 @@ export function CircleStyleSection({
     updateSelectedCircleStyle,
     updateSelectedCircleFields,
     mode = "object",
+    title = "Circle Style",
+    showArrow = true,
 }: CircleStyleSectionProps) {
     const selectedAreaStyle = selectedCircle.style;
 
     return (
         <div className="cosmeticsBlock">
             <StyleSectionHeader
-                title="Circle Style"
+                title={title}
                 selectedStyleAsDefault={selectedStyleAsDefault}
                 onMakeStyleDefaultChange={onMakeStyleDefaultChange}
                 mode={mode}
@@ -182,18 +186,20 @@ export function CircleStyleSection({
                 )}
             </StyleControlGroup>
 
-            <StyleControlGroup title="Arrow">
-                <ArrowListControl
-                    arrows={
-                        selectedCircle.style.arrowMarks ??
-                        (selectedCircle.style.arrowMark?.enabled
-                            ? [selectedCircle.style.arrowMark]
-                            : [])
-                    }
-                    strokeColor={selectedCircle.style.strokeColor}
-                    onChange={(newArrows) => updateSelectedCircleStyle({ arrowMarks: newArrows })}
-                />
-            </StyleControlGroup>
+            {showArrow && (
+                <StyleControlGroup title="Arrow">
+                    <ArrowListControl
+                        arrows={
+                            selectedCircle.style.arrowMarks ??
+                            (selectedCircle.style.arrowMark?.enabled
+                                ? [selectedCircle.style.arrowMark]
+                                : [])
+                        }
+                        strokeColor={selectedCircle.style.strokeColor}
+                        onChange={(newArrows) => updateSelectedCircleStyle({ arrowMarks: newArrows })}
+                    />
+                </StyleControlGroup>
+            )}
             </StyleControlTabbedGroups>
         </div>
     );

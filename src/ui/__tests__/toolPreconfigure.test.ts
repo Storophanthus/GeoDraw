@@ -26,6 +26,7 @@ const expected: Array<[ActiveTool, ReturnType<typeof getToolDefaultKind>]> = [
   ["circle_cp", "circle"],
   ["circle_3p", "circle"],
   ["circle_fixed", "circle"],
+  ["ellipse_foci_point", "ellipse"],
   ["polygon", "polygon"],
   ["regular_polygon", "polygon"],
   ["angle", "angle"],

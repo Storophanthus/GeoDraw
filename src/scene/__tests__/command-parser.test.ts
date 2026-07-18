@@ -220,6 +220,16 @@ const circle3p = mustCmd("Circle3P(A,B,O)", baseCtx, "CreateCircleThreePoint");
 if (circle3p.type !== "CreateCircleThreePoint" || circle3p.aId !== "pA" || circle3p.bId !== "pB" || circle3p.cId !== "pO") {
   throw new Error("Circle3P(A,B,O) mismatch");
 }
+const ellipseABO = mustCmd("Ellipse(A,B,O)", baseCtx, "CreateEllipseFociPoint");
+if (
+  ellipseABO.type !== "CreateEllipseFociPoint" ||
+  ellipseABO.focusAId !== "pA" ||
+  ellipseABO.focusBId !== "pB" ||
+  ellipseABO.throughId !== "pO"
+) {
+  throw new Error("Ellipse(A,B,O) mismatch");
+}
+mustError("Ellipse(A,A,O)", baseCtx, "foci must be distinct");
 
 const incircle = mustCmd("Incircle(A,B,O)", baseCtx, "CreateIncircle");
 if (incircle.type !== "CreateIncircle" || incircle.aId !== "pA" || incircle.bId !== "pB" || incircle.cId !== "pO") {

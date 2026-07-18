@@ -36,6 +36,12 @@
   - Drag-dropping `.geodraw` / `.json` files on the canvas also opens them into a new tab.
   - `Save` / `Save As` operate on the active tab only.
   - `+` creates a blank canvas tab; close resets the last remaining tab to a blank canvas.
+  - 2026-05-05 reload recovery follow-up:
+    - open tabs, active tab, titles, file metadata, snapshot, camera, undo/redo, and command aliases persist to local storage
+    - current active canvas is captured before persistence, including before page unload
+    - restored tab sessions skip global construction-preference hydration so per-tab defaults/canvas settings remain independent after reload
+    - browser `FileSystemFileHandle`s cannot be serialized, so a reloaded tab keeps the displayed filename but still needs `Save As` to regain a writable browser handle
+    - canvas and overlay labels opt out of browser text selection to prevent the whole canvas from turning blue-selected after reload/click-drag
   - Validation:
     - `npx tsc --noEmit`
     - `npm run build`
@@ -46,7 +52,7 @@
     - consider tab reorder once the base workflow has settled
   - Risks:
     - browser download fallback can only remember the suggested file name, not a writable handle
-    - tab runtime is in-memory only; app restart still depends on explicit file saves
+    - local tab recovery is a convenience snapshot, not a replacement for explicit `.geodraw` saves
 - 2026-03-30 TikZ export fixture sweep restored to green:
   - `node --import tsx scripts/test-export.ts` now passes fully (`All 90 export fixtures compiled successfully.`).
   - Closed stale export-test drift:

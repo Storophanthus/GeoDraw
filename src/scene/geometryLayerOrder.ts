@@ -15,6 +15,7 @@ export function geometryLayerRefAlive(scene: SceneModel, ref: SceneGeometryLayer
   if (ref.type === "segment") return scene.segments.some((segment) => segment.id === ref.id);
   if (ref.type === "line") return scene.lines.some((line) => line.id === ref.id);
   if (ref.type === "circle") return scene.circles.some((circle) => circle.id === ref.id);
+  if (ref.type === "ellipse") return (scene.ellipses ?? []).some((ellipse) => ellipse.id === ref.id);
   if (ref.type === "polygon") return scene.polygons.some((polygon) => polygon.id === ref.id);
   return scene.angles.some((angle) => angle.id === ref.id);
 }
@@ -27,6 +28,7 @@ export function isGeometryLayerRef(value: unknown): value is SceneGeometryLayerR
     candidate.type === "segment" ||
     candidate.type === "line" ||
     candidate.type === "circle" ||
+    candidate.type === "ellipse" ||
     candidate.type === "polygon" ||
     candidate.type === "angle"
   );
@@ -45,7 +47,7 @@ export function geometryLayerRefMatchesTab(
   if (tab === "all") return true;
   if (tab === "lines") return ref.type === "segment" || ref.type === "line";
   if (tab === "circles") {
-    return ref.type === "circle" || ref.type === "polygon" || isSectorAngleRef(scene, ref);
+    return ref.type === "circle" || ref.type === "ellipse" || ref.type === "polygon" || isSectorAngleRef(scene, ref);
   }
   return ref.type === "angle" && !isSectorAngleRef(scene, ref);
 }
@@ -63,6 +65,10 @@ export function getLegacyGeometryLayerOrder(scene: SceneModel): SceneGeometryLay
   }
   for (let i = scene.polygons.length - 1; i >= 0; i -= 1) {
     out.push({ type: "polygon", id: scene.polygons[i].id });
+  }
+  const ellipses = scene.ellipses ?? [];
+  for (let i = ellipses.length - 1; i >= 0; i -= 1) {
+    out.push({ type: "ellipse", id: ellipses[i].id });
   }
   for (let i = scene.circles.length - 1; i >= 0; i -= 1) {
     out.push({ type: "circle", id: scene.circles[i].id });

@@ -1,16 +1,18 @@
 import type { Vec2 } from "../geo/vec2";
 import {
   getCircleWorldGeometry,
+  getEllipseWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
   type SceneCircle,
+  type SceneEllipse,
   type SceneLine,
   type SceneModel,
   type ScenePolygon,
   type SceneSegment,
 } from "./points";
 
-export type LabelableObjectType = "segment" | "line" | "circle" | "polygon";
+export type LabelableObjectType = "segment" | "line" | "circle" | "ellipse" | "polygon";
 
 export type LabelableObjectRef = {
   type: LabelableObjectType;
@@ -63,6 +65,10 @@ export function defaultCircleLabelText(circle: SceneCircle, scene: SceneModel): 
   return circle.id;
 }
 
+export function defaultEllipseLabelText(ellipse: SceneEllipse, scene: SceneModel): string {
+  return `(${pointName(scene, ellipse.focusAId)}${pointName(scene, ellipse.focusBId)}${pointName(scene, ellipse.throughId)})`;
+}
+
 export function defaultPolygonLabelText(polygon: ScenePolygon, scene: SceneModel): string {
   if (polygon.pointIds.length === 0) return polygon.id;
   return polygon.pointIds.map((id) => pointName(scene, id)).join("");
@@ -100,6 +106,20 @@ export function defaultCircleLabelPosWorld(circle: SceneCircle, scene: SceneMode
   };
 }
 
+export function defaultEllipseLabelPosWorld(ellipse: SceneEllipse, scene: SceneModel): Vec2 | null {
+  const geom = getEllipseWorldGeometry(ellipse, scene);
+  if (!geom) return null;
+  const d = Math.max(0.3, Math.min(geom.semiMajor * 1.1, geom.semiMajor + 0.65));
+  const localX = d * Math.SQRT1_2;
+  const localY = Math.max(0.3, geom.semiMinor + 0.2) * Math.SQRT1_2;
+  const cos = Math.cos(geom.rotationRad);
+  const sin = Math.sin(geom.rotationRad);
+  return {
+    x: geom.center.x + localX * cos - localY * sin,
+    y: geom.center.y + localX * sin + localY * cos,
+  };
+}
+
 export function defaultPolygonLabelPosWorld(polygon: ScenePolygon, scene: SceneModel): Vec2 | null {
   if (polygon.pointIds.length === 0) return null;
   let sumX = 0;
@@ -129,6 +149,10 @@ export function defaultObjectLabelText(ref: LabelableObjectRef, scene: SceneMode
     const circle = scene.circles.find((item) => item.id === ref.id);
     return circle ? defaultCircleLabelText(circle, scene) : ref.id;
   }
+  if (ref.type === "ellipse") {
+    const ellipse = (scene.ellipses ?? []).find((item) => item.id === ref.id);
+    return ellipse ? defaultEllipseLabelText(ellipse, scene) : ref.id;
+  }
   const polygon = scene.polygons.find((item) => item.id === ref.id);
   return polygon ? defaultPolygonLabelText(polygon, scene) : ref.id;
 }
@@ -145,6 +169,10 @@ export function defaultObjectLabelPosWorld(ref: LabelableObjectRef, scene: Scene
   if (ref.type === "circle") {
     const circle = scene.circles.find((item) => item.id === ref.id);
     return circle ? defaultCircleLabelPosWorld(circle, scene) : null;
+  }
+  if (ref.type === "ellipse") {
+    const ellipse = (scene.ellipses ?? []).find((item) => item.id === ref.id);
+    return ellipse ? defaultEllipseLabelPosWorld(ellipse, scene) : null;
   }
   const polygon = scene.polygons.find((item) => item.id === ref.id);
   return polygon ? defaultPolygonLabelPosWorld(polygon, scene) : null;

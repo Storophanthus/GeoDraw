@@ -18,7 +18,7 @@ type RunConstructClickParams = {
   preHitRichTextNodeId?: string | null;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
   scene: SceneModel;
   resolvedPoints: Array<{ point: SceneModel["points"][number]; world: Vec2 }>;
   camera: Camera;

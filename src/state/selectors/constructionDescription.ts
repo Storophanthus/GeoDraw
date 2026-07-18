@@ -7,7 +7,7 @@ import {
 } from "../../scene/points";
 
 export function selectConstructionDescription(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number" | "richText"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "number" | "richText"; id: string } | null,
   scene: SceneModel
 ): string | null {
   const pointNameById = new Map(scene.points.map((p) => [p.id, p.name]));
@@ -15,6 +15,7 @@ export function selectConstructionDescription(
   const lineById = new Map(scene.lines.map((l) => [l.id, l]));
   const segmentById = new Map(scene.segments.map((s) => [s.id, s]));
   const circleById = new Map(scene.circles.map((c) => [c.id, c]));
+  const ellipseById = new Map((scene.ellipses ?? []).map((e) => [e.id, e]));
   const polygonById = new Map(scene.polygons.map((p) => [p.id, p]));
   const angleById = new Map(scene.angles.map((a) => [a.id, a]));
   const numberById = new Map(scene.numbers.map((n) => [n.id, n]));
@@ -27,6 +28,7 @@ export function selectConstructionDescription(
     lineById,
     segmentById,
     circleById,
+    ellipseById,
     polygonById,
     angleById,
     numberById
@@ -34,13 +36,14 @@ export function selectConstructionDescription(
 }
 
 function describeSelectedConstruction(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number" | "richText"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "number" | "richText"; id: string } | null,
   scene: SceneModel,
   pointNameById: Map<string, string>,
   pointById: Map<string, ScenePoint>,
   lineById: Map<string, SceneModel["lines"][number]>,
   segmentById: Map<string, SceneModel["segments"][number]>,
   circleById: Map<string, SceneModel["circles"][number]>,
+  ellipseById: Map<string, NonNullable<SceneModel["ellipses"]>[number]>,
   polygonById: Map<string, SceneModel["polygons"][number]>,
   angleById: Map<string, SceneModel["angles"][number]>,
   numberById: Map<string, SceneModel["numbers"][number]>
@@ -157,6 +160,14 @@ function describeSelectedConstruction(
       }
     }
     return describeCircleForConstruction(circle, pointNameById);
+  }
+  if (selectedObject.type === "ellipse") {
+    const ellipse = ellipseById.get(selectedObject.id);
+    if (!ellipse) return `Ellipse ${selectedObject.id}`;
+    return `Ellipse with foci ${pointLabel(ellipse.focusAId, pointNameById)} and ${pointLabel(
+      ellipse.focusBId,
+      pointNameById
+    )}, through ${pointLabel(ellipse.throughId, pointNameById)}.`;
   }
   if (selectedObject.type === "polygon") {
     const polygon = polygonById.get(selectedObject.id);

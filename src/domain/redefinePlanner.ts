@@ -2,7 +2,7 @@ import type { Command } from "../CommandParser";
 import type { SceneModel } from "../scene/points";
 
 export type CommandAliasTarget = {
-  type: "point" | "segment" | "line" | "circle" | "polygon" | "angle";
+  type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle";
   id: string;
 };
 
@@ -95,6 +95,16 @@ export function planAliasRedefine(
       return { ok: true, objectType: "circle" };
     }
     return { ok: false, error: `Cannot redefine circle ${label} with this command` };
+  }
+
+  if (target.type === "ellipse") {
+    if (cmd.type !== "CreateEllipseFociPoint") return { ok: false, error: `Cannot redefine ellipse ${label} with this command` };
+    if (!(scene.ellipses ?? []).some((e) => e.id === target.id)) return { ok: false, error: `Cannot redefine ellipse ${label}` };
+    if (!hasPoint(scene, cmd.focusAId) || !hasPoint(scene, cmd.focusBId) || !hasPoint(scene, cmd.throughId)) {
+      return { ok: false, error: `Cannot redefine ellipse ${label} with this command` };
+    }
+    if (cmd.focusAId === cmd.focusBId) return { ok: false, error: `Cannot redefine ellipse ${label}` };
+    return { ok: true, objectType: "ellipse" };
   }
 
   if (target.type === "polygon") {

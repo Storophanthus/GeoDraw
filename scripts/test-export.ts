@@ -9,6 +9,7 @@ import type {
   PointStyle,
   PolygonStyle,
   SceneCircle,
+  SceneEllipse,
   SceneAngle,
   SceneLine,
   SceneModel,
@@ -97,10 +98,11 @@ async function main(): Promise<void> {
     const parsed = JSON.parse(rawText);
     const rawScene = parsed.scene ?? parsed;
     const scene = hydrateScene(rawScene);
+    const fixtureExportOptions = parsed.exportOptions as Record<string, unknown> | undefined;
     let tikz = "";
     let exportError: Error | null = null;
     try {
-      tikz = exportTikz(scene);
+      tikz = fixtureExportOptions ? exportTikzWithOptions(scene, fixtureExportOptions) : exportTikz(scene);
     } catch (error) {
       exportError = error instanceof Error ? error : new Error(String(error));
     }
@@ -114,8 +116,36 @@ async function main(): Promise<void> {
   }
 
   assertTkzSetupToggleRegression();
+  await assertEfficientCoordinateRoundingCompileRegression();
 
   console.log(`All ${files.length} export fixtures compiled successfully.`);
+}
+
+async function assertEfficientCoordinateRoundingCompileRegression(): Promise<void> {
+  const standard = String.raw`\begin{tikzpicture}
+\tkzDefPoints{3/1/A, 6.061083984375/4.95205078125/Ba, 5.514599609375/0.92724609375/C}
+\tkzDefPoint(4.32023676029465,3.13891853466853){O_1}
+\tkzDefPoint(6.83066157486428,3.06628541608936){O_2}
+\tkzDefCircle[circum](A,Ba,C) \tkzGetPoint{tkzCircum_1}
+\tkzInterLC[common=A](A,O_1)(tkzCircum_1,A) \tkzGetPoints{B}{A}
+\tkzDefCircle[circum](B,O_1,C) \tkzGetPoint{tkzCircum_2}
+\tkzInterLC[near](A,O_2)(tkzCircum_2,B) \tkzGetPoints{Other}{N}
+\end{tikzpicture}`;
+  const efficient = makeEfficientTikz(standard);
+  if (!efficient.includes("6.061083984375/4.95205078125/Ba") || !efficient.includes("(6.83066157486428,3.06628541608936)")) {
+    throw new Error("Expected efficient TikZ to preserve full construction-coordinate precision.");
+  }
+  await compileTikzSnippet("efficient-coordinate-rounding-line-circle", efficient);
+
+  const nearTangent = String.raw`\begin{tikzpicture}
+\tkzDefPoints{0/0/O,1/0/X,-2/0.9996/A,2/0.9996/B}
+\tkzInterLC[near](A,B)(O,X) \tkzGetPoints{P}{Q}
+\end{tikzpicture}`;
+  const efficientNearTangent = makeEfficientTikz(nearTangent);
+  if (!efficientNearTangent.includes("0.9996")) {
+    throw new Error("Efficient TikZ must not round a near-tangent secant into tangency.");
+  }
+  await compileTikzSnippet("efficient-coordinate-rounding-near-tangent", efficientNearTangent);
 }
 
 function hydrateScene(raw: {
@@ -124,6 +154,7 @@ function hydrateScene(raw: {
   lines?: Array<Record<string, unknown>>;
   segments?: Array<Record<string, unknown>>;
   circles?: Array<Record<string, unknown>>;
+  ellipses?: Array<Record<string, unknown>>;
   polygons?: Array<Record<string, unknown>>;
   angles?: Array<Record<string, unknown>>;
   textLabels?: Array<Record<string, unknown>>;
@@ -134,11 +165,12 @@ function hydrateScene(raw: {
   const lines = (raw.lines ?? []).map(hydrateLine);
   const segments = (raw.segments ?? []).map(hydrateSegment);
   const circles = (raw.circles ?? []).map(hydrateCircle);
+  const ellipses = (raw.ellipses ?? []).map(hydrateEllipse);
   const polygons = (raw.polygons ?? []).map(hydratePolygon);
   const angles = (raw.angles ?? []).map(hydrateAngle);
   const textLabels = (raw.textLabels ?? []).map(hydrateTextLabel);
   const richTextNodes = (raw.richTextNodes ?? []).map(hydrateRichTextNode);
-  return { points, numbers, lines, segments, circles, polygons, angles, textLabels, richTextNodes };
+  return { points, numbers, lines, segments, circles, ellipses, polygons, angles, textLabels, richTextNodes };
 }
 
 function hydratePoint(raw: Record<string, unknown>): ScenePoint {
@@ -404,6 +436,22 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
   };
 }
 
+function hydrateEllipse(raw: Record<string, unknown>): SceneEllipse {
+  return {
+    id: String(raw.id),
+    kind: "fociPoint",
+    focusAId: String(raw.focusAId),
+    focusBId: String(raw.focusBId),
+    throughId: String(raw.throughId),
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+    labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+    labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+    labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
+    style: (raw.style as CircleStyle) ?? defaultCircleStyle,
+  };
+}
+
 function hydrateAngle(raw: Record<string, unknown>): SceneAngle {
   const style = (raw.style as SceneAngle["style"] | undefined) ?? {
     strokeColor: "#334155",
@@ -641,6 +689,64 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (exportError) throw exportError;
     if (!/\\tkzInterLC\[common=C\]\((?:C,D|D,C)\)\(A,B\)\s+\\tkzGetPoints\{F\}\{C\}/.test(tikz)) {
       throw new Error("Expected dedicated circle-line exclude fixture to export F using common=C.");
+    }
+  }
+
+  if (fileName === "baked-coordinates-construction.json") {
+    if (exportError) throw exportError;
+    // Baked mode emits every point as a literal \tkzDefPoint and never re-derives
+    // geometry in TeX, so none of the construction/intersection macros may appear.
+    for (const forbidden of [
+      "\\tkzInterLC",
+      "\\tkzInterLL",
+      "\\tkzInterCC",
+      "\\tkzDefTriangleCenter",
+      "\\tkzCircumCenter",
+      "\\tkzDefPointBy",
+      "\\tkzDefPointOnCircle",
+    ]) {
+      if (tikz.includes(forbidden)) {
+        throw new Error(`Baked-coordinate export must not emit ${forbidden}; all points should be literal \\tkzDefPoint.`);
+      }
+    }
+    for (const literal of [
+      /\\tkzDefPoint\([^)]*\)\{I\}/,
+      /\\tkzDefPoint\([^)]*\)\{X\}/,
+    ]) {
+      if (!literal.test(tikz)) {
+        throw new Error(`Baked-coordinate export expected a literal \\tkzDefPoint for ${literal}.`);
+      }
+    }
+    return;
+  }
+
+  if (fileName === "circle-line-coincidental-common-not-on-circle.json") {
+    if (exportError) throw exportError;
+    // E coincides with an intersection but is a free point (not on the circle by
+    // construction). tkz-euclide's common= matching is then unreliable under
+    // picture scaling, so the exporter must NOT use it as common= and must fall
+    // back to the near/swap line-circle export.
+    if (tikz.includes("[common=E]")) {
+      throw new Error("Regression: coincidental common point not on the circle by construction must not be used as tkz common=.");
+    }
+    if (!/\\tkzInterLC\[near\]\((?:G,H|H,G)\)\(O,P\)\s+\\tkzGetPoints(?:\{F\}\{tkzInterLC_\d+_other\}|\{tkzInterLC_\d+_other\}\{F\})/.test(tikz)) {
+      throw new Error("Expected coincidental-common fixture to fall back to near/swap line-circle export for F.");
+    }
+  }
+
+  if (fileName === "line-circle-derived-common-not-on-target-circle.json") {
+    if (exportError) throw exportError;
+    // I is intentionally constructed on omega, so using common=I for L is safe.
+    // The same I lies on gamma only by geometric coincidence/theorem, so using
+    // common=I for M can make tkz-euclide collapse M back onto I.
+    if (!/\\tkzInterLC\[common=I\]\(I,G\)\(tkzCircum_\d+,I\)\s+\\tkzGetPoints\{L\}\{I\}/.test(tikz)) {
+      throw new Error("Expected L to keep the safe common=I export on its source circle.");
+    }
+    if (/\\tkzInterLC\[common=I\]\(I,L\)\(tkzCircum_\d+,B\)\s+\\tkzGetPoints\{M\}\{I\}/.test(tikz)) {
+      throw new Error("Regression: M must not export with common=I when I is not constructed on the target circle.");
+    }
+    if (!/\\tkzInterLC\[near\]\(I,L\)\(tkzCircum_\d+,B\)\s+\\tkzGetPoints\{tkzInterLC_\d+_other\}\{M\}/.test(tikz)) {
+      throw new Error("Expected M to fall back to near/swap export instead of common=I.");
     }
   }
 
@@ -1483,9 +1589,6 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("mark=at position")) {
       throw new Error("Expected segment mid-arrow fixture to emit mark=at position.");
     }
-    if (!tikz.includes("\\arrowreversed")) {
-      throw new Error("Expected segment mid-arrow fixture to include reversed arrow command.");
-    }
     const markCount = (tikz.match(/mark=at position/g) ?? []).length;
     if (markCount < 2) {
       throw new Error("Expected segment bidirectional mid-arrow to emit separated mark positions.");
@@ -1506,7 +1609,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     const worldA = pointA ? getPointWorldPos(pointA, scene) : null;
     const worldB = pointB ? getPointWorldPos(pointB, scene) : null;
     const pathLengthWorld = worldA && worldB ? Math.hypot(worldB.x - worldA.x, worldB.y - worldA.y) : 0;
-    const pxPerWorld = extractEffectiveDrawScale(tikz) * 37.8;
+    const pxPerWorld = 80;
     const gapPx = (right.position - left.position) * pathLengthWorld * pxPerWorld;
     if (!Number.isFinite(gapPx) || gapPx < 3) {
       throw new Error("Expected segment <-> mid-arrow marks to be separated enough to be visually distinct.");
@@ -1524,7 +1627,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     const first = marks[0];
     if (first.cmd !== "arrowreversed") {
-      throw new Error("Expected near-edge mid <- arrow to emit arrowreversed command.");
+      throw new Error("Expected near-edge mid <- arrow to emit reversed arrow glyph.");
     }
     if (Math.abs(first.position - 0.02) > 0.005) {
       throw new Error(`Expected near-edge mid arrow position ~0.02, got ${first.position}.`);
@@ -1572,14 +1675,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
         ? segment.style.segmentArrowMarks[0]?.pairGapPx
         : segment?.style.segmentArrowMark?.pairGapPx) ?? 30;
     const pairGapPx = Number.isFinite(explicitPairGap) ? Number(explicitPairGap) : 30;
-    const pictureScaleMatch = tikz.match(/\\begin\{tikzpicture\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-    const scopeScaleMatch = tikz.match(/\\begin\{scope\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-    const tikzScale = pictureScaleMatch
-      ? Number(pictureScaleMatch[1])
-      : scopeScaleMatch
-        ? Number(scopeScaleMatch[1])
-        : 1;
-    const pxPerWorld = Number.isFinite(tikzScale) && tikzScale > 0 ? tikzScale * 37.8 : 80;
+    const pxPerWorld = 80;
     const expectedGap = (2 * pairGapPx) / (pathLengthWorld * pxPerWorld); // 2*pairGapPx / (pathLengthWorld * export px density)
     if (Math.abs(measuredGap - expectedGap) > 0.005) {
       throw new Error(`Expected explicit pairGapPx spacing ${expectedGap}, got ${measuredGap}.`);
@@ -1602,15 +1698,6 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "segment-mark-arrow-mid-inward.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\arrow[")) {
-      throw new Error("Expected inward mid-arrow fixture to include forward arrow command.");
-    }
-    if (!tikz.includes("\\arrowreversed[")) {
-      throw new Error("Expected inward mid-arrow fixture to include reversed arrow command.");
-    }
-    if (!tikz.includes("{Latex[")) {
-      throw new Error("Expected inward mid-arrow fixture to emit Latex tip style.");
-    }
     const marks = extractMarkCommands(tikz);
     if (marks.length < 2) {
       throw new Error("Expected inward mid-arrow fixture to emit parseable mark commands.");
@@ -1627,7 +1714,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     const worldA = pointA ? getPointWorldPos(pointA, scene) : null;
     const worldB = pointB ? getPointWorldPos(pointB, scene) : null;
     const pathLengthWorld = worldA && worldB ? Math.hypot(worldB.x - worldA.x, worldB.y - worldA.y) : 0;
-    const pxPerWorld = extractEffectiveDrawScale(tikz) * 37.8;
+    const pxPerWorld = 80;
     const gapPx = (right.position - left.position) * pathLengthWorld * pxPerWorld;
     if (!Number.isFinite(gapPx) || gapPx < 3) {
       throw new Error("Expected segment >-< mid-arrow marks to be separated enough to be visually distinct.");
@@ -1642,8 +1729,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("postaction=decorate")) {
       throw new Error("Expected circle arrow fixture to emit decoration-based arrow overlay.");
     }
-    if (!tikz.includes("{Latex[")) {
-      throw new Error("Expected circle arrow fixture to emit Latex arrow tip.");
+    if (!tikz.includes("\\draw[color=")) {
+      throw new Error("Expected circle arrow fixture to emit canvas-parity stroked arrow glyph.");
     }
   }
 
@@ -1694,8 +1781,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!hasArcOverlay) {
       throw new Error("Expected sector arrow fixture to emit arc path overlay.");
     }
-    if (!tikz.includes("{Triangle[")) {
-      throw new Error("Expected sector arrow fixture to emit Triangle arrow tip.");
+    if (!tikz.includes("\\fill[color=")) {
+      throw new Error("Expected sector arrow fixture to emit canvas-parity filled arrow glyph.");
     }
   }
 
@@ -1712,6 +1799,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     fileName === "sector-arrow-basic.json"
   ) {
     const hasMarkingArrowLib =
+      tikz.includes("\\usetikzlibrary{decorations.markings}") ||
       tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta}") ||
       tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta,bending}");
     const hasConstructiveArrowLib = tikz.includes("\\usetikzlibrary{arrows.meta,bending}");
@@ -1809,21 +1897,18 @@ function extractMarkCommands(tikz: string): Array<{ position: number; cmd: "arro
     const cmd = match[2] === "arrowreversed" ? "arrowreversed" : "arrow";
     if (Number.isFinite(position)) marks.push({ position, cmd });
   }
+  const glyphRegex = /mark=at position\s+([0-9]*\.?[0-9]+)\s+with\s+\{(\\(?:fill|draw)\[[^}]+?;\s*)\}/g;
+  for (const match of tikz.matchAll(glyphRegex)) {
+    const position = Number(match[1]);
+    const coordMatches = [...match[2].matchAll(/\(([-+]?\d*\.?\d+)pt,/g)];
+    const directionalCoord = coordMatches
+      .map((coordMatch) => Number(coordMatch[1]))
+      .find((value) => Number.isFinite(value) && Math.abs(value) > 1e-6);
+    if (!Number.isFinite(position) || directionalCoord === undefined) continue;
+    marks.push({ position, cmd: directionalCoord < 0 ? "arrow" : "arrowreversed" });
+  }
+  marks.sort((a, b) => a.position - b.position);
   return marks;
-}
-
-function extractEffectiveDrawScale(tikz: string): number {
-  const pictureScaleMatch = tikz.match(/\\begin\{tikzpicture\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-  if (pictureScaleMatch) {
-    const value = Number(pictureScaleMatch[1]);
-    if (Number.isFinite(value) && value > 0) return value;
-  }
-  const scopeScaleMatch = tikz.match(/\\begin\{scope\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-  if (scopeScaleMatch) {
-    const value = Number(scopeScaleMatch[1]);
-    if (Number.isFinite(value) && value > 0) return value;
-  }
-  return 1;
 }
 
 function parseDrawLines(

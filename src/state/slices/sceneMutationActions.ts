@@ -4,6 +4,8 @@ import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos, type Ang
 import {
   defaultCircleLabelPosWorld,
   defaultCircleLabelText,
+  defaultEllipseLabelPosWorld,
+  defaultEllipseLabelText,
   defaultLineLabelPosWorld,
   defaultLineLabelText,
   defaultPolygonLabelPosWorld,
@@ -46,6 +48,8 @@ export function createSceneMutationActions({
   | "updateLineStyleByIds"
   | "updateSelectedCircleStyle"
   | "updateCircleStyleByIds"
+  | "updateSelectedEllipseStyle"
+  | "updateEllipseStyleByIds"
   | "updateSelectedPolygonStyle"
   | "updatePolygonStyleByIds"
   | "updateSelectedAngleStyle"
@@ -58,6 +62,8 @@ export function createSceneMutationActions({
   | "updateLineFieldsByIds"
   | "updateSelectedCircleFields"
   | "updateCircleFieldsByIds"
+  | "updateSelectedEllipseFields"
+  | "updateEllipseFieldsByIds"
   | "updateSelectedPolygonFields"
   | "updatePolygonFieldsByIds"
   | "setSelectedPolygonOwnedSegmentsVisible"
@@ -255,6 +261,17 @@ export function createSceneMutationActions({
                 ...prev.scene,
                 circles: prev.scene.circles.map((circle) =>
                   circle.id === obj.id ? { ...circle, labelPosWorld: { x: world.x, y: world.y } } : circle
+                ),
+              },
+            };
+          }
+          if (obj.type === "ellipse") {
+            return {
+              ...prev,
+              scene: {
+                ...prev.scene,
+                ellipses: (prev.scene.ellipses ?? []).map((ellipse) =>
+                  ellipse.id === obj.id ? { ...ellipse, labelPosWorld: { x: world.x, y: world.y } } : ellipse
                 ),
               },
             };
@@ -538,6 +555,18 @@ export function createSceneMutationActions({
             },
           };
         }
+        if (obj.type === "ellipse") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              ellipses: (prev.scene.ellipses ?? []).map((ellipse) => {
+                if (ellipse.id !== obj.id) return ellipse;
+                return ensureEllipseLabelFields({ ...ellipse, showLabel: true }, prev.scene);
+              }),
+            },
+          };
+        }
         if (obj.type === "polygon") {
           return {
             ...prev,
@@ -771,6 +800,48 @@ export function createSceneMutationActions({
           scene: {
             ...prev.scene,
             circles,
+          },
+        };
+      });
+    },
+
+    updateSelectedEllipseStyle(next) {
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "ellipse") return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses: (prev.scene.ellipses ?? []).map((ellipse) =>
+              ellipse.id === prev.selectedObject!.id ? { ...ellipse, style: { ...ellipse.style, ...next } } : ellipse
+            ),
+          },
+        };
+      });
+    },
+
+    updateEllipseStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const ellipses = (prev.scene.ellipses ?? []).map((ellipse) => {
+          if (!idSet.has(ellipse.id)) return ellipse;
+          changed = true;
+          return {
+            ...ellipse,
+            style: {
+              ...ellipse.style,
+              ...next,
+            },
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses,
           },
         };
       });
@@ -1123,6 +1194,44 @@ export function createSceneMutationActions({
           scene: {
             ...prev.scene,
             circles,
+          },
+        };
+      });
+    },
+
+    updateSelectedEllipseFields(next) {
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "ellipse") return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses: (prev.scene.ellipses ?? []).map((ellipse) =>
+              ellipse.id === prev.selectedObject!.id
+                ? ensureEllipseLabelFields({ ...ellipse, ...next }, prev.scene)
+                : ellipse
+            ),
+          },
+        };
+      });
+    },
+
+    updateEllipseFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const ellipses = (prev.scene.ellipses ?? []).map((ellipse) => {
+          if (!idSet.has(ellipse.id)) return ellipse;
+          changed = true;
+          return ensureEllipseLabelFields({ ...ellipse, ...next }, prev.scene);
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses,
           },
         };
       });
@@ -1495,6 +1604,27 @@ export function createSceneMutationActions({
           };
         }
 
+        if (obj.type === "ellipse") {
+          const ellipse = (prev.scene.ellipses ?? []).find((item) => item.id === obj.id);
+          if (!ellipse) return prev;
+          return {
+            ...prev,
+            copyStyle: {
+              source: obj,
+              pointStyle: null,
+              lineStyle: lineStyleFromCircleStyle(ellipse.style),
+              circleStyle: { ...ellipse.style },
+              polygonStyle: polygonStyleFromCircleStyle(ellipse.style),
+              angleStyle: angleStyleFromCircleStyle(ellipse.style),
+              textLabelStyle: null,
+              richTextStyle: null,
+              pointShowLabel: null,
+              objectShowLabel: Boolean(ellipse.showLabel),
+              objectLabelGlow: ellipse.labelGlow !== false,
+            },
+          };
+        }
+
         if (obj.type === "polygon") {
           const polygon = prev.scene.polygons.find((item) => item.id === obj.id);
           if (!polygon) return prev;
@@ -1714,6 +1844,7 @@ function applyVisibilityToScene(scene: SceneModel, objects: SelectedObjectRef[],
   const segmentIds = new Set<string>();
   const lineIds = new Set<string>();
   const circleIds = new Set<string>();
+  const ellipseIds = new Set<string>();
   const polygonIds = new Set<string>();
   const angleIds = new Set<string>();
   const textLabelIds = new Set<string>();
@@ -1725,6 +1856,7 @@ function applyVisibilityToScene(scene: SceneModel, objects: SelectedObjectRef[],
     else if (obj.type === "segment") segmentIds.add(obj.id);
     else if (obj.type === "line") lineIds.add(obj.id);
     else if (obj.type === "circle") circleIds.add(obj.id);
+    else if (obj.type === "ellipse") ellipseIds.add(obj.id);
     else if (obj.type === "polygon") polygonIds.add(obj.id);
     else if (obj.type === "angle") angleIds.add(obj.id);
     else if (obj.type === "textLabel") textLabelIds.add(obj.id);
@@ -1768,6 +1900,15 @@ function applyVisibilityToScene(scene: SceneModel, objects: SelectedObjectRef[],
       return { ...circle, visible };
     });
     if (changed) nextScene = { ...nextScene, circles };
+  }
+  if (ellipseIds.size > 0) {
+    let changed = false;
+    const ellipses = (nextScene.ellipses ?? []).map((ellipse) => {
+      if (!ellipseIds.has(ellipse.id) || ellipse.visible === visible) return ellipse;
+      changed = true;
+      return { ...ellipse, visible };
+    });
+    if (changed) nextScene = { ...nextScene, ellipses };
   }
   if (polygonIds.size > 0) {
     let changed = false;
@@ -1943,6 +2084,27 @@ function applyCopyStyleToScene(
     return changed ? { ...scene, circles } : scene;
   }
 
+  if (obj.type === "ellipse") {
+    const sourceCircleStyle =
+      copyStyle.circleStyle ??
+      (copyStyle.polygonStyle ? circleStyleFromPolygonStyle(copyStyle.polygonStyle) : null) ??
+      (copyStyle.lineStyle ? circleStyleFromLineStyle(copyStyle.lineStyle) : null) ??
+      (copyStyle.pointStyle ? circleStyleFromPointStyle(copyStyle.pointStyle) : null);
+    if (!sourceCircleStyle) return scene;
+    let changed = false;
+    const ellipses = (scene.ellipses ?? []).map((ellipse) => {
+      if (ellipse.id !== obj.id) return ellipse;
+      changed = true;
+      return {
+        ...ellipse,
+        showLabel: copyStyle.objectShowLabel ?? ellipse.showLabel,
+        labelGlow: copyStyle.objectLabelGlow ?? ellipse.labelGlow,
+        style: { ...ellipse.style, ...sourceCircleStyle },
+      };
+    });
+    return changed ? { ...scene, ellipses } : scene;
+  }
+
   if (obj.type === "polygon") {
     const sourcePolygonStyle =
       copyStyle.polygonStyle ??
@@ -2052,6 +2214,22 @@ function ensureCircleLabelFields(
   return {
     ...circle,
     showLabel: Boolean(circle.showLabel),
+    labelText,
+    labelPosWorld,
+  };
+}
+
+function ensureEllipseLabelFields(
+  ellipse: NonNullable<SceneModel["ellipses"]>[number],
+  scene: SceneModel
+): NonNullable<SceneModel["ellipses"]>[number] {
+  const fallbackText = defaultEllipseLabelText(ellipse, scene);
+  const labelText = resolveObjectLabelText(ellipse.labelText, fallbackText);
+  const fallbackPos = defaultEllipseLabelPosWorld(ellipse, scene) ?? undefined;
+  const labelPosWorld = isFiniteLabelPosWorld(ellipse.labelPosWorld) ? ellipse.labelPosWorld : fallbackPos;
+  return {
+    ...ellipse,
+    showLabel: Boolean(ellipse.showLabel),
     labelText,
     labelPosWorld,
   };

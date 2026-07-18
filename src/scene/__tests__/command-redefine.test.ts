@@ -154,6 +154,17 @@ assert(aliasId("rc") === circleId, "circle alias id changed on redefine");
   assert(circle.centerId === c && Math.abs(circle.radius - 2) < 1e-9, "circle center/radius not updated");
 }
 
+// ellipse: create then update in-place
+mustOk(commandBarApi.applyObjectAssignment("re", { type: "CreateEllipseFociPoint", focusAId: a, focusBId: b, throughId: c }), "create ellipse");
+const ellipseId = aliasId("re");
+mustOk(commandBarApi.applyObjectAssignment("re", { type: "CreateEllipseFociPoint", focusAId: b, focusBId: c, throughId: d }), "update ellipse");
+assert(aliasId("re") === ellipseId, "ellipse alias id changed on redefine");
+{
+  const ellipse = (getGeoStore().scene.ellipses ?? []).find((it) => it.id === ellipseId);
+  assert(!!ellipse, "missing ellipse after redefine");
+  assert(ellipse.focusAId === b && ellipse.focusBId === c && ellipse.throughId === d, "ellipse points not updated");
+}
+
 // polygon: create then update in-place
 mustOk(commandBarApi.applyObjectAssignment("rp", { type: "CreatePolygonByPoints", pointIds: [a, b, c] }), "create polygon");
 const polygonId = aliasId("rp");

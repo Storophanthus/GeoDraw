@@ -10,6 +10,7 @@ export const defaultPointStyle: PointStyle = profileDefaults.pointDefaults;
 export const defaultSegmentStyle: LineStyle = profileDefaults.segmentDefaults;
 export const defaultLineStyle: LineStyle = profileDefaults.lineDefaults;
 export const defaultCircleStyle: CircleStyle = profileDefaults.circleDefaults;
+export const defaultEllipseStyle: CircleStyle = profileDefaults.ellipseDefaults;
 export const defaultPolygonStyle: PolygonStyle = profileDefaults.polygonDefaults;
 export const defaultAngleStyle: AngleStyle = profileDefaults.angleDefaults;
 export const defaultLabelToolStyle: SceneTextLabelStyle = profileDefaults.labelToolDefaults;
@@ -30,6 +31,7 @@ export function createSceneSliceState() {
       segments: [],
       lines: [],
       circles: [],
+      ellipses: [],
       polygons: [],
       angles: [],
       numbers: [],
@@ -41,6 +43,7 @@ export function createSceneSliceState() {
     nextSegmentId: 1,
     nextLineId: 1,
     nextCircleId: 1,
+    nextEllipseId: 1,
     nextPolygonId: 1,
     nextAngleId: 1,
     nextNumberId: 1,
@@ -51,6 +54,7 @@ export function createSceneSliceState() {
     segmentDefaults: defaultSegmentStyle,
     lineDefaults: defaultLineStyle,
     circleDefaults: defaultCircleStyle,
+    ellipseDefaults: defaultEllipseStyle,
     polygonDefaults: defaultPolygonStyle,
     angleDefaults: defaultAngleStyle,
     objectLabelDefaults: {
@@ -58,10 +62,12 @@ export function createSceneSliceState() {
       segment: false,
       line: false,
       circle: false,
+      ellipse: false,
       polygon: false,
       segmentGlow: true,
       lineGlow: true,
       circleGlow: true,
+      ellipseGlow: true,
       polygonGlow: true,
     },
     labelToolDefaults: defaultLabelToolStyle,

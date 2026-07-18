@@ -2,6 +2,8 @@ import type { GeometryObjectRef, SceneModel } from "../scene/points";
 import {
   defaultCircleLabelPosWorld,
   defaultCircleLabelText,
+  defaultEllipseLabelPosWorld,
+  defaultEllipseLabelText,
   defaultLineLabelPosWorld,
   defaultLineLabelText,
   defaultPolygonLabelPosWorld,
@@ -219,6 +221,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   let segments = scene.segments;
   let lines = scene.lines;
   let circles = scene.circles;
+  let ellipses = scene.ellipses ?? [];
   let polygons = scene.polygons;
   let angles = scene.angles;
   let numbers = scene.numbers;
@@ -253,6 +256,13 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       if (circle.kind === "fixedRadius") return Number.isFinite(circle.radius) && circle.radius > 0;
       return pointIds.has(circle.throughId);
     });
+    const nextEllipses = ellipses.filter(
+      (ellipse) =>
+        pointIds.has(ellipse.focusAId) &&
+        pointIds.has(ellipse.focusBId) &&
+        pointIds.has(ellipse.throughId) &&
+        ellipse.focusAId !== ellipse.focusBId
+    );
     const nextAngles = angles.filter(
       (angle) => pointIds.has(angle.aId) && pointIds.has(angle.bId) && pointIds.has(angle.cId)
     );
@@ -331,6 +341,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       lines,
       segments,
       circles,
+      ellipses: nextEllipses,
       polygons,
       angles,
       numbers,
@@ -460,6 +471,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       segments: nextSegmentsNormalized,
       lines: nextLines,
       circles: nextCirclesMigrated,
+      ellipses: nextEllipses,
       polygons: nextPolygons,
       angles: nextAngles,
       numbers: nextNumbers,
@@ -556,9 +568,39 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       circles: nextCirclesLabeled,
     };
 
+    const nextEllipsesLabeled = nextEllipses.map((ellipse) => {
+      const fallbackText = defaultEllipseLabelText(ellipse, sceneForPolygonLabels);
+      const fallbackPos = defaultEllipseLabelPosWorld(ellipse, sceneForPolygonLabels) ?? undefined;
+      const showLabel = Boolean(ellipse.showLabel);
+      const labelText = resolveObjectLabelText(ellipse.labelText, fallbackText);
+      const labelPosWorld = isFiniteLabelPosWorld(ellipse.labelPosWorld) ? ellipse.labelPosWorld : fallbackPos;
+      const sameShow = Boolean(ellipse.showLabel) === showLabel;
+      const sameText = ellipse.labelText === labelText;
+      const samePos =
+        (ellipse.labelPosWorld === undefined && labelPosWorld === undefined)
+        || (
+          ellipse.labelPosWorld !== undefined
+          && labelPosWorld !== undefined
+          && ellipse.labelPosWorld.x === labelPosWorld.x
+          && ellipse.labelPosWorld.y === labelPosWorld.y
+        );
+      if (sameShow && sameText && samePos) return ellipse;
+      return {
+        ...ellipse,
+        showLabel,
+        labelText,
+        labelPosWorld,
+      };
+    });
+
+    const sceneForEllipseLabels: SceneModel = {
+      ...sceneForPolygonLabels,
+      ellipses: nextEllipsesLabeled,
+    };
+
     const nextPolygonsLabeled = nextPolygons.map((polygon) => {
-      const fallbackText = defaultPolygonLabelText(polygon, sceneForPolygonLabels);
-      const fallbackPos = defaultPolygonLabelPosWorld(polygon, sceneForPolygonLabels) ?? undefined;
+      const fallbackText = defaultPolygonLabelText(polygon, sceneForEllipseLabels);
+      const fallbackPos = defaultPolygonLabelPosWorld(polygon, sceneForEllipseLabels) ?? undefined;
       const showLabel = Boolean(polygon.showLabel);
       const labelText = resolveObjectLabelText(polygon.labelText, fallbackText);
       const labelPosWorld = isFiniteLabelPosWorld(polygon.labelPosWorld) ? polygon.labelPosWorld : fallbackPos;
@@ -587,6 +629,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       !sameIds(nextSegmentsLabeled, segments) ||
       !sameIds(nextLinesLabeled, lines) ||
       !sameIds(nextCirclesLabeled, circles) ||
+      !sameIds(nextEllipsesLabeled, ellipses) ||
       !sameIds(nextPolygonsLabeled, polygons) ||
       !sameIds(nextAngles, angles) ||
       !sameIds(nextTextLabels, textLabels) ||
@@ -596,6 +639,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       nextSegmentsLabeled.some((segment, idx) => segment !== segments[idx]) ||
       nextLinesLabeled.some((line, idx) => line !== lines[idx]) ||
       nextCirclesLabeled.some((circle, idx) => circle !== circles[idx]) ||
+      nextEllipsesLabeled.some((ellipse, idx) => ellipse !== ellipses[idx]) ||
       nextPolygonsLabeled.some((polygon, idx) => polygon !== polygons[idx]) ||
       nextTextLabels.some((label, idx) => label !== textLabels[idx]);
 
@@ -604,6 +648,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     segments = nextSegmentsLabeled;
     lines = nextLinesLabeled;
     circles = nextCirclesLabeled;
+    ellipses = nextEllipsesLabeled;
     polygons = nextPolygonsLabeled;
     angles = nextAngles;
     numbers = nextNumbers;
@@ -619,6 +664,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     segments,
     lines,
     circles,
+    ellipses,
     polygons,
     angles,
     numbers,
@@ -635,6 +681,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     segments,
     lines,
     circles,
+    ellipses,
     polygons,
     angles,
     numbers,

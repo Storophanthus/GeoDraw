@@ -49,6 +49,7 @@ export type SceneStyleDefaults = {
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
+  ellipseDefaults: CircleStyle;
   polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
   labelToolDefaults: SceneTextLabelStyle;
@@ -546,6 +547,14 @@ export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneSt
         color: palette.arrow,
       },
     },
+    ellipseDefaults: {
+      strokeColor: palette.circleStroke,
+      strokeWidth: 1.6,
+      strokeDash: "solid",
+      strokeOpacity: 1,
+      fillOpacity: 0,
+      pattern: "",
+    },
     polygonDefaults: {
       strokeColor: palette.polygonStroke,
       strokeWidth: 1.6,
@@ -664,6 +673,16 @@ export function applyProfileColorsToDefaults(defaults: SceneStyleDefaults, profi
         : defaults.circleDefaults.arrowMark,
       arrowMarks: defaults.circleDefaults.arrowMarks?.map((arrow) => ({ ...arrow, color: palette.arrow })),
     },
+    ellipseDefaults: {
+      ...defaults.ellipseDefaults,
+      strokeColor: palette.circleStroke,
+      fillColor: defaults.ellipseDefaults.fillColor === undefined ? undefined : palette.polygonFill,
+      patternColor: defaults.ellipseDefaults.patternColor === undefined ? undefined : palette.polygonFill,
+      arrowMark: defaults.ellipseDefaults.arrowMark
+        ? { ...defaults.ellipseDefaults.arrowMark, color: palette.arrow }
+        : defaults.ellipseDefaults.arrowMark,
+      arrowMarks: defaults.ellipseDefaults.arrowMarks?.map((arrow) => ({ ...arrow, color: palette.arrow })),
+    },
     polygonDefaults: {
       ...defaults.polygonDefaults,
       strokeColor: palette.polygonStroke,
@@ -757,6 +776,17 @@ export function recolorSceneForProfile(scene: SceneModel, fromProfileId: ColorPr
         patternColor: remapOptionalColor(circle.style.patternColor, colorMap),
         arrowMark: remapArrowMark(circle.style.arrowMark, colorMap),
         arrowMarks: circle.style.arrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+      },
+    })),
+    ellipses: (scene.ellipses ?? []).map((ellipse) => ({
+      ...ellipse,
+      style: {
+        ...ellipse.style,
+        strokeColor: remapColor(ellipse.style.strokeColor, colorMap),
+        fillColor: remapOptionalColor(ellipse.style.fillColor, colorMap),
+        patternColor: remapOptionalColor(ellipse.style.patternColor, colorMap),
+        arrowMark: remapArrowMark(ellipse.style.arrowMark, colorMap),
+        arrowMarks: ellipse.style.arrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
       },
     })),
     polygons: scene.polygons.map((polygon) => ({

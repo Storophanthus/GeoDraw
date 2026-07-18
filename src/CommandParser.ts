@@ -28,7 +28,7 @@ export type ParseContext = {
   circleWorldGeometryById?: Map<string, { center: { x: number; y: number }; radius: number }>;
   polygonPointIdsById?: Map<string, string[]>;
   scalarsByName: Map<string, number>;
-  objectAliases: Map<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }>;
+  objectAliases: Map<string, { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }>;
   objectNames: Set<string>;
   ans?: number;
 };
@@ -60,6 +60,7 @@ export type Command =
   | { type: "CreateCircleThreePoint"; aId: string; bId: string; cId: string }
   | { type: "CreateCircleXYR"; x: number; y: number; r: number }
   | { type: "CreateCircleCenterRadius"; centerId: string; r: number; rExpr?: string }
+  | { type: "CreateEllipseFociPoint"; focusAId: string; focusBId: string; throughId: string }
   | { type: "CreateCircleCenterThrough"; centerId: string; throughId: string };
 
 export type ParseResult =
@@ -920,6 +921,22 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     const c = resolvePointIdentifier(cLabel, ctx);
     if (!c.ok) return err(c.message);
     return { kind: "cmd", cmd: { type: "CreateCircleThreePoint", aId: a.id, bId: b.id, cId: c.id } };
+  }
+
+  if (name === "Ellipse") {
+    if (args.length !== 3) return err("Ellipse(F1,F2,P) expects 3 point labels");
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    const pLabel = asIdentifier(args[2]);
+    if (!aLabel || !bLabel || !pLabel) return err("Ellipse(F1,F2,P) expects point labels");
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const p = resolvePointIdentifier(pLabel, ctx);
+    if (!p.ok) return err(p.message);
+    if (a.id === b.id) return err("Ellipse foci must be distinct");
+    return { kind: "cmd", cmd: { type: "CreateEllipseFociPoint", focusAId: a.id, focusBId: b.id, throughId: p.id } };
   }
 
   if (name === "Distance") {

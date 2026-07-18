@@ -125,6 +125,9 @@ function runScenario(activeTool: ActiveTool): void {
     createCircleThreePoint() {
       return null;
     },
+    createEllipseFociPoint() {
+      return null;
+    },
     createPerpendicularLine() {
       return null;
     },
@@ -285,6 +288,9 @@ runScenario("line2p");
       return null;
     },
     createCircleThreePoint() {
+      return null;
+    },
+    createEllipseFociPoint() {
       return null;
     },
     createPerpendicularLine() {
@@ -513,6 +519,9 @@ runScenario("line2p");
       return null;
     },
     createCircleThreePoint() {
+      return null;
+    },
+    createEllipseFociPoint() {
       return null;
     },
     createPerpendicularLine() {
@@ -757,6 +766,9 @@ runScenario("line2p");
     createCircleThreePoint() {
       return null;
     },
+    createEllipseFociPoint() {
+      return null;
+    },
     createPerpendicularLine() {
       return null;
     },
@@ -974,6 +986,9 @@ runScenario("line2p");
       return "c_aux";
     },
     createCircleThreePoint() {
+      return null;
+    },
+    createEllipseFociPoint() {
       return null;
     },
     createPerpendicularLine() {
@@ -1214,6 +1229,9 @@ runScenario("line2p");
     createCircleThreePoint() {
       return null;
     },
+    createEllipseFociPoint() {
+      return null;
+    },
     createPerpendicularLine() {
       return null;
     },
@@ -1431,6 +1449,9 @@ runScenario("line2p");
       return null;
     },
     createCircleThreePoint() {
+      return null;
+    },
+    createEllipseFociPoint() {
       return null;
     },
     createPerpendicularLine() {
@@ -1663,6 +1684,9 @@ runScenario("line2p");
       return null;
     },
     createCircleThreePoint() {
+      return null;
+    },
+    createEllipseFociPoint() {
       return null;
     },
     createPerpendicularLine() {

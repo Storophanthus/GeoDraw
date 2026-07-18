@@ -53,7 +53,7 @@ export type AngleLabelOverlay = {
 };
 
 export type ObjectLabelOverlay = {
-  type: "segment" | "line" | "circle" | "polygon";
+  type: "segment" | "line" | "circle" | "ellipse" | "polygon";
   id: string;
   x: number;
   y: number;
@@ -356,6 +356,24 @@ export function createObjectLabelOverlays(
       circle.style.strokeColor,
       16,
       circle.labelGlow !== false,
+      labelHaloColor
+    );
+    if (overlay) overlays.push(overlay);
+  }
+  for (const ellipse of scene.ellipses ?? []) {
+    const overlay = buildObjectLabelOverlay(
+      "ellipse",
+      ellipse.id,
+      ellipse.visible,
+      ellipse.showLabel,
+      ellipse.labelText,
+      ellipse.labelPosWorld,
+      scene,
+      camera,
+      vp,
+      ellipse.style.strokeColor,
+      16,
+      ellipse.labelGlow !== false,
       labelHaloColor
     );
     if (overlay) overlays.push(overlay);

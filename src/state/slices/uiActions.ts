@@ -20,6 +20,7 @@ export function createUiActions(
   | "setSegmentDefaults"
   | "setLineDefaults"
   | "setCircleDefaults"
+  | "setEllipseDefaults"
   | "setPolygonDefaults"
   | "setAngleDefaults"
   | "setObjectLabelDefaults"
@@ -80,6 +81,16 @@ export function createUiActions(
         ...prev,
         circleDefaults: {
           ...prev.circleDefaults,
+          ...next,
+        },
+      }));
+    },
+
+    setEllipseDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        ellipseDefaults: {
+          ...prev.ellipseDefaults,
           ...next,
         },
       }));
@@ -218,6 +229,7 @@ export function createUiActions(
             segmentDefaults: prev.segmentDefaults,
               lineDefaults: prev.lineDefaults,
               circleDefaults: prev.circleDefaults,
+              ellipseDefaults: prev.ellipseDefaults,
             polygonDefaults: prev.polygonDefaults,
             angleDefaults: prev.angleDefaults,
             labelToolDefaults: prev.labelToolDefaults,
@@ -235,6 +247,7 @@ export function createUiActions(
           segmentDefaults: nextDefaults.segmentDefaults,
           lineDefaults: nextDefaults.lineDefaults,
           circleDefaults: nextDefaults.circleDefaults,
+          ellipseDefaults: nextDefaults.ellipseDefaults,
           polygonDefaults: nextDefaults.polygonDefaults,
           angleDefaults: nextDefaults.angleDefaults,
           objectLabelDefaults: prev.objectLabelDefaults,
@@ -309,6 +322,7 @@ export function createUiActions(
                 segmentDefaults: prev.segmentDefaults,
                 lineDefaults: prev.lineDefaults,
                 circleDefaults: prev.circleDefaults,
+                ellipseDefaults: prev.ellipseDefaults,
                 polygonDefaults: prev.polygonDefaults,
                 angleDefaults: prev.angleDefaults,
                 labelToolDefaults: prev.labelToolDefaults,
@@ -322,6 +336,7 @@ export function createUiActions(
               segmentDefaults: prev.segmentDefaults,
               lineDefaults: prev.lineDefaults,
               circleDefaults: prev.circleDefaults,
+              ellipseDefaults: prev.ellipseDefaults,
               polygonDefaults: prev.polygonDefaults,
               angleDefaults: prev.angleDefaults,
               labelToolDefaults: prev.labelToolDefaults,
@@ -344,6 +359,9 @@ export function createUiActions(
           const circleDefaults = next.circleDefaults
             ? { ...next.circleDefaults }
             : baseDefaults.circleDefaults;
+          const ellipseDefaults = next.ellipseDefaults
+            ? { ...next.ellipseDefaults }
+            : baseDefaults.ellipseDefaults;
           const polygonDefaults = next.polygonDefaults
             ? { ...next.polygonDefaults }
             : baseDefaults.polygonDefaults;
@@ -382,6 +400,7 @@ export function createUiActions(
             segmentDefaults,
             lineDefaults,
             circleDefaults,
+            ellipseDefaults,
             polygonDefaults,
             angleDefaults,
             objectLabelDefaults: next.objectLabelDefaults ? { ...next.objectLabelDefaults } : prev.objectLabelDefaults,

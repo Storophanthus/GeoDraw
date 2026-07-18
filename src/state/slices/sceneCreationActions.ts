@@ -4,6 +4,8 @@ import { evaluateNumberExpression } from "../../scene/points";
 import {
   defaultCircleLabelPosWorld,
   defaultCircleLabelText,
+  defaultEllipseLabelPosWorld,
+  defaultEllipseLabelText,
 } from "../../scene/objectLabels";
 import type { Vec2 } from "../../geo/vec2";
 import type { SceneCreationStateLike } from "../../domain/intersectionReuse";
@@ -56,6 +58,7 @@ export function createSceneCreationActions(
   | "createCircle"
   | "createCircleThreePoint"
   | "createCircleFixedRadius"
+  | "createEllipseFociPoint"
   | "createPointOnLine"
   | "createPointOnSegment"
   | "createPointOnCircle"
@@ -269,6 +272,63 @@ export function createSceneCreationActions(
           selectedObject: { type: "circle", id },
           recentCreatedObject: { type: "circle", id },
           nextCircleId: prev.nextCircleId + 1,
+        };
+      });
+      return id;
+    },
+
+    createEllipseFociPoint(focusAId, focusBId, throughId) {
+      if (focusAId === focusBId) return null;
+      let id: string | null = null;
+      ctx.setState((prev) => {
+        const focusA = prev.scene.points.find((p) => p.id === focusAId);
+        const focusB = prev.scene.points.find((p) => p.id === focusBId);
+        const through = prev.scene.points.find((p) => p.id === throughId);
+        if (!focusA || !focusB || !through) return prev;
+        const aWorld = getPointWorldPos(focusA, prev.scene);
+        const bWorld = getPointWorldPos(focusB, prev.scene);
+        const throughWorld = getPointWorldPos(through, prev.scene);
+        if (!aWorld || !bWorld || !throughWorld) return prev;
+        const focusDistance = Math.hypot(bWorld.x - aWorld.x, bWorld.y - aWorld.y);
+        const semiMajor = (Math.hypot(throughWorld.x - aWorld.x, throughWorld.y - aWorld.y) + Math.hypot(throughWorld.x - bWorld.x, throughWorld.y - bWorld.y)) / 2;
+        if (!Number.isFinite(focusDistance) || focusDistance <= 1e-12) return prev;
+        if (!Number.isFinite(semiMajor) || semiMajor <= focusDistance / 2 + 1e-9) return prev;
+        id = `e_${prev.nextEllipseId}`;
+        const showLabel = prev.objectLabelDefaults.ellipse;
+        const ellipseForLabel = {
+          id,
+          kind: "fociPoint" as const,
+          focusAId,
+          focusBId,
+          throughId,
+          visible: true,
+          showLabel,
+          style: prev.ellipseDefaults,
+        };
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses: [
+              ...(prev.scene.ellipses ?? []),
+              {
+                id,
+                kind: "fociPoint",
+                focusAId,
+                focusBId,
+                throughId,
+                visible: true,
+                showLabel,
+                labelGlow: prev.objectLabelDefaults.ellipseGlow ?? true,
+                labelText: defaultEllipseLabelText(ellipseForLabel, prev.scene),
+                labelPosWorld: defaultEllipseLabelPosWorld(ellipseForLabel, prev.scene) ?? undefined,
+                style: { ...prev.ellipseDefaults },
+              },
+            ],
+          },
+          selectedObject: { type: "ellipse", id },
+          recentCreatedObject: { type: "ellipse", id },
+          nextEllipseId: prev.nextEllipseId + 1,
         };
       });
       return id;

@@ -22,6 +22,7 @@ export type HistorySnapshot = {
   nextSegmentId: number;
   nextLineId: number;
   nextCircleId: number;
+  nextEllipseId?: number;
   nextPolygonId: number;
   nextAngleId: number;
   nextNumberId: number;
@@ -32,6 +33,7 @@ export type HistorySnapshot = {
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
+  ellipseDefaults?: CircleStyle;
   polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
   objectLabelDefaults: ObjectLabelDefaults;
@@ -74,6 +76,7 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     nextSegmentId: prev.nextSegmentId,
     nextLineId: prev.nextLineId,
     nextCircleId: prev.nextCircleId,
+    nextEllipseId: prev.nextEllipseId,
     nextPolygonId: prev.nextPolygonId,
     nextAngleId: prev.nextAngleId,
     nextNumberId: prev.nextNumberId,
@@ -84,6 +87,7 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     segmentDefaults: prev.segmentDefaults,
     lineDefaults: prev.lineDefaults,
     circleDefaults: prev.circleDefaults,
+    ellipseDefaults: prev.ellipseDefaults,
     polygonDefaults: prev.polygonDefaults,
     angleDefaults: prev.angleDefaults,
     objectLabelDefaults: prev.objectLabelDefaults,
@@ -111,6 +115,7 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.nextSegmentId !== next.nextSegmentId ||
     prev.nextLineId !== next.nextLineId ||
     prev.nextCircleId !== next.nextCircleId ||
+    prev.nextEllipseId !== next.nextEllipseId ||
     prev.nextPolygonId !== next.nextPolygonId ||
     prev.nextAngleId !== next.nextAngleId ||
     prev.nextNumberId !== next.nextNumberId ||
@@ -121,6 +126,7 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.segmentDefaults !== next.segmentDefaults ||
     prev.lineDefaults !== next.lineDefaults ||
     prev.circleDefaults !== next.circleDefaults ||
+    prev.ellipseDefaults !== next.ellipseDefaults ||
     prev.polygonDefaults !== next.polygonDefaults ||
     prev.angleDefaults !== next.angleDefaults ||
     prev.objectLabelDefaults !== next.objectLabelDefaults ||

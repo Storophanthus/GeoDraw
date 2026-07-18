@@ -17,12 +17,13 @@ export type PointerMode =
 type MovePointerDownDecision = {
   mode: PointerMode;
   pointId: string | null;
-  dragObjectType: "segment" | "line" | "circle" | "polygon" | null;
+  dragObjectType: "segment" | "line" | "circle" | "ellipse" | "polygon" | null;
   selectedObject:
     | { type: "point"; id: string }
     | { type: "segment"; id: string }
     | { type: "line"; id: string }
     | { type: "circle"; id: string }
+    | { type: "ellipse"; id: string }
     | { type: "polygon"; id: string }
     | { type: "angle"; id: string }
     | { type: "textLabel"; id: string }
@@ -40,11 +41,13 @@ type MovePointerDownInput = {
   hitPolygonId: string | null;
   hitLineId: string | null;
   hitCircleId: string | null;
+  hitEllipseId: string | null;
   hitAngleId: string | null;
   hitObjectLabel?:
     | { type: "segment"; id: string }
     | { type: "line"; id: string }
     | { type: "circle"; id: string }
+    | { type: "ellipse"; id: string }
     | { type: "polygon"; id: string }
     | null;
   scenePoints: ScenePoint[];
@@ -74,6 +77,7 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     hitPolygonId,
     hitLineId,
     hitCircleId,
+    hitEllipseId,
     hitAngleId,
     hitObjectLabel = null,
     scenePoints,
@@ -159,6 +163,10 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "circle", id: hitCircleId } };
   }
 
+  if (hitEllipseId) {
+    return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "ellipse", id: hitEllipseId } };
+  }
+
   if (hitPolygonId) {
     return {
       mode: "drag-polygon",
@@ -197,7 +205,7 @@ export function computeCanvasCursor(
     ) {
       return "grabbing";
     }
-    if (hoveredHit?.type === "point" || hoveredHit?.type === "angle" || hoveredHit?.type === "polygon") {
+    if (hoveredHit?.type === "point" || hoveredHit?.type === "angle" || hoveredHit?.type === "ellipse" || hoveredHit?.type === "polygon") {
       return "pointer";
     }
     return "grab";

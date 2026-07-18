@@ -85,6 +85,9 @@ function makeHarness(activeTool: ActiveTool): {
     createCircleThreePoint() {
       return null;
     },
+    createEllipseFociPoint() {
+      return null;
+    },
     createPerpendicularLine() {
       return null;
     },
