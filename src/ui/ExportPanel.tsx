@@ -61,8 +61,9 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     () => scene.lines.some((line) => line.visible),
     [scene.lines]
   );
-  const exportEmitTkzSetup = exportEmitTkzSetupManual ?? hasVisibleLineObject;
   const exportBakeCoordinates = tikzExportMode === "visualExact";
+  const exportEmitTkzSetup = exportBakeCoordinates ? false : (exportEmitTkzSetupManual ?? hasVisibleLineObject);
+  const exportDrawLayerBackend = exportBakeCoordinates ? "plain" : "tkz";
 
   const clipSig = exportClipWorld
     ? exportClipWorld.kind === "rect"
@@ -104,6 +105,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       labelScale: Number.isFinite(labelScale) ? labelScale : 1,
       screenPxPerWorld: camera.zoom,
       emitTkzSetup: exportEmitTkzSetup,
+      drawLayerBackend: exportDrawLayerBackend,
       labelGlow: exportLabelGlow,
       bakePointCoordinates: exportBakeCoordinates,
       pointStrokeScale: TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
@@ -245,8 +247,9 @@ export function ExportPanel({ visible }: ExportPanelProps) {
               type="checkbox"
               checked={exportEmitTkzSetup}
               onChange={(e) => setExportEmitTkzSetupManual(e.target.checked)}
+              disabled={exportBakeCoordinates}
             />
-            Emit tkz setup (Init/Clip/SetUpLine)
+            {exportBakeCoordinates ? "Emit tkz setup (disabled in Visual Exact)" : "Emit tkz setup (Init/Clip/SetUpLine)"}
           </label>
           <label className="checkboxRow">
             <input

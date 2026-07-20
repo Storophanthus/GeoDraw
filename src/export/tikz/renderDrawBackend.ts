@@ -5,16 +5,20 @@ type DrawRawCommand = Extract<TikzCommand, { kind: "DrawRaw" }>;
 type DrawSegmentCommand = Extract<TikzCommand, { kind: "DrawSegment" }>;
 type DrawLineCommand = Extract<TikzCommand, { kind: "DrawLine" }>;
 type DrawCircleCommand = Extract<TikzCommand, { kind: "DrawCircle" }>;
+type DrawPointsCommand = Extract<TikzCommand, { kind: "DrawPoints" }>;
 type FillCircleCommand = Extract<TikzCommand, { kind: "FillCircle" }>;
 type LabelPointCommand = Extract<TikzCommand, { kind: "LabelPoint" }>;
 type LabelAtCommand = Extract<TikzCommand, { kind: "LabelAt" }>;
+type MarkSegmentCommand = Extract<TikzCommand, { kind: "MarkSegment" }>;
 
 export type DrawLayerBackendEmitter = {
   emitDrawRaw: (cmd: DrawRawCommand) => string[];
   emitDrawSegment: (cmd: DrawSegmentCommand) => string[];
   emitDrawLine: (cmd: DrawLineCommand) => string[];
+  emitMarkSegment: (cmd: MarkSegmentCommand) => string[];
   emitDrawCircle: (cmd: DrawCircleCommand) => string[];
   emitFillCircle: (cmd: FillCircleCommand) => string[];
+  emitDrawPoints: (cmd: DrawPointsCommand) => string[];
   emitLabelPoint: (cmd: LabelPointCommand) => string[];
   emitLabelAt: (cmd: LabelAtCommand) => string[];
 };
@@ -37,6 +41,10 @@ function createTkzDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayerBa
       caps.assertTkzMacro("tkzDrawSegment");
       return [`\\tkzDrawSegment${styleOptions(cmd.style)}(${cmd.a},${cmd.b})`];
     },
+    emitMarkSegment: (cmd) => {
+      caps.assertTkzMacro("tkzMarkSegment");
+      return [`\\tkzMarkSegment[${cmd.style}](${cmd.a},${cmd.b})`];
+    },
     emitDrawLine: (cmd) => {
       if (cmd.finiteFallback) {
         const { ax, ay, bx, by } = cmd.finiteFallback;
@@ -52,6 +60,9 @@ function createTkzDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayerBa
     emitFillCircle: (cmd) => {
       caps.assertTkzMacro("tkzFillCircle");
       return [`\\tkzFillCircle${styleOptions(cmd.style)}(${cmd.o},${cmd.x})`];
+    },
+    emitDrawPoints: (cmd) => {
+      return [`\\tkzDrawPoints[${cmd.style}](${cmd.points.join(",")})`];
     },
     emitLabelPoint: (cmd) => {
       caps.assertTkzMacro("tkzLabelPoint");
@@ -70,6 +81,10 @@ function createPlainDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayer
   return {
     emitDrawRaw: (cmd) => [cmd.tex],
     emitDrawSegment: (cmd) => [`\\draw${styleOptions(cmd.style)} (${cmd.a}) -- (${cmd.b});`],
+    emitMarkSegment: (cmd) => {
+      const markerOpts = styleOptions(cmd.style);
+      return [`\\draw${markerOpts} (${cmd.a}) -- (${cmd.b});`];
+    },
     emitDrawLine: (cmd) => {
       if (cmd.finiteFallback) {
         const { ax, ay, bx, by } = cmd.finiteFallback;
@@ -85,6 +100,11 @@ function createPlainDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayer
     },
     emitDrawCircle: (cmd) => [`\\draw${styleOptions(cmd.style)} (${cmd.o}) circle [through=(${cmd.x})];`],
     emitFillCircle: (cmd) => [`\\fill${styleOptions(cmd.style)} (${cmd.o}) circle [through=(${cmd.x})];`],
+    emitDrawPoints: (cmd) => {
+      if (cmd.points.length === 0) return [];
+      const style = cmd.style ? `[${cmd.style}]` : "";
+      return cmd.points.map((name) => `\\node${style} at (${name}) {};`);
+    },
     emitLabelPoint: (cmd) => {
       const opts = cmd.options ? `[${cmd.options}]` : "";
       return [`\\node${opts} at (${cmd.name}){${renderLabelText(ctx, cmd.text, cmd.useGlow)}};`];

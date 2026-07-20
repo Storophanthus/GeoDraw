@@ -103,8 +103,7 @@ export function appendRenderedDrawLayers({
     if (cmd.kind === "DrawSegment") {
       out.push(...backend.emitDrawSegment(withDrawStyleAlias(cmd, drawStyleAliases)));
     } else if (cmd.kind === "MarkSegment") {
-      caps.assertTkzMacro("tkzMarkSegment");
-      out.push(`\\tkzMarkSegment[${cmd.style}](${cmd.a},${cmd.b})`);
+      out.push(...backend.emitMarkSegment(cmd));
     } else if (cmd.kind === "DrawRaw") {
       out.push(...backend.emitDrawRaw(cmd));
     } else if (cmd.kind === "DrawLine") {
@@ -180,8 +179,7 @@ export function appendRenderedDrawLayers({
   for (const cmd of drawPoints) {
     if (cmd.kind !== "DrawPoints") continue;
     if (cmd.points.length === 0) continue;
-    caps.assertTkzMacro("tkzDrawPoints");
-    out.push(`\\tkzDrawPoints[${cmd.style}](${cmd.points.join(",")})`);
+    out.push(...backend.emitDrawPoints(cmd));
   }
 
   ctx.pushSectionHeader("% Labels");

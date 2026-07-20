@@ -202,6 +202,8 @@ function edgeKey(aId: string, bId: string): string {
 
 export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}): TikzCommand[] {
   const bakePointCoordinates = options.bakePointCoordinates ?? false;
+  const emitPlainConstructions =
+    options.drawLayerBackend === "plain" && Boolean(options.bakePointCoordinates);
   const pointById = new Map(scene.points.map((p) => [p.id, p]));
   const lineById = new Map(scene.lines.map((l) => [l.id, l]));
   const segById = new Map(scene.segments.map((s) => [s.id, s]));
@@ -435,6 +437,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       if (!anchorsWorld) {
         throw new Error(`Cannot export undefined tangent geometry: ${line.id}`);
       }
+      if (emitPlainConstructions) {
+        derivedAuxIndex += 1;
+        const auxName = `gdTan_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefPoint",
+          name: auxName,
+          x: anchorsWorld.b.x,
+          y: anchorsWorld.b.y,
+        });
+        const anchors = {
+          a: mustName(pointName, line.throughId),
+          b: auxName,
+        };
+        lineAnchorNames.set(lineId, anchors);
+        return anchors;
+      }
       derivedAuxIndex += 1;
       const auxName = `tkzTan_${derivedAuxIndex}`;
       constructions.push({
@@ -456,6 +474,31 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       }
       const geomA = circleGeomById(circleA.id);
       const geomB = circleGeomById(circleB.id);
+      const anchorsWorld = getLineWorldAnchors(line, scene);
+      if (emitPlainConstructions) {
+        if (!anchorsWorld) {
+          throw new Error(`Cannot export undefined circle-circle tangent geometry: ${line.id}`);
+        }
+        derivedAuxIndex += 1;
+        const tangentBaseName = `gdTanCC_${derivedAuxIndex}`;
+        const tangentAName = `${tangentBaseName}_a`;
+        constructions.push({
+          kind: "DefPoint",
+          name: tangentAName,
+          x: anchorsWorld.a.x,
+          y: anchorsWorld.a.y,
+        });
+        const tangentBName = `${tangentBaseName}_b`;
+        constructions.push({
+          kind: "DefPoint",
+          name: tangentBName,
+          x: anchorsWorld.b.x,
+          y: anchorsWorld.b.y,
+        });
+        const anchors = { a: tangentAName, b: tangentBName };
+        lineAnchorNames.set(lineId, anchors);
+        return anchors;
+      }
       const tangentTopology = classifyCircleCircleTangentTopology(geomA, geomB);
       assertCircleCircleTangentExportable(line, geomA, geomB);
       if (
@@ -491,7 +534,6 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         lineAnchorNames.set(lineId, anchors);
         return anchors;
       }
-      const anchorsWorld = getLineWorldAnchors(line, scene);
       if (!anchorsWorld) {
         throw new Error(`Cannot export undefined circle-circle tangent geometry: ${line.id}`);
       }
@@ -645,6 +687,30 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         resolvePoint(line.aId);
         resolvePoint(line.bId);
         resolvePoint(line.cId);
+      } else {
+        resolvePoint(line.throughId);
+        resolveLineLikeNames(line.base);
+      }
+      const anchorsWorld = getLineWorldAnchors(line, scene);
+      if (!anchorsWorld) {
+        throw new Error(`Cannot export undefined ${line.kind} geometry: ${line.id}`);
+      }
+      if (emitPlainConstructions) {
+        const baseAnchorName =
+          line.kind === "angleBisector" ? mustName(pointName, line.bId) : mustName(pointName, line.throughId);
+        derivedAuxIndex += 1;
+        const auxName = `${line.kind === "perpendicular" ? "gdPerp" : line.kind === "parallel" ? "gdPar" : "gdBis"}_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefPoint",
+          name: auxName,
+          x: anchorsWorld.b.x,
+          y: anchorsWorld.b.y,
+        });
+        const anchors = { a: baseAnchorName, b: auxName };
+        lineAnchorNames.set(lineId, anchors);
+        return anchors;
+      }
+      if (line.kind === "angleBisector") {
         derivedAuxIndex += 1;
         const auxName = `tkzBis_${derivedAuxIndex}`;
         constructions.push({

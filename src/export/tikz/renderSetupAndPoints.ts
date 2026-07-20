@@ -35,7 +35,7 @@ export function appendRenderedSetupAndPoints({
   pointDefs,
 }: SetupAndPointsRendererArgs): void {
   const out = ctx.out;
-  const { scale, hasGlowLabels, emitTkzSetup } = ctx.options;
+  const { scale, hasGlowLabels, emitTkzSetup, drawLayerBackend } = ctx.options;
   const caps = ctx.capabilities;
 
   out.push(`\\begin{tikzpicture}[scale=${caps.fmt(scale)},line cap=round,line join=round,>=triangle 45]`);
@@ -76,12 +76,22 @@ export function appendRenderedSetupAndPoints({
 
   ctx.pushSectionHeader("% Points");
   for (const cmd of pointsDefs) {
-    caps.assertTkzMacro("tkzDefPoints");
     const items = cmd.items.map((it) => `${caps.fmt(it.x)}/${caps.fmt(it.y)}/${it.name}`).join(", ");
-    out.push(`\\tkzDefPoints{${items}}`);
+    if (drawLayerBackend === "plain") {
+      for (const item of cmd.items) {
+        out.push(`\\coordinate (${item.name}) at (${caps.fmt(item.x)},${caps.fmt(item.y)});`);
+      }
+    } else {
+      caps.assertTkzMacro("tkzDefPoints");
+      out.push(`\\tkzDefPoints{${items}}`);
+    }
   }
   for (const cmd of pointDefs) {
-    caps.assertTkzMacro("tkzDefPoint");
-    out.push(`\\tkzDefPoint(${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${cmd.name}}`);
+    if (drawLayerBackend === "plain") {
+      out.push(`\\coordinate (${cmd.name}) at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)});`);
+    } else {
+      caps.assertTkzMacro("tkzDefPoint");
+      out.push(`\\tkzDefPoint(${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${cmd.name}}`);
+    }
   }
 }
