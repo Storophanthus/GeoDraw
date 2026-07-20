@@ -348,3 +348,25 @@ export function clearStoredConstructionPreferences(): boolean {
     return false;
   }
 }
+
+export type OnboardingFlags = {
+  emptyCanvasHintDismissed: boolean;
+};
+
+const ONBOARDING_KEY = "geodraw.onboarding.v1";
+
+export const DEFAULT_ONBOARDING_FLAGS: OnboardingFlags = {
+  emptyCanvasHintDismissed: false,
+};
+
+export function loadStoredOnboardingFlags(): OnboardingFlags {
+  const envelope = readStoredEnvelope<unknown>(ONBOARDING_KEY);
+  const raw = envelope && isRecord(envelope.value) ? envelope.value : {};
+  return {
+    emptyCanvasHintDismissed: normalizeBoolean(raw.emptyCanvasHintDismissed, DEFAULT_ONBOARDING_FLAGS.emptyCanvasHintDismissed),
+  };
+}
+
+export function saveStoredOnboardingFlags(flags: OnboardingFlags): boolean {
+  return writeStoredEnvelope(ONBOARDING_KEY, flags);
+}

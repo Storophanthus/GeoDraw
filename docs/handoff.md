@@ -25,6 +25,63 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Minimal empty-canvas onboarding (UI/UX revamp Phase 4 — final
+  phase of the plan):
+  - Zero first-run guidance existed: a brand-new user got a blank canvas,
+    "No objects", and a command-bar placeholder as their only orientation.
+    Added a single dismissible hint card, deliberately not a multi-step tour.
+    - `src/state/appPreferences.ts`: `geodraw.onboarding.v1` envelope
+      (`OnboardingFlags.emptyCanvasHintDismissed`), same per-field-normalize
+      pattern as export preferences.
+    - `src/ui/EmptyCanvasHint.tsx` (new): shows when the active scene is
+      empty *and* the dismissal flag is unset; disappears the moment any
+      object exists (pure derived visibility from `store.scene`, no flag
+      write) and reappears if the scene is emptied again — the flag is only
+      ever set by clicking "Got it", which is a one-time permanent dismiss.
+      One correction to the plan's field list while implementing: the
+      emptiness check covers `scene.vectors` in addition to the 10 fields
+      the plan named — `vectors` is a real, actively-created collection
+      (e.g. from Translate) that the plan's list omitted, and skipping it
+      would have shown the hint over a scene that already has content.
+      Positioned via a `pointer-events: none` wrapper (`inset:0` inside
+      `canvasDocumentArea`, z-index 30 — below the floating top actions at
+      45 and the command bar at 60) with the actual card carrying
+      `pointer-events: auto`, so the canvas, palette, tabs, and command bar
+      all stay fully interactive underneath it.
+    - `src/ui/WorkspaceShell.tsx`: mounted after `CanvasView`.
+    - `src/ui/RightSidebar.tsx`: added a "User manual (PDF)" link to the
+      bottom of the existing Quick Help card (linking to
+      `docs/user-manual.pdf` on GitHub — works from both web and desktop
+      since it's a plain external link, not a Tauri-opener call).
+    - `src/App.css`: `.emptyCanvasHintWrap`/`.emptyCanvasHint` (matching the
+      existing `.sidebarHelpCard` visual language) and
+      `.sidebarHelpManualLink`, all on `--gd-ui-*` tokens.
+  - Validation:
+    - `npx tsc --noEmit` — no new errors (same pre-existing unrelated one)
+    - `npm run test:scene` (19/19), `npm run test:command` (5/5) — green
+      (Phase 4 adds no new automated tests — it's a visibility/persistence
+      component with no algorithmic surface worth unit-testing; covered by
+      the manual pass instead)
+    - Manual browser pass, all via a fresh empty document tab: hint shows
+      on blank scene; typing `Point(1,2)` in the command bar and running it
+      hides the hint immediately; deleting that point brings it back
+      (confirming the flag is genuinely not written until "Got it");
+      clicked "Got it", reloaded the page, hint stayed gone on the still-
+      empty tab (real persistence, not just in-session state); confirmed
+      via `document.elementFromPoint` that clicks in the hint's empty
+      margin land on the actual canvas element, not the wrapper, proving
+      `pointer-events: none` isn't blocking canvas interaction; dark theme
+      clean. One tool-usage note, not a product bug: a raw coordinate click
+      that I expected to hit the Preferences gear instead landed on the
+      canvas and placed a stray point (undone via Cmd+Z) — screenshot-to-
+      viewport coordinate mapping was off in that instance, not an issue
+      with pointer-events or z-index; ref-based clicks were reliable
+      throughout and are what actually verified every behavior above.
+  - This closes out the phases from the approved plan
+    (`~/.claude/plans/rippling-rolling-thunder.md`). Phases 1+2+3+4 are all
+    committed on `codex/ui-refactor`, not yet pushed. Remaining from the
+    plan: push to `main` for the web deploy, then Phase 3d (preview window
+    save buttons) + a desktop compile smoke test before tagging v0.2.0.
 - 2026-07-21 Export tab redesigned for the teacher path (UI/UX revamp Phase 3a-3c):
   - The Export tab had ~18 flat controls with jargon labels ("Emit tkz setup
     (Init/Clip/SetUpLine)"), almost no tooltips, and every option reset on

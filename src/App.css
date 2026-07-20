@@ -262,6 +262,66 @@ input[type="range"] {
   }
 }
 
+.sidebarHelpManualLink {
+  display: inline-block;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gd-ui-border-soft, #e6dac0);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--gd-ui-accent, #8a5a2b);
+}
+
+.emptyCanvasHintWrap {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  pointer-events: none;
+}
+
+.emptyCanvasHint {
+  pointer-events: auto;
+  width: min(420px, 100%);
+  border: 1px solid var(--gd-ui-border, #d6c3a8);
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--gd-ui-surface, #fffaf0) 0%, var(--gd-ui-surface-muted, #f8f0df) 100%);
+  color: var(--gd-ui-text, #54473b);
+  box-shadow: 0 12px 30px var(--gd-ui-shadow-strong, rgba(84, 71, 59, 0.16));
+  padding: 20px;
+}
+
+.emptyCanvasHintTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--gd-ui-text-strong, #2e271f);
+  margin-bottom: 10px;
+}
+
+.emptyCanvasHintRow {
+  margin: 0 0 8px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--gd-ui-text, #54473b);
+}
+
+.emptyCanvasHintFooter {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.emptyCanvasHintFooter a {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--gd-ui-accent, #8a5a2b);
+}
+
 .rightSidebar.collapsed {
   padding: 8px 6px;
   align-items: center;

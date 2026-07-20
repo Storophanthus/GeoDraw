@@ -180,6 +180,14 @@ export function RightSidebar({
                   </div>
                 ))}
               </div>
+              <a
+                className="sidebarHelpManualLink"
+                href="https://github.com/Storophanthus/GeoDraw/blob/main/docs/user-manual.pdf"
+                target="_blank"
+                rel="noreferrer"
+              >
+                User manual (PDF)
+              </a>
             </section>
           )}
 
