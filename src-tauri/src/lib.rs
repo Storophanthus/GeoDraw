@@ -255,17 +255,24 @@ const EVENT_FILE_SAVE: &str = "gd-menu-file-save";
 const EVENT_FILE_SAVE_AS: &str = "gd-menu-file-save-as";
 
 #[cfg(desktop)]
+const MENU_CHECK_UPDATES: &str = "check_updates";
+#[cfg(desktop)]
+const EVENT_CHECK_UPDATES: &str = "gd-menu-check-updates";
+
+#[cfg(desktop)]
 fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>> {
-    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 
     let menu = Menu::default(app)?;
 
     let mut file_submenu: Option<tauri::menu::Submenu<R>> = None;
+    let mut help_submenu: Option<tauri::menu::Submenu<R>> = None;
     for item in menu.items()? {
         if let Some(submenu) = item.as_submenu() {
-            if submenu.text()? == "File" {
-                file_submenu = Some(submenu.clone());
-                break;
+            match submenu.text()?.as_str() {
+                "File" => file_submenu = Some(submenu.clone()),
+                "Help" => help_submenu = Some(submenu.clone()),
+                _ => {}
             }
         }
     }
@@ -284,6 +291,16 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<tau
         file.prepend_items(&[&open, &save, &save_as, &sep])?;
     }
 
+    let check_updates =
+        MenuItem::with_id(app, MENU_CHECK_UPDATES, "Check for Updates…", true, None::<&str>)?;
+    match help_submenu {
+        Some(help) => help.prepend_items(&[&check_updates, &PredefinedMenuItem::separator(app)?])?,
+        None => {
+            let help = Submenu::with_items(app, "Help", true, &[&check_updates])?;
+            menu.append(&help)?;
+        }
+    }
+
     Ok(menu)
 }
 
@@ -300,6 +317,10 @@ fn forward_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, event: tauri
     }
     if event.id() == MENU_FILE_SAVE_AS {
         let _ = app.emit(EVENT_FILE_SAVE_AS, ());
+        return;
+    }
+    if event.id() == MENU_CHECK_UPDATES {
+        let _ = app.emit(EVENT_CHECK_UPDATES, ());
     }
 }
 
@@ -313,6 +334,8 @@ pub fn run() {
 
     #[cfg(desktop)]
     let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .menu(|app| build_menu(app))
         .on_menu_event(|app, event| forward_menu_event(app, event));
 

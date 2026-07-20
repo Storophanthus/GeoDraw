@@ -7,6 +7,7 @@ import { FileControls } from "./FileControls";
 import { HistoryControls } from "./HistoryControls";
 import { RightSidebar } from "./RightSidebar";
 import { ToolPalette } from "./ToolPalette";
+import { UpdateChecker } from "./UpdateChecker";
 import type { DocumentFilePatch, DocumentFileState, GeoDocumentTab } from "./useDocumentTabs";
 import type { HistorySnapshot } from "../state/slices/historySlice";
 
@@ -105,6 +106,7 @@ export function WorkspaceShell({
             buildActiveSnapshotJson={onBuildActiveSnapshotJson}
           />
           <HistoryControls canUndo={canUndo} canRedo={canRedo} onUndo={onUndo} onRedo={onRedo} onFitView={onFitView} />
+          <UpdateChecker />
           <CanvasView openSnapshotAsDocument={onOpenSnapshotAsDocument} />
         </div>
         <CommandBar />
