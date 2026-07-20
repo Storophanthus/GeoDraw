@@ -1,5 +1,5 @@
 import { exportTikzWithOptions } from "../tikz.ts";
-import type { SceneModel } from "../../scene/points.ts";
+import type { AngleStyle, SceneModel } from "../../scene/points.ts";
 
 const pointStyle = {
   shape: "circle" as const,
@@ -60,6 +60,12 @@ if (!plain.includes("% Draw objects")) {
 if (!plain.includes("\\draw[")) {
   throw new Error("Expected plain draw backend to emit \\draw commands.");
 }
+if (plain.includes("circle [through=")) {
+  throw new Error("Expected plain backend to avoid invalid circle-through syntax.");
+}
+if (!plain.includes("circle [radius=")) {
+  throw new Error("Expected plain backend to emit circle [radius=...] for non-fixed circles.");
+}
 if (!plain.includes("gd plain draw backend: DrawLine exported as anchor segment")) {
   throw new Error("Expected plain backend DrawLine approximation marker.");
 }
@@ -98,6 +104,146 @@ if (fixedRadiusPlain.includes("\\tkzDefCircle") || fixedRadiusPlain.includes("\\
 }
 if (!fixedRadiusPlain.includes("\\draw") || !fixedRadiusPlain.includes("circle [radius=")) {
   throw new Error("Expected plain fixed-radius export to use direct \\draw circle radius syntax.");
+}
+
+const namedColorScene: SceneModel = {
+  points: [
+    { id: "pn1", kind: "free", name: "P", captionTex: "P", visible: true, showLabel: "name", position: { x: 0, y: 0 }, style: pointStyle },
+    { id: "pn2", kind: "free", name: "Q", captionTex: "Q", visible: true, showLabel: "name", position: { x: 4, y: 0 }, style: pointStyle },
+  ],
+  numbers: [],
+  lines: [],
+  segments: [
+    {
+      id: "sn1",
+      aId: "pn1",
+      bId: "pn2",
+      visible: true,
+      showLabel: false,
+      style: { strokeColor: "Goldenrod", strokeWidth: 1.2, dash: "solid", opacity: 1 },
+    },
+  ],
+  circles: [],
+  polygons: [],
+  angles: [],
+};
+
+const namedColorPlain = exportTikzWithOptions(namedColorScene, {
+  drawLayerBackend: "plain",
+  emitTkzSetup: false,
+  bakePointCoordinates: true,
+});
+
+if (!namedColorPlain.includes("Goldenrod")) {
+  throw new Error("Expected export to keep Goldenrod color name in output for non-core named colors.");
+}
+if (!namedColorPlain.includes("\\definecolor{Goldenrod}{RGB}")) {
+  throw new Error("Expected export to define non-core named colors like Goldenrod.");
+}
+
+const arrowScene: SceneModel = {
+  points: [
+    { id: "pa1", kind: "free", name: "A", captionTex: "A", visible: true, showLabel: "name", position: { x: 0, y: 0 }, style: pointStyle },
+    { id: "pb1", kind: "free", name: "B", captionTex: "B", visible: true, showLabel: "name", position: { x: 3, y: 0 }, style: pointStyle },
+  ],
+  numbers: [],
+  lines: [],
+  segments: [
+    {
+      id: "as1",
+      aId: "pa1",
+      bId: "pb1",
+      visible: true,
+      showLabel: false,
+      style: {
+        strokeColor: "#1f2937",
+        strokeWidth: 1.2,
+        dash: "solid",
+        opacity: 1,
+        segmentArrowMark: { enabled: true, direction: "->", mode: "end", tip: "Triangle" },
+      },
+    },
+  ],
+  circles: [],
+  polygons: [],
+  angles: [],
+};
+
+const arrowPlain = exportTikzWithOptions(arrowScene, {
+  drawLayerBackend: "plain",
+  emitTkzSetup: false,
+  bakePointCoordinates: true,
+});
+if (!arrowPlain.includes("\\usetikzlibrary{") || !arrowPlain.includes("arrows")) {
+  throw new Error("Expected plain backend to include arrows library when arrow marks require it.");
+}
+
+const plainSectorStyle: AngleStyle = {
+  strokeColor: "#0f172a",
+  strokeWidth: 1.2,
+  strokeDash: "solid",
+  strokeOpacity: 1,
+  textColor: "#0f172a",
+  textSize: 12,
+  fillEnabled: true,
+  fillColor: "#e2e8f0",
+  fillOpacity: 0.2,
+  pattern: "",
+  patternColor: "#e2e8f0",
+  markStyle: "arc",
+  markSymbol: "|",
+  arcMultiplicity: 1,
+  markPos: 0.5,
+  markSize: 1,
+  markColor: "#0f172a",
+  angleMarks: [],
+  arcRadius: 1,
+  labelText: "",
+  labelPosWorld: { x: 0, y: 0 },
+  showLabel: false,
+  showValue: false,
+};
+
+const sectorScene: SceneModel = {
+  points: [
+    { id: "psA", kind: "free", name: "A", captionTex: "A", visible: true, showLabel: "name", position: { x: 0, y: 0 }, style: pointStyle },
+    { id: "psB", kind: "free", name: "B", captionTex: "B", visible: true, showLabel: "name", position: { x: 5, y: 0 }, style: pointStyle },
+    { id: "psC", kind: "free", name: "C", captionTex: "C", visible: true, showLabel: "name", position: { x: 2.5, y: 3.4 }, style: pointStyle },
+  ],
+  numbers: [],
+  lines: [],
+  segments: [],
+  circles: [],
+  polygons: [],
+  angles: [
+    {
+      id: "psAng",
+      kind: "sector",
+      aId: "psA",
+      bId: "psB",
+      cId: "psC",
+      visible: true,
+      style: plainSectorStyle,
+    },
+  ],
+};
+
+const plainSector = exportTikzWithOptions(sectorScene, {
+  drawLayerBackend: "plain",
+  emitTkzSetup: false,
+  bakePointCoordinates: true,
+});
+
+if (plainSector.includes("\\tkzFillSector") || plainSector.includes("\\tkzDrawSector")) {
+  throw new Error("Expected plain sector export to avoid tkz sector draw/fill macros.");
+}
+
+if (!plainSector.includes("\\fill[") || !plainSector.includes("arc[start angle=")) {
+  throw new Error("Expected plain sector export to emit a fill arc path.");
+}
+
+if (!plainSector.includes("\\draw") || !plainSector.includes("--")) {
+  throw new Error("Expected plain sector export to emit a sector stroke path.");
 }
 
 console.log("✓ export draw-layer plain backend test passed");

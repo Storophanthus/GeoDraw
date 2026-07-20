@@ -1798,18 +1798,23 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     fileName === "circle-arrow-mid-position-parity.json" ||
     fileName === "sector-arrow-basic.json"
   ) {
-    const hasMarkingArrowLib =
-      tikz.includes("\\usetikzlibrary{decorations.markings}") ||
-      tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta}") ||
-      tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta,bending}");
-    const hasConstructiveArrowLib = tikz.includes("\\usetikzlibrary{arrows.meta,bending}");
-    if (!hasMarkingArrowLib && !hasConstructiveArrowLib) {
+    const hasMarkingArrowLibLine = tikz
+      .split("\n")
+      .some((line) => /\\usetikzlibrary\{[^}]*decorations\.markings[^}]*\}/.test(line));
+    const hasConstructiveArrowLib =
+      tikz
+        .split("\n")
+        .some(
+          (line) => /\\usetikzlibrary\{[^}]*arrows\.meta[^}]*\}/.test(line) && /\\usetikzlibrary\{[^}]*bending[^}]*\}/.test(line)
+        );
+    if (!hasMarkingArrowLibLine && !hasConstructiveArrowLib) {
       throw new Error("Expected arrow fixtures to emit an arrows.meta (+ optional markings/bending) library line.");
     }
   }
 
   if (fileName === "circle-arrow-dot-multi.json") {
-    if (!tikz.includes("\\usetikzlibrary{decorations.markings")) {
+    const hasDecorationsMarkings = /\\usetikzlibrary\{[^}]*\bdecorations\.markings\b[^}]*\}/.test(tikz);
+    if (!hasDecorationsMarkings) {
       throw new Error("Expected circle dot-arrow fixture to include decorations.markings library.");
     }
   }
@@ -1842,20 +1847,24 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "export-no-patterns.json") {
     if (exportError) throw exportError;
-    if (tikz.includes("\\usetikzlibrary{patterns}")) {
+    const hasPatternsLine = /\\usetikzlibrary\{[^}]*\bpatterns\b[^}]*\}/.test(tikz);
+    if (hasPatternsLine) {
       throw new Error("Expected no-patterns fixture to omit patterns library line.");
     }
-    if (tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
-      throw new Error("Expected no-patterns fixture to omit patterns.meta library line.");
+    const hasPatternsMeta = /\\usetikzlibrary\{[^}]*\bpatterns\.meta\b[^}]*\}/.test(tikz);
+    if (hasPatternsMeta) {
+      throw new Error("Expected no-patterns fixture to omit patterns.meta library.");
     }
   }
 
   if (fileName === "export-with-patterns.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\usetikzlibrary{patterns}")) {
+    const hasPatternsLine = /\\usetikzlibrary\{[^}]*\bpatterns\b[^}]*\}/.test(tikz);
+    if (!hasPatternsLine) {
       throw new Error("Expected patterns fixture to emit \\usetikzlibrary{patterns}.");
     }
-    if (tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
+    const hasPatternsMeta = /\\usetikzlibrary\{[^}]*\bpatterns\.meta\b[^}]*\}/.test(tikz);
+    if (hasPatternsMeta) {
       throw new Error("Expected classic patterns fixture to avoid patterns.meta.");
     }
     if (!tikz.includes("pattern=north east lines")) {
@@ -1865,7 +1874,10 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "export-with-patterns-meta.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
+    const hasPatternsAndMeta =
+      /\\usetikzlibrary\{[^}]*\bpatterns\b[^}]*\}/.test(tikz) &&
+      /\\usetikzlibrary\{[^}]*\bpatterns\.meta\b[^}]*\}/.test(tikz);
+    if (!hasPatternsAndMeta) {
       throw new Error("Expected patterns-meta fixture to emit \\usetikzlibrary{patterns,patterns.meta}.");
     }
     if (!tikz.includes("pattern={Lines[angle=45,distance=4pt]}")) {
@@ -1875,7 +1887,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "sector-pattern-fill.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\usetikzlibrary{patterns}")) {
+    const hasPatternsLine = /\\usetikzlibrary\{[^}]*\bpatterns\b[^}]*\}/.test(tikz);
+    if (!hasPatternsLine) {
       throw new Error("Expected sector pattern fixture to emit \\usetikzlibrary{patterns}.");
     }
     if (!tikz.includes("pattern=north east lines")) {

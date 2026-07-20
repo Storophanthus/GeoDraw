@@ -41,6 +41,7 @@ const MAX_TIKZ_EDITOR_HISTORY = 250;
 const MIN_PDF_ZOOM = 0.4;
 const MAX_PDF_ZOOM = 4;
 const PDF_CANVAS_PADDING = 18;
+const DVIPS_XCOLOR_PREAMBLE_LINE = "\\usepackage[dvipsnames]{xcolor}";
 
 const REQUIRED_PREAMBLE = `\\PassOptionsToPackage{dvipsnames}{xcolor}
 \\documentclass[tikz,border=2pt]{standalone}
@@ -210,7 +211,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       trackHistory: false,
       resetHistory: true,
     });
-    const defaultPreamble = deriveDefaultOptionalPreamble(session?.uiCssVariables);
+    const defaultPreamble = deriveDefaultOptionalPreamble(nextTikz, session?.uiCssVariables);
     setOptionalPreamble(defaultPreamble);
     setOptionalPreambleOpen(Boolean(defaultPreamble));
     if (session) {
@@ -446,7 +447,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     return trimmed;
   };
 
-  const defaultPreviewFileName = (extension: "pdf" | "png" | "svg"): string => {
+  const defaultPreviewFileName = (extension: "pdf" | "png" | "svg" | "tex"): string => {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     return `tikz-preview-${stamp}.${extension}`;
   };
@@ -493,7 +494,11 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     downloadBlob(new Blob([bytes], { type: mime }), defaultPreviewFileName(extension));
   };
 
-  const saveTextWithDialog = async (text: string, extension: "svg", filterName: "SVG") => {
+  const saveTextWithDialog = async (
+    text: string,
+    extension: "svg" | "tex",
+    filterName: "SVG" | "LaTeX"
+  ) => {
     if (isTauriRuntime) {
       const path = await tauriSave({
         defaultPath: defaultPreviewFileName(extension),
@@ -503,7 +508,8 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       await writeTextFile(normalizeTauriPath(path), text);
       return;
     }
-    downloadBlob(new Blob([text], { type: "image/svg+xml;charset=utf-8" }), defaultPreviewFileName(extension));
+    const mimeType = extension === "svg" ? "image/svg+xml;charset=utf-8" : "text/plain;charset=utf-8";
+    downloadBlob(new Blob([text], { type: mimeType }), defaultPreviewFileName(extension));
   };
 
   const buildSvgSnapshotFromCanvas = (): string | null => {
@@ -559,6 +565,16 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       await saveTextWithDialog(svg, "svg", "SVG");
     } catch (err) {
       setError(`Failed to save SVG: ${extractErrorMessage(err)}`);
+    }
+  };
+
+  const savePreviewTex = async () => {
+    setPdfContextMenu(null);
+    try {
+      const source = buildStandaloneSource(tikzCode, optionalPreamble);
+      await saveTextWithDialog(source, "tex", "LaTeX");
+    } catch (err) {
+      setError(`Failed to save LaTeX: ${extractErrorMessage(err)}`);
     }
   };
 
@@ -827,6 +843,9 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
           <button className="actionButton secondary" onClick={() => void copyEditedTikz()}>
             {copied ? "Copied" : "Copy Edited TikZ"}
           </button>
+          <button className="actionButton secondary" onClick={() => void savePreviewTex()}>
+            Save Full LaTeX (.tex)
+          </button>
         </div>
       </header>
 
@@ -982,6 +1001,9 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
           <button className="pdfPreviewContextMenuItem" role="menuitem" onClick={() => void savePreviewPng()}>
             Save as PNG
           </button>
+          <button className="pdfPreviewContextMenuItem" role="menuitem" onClick={() => void savePreviewTex()}>
+            Save as Full LaTeX (.tex)
+          </button>
         </div>
       ) : null}
     </div>
@@ -996,12 +1018,41 @@ function buildStandaloneSource(tikzCode: string, optionalPreamble: string): stri
   return `${preamble}\n\\begin{document}\n${tikzCode}\n\\end{document}\n`;
 }
 
-function deriveDefaultOptionalPreamble(uiCssVariables: Record<string, string> | undefined): string {
+function deriveDefaultOptionalPreamble(tikzCode: string, uiCssVariables: Record<string, string> | undefined): string {
+  const shouldIncludeDvipsXcolor = containsDvipsNamedColorUsage(tikzCode);
   const normalizedHex = normalizeSceneBgHex(uiCssVariables?.["--gd-scene-bg"]);
-  if (!normalizedHex || normalizedHex === "FFFFFF") return "";
-  const rgb = hexToRgbTriplet(normalizedHex);
+  const hasNonWhiteBg = Boolean(normalizedHex && normalizedHex !== "FFFFFF");
+  if (!hasNonWhiteBg && !shouldIncludeDvipsXcolor) return "";
+
+  const rgb = hexToRgbTriplet(hasNonWhiteBg ? normalizedHex as string : "FFFFFF");
   if (!rgb) return "";
-  return `\\usepackage{pagecolor}\n\\definecolor{gdPageColor}{RGB}{${rgb.join(",")}}\n\\pagecolor{gdPageColor}`;
+
+  const lines: string[] = [];
+  if (shouldIncludeDvipsXcolor) lines.push(DVIPS_XCOLOR_PREAMBLE_LINE);
+  if (hasNonWhiteBg) {
+    lines.push("\\usepackage{pagecolor}");
+    lines.push(`\\definecolor{gdPageColor}{RGB}{${rgb.join(",")}}`);
+    lines.push("\\pagecolor{gdPageColor}");
+  }
+  return lines.join("\n");
+}
+
+function containsDvipsNamedColorUsage(tikzCode: string): boolean {
+  const tokenColorRegex = /\b(?:color|text|fill|draw)\s*=\s*\{?([A-Za-z][A-Za-z0-9!]+)\b/g;
+  for (const match of tikzCode.matchAll(tokenColorRegex)) {
+    const colorName = match[1];
+    if (!colorName || colorName.startsWith("gdC_")) continue;
+    if (/[A-Z]/.test(colorName)) return true;
+  }
+
+  const customColorDefRegex = /\\definecolor\{([A-Za-z][A-Za-z0-9_!]+)\}\{RGB\}\{/g;
+  for (const match of tikzCode.matchAll(customColorDefRegex)) {
+    const colorName = match[1];
+    if (!colorName || colorName.startsWith("gdC_")) continue;
+    if (/[A-Z]/.test(colorName)) return true;
+  }
+
+  return false;
 }
 
 function normalizeSceneBgHex(rawColor: string | undefined): string | null {
@@ -1089,7 +1140,7 @@ function clampContextMenuPosition(
   root: HTMLDivElement | null
 ): CSSProperties {
   const MENU_WIDTH = 170;
-  const MENU_HEIGHT = 118;
+  const MENU_HEIGHT = 170;
   const PADDING = 10;
   const bounds = root?.getBoundingClientRect() ?? {
     left: 0,

@@ -38,7 +38,8 @@ export function appendRenderedSetupAndPoints({
   const { scale, hasGlowLabels, emitTkzSetup, drawLayerBackend } = ctx.options;
   const caps = ctx.capabilities;
 
-  out.push(`\\begin{tikzpicture}[scale=${caps.fmt(scale)},line cap=round,line join=round,>=triangle 45]`);
+  const arrowHeadStyle = drawLayerBackend === "tkz" ? ",>=triangle 45" : "";
+  out.push(`\\begin{tikzpicture}[scale=${caps.fmt(scale)},line cap=round,line join=round${arrowHeadStyle}]`);
   if (hasGlowLabels) {
     // Reusable text halo macro using contour stroke (page-color aware).
     out.push(
