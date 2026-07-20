@@ -204,7 +204,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       trackHistory: false,
       resetHistory: true,
     });
-    const defaultPreamble = deriveDefaultOptionalPreamble(session?.uiCssVariables);
+    const defaultPreamble = deriveDefaultOptionalPreamble(nextTikz, session?.uiCssVariables);
     setOptionalPreamble(defaultPreamble);
     setOptionalPreambleOpen(Boolean(defaultPreamble));
     if (session) {
@@ -440,7 +440,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     return trimmed;
   };
 
-  const defaultPreviewFileName = (extension: "pdf" | "png" | "svg"): string => {
+  const defaultPreviewFileName = (extension: "pdf" | "png" | "svg" | "tex"): string => {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     return `tikz-preview-${stamp}.${extension}`;
   };
@@ -487,7 +487,11 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     downloadBlob(new Blob([bytes], { type: mime }), defaultPreviewFileName(extension));
   };
 
-  const saveTextWithDialog = async (text: string, extension: "svg", filterName: "SVG") => {
+  const saveTextWithDialog = async (
+    text: string,
+    extension: "svg" | "tex",
+    filterName: "SVG" | "LaTeX"
+  ) => {
     if (isTauriRuntime) {
       const path = await tauriSave({
         defaultPath: defaultPreviewFileName(extension),
@@ -497,7 +501,8 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       await writeTextFile(normalizeTauriPath(path), text);
       return;
     }
-    downloadBlob(new Blob([text], { type: "image/svg+xml;charset=utf-8" }), defaultPreviewFileName(extension));
+    const mimeType = extension === "svg" ? "image/svg+xml;charset=utf-8" : "text/plain;charset=utf-8";
+    downloadBlob(new Blob([text], { type: mimeType }), defaultPreviewFileName(extension));
   };
 
   const buildSvgSnapshotFromCanvas = (): string | null => {
@@ -553,6 +558,16 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       await saveTextWithDialog(svg, "svg", "SVG");
     } catch (err) {
       setError(`Failed to save SVG: ${extractErrorMessage(err)}`);
+    }
+  };
+
+  const savePreviewTex = async () => {
+    setPdfContextMenu(null);
+    try {
+      const source = buildStandaloneSource(tikzCode, optionalPreamble);
+      await saveTextWithDialog(source, "tex", "LaTeX");
+    } catch (err) {
+      setError(`Failed to save LaTeX: ${extractErrorMessage(err)}`);
     }
   };
 
@@ -821,6 +836,9 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
           <button className="actionButton secondary" onClick={() => void copyEditedTikz()}>
             {copied ? "Copied" : "Copy Edited TikZ"}
           </button>
+          <button className="actionButton secondary" onClick={() => void savePreviewTex()}>
+            Save Full LaTeX (.tex)
+          </button>
         </div>
       </header>
 
@@ -976,6 +994,9 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
           <button className="pdfPreviewContextMenuItem" role="menuitem" onClick={() => void savePreviewPng()}>
             Save as PNG
           </button>
+          <button className="pdfPreviewContextMenuItem" role="menuitem" onClick={() => void savePreviewTex()}>
+            Save as Full LaTeX (.tex)
+          </button>
         </div>
       ) : null}
     </div>
@@ -1034,7 +1055,7 @@ function clampContextMenuPosition(
   root: HTMLDivElement | null
 ): CSSProperties {
   const MENU_WIDTH = 170;
-  const MENU_HEIGHT = 118;
+  const MENU_HEIGHT = 170;
   const PADDING = 10;
   const bounds = root?.getBoundingClientRect() ?? {
     left: 0,

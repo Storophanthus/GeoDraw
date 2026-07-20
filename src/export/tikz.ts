@@ -2029,6 +2029,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (!circle.visible) continue;
     const centerName = ensureCircleCenterName(circle.id);
     const throughName = incircleConstructedCircleIds.has(circle.id) ? ensureCircleThroughName(circle.id) : null;
+    const shouldExportPlainCirclesAsRadius = options.drawLayerBackend === "plain";
+    const circleRadiusForPlain = shouldExportPlainCirclesAsRadius ? circleGeomById(circle.id).radius : null;
+    const fixedRadiusExpr = circle.kind === "fixedRadius" ? pgfSafeRadiusExpression(circle.radiusExpr) : undefined;
     const fillStyle = circleFillStyleToTikz(circle.style);
     const strokeStyle = circleStrokeStyleToTikz(circle.style, options);
     const circleBundle: TikzCommand[] = [];
@@ -2055,39 +2058,83 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         style: strokeStyle,
       });
     } else if (throughName) {
+      if (shouldExportPlainCirclesAsRadius && !Number.isFinite(circleRadiusForPlain ?? Number.NaN)) {
+        throw new Error(`Unsupported construction: Circle plain export missing finite radius for ${circle.id}`);
+      }
       if (fillStyle) {
+        if (shouldExportPlainCirclesAsRadius) {
+          circleBundle.push({
+            kind: "FillCircleRadius",
+            o: centerName,
+            radius: circleRadiusForPlain as number,
+            radiusExpr: fixedRadiusExpr ?? undefined,
+            style: fillStyle,
+          });
+        } else {
+          circleBundle.push({
+            kind: "FillCircle",
+            o: centerName,
+            x: throughName,
+            style: fillStyle,
+          });
+        }
+      }
+      if (shouldExportPlainCirclesAsRadius) {
         circleBundle.push({
-          kind: "FillCircle",
+          kind: "DrawCircleRadius",
+          o: centerName,
+          radius: circleRadiusForPlain as number,
+          radiusExpr: fixedRadiusExpr ?? undefined,
+          style: strokeStyle,
+        });
+      } else {
+        circleBundle.push({
+          kind: "DrawCircle",
           o: centerName,
           x: throughName,
-          style: fillStyle,
+          style: strokeStyle,
         });
       }
-      circleBundle.push({
-        kind: "DrawCircle",
-        o: centerName,
-        x: throughName,
-        style: strokeStyle,
-      });
     } else if (circle.kind === "threePoint") {
       if (!definedPointIds.has(circle.aId) || !definedPointIds.has(circle.bId) || !definedPointIds.has(circle.cId)) {
         throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
       }
       const through = mustName(pointName, circle.aId);
+      if (shouldExportPlainCirclesAsRadius && !Number.isFinite(circleRadiusForPlain ?? Number.NaN)) {
+        throw new Error(`Unsupported construction: Circle plain export missing finite radius for ${circle.id}`);
+      }
       if (fillStyle) {
+        if (shouldExportPlainCirclesAsRadius) {
+          circleBundle.push({
+            kind: "FillCircleRadius",
+            o: centerName,
+            radius: circleRadiusForPlain as number,
+            style: fillStyle,
+          });
+        } else {
+          circleBundle.push({
+            kind: "FillCircle",
+            o: centerName,
+            x: through,
+            style: fillStyle,
+          });
+        }
+      }
+      if (shouldExportPlainCirclesAsRadius) {
         circleBundle.push({
-          kind: "FillCircle",
+          kind: "DrawCircleRadius",
+          o: centerName,
+          radius: circleRadiusForPlain as number,
+          style: strokeStyle,
+        });
+      } else {
+        circleBundle.push({
+          kind: "DrawCircle",
           o: centerName,
           x: through,
-          style: fillStyle,
+          style: strokeStyle,
         });
       }
-      circleBundle.push({
-        kind: "DrawCircle",
-        o: centerName,
-        x: through,
-        style: strokeStyle,
-      });
     } else {
       if (circle.kind === "fixedRadius") {
         throw new Error(`Missing symbolic export path for fixed-radius circle ${circle.id}`);
@@ -2096,20 +2143,41 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
       }
       const through = mustName(pointName, circle.throughId);
+      if (shouldExportPlainCirclesAsRadius && !Number.isFinite(circleRadiusForPlain ?? Number.NaN)) {
+        throw new Error(`Unsupported construction: Circle plain export missing finite radius for ${circle.id}`);
+      }
       if (fillStyle) {
+        if (shouldExportPlainCirclesAsRadius) {
+          circleBundle.push({
+            kind: "FillCircleRadius",
+            o: centerName,
+            radius: circleRadiusForPlain as number,
+            style: fillStyle,
+          });
+        } else {
+          circleBundle.push({
+            kind: "FillCircle",
+            o: centerName,
+            x: through,
+            style: fillStyle,
+          });
+        }
+      }
+      if (shouldExportPlainCirclesAsRadius) {
         circleBundle.push({
-          kind: "FillCircle",
+          kind: "DrawCircleRadius",
+          o: centerName,
+          radius: circleRadiusForPlain as number,
+          style: strokeStyle,
+        });
+      } else {
+        circleBundle.push({
+          kind: "DrawCircle",
           o: centerName,
           x: through,
-          style: fillStyle,
+          style: strokeStyle,
         });
       }
-      circleBundle.push({
-        kind: "DrawCircle",
-        o: centerName,
-        x: through,
-        style: strokeStyle,
-      });
     }
     const circleGeom = circleGeomById(circle.id);
     const circleArrowOverlay = pathArrowOverlayToTikz(
@@ -2216,20 +2284,37 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const cName = mustName(pointName, angle.cId);
     const angleBundle: TikzCommand[] = [];
     if (angle.kind === "sector") {
-      if (angle.style.fillEnabled) {
-        const fillStyle = sectorFillStyleToTikz(angle.style);
-        angleBundle.push({ kind: "FillSector", o: bName, a: aName, b: cName, style: fillStyle });
-      }
-      angleBundle.push({
-        kind: "DrawSector",
-        o: bName,
-        a: aName,
-        b: cName,
-        style: sectorDrawStyleToTikz(angle.style, options),
-      });
       const sectorRadius = distance(aWorld, bWorld);
       const sectorStart = Math.atan2(aWorld.y - bWorld.y, aWorld.x - bWorld.x);
       const sectorArcPath = arcPathExprFromWorld(bWorld, sectorRadius, sectorStart, theta, `(${aName})`);
+      const sectorDrawStyle = sectorDrawStyleToTikz(angle.style, options);
+      const sectorFillStyle = angle.style.fillEnabled ? sectorFillStyleToTikz(angle.style) : null;
+
+      if (options.drawLayerBackend === "plain") {
+        if (sectorFillStyle) {
+          angleBundle.push({
+            kind: "DrawRaw",
+            tex: `\\fill[${sectorFillStyle}] (${bName}) -- ${sectorArcPath} -- cycle;`,
+          });
+        }
+        const drawOpts = sectorDrawStyle ? `[${sectorDrawStyle}]` : "";
+        angleBundle.push({
+          kind: "DrawRaw",
+          tex: `\\draw${drawOpts} ${sectorArcPath};`,
+        });
+      } else {
+        if (sectorFillStyle) {
+          angleBundle.push({ kind: "FillSector", o: bName, a: aName, b: cName, style: sectorFillStyle });
+        }
+        angleBundle.push({
+          kind: "DrawSector",
+          o: bName,
+          a: aName,
+          b: cName,
+          style: sectorDrawStyle,
+        });
+      }
+
       const sectorArrowOverlay = pathArrowOverlayToTikz(
         angle.style.arcArrowMarks ?? angle.style.arcArrowMark,
         sectorArcPath,
@@ -2826,8 +2911,11 @@ export function renderTikz(
   });
 
   out.push("\\end{tikzpicture}");
-  const withNamedColors = hoistNamedColors(out);
-  const withOptionalLibraries = injectOptionalTikzLibraries(withNamedColors);
+  const withNamedColors = hoistNamedColors(out, renderCtx.options.drawLayerBackend !== "plain");
+  const withOptionalLibraries = injectOptionalTikzLibraries(
+    withNamedColors,
+    renderCtx.options.drawLayerBackend === "plain"
+  );
   return withOptionalLibraries.join("\n");
 }
 
@@ -5311,6 +5399,36 @@ function pointStyleMetricsPx(point: ScenePoint, pointScale: number): { markerRad
   return { markerRadiusPx: sizePx + strokePx * 0.5 };
 }
 
+const TIKZ_CORE_COLOR_NAMES = new Set([
+  "black",
+  "white",
+  "red",
+  "green",
+  "blue",
+  "cyan",
+  "magenta",
+  "yellow",
+  "gray",
+  "grey",
+  "darkgray",
+  "darkgrey",
+  "lightgray",
+  "lightgrey",
+  "orange",
+  "lime",
+  "olive",
+  "teal",
+  "purple",
+  "violet",
+  "brown",
+  "pink",
+]);
+
+function isCoreTikzColorName(rawColor: string): boolean {
+  const normalized = rawColor.trim().toLowerCase();
+  return TIKZ_CORE_COLOR_NAMES.has(normalized);
+}
+
 function computeLabelBubbleRadiusPx(text: string, labelFontPx: number, haloWidthPx: number): number {
   const fontPx = Math.max(6, Math.min(48, labelFontPx));
   const content = (text && text.length > 0 ? text : "X").replace(/\\[a-zA-Z]+|[{}$]/g, "");
@@ -5324,14 +5442,15 @@ function computeLabelBubbleRadiusPx(text: string, labelFontPx: number, haloWidth
 
 function rgbColorExpr(rawColor: string): string {
   const named = resolveExportFriendlyColorName(rawColor);
-  if (named) return named;
+  if (named && isCoreTikzColorName(rawColor)) return named;
+  if (named && isCoreTikzColorName(named)) return named;
 
   const rgb = parseColorToRgb(rawColor) ?? { r: 0, g: 0, b: 0 };
   const { r, g, b } = rgb;
   return `{rgb,255:red,${r};green,${g};blue,${b}}`;
 }
 
-function hoistNamedColors(lines: string[]): string[] {
+function hoistNamedColors(lines: string[], preferNamed: boolean): string[] {
   const rgbPattern = /\{rgb,255:red,(\d+);green,(\d+);blue,(\d+)\}/g;
   const colorMap = new Map<string, string>();
   const colorDefs: string[] = [];
@@ -5351,11 +5470,14 @@ function hoistNamedColors(lines: string[]): string[] {
       const key = `${r},${g},${b}`;
       let name = colorMap.get(key);
       if (!name) {
-        name = exportFriendlyColorNameByRgbKey[key] ?? toName(r, g, b);
-        colorMap.set(key, name);
-        if (!exportFriendlyColorNameByRgbKey[key]) {
-          colorDefs.push(`\\definecolor{${name}}{RGB}{${r},${g},${b}}`);
-        }
+      const mapped = exportFriendlyColorNameByRgbKey[key];
+      const isCore = mapped && isCoreTikzColorName(mapped);
+      const useMapped = mapped !== undefined;
+      name = useMapped ? mapped : toName(r, g, b);
+      colorMap.set(key, name);
+      if (mapped === undefined || (!isCore && !preferNamed)) {
+        colorDefs.push(`\\definecolor{${name}}{RGB}{${r},${g},${b}}`);
+      }
       }
       return name;
     })
@@ -5371,7 +5493,7 @@ function hoistNamedColors(lines: string[]): string[] {
   return out;
 }
 
-function injectOptionalTikzLibraries(lines: string[]): string[] {
+function injectOptionalTikzLibraries(lines: string[], defaultLibs: boolean): string[] {
   const beginIdx = lines.findIndex((line) => line.trim().startsWith("\\begin{tikzpicture}"));
   if (beginIdx < 0) return lines;
 
@@ -5379,13 +5501,17 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
   let needsPatternsMeta = false;
   let needsDecorationsMarkings = false;
   let needsArrowsMeta = false;
+  let needsArrowsLibrary = false;
+  let needsThroughLibrary = false;
   let needsShapesGeometric = false;
   const patternRegex = /pattern\s*=|pattern color\s*=/;
   const patternMetaRegex = /pattern\s*=\s*\{/;
   const decorationRegex = /postaction\s*=\s*decorate|decoration\s*=\s*\{markings/i;
   const arrowTipRegex =
     /-\{(?:Stealth|Latex|Triangle)\[[^\]]*\]|\\arrow(?:reversed)?\[[^\]]*\]\{(?:Stealth|Latex|Triangle)(?:\[[^\]]*\])?\}/;
+  const arrowStyleRegex = />=\s*triangle|triangle\s+45/i;
   const geometricShapeRegex = /shape\s*=\s*diamond|regular polygon(?:\s|,|$)/;
+  const throughRegex = /through=/i;
   for (const line of lines) {
     if (patternMetaRegex.test(line)) {
       needsPatternsMeta = true;
@@ -5394,22 +5520,28 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
       needsPatterns = true;
     }
     if (decorationRegex.test(line)) needsDecorationsMarkings = true;
-    if (arrowTipRegex.test(line)) needsArrowsMeta = true;
-    if (geometricShapeRegex.test(line)) needsShapesGeometric = true;
+  if (arrowTipRegex.test(line)) needsArrowsMeta = true;
+  if (arrowStyleRegex.test(line)) needsArrowsLibrary = true;
+  if (throughRegex.test(line)) needsThroughLibrary = true;
+  if (geometricShapeRegex.test(line)) needsShapesGeometric = true;
+  }
+
+  const requestedLibs: string[] = defaultLibs ? ["patterns", "through", "arrows"] : [];
+  if (needsShapesGeometric) requestedLibs.push("shapes.geometric");
+  if (needsPatterns) requestedLibs.push("patterns");
+  if (needsPatternsMeta) requestedLibs.push("patterns.meta");
+  if (needsThroughLibrary) requestedLibs.push("through");
+  if (needsDecorationsMarkings) requestedLibs.push("decorations.markings");
+  if (needsArrowsLibrary || needsArrowsMeta) requestedLibs.push("arrows");
+  if (needsArrowsMeta) {
+    requestedLibs.push("arrows.meta");
+    requestedLibs.push("bending");
   }
 
   const libraryLines: string[] = [];
-  if (needsShapesGeometric) {
-    libraryLines.push("\\usetikzlibrary{shapes.geometric}");
-  }
-  if (needsPatterns) {
-    libraryLines.push(needsPatternsMeta ? "\\usetikzlibrary{patterns,patterns.meta}" : "\\usetikzlibrary{patterns}");
-  }
-  if (needsDecorationsMarkings) {
-    const suffix = needsArrowsMeta ? ",arrows.meta,bending" : "";
-    libraryLines.push(`\\usetikzlibrary{decorations.markings${suffix}}`);
-  } else if (needsArrowsMeta) {
-    libraryLines.push("\\usetikzlibrary{arrows.meta,bending}");
+  if (requestedLibs.length > 0) {
+    const uniq = [...new Set(requestedLibs)];
+    libraryLines.push(`\\usetikzlibrary{${uniq.join(",")}}`);
   }
 
   if (libraryLines.length === 0) return lines;

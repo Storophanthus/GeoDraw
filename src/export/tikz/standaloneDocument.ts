@@ -5,6 +5,8 @@ export const REQUIRED_PREAMBLE = `\\PassOptionsToPackage{dvipsnames}{xcolor}
 \\usepackage{contour}
 \\usetikzlibrary{arrows.meta,bending,decorations.markings,patterns,patterns.meta,shapes.geometric}`;
 
+const DVIPS_XCOLOR_PREAMBLE_LINE = "\\usepackage[dvipsnames]{xcolor}";
+
 export function looksLikeFullDocument(text: string): boolean {
   return /\\documentclass\b/.test(text) || /\\begin\{document\}/.test(text);
 }
@@ -46,10 +48,42 @@ function hexToRgbTriplet(hex: string): [number, number, number] | null {
   return [r, g, b];
 }
 
-export function deriveDefaultOptionalPreamble(uiCssVariables: Record<string, string> | undefined): string {
+export function deriveDefaultOptionalPreamble(
+  tikzCode: string,
+  uiCssVariables: Record<string, string> | undefined
+): string {
+  const shouldIncludeDvipsXcolor = containsDvipsNamedColorUsage(tikzCode);
   const normalizedHex = normalizeSceneBgHex(uiCssVariables?.["--gd-scene-bg"]);
-  if (!normalizedHex || normalizedHex === "FFFFFF") return "";
-  const rgb = hexToRgbTriplet(normalizedHex);
+  const hasNonWhiteBg = Boolean(normalizedHex && normalizedHex !== "FFFFFF");
+  if (!hasNonWhiteBg && !shouldIncludeDvipsXcolor) return "";
+
+  const rgb = hexToRgbTriplet(hasNonWhiteBg ? (normalizedHex as string) : "FFFFFF");
   if (!rgb) return "";
-  return `\\usepackage{pagecolor}\n\\definecolor{gdPageColor}{RGB}{${rgb.join(",")}}\n\\pagecolor{gdPageColor}`;
+
+  const lines: string[] = [];
+  if (shouldIncludeDvipsXcolor) lines.push(DVIPS_XCOLOR_PREAMBLE_LINE);
+  if (hasNonWhiteBg) {
+    lines.push("\\usepackage{pagecolor}");
+    lines.push(`\\definecolor{gdPageColor}{RGB}{${rgb.join(",")}}`);
+    lines.push("\\pagecolor{gdPageColor}");
+  }
+  return lines.join("\n");
+}
+
+function containsDvipsNamedColorUsage(tikzCode: string): boolean {
+  const tokenColorRegex = /\b(?:color|text|fill|draw)\s*=\s*\{?([A-Za-z][A-Za-z0-9!]+)\b/g;
+  for (const match of tikzCode.matchAll(tokenColorRegex)) {
+    const colorName = match[1];
+    if (!colorName || colorName.startsWith("gdC_")) continue;
+    if (/[A-Z]/.test(colorName)) return true;
+  }
+
+  const customColorDefRegex = /\\definecolor\{([A-Za-z][A-Za-z0-9_!]+)\}\{RGB\}\{/g;
+  for (const match of tikzCode.matchAll(customColorDefRegex)) {
+    const colorName = match[1];
+    if (!colorName || colorName.startsWith("gdC_")) continue;
+    if (/[A-Z]/.test(colorName)) return true;
+  }
+
+  return false;
 }

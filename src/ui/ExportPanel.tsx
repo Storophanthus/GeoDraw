@@ -193,7 +193,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const copyFullDocument = async () => {
     const text = ensureTikzText();
     if (!text) return;
-    const fullDocument = buildStandaloneSource(text, deriveDefaultOptionalPreamble(uiCssVariables));
+    const fullDocument = buildStandaloneSource(text, deriveDefaultOptionalPreamble(text, uiCssVariables));
     try {
       await navigator.clipboard.writeText(fullDocument);
       setFullDocumentCopied(true);
