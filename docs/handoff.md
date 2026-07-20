@@ -25,6 +25,44 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-20 Tool shortcuts now match their tooltips (UI/UX revamp Phase 1):
+  - Tool tooltips have long advertised single-key shortcuts (V/P/S/L/M/O/C) that no
+    handler implemented; pressing them did nothing. Implemented them:
+    - `src/ui/toolHotkeyState.ts`: new `TOOL_KEY_SHORTCUTS` map (pure data,
+      v→move, p→point, s→segment, l→line2p, m→midpoint, o→circle_cp, c→copyStyle).
+    - `src/ui/useGlobalCanvasHotkeys.ts`: letter-key handler inserted after the
+      Shift+F block, before Delete/Backspace, gated on no modifier keys.
+    - Added a `[role="dialog"]` closest-ancestor guard alongside the existing
+      text-input guard — this also fixes a latent bug where Delete/Backspace
+      (and now the new letters) could reach the canvas while a modal
+      (e.g. Preferences) had focus.
+    - `src/ui/RightSidebar.tsx`: Quick Help card (`HELP_ROWS`) documents the
+      two new shortcut rows.
+  - Tests: extended `src/ui/__tests__/tool-hotkey-state.test.ts` (shortcut set is
+    exactly the 7 advertised tools, single lowercase letters, no collision with
+    reserved keys) and wired it into the `test:command` npm script — it
+    previously existed on disk but ran in no chain.
+  - Validation:
+    - `npx tsc --noEmit` — one pre-existing error in
+      `src/export/__tests__/draw-layer-backend-plain-constructions.test.ts`
+      (from an unrelated TikZ export commit already on `main`); confirmed via
+      `git stash` that it exists independent of this change. No errors in any
+      file this entry touches.
+    - `npx vite build` (bundle-only, since the pre-existing tsc error blocks
+      the full `npm run build` gate)
+    - `npm run test:command`, `npm run test:scene` — all green
+    - Manual browser pass: all 7 letters switch tools; typing "value slope" in
+      the command bar does not trigger any tool switch; P and Delete are inert
+      while the Preferences dialog has focus; Quick Help card renders the new
+      rows; Esc still returns to Move; no console errors.
+  - Next: this is Phase 1 of a 4-phase UI/UX revamp (plan at
+    `~/.claude/plans/rippling-rolling-thunder.md`) — Phase 2 (in-app command
+    reference popup) is next, then Phase 3 (export tab redesign) and Phase 4
+    (minimal onboarding).
+  - Risks: none identified for this change in isolation. The pre-existing tsc
+    error above blocks a clean `npm run build` for anyone working in this
+    worktree until it's fixed (out of scope for this entry — it's in TikZ
+    export test fixtures, unrelated to tool hotkeys).
 - 2026-05-03 Multiple canvas tab shell wired:
   - Added visible canvas tabs above the drawing area using the existing document runtime capture/restore path.
   - Each tab now keeps its own:

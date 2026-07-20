@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useRef } from "react";
 import type { ActiveTool } from "../state/geoStore";
 import type { SelectedObject, TextClipboardObjectTarget } from "../state/slices/storeTypes";
-import { resolveRecentToolShortcut, shouldTrackRecentNonMoveTool } from "./toolHotkeyState";
+import { TOOL_KEY_SHORTCUTS, resolveRecentToolShortcut, shouldTrackRecentNonMoveTool } from "./toolHotkeyState";
 
 type GlobalHotkeysOptions = {
   activeTool: ActiveTool;
@@ -45,6 +45,7 @@ export function useGlobalCanvasHotkeys({
       const isTextInput =
         tagName === "INPUT" || tagName === "TEXTAREA" || target?.isContentEditable === true;
       if (isTextInput) return;
+      if (target?.closest?.('[role="dialog"]')) return;
 
       if (e.key === "Escape") {
         e.preventDefault();
@@ -91,6 +92,15 @@ export function useGlobalCanvasHotkeys({
         e.preventDefault();
         onFitView();
         return;
+      }
+
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        const tool = TOOL_KEY_SHORTCUTS[e.key.toLowerCase()];
+        if (tool) {
+          e.preventDefault();
+          if (tool !== activeTool) onSelectTool(tool);
+          return;
+        }
       }
 
       if (e.key === "Delete" || e.key === "Backspace") {
