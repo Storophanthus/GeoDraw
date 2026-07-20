@@ -25,6 +25,21 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Unblock the GitHub Pages deploy (cherry-pick of `8a91660`):
+  - The Pages workflow builds with `npm run build` (= `tsc && vite build`),
+    a *full* type-check. A pre-existing error in
+    `src/export/__tests__/draw-layer-backend-plain-constructions.test.ts`
+    (`kind: "free"` widened to `string` because `scene` had no `SceneModel`
+    annotation) failed `tsc`, so the `ad383db` deploy AND the first push of
+    UI-revamp Phases 1–4 both failed to deploy — the live site stayed stale
+    at the last green commit (`52c90be`) with none of the new work visible.
+  - Fix: cherry-picked the owner's own fix commit `8a91660` from
+    `codex/text-editor-rewrite` (adds `import type { SceneModel }` +
+    `const scene: SceneModel`). Self-contained to that one test file;
+    identical content means no conflict when that branch later merges.
+  - Process lesson: verify against `npm run build` (the real deploy command),
+    NOT `npx vite build` (esbuild, skips types) or `tsc --noEmit | grep -v`,
+    both of which masked this error the whole session.
 - 2026-07-21 Minimal empty-canvas onboarding (UI/UX revamp Phase 4 — final
   phase of the plan):
   - Zero first-run guidance existed: a brand-new user got a blank canvas,
