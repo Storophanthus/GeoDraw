@@ -44,6 +44,13 @@ assert(defaults.segmentDefaults.strokeWidth === defaultSegmentStyle.strokeWidth,
 assert(defaults.angleDefaults.fillColor === "#bfbfbf", "profile should update default angle fill color");
 assert(defaults.angleDefaults.strokeWidth === defaultAngleStyle.strokeWidth, "profile should preserve default angle stroke width");
 assert(defaults.textboxToolDefaults.boxWidthPx === 220, "profile should preserve default textbox width");
+const thinDefaults = buildDefaultStylesForProfile("image_palette_vanilla_thin");
+const imageDefaults = buildDefaultStylesForProfile("image_palette");
+assert(thinDefaults.segmentDefaults.strokeWidth < imageDefaults.segmentDefaults.strokeWidth, "thin vanilla profile should reduce segment stroke");
+assert(thinDefaults.lineDefaults.strokeWidth < imageDefaults.lineDefaults.strokeWidth, "thin vanilla profile should reduce line stroke");
+assert(thinDefaults.circleDefaults.strokeWidth < imageDefaults.circleDefaults.strokeWidth, "thin vanilla profile should reduce circle stroke");
+assert(thinDefaults.angleDefaults.strokeWidth < imageDefaults.angleDefaults.strokeWidth, "thin vanilla profile should reduce angle stroke");
+assert(thinDefaults.angleDefaults.markSize < imageDefaults.angleDefaults.markSize, "thin vanilla profile should reduce angle mark size");
 
 const classicDefaults = buildDefaultStylesForProfile("classic");
 const scene: SceneModel = {

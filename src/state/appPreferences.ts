@@ -79,11 +79,29 @@ function normalizeUiOverrides(raw: unknown): UiPreferencesState["uiCssOverrides"
 }
 
 function isUiProfileId(value: unknown): value is UiPreferencesState["uiColorProfileId"] {
-  return value === "vanilla" || value === "grayscale" || value === "beige" || value === "dark";
+  return (
+    value === "vanilla" ||
+    value === "grayscale" ||
+    value === "beige" ||
+    value === "dark" ||
+    value === "image" ||
+    value === "image_palette"
+  );
+}
+
+function normalizeUiProfileId(raw: UiPreferencesState["uiColorProfileId"]): UiPreferencesState["uiColorProfileId"] {
+  return raw === "image" ? "image_palette" : raw;
 }
 
 function isColorProfileId(value: unknown): value is ConstructionPreferencesState["colorProfileId"] {
-  return value === "classic" || value === "grayscale_white_dot" || value === "beige_light" || value === "dark_mode";
+  return (
+    value === "classic" ||
+    value === "grayscale_white_dot" ||
+    value === "beige_light" ||
+    value === "dark_mode" ||
+    value === "image_palette" ||
+    value === "image_palette_vanilla_thin"
+  );
 }
 
 function normalizeCanvasThemeOverrides(raw: unknown): ConstructionPreferencesState["canvasThemeOverrides"] {
@@ -182,7 +200,7 @@ export function loadStoredUiPreferences(): UiPreferencesState | null {
   if (!envelope || !isRecord(envelope.value)) return null;
   if (!isUiProfileId(envelope.value.uiColorProfileId)) return null;
   return {
-    uiColorProfileId: envelope.value.uiColorProfileId,
+    uiColorProfileId: normalizeUiProfileId(envelope.value.uiColorProfileId),
     uiCssOverrides: normalizeUiOverrides(envelope.value.uiCssOverrides),
   };
 }

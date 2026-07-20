@@ -10,8 +10,14 @@ import type {
 } from "../scene/points";
 import type { RichTextStyle } from "../text-editor/richTextModel";
 
-export type ColorProfileId = "classic" | "grayscale_white_dot" | "beige_light" | "dark_mode";
-export type UiColorProfileId = "vanilla" | "grayscale" | "beige" | "dark";
+export type ColorProfileId =
+  | "classic"
+  | "grayscale_white_dot"
+  | "beige_light"
+  | "dark_mode"
+  | "image_palette"
+  | "image_palette_vanilla_thin";
+export type UiColorProfileId = "vanilla" | "grayscale" | "beige" | "dark" | "image" | "image_palette";
 
 export type CanvasColorTheme = {
   backgroundColor: string;
@@ -62,6 +68,106 @@ export const DEFAULT_UI_COLOR_PROFILE_ID: UiColorProfileId = "beige";
 
 const DEFAULT_PATH_ARROW_UI = 1.0;
 const DEFAULT_PATH_ARROW_LINE_WIDTH_PT = DEFAULT_PATH_ARROW_UI * 8;
+const VANILLA_THIN_PROFILE_ID = "image_palette_vanilla_thin";
+const THIN_PROFILE_STROKE_WIDTHS = {
+  pointStrokeWidth: 1.4,
+  segmentStrokeWidth: 1.5,
+  lineStrokeWidth: 1.25,
+  circleStrokeWidth: 1.25,
+  ellipseStrokeWidth: 1.25,
+  polygonStrokeWidth: 1.25,
+  angleStrokeWidth: 0.88,
+  segmentMarkSizePt: 6.2,
+  angleMarkSize: 6.1,
+  arrowLineWidthPt: 6,
+} as const;
+
+function withVanillaThinStyle(defaults: SceneStyleDefaults): SceneStyleDefaults {
+  const arrowLineWidthPt = THIN_PROFILE_STROKE_WIDTHS.arrowLineWidthPt;
+  return {
+    ...defaults,
+    pointDefaults: {
+      ...defaults.pointDefaults,
+      strokeWidth: THIN_PROFILE_STROKE_WIDTHS.pointStrokeWidth,
+    },
+    segmentDefaults: {
+      ...defaults.segmentDefaults,
+      strokeWidth: THIN_PROFILE_STROKE_WIDTHS.segmentStrokeWidth,
+      segmentMark: defaults.segmentDefaults.segmentMark
+        ? {
+            ...defaults.segmentDefaults.segmentMark,
+            sizePt: THIN_PROFILE_STROKE_WIDTHS.segmentMarkSizePt,
+            lineWidthPt: arrowLineWidthPt,
+          }
+        : defaults.segmentDefaults.segmentMark,
+      segmentMarks: defaults.segmentDefaults.segmentMarks?.map((mark) => ({
+        ...mark,
+        sizePt: THIN_PROFILE_STROKE_WIDTHS.segmentMarkSizePt,
+      })),
+      segmentArrowMark: defaults.segmentDefaults.segmentArrowMark
+        ? {
+            ...defaults.segmentDefaults.segmentArrowMark,
+            lineWidthPt: arrowLineWidthPt,
+          }
+        : defaults.segmentDefaults.segmentArrowMark,
+      segmentArrowMarks: defaults.segmentDefaults.segmentArrowMarks?.map((mark) => ({
+        ...mark,
+        lineWidthPt: arrowLineWidthPt,
+      })),
+    },
+    lineDefaults: {
+      ...defaults.lineDefaults,
+      strokeWidth: THIN_PROFILE_STROKE_WIDTHS.lineStrokeWidth,
+    },
+    circleDefaults: {
+      ...defaults.circleDefaults,
+      strokeWidth: THIN_PROFILE_STROKE_WIDTHS.circleStrokeWidth,
+      arrowMark: defaults.circleDefaults.arrowMark
+        ? {
+            ...defaults.circleDefaults.arrowMark,
+            lineWidthPt: arrowLineWidthPt,
+          }
+        : defaults.circleDefaults.arrowMark,
+      arrowMarks: defaults.circleDefaults.arrowMarks?.map((mark) => ({
+        ...mark,
+        lineWidthPt: arrowLineWidthPt,
+      })),
+    },
+    ellipseDefaults: {
+      ...defaults.ellipseDefaults,
+      strokeWidth: THIN_PROFILE_STROKE_WIDTHS.ellipseStrokeWidth,
+      arrowMark: defaults.ellipseDefaults.arrowMark
+        ? {
+            ...defaults.ellipseDefaults.arrowMark,
+            lineWidthPt: arrowLineWidthPt,
+          }
+        : defaults.ellipseDefaults.arrowMark,
+      arrowMarks: defaults.ellipseDefaults.arrowMarks?.map((mark) => ({
+        ...mark,
+        lineWidthPt: arrowLineWidthPt,
+      })),
+    },
+    polygonDefaults: {
+      ...defaults.polygonDefaults,
+      strokeWidth: THIN_PROFILE_STROKE_WIDTHS.polygonStrokeWidth,
+    },
+    angleDefaults: {
+      ...defaults.angleDefaults,
+      strokeWidth: THIN_PROFILE_STROKE_WIDTHS.angleStrokeWidth,
+      markSize: THIN_PROFILE_STROKE_WIDTHS.angleMarkSize,
+      arcArrowMark: defaults.angleDefaults.arcArrowMark
+        ? {
+            ...defaults.angleDefaults.arcArrowMark,
+            lineWidthPt: arrowLineWidthPt,
+          }
+        : defaults.angleDefaults.arcArrowMark,
+      arcArrowMarks: defaults.angleDefaults.arcArrowMarks?.map((mark) => ({
+        ...mark,
+        lineWidthPt: arrowLineWidthPt,
+      })),
+    },
+  };
+}
 
 export const UI_CSS_VARIABLE_DEFAULTS = {
   "--gd-ui-app-text": "#1f2937",
@@ -117,6 +223,52 @@ export const UI_CSS_VARIABLE_DEFAULTS = {
 export type UiCssVariableName = keyof typeof UI_CSS_VARIABLE_DEFAULTS;
 export type UiCssVariables = Record<UiCssVariableName, string>;
 export const UI_CSS_VARIABLE_KEYS = Object.keys(UI_CSS_VARIABLE_DEFAULTS) as UiCssVariableName[];
+
+const IMAGE_THEME_UI_OVERRIDES: Partial<UiCssVariables> = {
+  "--gd-ui-app-text": "#292036",
+  "--gd-ui-app-bg": "#fefefe",
+  "--gd-ui-toolbar-bg": "#fcf5eb",
+  "--gd-ui-sidebar-bg": "#f9efde",
+  "--gd-ui-canvas-bg": "#fefefe",
+  "--gd-ui-surface": "#fffdf9",
+  "--gd-ui-surface-soft": "#f4e9d7",
+  "--gd-ui-surface-muted": "#e9d8bf",
+  "--gd-ui-surface-elevated": "#f2debf",
+  "--gd-ui-border": "#ccb28f",
+  "--gd-ui-border-soft": "#d5bea3",
+  "--gd-ui-border-panel": "#ceb79a",
+  "--gd-ui-border-strong": "#8a6f52",
+  "--gd-ui-text-strong": "#1b1129",
+  "--gd-ui-text": "#30263a",
+  "--gd-ui-text-muted": "#5b4d62",
+  "--gd-ui-text-subtle": "#726679",
+  "--gd-ui-accent": "#3f2f63",
+  "--gd-ui-accent-strong": "#322155",
+  "--gd-ui-accent-deeper": "#261545",
+  "--gd-ui-accent-text": "#26174f",
+  "--gd-ui-accent-bg": "#eadff7",
+  "--gd-ui-accent-bg-soft": "#f3eaff",
+  "--gd-ui-accent-bg-strong": "#d9c9ef",
+  "--gd-ui-preview-stroke": "#3f2f63",
+  "--gd-ui-preview-stroke-strong": "#2e214a",
+  "--gd-ui-preview-fill-soft": "rgba(63, 47, 99, 0.16)",
+  "--gd-ui-preview-fill": "rgba(63, 47, 99, 0.26)",
+  "--gd-ui-preview-fill-strong": "rgba(46, 33, 74, 0.98)",
+  "--gd-ui-preview-snap-stroke": "#d51315",
+  "--gd-ui-icon-tone": "#554b61",
+  "--gd-ui-icon-tone-strong": "#2e2248",
+  "--gd-ui-title-tone": "#675a75",
+  "--gd-ui-focus-outline": "rgba(63, 47, 99, 0.45)",
+  "--gd-ui-focus-outline-strong": "rgba(63, 47, 99, 0.66)",
+  "--gd-ui-accent-ring": "rgba(63, 47, 99, 0.4)",
+  "--gd-ui-overlay-hover": "rgba(255, 244, 228, 0.62)",
+  "--gd-ui-resize-hover": "rgba(63, 47, 99, 0.2)",
+  "--gd-ui-shadow-soft": "rgba(73, 58, 87, 0.1)",
+  "--gd-ui-shadow": "rgba(73, 58, 87, 0.2)",
+  "--gd-ui-shadow-strong": "rgba(73, 58, 87, 0.34)",
+  "--gd-ui-glass-bg": "rgba(255, 251, 246, 0.94)",
+  "--gd-ui-glass-bg-strong": "rgba(255, 246, 238, 0.98)",
+};
 
 const UI_CSS_VARIABLE_PROFILE_OVERRIDES: Record<UiColorProfileId, Partial<UiCssVariables>> = {
   vanilla: {},
@@ -257,6 +409,8 @@ const UI_CSS_VARIABLE_PROFILE_OVERRIDES: Record<UiColorProfileId, Partial<UiCssV
     "--gd-ui-glass-bg": "rgba(15, 23, 42, 0.92)",
     "--gd-ui-glass-bg-strong": "rgba(15, 23, 42, 0.96)",
   },
+  image_palette: IMAGE_THEME_UI_OVERRIDES,
+  image: IMAGE_THEME_UI_OVERRIDES,
 };
 
 export const UI_COLOR_PROFILE_OPTIONS: ReadonlyArray<{ id: UiColorProfileId; label: string }> = [
@@ -264,6 +418,7 @@ export const UI_COLOR_PROFILE_OPTIONS: ReadonlyArray<{ id: UiColorProfileId; lab
   { id: "grayscale", label: "Grayscale" },
   { id: "beige", label: "Beige" },
   { id: "dark", label: "Dark Mode" },
+  { id: "image_palette", label: "Image Palette" },
 ] as const;
 
 const RECOMMENDED_UI_PROFILE_BY_COLOR_PROFILE: Record<ColorProfileId, UiColorProfileId> = {
@@ -271,6 +426,8 @@ const RECOMMENDED_UI_PROFILE_BY_COLOR_PROFILE: Record<ColorProfileId, UiColorPro
   grayscale_white_dot: "grayscale",
   beige_light: "beige",
   dark_mode: "dark",
+  image_palette: "image_palette",
+  image_palette_vanilla_thin: "vanilla",
 };
 
 export function getRecommendedUiProfileForColorProfile(profileId: ColorProfileId): UiColorProfileId {
@@ -313,6 +470,20 @@ const UI_COLOR_PROFILE_SWATCHES: Record<UiColorProfileId, UiProfileSwatch> = {
     fill: "#1e3a8a",
     dotFill: "#111827",
     dotStroke: "#f8fafc",
+  },
+  image: {
+    background: "#fefefe",
+    line: "#3f2f63",
+    fill: "#e19b8b",
+    dotFill: "#0d0d0d",
+    dotStroke: "#3f2f63",
+  },
+  image_palette: {
+    background: "#fefefe",
+    line: "#3f2f63",
+    fill: "#e19b8b",
+    dotFill: "#0d0d0d",
+    dotStroke: "#3f2f63",
   },
 };
 
@@ -390,6 +561,56 @@ const COLOR_PROFILES: readonly ColorProfile[] = [
       angleMark: "#000000",
       arrow: "#000000",
       marking: "#000000",
+    },
+  },
+  {
+    id: "image_palette",
+    label: "Image Palette",
+    palette: {
+      backgroundColor: "#fefefe",
+      gridMinorColor: "#ece5d9",
+      gridMajorColor: "#7a5f9a",
+      axisColor: "#d51315",
+      pointStroke: "#fefefe",
+      pointFill: "#0d0d0d",
+      pointLabel: "#2a1b56",
+      pointLabelHalo: "#ffffff",
+      segmentStroke: "#403963",
+      lineStroke: "#4b3f6d",
+      circleStroke: "#403963",
+      polygonStroke: "#2c1e58",
+      polygonFill: "#e8a295",
+      angleStroke: "#2c1e58",
+      angleText: "#2a1b56",
+      angleFill: "#e8a295",
+      angleMark: "#2c1e58",
+      arrow: "#403963",
+      marking: "#403963",
+    },
+  },
+  {
+    id: "image_palette_vanilla_thin",
+    label: "Image Palette (Vanilla Thin)",
+    palette: {
+      backgroundColor: "#fefefe",
+      gridMinorColor: "#ece5d9",
+      gridMajorColor: "#7a5f9a",
+      axisColor: "#d51315",
+      pointStroke: "#fefefe",
+      pointFill: "#0d0d0d",
+      pointLabel: "#2a1b56",
+      pointLabelHalo: "#ffffff",
+      segmentStroke: "#403963",
+      lineStroke: "#4b3f6d",
+      circleStroke: "#403963",
+      polygonStroke: "#2c1e58",
+      polygonFill: "#e8a295",
+      angleStroke: "#2c1e58",
+      angleText: "#2a1b56",
+      angleFill: "#e8a295",
+      angleMark: "#2c1e58",
+      arrow: "#403963",
+      marking: "#403963",
     },
   },
   {
@@ -477,7 +698,7 @@ export function getUiColorProfileSwatch(profileId: UiColorProfileId): UiProfileS
 
 export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneStyleDefaults {
   const palette = getColorProfile(profileId).palette;
-  return {
+  const defaults: SceneStyleDefaults = {
     pointDefaults: {
       shape: "circle",
       sizePx: 6,
@@ -629,11 +850,17 @@ export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneSt
       labelGlow: false,
     },
   };
+
+  if (profileId === VANILLA_THIN_PROFILE_ID) {
+    return withVanillaThinStyle(defaults);
+  }
+
+  return defaults;
 }
 
 export function applyProfileColorsToDefaults(defaults: SceneStyleDefaults, profileId: ColorProfileId): SceneStyleDefaults {
   const palette = getColorProfile(profileId).palette;
-  return {
+  const recolored: SceneStyleDefaults = {
     pointDefaults: {
       ...defaults.pointDefaults,
       strokeColor: palette.pointStroke,
@@ -720,6 +947,12 @@ export function applyProfileColorsToDefaults(defaults: SceneStyleDefaults, profi
       textColor: palette.pointLabel,
     },
   };
+
+  if (profileId === VANILLA_THIN_PROFILE_ID) {
+    return withVanillaThinStyle(recolored);
+  }
+
+  return recolored;
 }
 
 export function recolorSceneForProfile(scene: SceneModel, fromProfileId: ColorProfileId, toProfileId: ColorProfileId): SceneModel {
