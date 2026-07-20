@@ -25,6 +25,73 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-20 In-app command reference popup (UI/UX revamp Phase 2):
+  - The only in-app command help was one cryptic placeholder string in the
+    command bar; the real reference (`docs/command-bar-reference.md`) was
+    never surfaced to users. Added a searchable reference dialog:
+    - `src/ui/commandReference/commandReferenceData.ts` (new): pure data
+      module, no React/store/parser imports. `COMMAND_SPECS` — 28 entries,
+      one per parser constructor (aliases folded into `variants`, e.g.
+      `Ortho(A,B,C)` under Orthocenter). `FUNCTION_SPECS` — 29 entries: 25
+      scalar functions from `scalarFunctionRegistry.ts` collapsed to one
+      canonical name per function (case-variants like `Sin`/`sin` merged;
+      `sin`/`sind` kept distinct since they differ in unit), plus the 4
+      constants (`pi`,`e`,`tau`,`ans`) which live outside that registry.
+    - `src/ui/commandReference/CommandReferenceDialog.tsx` (new): search +
+      Commands/Functions tabs, grouped by category, click-to-insert rows.
+      Reuses `PreferencesDialog`'s dismissal logic (Escape + outside
+      mousedown) and its `preferencesOverlay`/`preferencesModal`/
+      `preferencesTabs`/`preferencesTabButton` CSS classes directly, per
+      plan. One correction from the approved plan: the plan said to render
+      the dialog "inside commandBarWrap", but `commandBarWrap` has no `top`
+      offset (it's a slim bottom-pinned bar, not full-bleed), so an
+      `inset:0` overlay nested inside it would be confined to that strip.
+      Rendered it as a sibling of `commandBarWrap` instead (`CommandBar`
+      now returns a Fragment) so the overlay resolves against `.canvasPane`
+      the same way `PreferencesDialog` resolves against `.canvasDocumentArea`.
+    - `src/CommandBar.tsx`: "?" button (CircleHelp icon) between Run and the
+      collapse chevron; insert handler sets the input, closes the dialog,
+      refocuses, and selects the text between the first `(`/last `)` so a
+      teacher can immediately overtype the placeholder args; placeholder
+      text shortened to mention the `?` button.
+    - `src/App.css`: `.commandBarExpanded` grid gained a 4th column for the
+      new button; added `.commandRef*` styles (search input, grouped list,
+      signature/description rows) — all on `--gd-ui-*` tokens.
+  - Content fix found while building the registry: `docs/command-bar-reference.md`
+    was missing `Ellipse(F1,F2,P)`, which the parser has supported all along
+    (`CommandParser.ts` "Ellipse" branch). Added it to both the human doc
+    and the new registry.
+  - Tests: new `src/scene/__tests__/command-reference-registry.test.ts`,
+    wired into `test:command`. A synthetic `ParseContext` fixture (points
+    A,B,C,D,O,P,V,X,F1,F2; aliases s/l/c/poly; scalar r_1; ans=1) parses
+    every `COMMAND_SPECS` example and every variant that's a full call form
+    — this caught 3 variant strings that used descriptive placeholders
+    (`Circle(O,r)`, `Line(x1,y1,x2,y2)`, `Homothety(P,O,k)`) instead of real
+    values, which would have inserted broken templates into the command bar.
+    Also asserts every non-constant `FUNCTION_SPECS` name is a real
+    registry key, and every registry function (case-collapsed) has a
+    `FUNCTION_SPECS` entry — verified this reverse-coverage check actually
+    fires by temporarily deleting an entry and confirming the test failed,
+    then restored.
+  - Validation:
+    - `npx tsc --noEmit` — no new errors (same single pre-existing error
+      from `main` noted in the Phase 1 entry below, in an unrelated file)
+    - `npm run test:command` (includes the new drift test) — green
+    - Manual browser pass: opened the dialog, searched ("circle" correctly
+      matches across name/description/category), switched Commands ↔
+      Functions & Math tabs (search persists across tabs), clicked
+      Circle(x,y,r) → input filled with "Circle(0,0,5)", dialog closed,
+      input focused with "0,0,5" pre-selected, Run created a real circle
+      (verified via the equation shown in Properties) — full loop works.
+      Confirmed the Phase 1 `[role="dialog"]` guard protects this dialog
+      too, for free (P/Delete inert while focus is inside it). Dark theme
+      pass: all `--gd-ui-*` tokens resolved correctly, nothing hardcoded.
+      Zero console errors throughout.
+  - Next: Phase 3 (export tab redesign for the teacher path) and Phase 4
+    (minimal onboarding). Plan at `~/.claude/plans/rippling-rolling-thunder.md`.
+  - Risks: the drift test is one-way — a new parser command added without a
+    matching `COMMAND_SPECS` entry is not caught. Flagged as a review
+    checklist item, not automated.
 - 2026-07-20 Tool shortcuts now match their tooltips (UI/UX revamp Phase 1):
   - Tool tooltips have long advertised single-key shortcuts (V/P/S/L/M/O/C) that no
     handler implemented; pressing them did nothing. Implemented them:

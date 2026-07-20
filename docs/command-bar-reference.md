@@ -74,6 +74,7 @@ Notes:
 - `Circle(O,A)`
 - `Circle(O,r)`
 - `Circle(O,96*sqrt(5))`
+- `Ellipse(F1,F2,P)` the ellipse with foci `F1`, `F2` passing through `P`
 - `Distance(...)` (returns number, creates nothing)
   - common forms: `Distance(A,B)`, `Distance(A,l)`, `Distance(l,A)`, `Distance(A,s)`, `Distance(s,A)`
 
@@ -110,6 +111,7 @@ Notes:
   - `c3 = Circle3P(A,B,C)`
   - `cRad = Circle(O,96*sqrt(5))`
   - `c = Circle(O,r_1)` (`r_1` can come from "Store Radius")
+  - `el = Ellipse(F1,F2,P)`
 
 Redefine behavior (current):
 - `name = <numeric expr>`:
