@@ -48,14 +48,12 @@ type PersistedDocumentTab = {
 type PersistedDocumentTabsState = {
   version: typeof DOCUMENT_TABS_STORAGE_VERSION;
   activeDocumentId: string;
-  nextIndex: number;
   documents: PersistedDocumentTab[];
 };
 
 type InitialDocumentTabsState = {
   documents: GeoDocumentTab[];
   activeDocumentId: string;
-  nextIndex: number;
   restoreRuntime: GeoDocumentRuntimeState | null;
 };
 
@@ -66,12 +64,22 @@ function baseTitleFromFileName(fileName: string | null | undefined): string | nu
   return trimmed.replace(/\.(geodraw|json)$/i, "") || trimmed;
 }
 
-function makeDocumentId(nextIndex: number): string {
-  return `doc_${nextIndex}`;
+function nextUnusedDocumentId(tabs: GeoDocumentTab[]): string {
+  const usedIds = new Set(tabs.map((tab) => tab.id));
+  let index = 1;
+  while (usedIds.has(`doc_${index}`)) index += 1;
+  return `doc_${index}`;
 }
 
-function makeUntitledTitle(nextIndex: number): string {
-  return `Figure ${nextIndex}`;
+function nextUntitledTitle(tabs: GeoDocumentTab[]): string {
+  const usedNumbers = new Set<number>();
+  for (const tab of tabs) {
+    const match = /^Figure (\d+)$/.exec(tab.title.trim());
+    if (match) usedNumbers.add(Number(match[1]));
+  }
+  let index = 1;
+  while (usedNumbers.has(index)) index += 1;
+  return `Figure ${index}`;
 }
 
 function canUseLocalStorage(): boolean {
@@ -155,17 +163,6 @@ function sanitizePersistedDocument(raw: unknown): GeoDocumentTab | null {
   };
 }
 
-function nextDocumentIndexFromTabs(tabs: GeoDocumentTab[]): number {
-  let next = tabs.length + 1;
-  for (const tab of tabs) {
-    const match = /^doc_(\d+)$/.exec(tab.id);
-    if (!match) continue;
-    const value = Number(match[1]);
-    if (Number.isFinite(value)) next = Math.max(next, value + 1);
-  }
-  return Math.max(2, next);
-}
-
 function loadPersistedDocumentTabsState(): InitialDocumentTabsState | null {
   if (!canUseLocalStorage()) return null;
   try {
@@ -189,13 +186,9 @@ function loadPersistedDocumentTabsState(): InitialDocumentTabsState | null {
         ? parsed.activeDocumentId
         : documents[0].id;
     const activeDocument = documents.find((doc) => doc.id === activeDocumentId) ?? documents[0];
-    const storedNextIndex = typeof parsed.nextIndex === "number" && Number.isFinite(parsed.nextIndex)
-      ? parsed.nextIndex
-      : 2;
     return {
       documents,
       activeDocumentId,
-      nextIndex: Math.max(storedNextIndex, nextDocumentIndexFromTabs(documents)),
       restoreRuntime: activeDocument.runtime,
     };
   } catch (err) {
@@ -216,7 +209,6 @@ function createInitialDocumentTabsState(): InitialDocumentTabsState {
   return {
     documents: [initialDocument],
     activeDocumentId: initialDocument.id,
-    nextIndex: 2,
     restoreRuntime: null,
   };
 }
@@ -235,15 +227,13 @@ function toPersistedDocument(tab: GeoDocumentTab): PersistedDocumentTab {
 
 function savePersistedDocumentTabsState(
   documents: GeoDocumentTab[],
-  activeDocumentId: string,
-  nextIndex: number
+  activeDocumentId: string
 ): void {
   if (!canUseLocalStorage()) return;
   try {
     const payload: PersistedDocumentTabsState = {
       version: DOCUMENT_TABS_STORAGE_VERSION,
       activeDocumentId,
-      nextIndex,
       documents: documents.map(toPersistedDocument),
     };
     window.localStorage.setItem(DOCUMENT_TABS_STORAGE_KEY, JSON.stringify(payload));
@@ -287,7 +277,6 @@ function createRuntimeStateFromSnapshot(snapshot: HistorySnapshot): GeoDocumentR
 
 export function useDocumentTabs() {
   const initialState = useMemo(createInitialDocumentTabsState, []);
-  const nextIndexRef = useRef(initialState.nextIndex);
   const initialRestoreRuntimeRef = useRef(initialState.restoreRuntime);
   const persistTimerRef = useRef<number | null>(null);
   const [documents, setDocuments] = useState<GeoDocumentTab[]>(initialState.documents);
@@ -306,7 +295,7 @@ export function useDocumentTabs() {
 
   const persistCurrentDocuments = useCallback(() => {
     const captured = captureActiveDocument(documentsRef.current);
-    savePersistedDocumentTabsState(captured, activeDocumentIdRef.current, nextIndexRef.current);
+    savePersistedDocumentTabsState(captured, activeDocumentIdRef.current);
   }, [captureActiveDocument]);
 
   const schedulePersistCurrentDocuments = useCallback(() => {
@@ -367,15 +356,13 @@ export function useDocumentTabs() {
   );
 
   const createDocument = useCallback(() => {
-    const index = nextIndexRef.current;
-    nextIndexRef.current += 1;
+    const captured = captureActiveDocument(documentsRef.current);
     const tab: GeoDocumentTab = {
-      id: makeDocumentId(index),
-      title: makeUntitledTitle(index),
+      id: nextUnusedDocumentId(captured),
+      title: nextUntitledTitle(captured),
       file: { ...emptyFileState },
       runtime: createBlankRuntimeState(),
     };
-    const captured = captureActiveDocument(documentsRef.current);
     setDocuments([...captured, tab]);
     setActiveDocumentId(tab.id);
     restoreGeoDocumentRuntimeState(tab.runtime);
@@ -383,17 +370,15 @@ export function useDocumentTabs() {
 
   const openSnapshotAsDocument = useCallback(
     (snapshot: HistorySnapshot, file: DocumentFilePatch = {}) => {
-      const index = nextIndexRef.current;
-      nextIndexRef.current += 1;
+      const captured = captureActiveDocument(documentsRef.current);
       const fileState = { ...emptyFileState, ...file };
-      const title = baseTitleFromFileName(fileState.savedName) ?? makeUntitledTitle(index);
+      const title = baseTitleFromFileName(fileState.savedName) ?? nextUntitledTitle(captured);
       const tab: GeoDocumentTab = {
-        id: makeDocumentId(index),
+        id: nextUnusedDocumentId(captured),
         title,
         file: fileState,
         runtime: createRuntimeStateFromSnapshot(snapshot),
       };
-      const captured = captureActiveDocument(documentsRef.current);
       setDocuments([...captured, tab]);
       setActiveDocumentId(tab.id);
       restoreGeoDocumentRuntimeState(tab.runtime);

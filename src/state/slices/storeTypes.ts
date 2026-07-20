@@ -563,6 +563,7 @@ export type GeoActions = {
     next: Partial<Pick<SceneModel["angles"][number], "visible">>
   ) => void;
   updateSelectedNumberDefinition: (next: SceneNumberDefinition) => void;
+  updateNumberDefinitionById: (id: string, next: SceneNumberDefinition) => void;
   updateSelectedTextLabelFields: (
     next: Partial<
       Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld" | "contentMode" | "numberId" | "expr" | "toolKind">

@@ -435,11 +435,17 @@ export function applyInversionToObject(
   inversionCircleId: string,
   ops: TransformCreateOps
 ): string | null {
-  if (source.type !== "line" && source.type !== "circle") return null;
+  if (source.type !== "point" && source.type !== "line" && source.type !== "circle") return null;
   const spec = resolveInversionSpec(inversionCircleId, ops);
   if (!spec) return null;
   if (spec.hideCenterId) {
     ops.setObjectVisibility?.({ type: "point", id: spec.hideCenterId }, false);
+  }
+  if (source.type === "point") {
+    const invertedId = ops.createPointByDilation(source.id, spec.centerId, inversionFactorExpr(spec, source.id));
+    if (!invertedId) return null;
+    cloneStyle(ops, source, { type: "point", id: invertedId });
+    return invertedId;
   }
   const mapPoint = mapPointWithCache(
     (pointId) => ops.createPointByDilation(pointId, spec.centerId, inversionFactorExpr(spec, pointId)),

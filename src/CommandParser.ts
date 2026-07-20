@@ -608,17 +608,17 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     };
   }
 
-  if (name === "Dilate") {
-    if (args.length !== 3) return err("Dilate(P, O, k) expects 3 arguments");
+  if (name === "Dilate" || name === "Homothety") {
+    if (args.length !== 3) return err(`${name}(P, O, k) expects 3 arguments`);
     const pointLabel = asIdentifier(args[0]);
     const centerLabel = asIdentifier(args[1]);
-    if (!pointLabel || !centerLabel) return err("Dilate(P, O, k) expects point labels for first two arguments");
+    if (!pointLabel || !centerLabel) return err(`${name}(P, O, k) expects point labels for first two arguments`);
     const point = resolvePointIdentifier(pointLabel, ctx);
     if (!point.ok) return err(point.message);
     const center = resolvePointIdentifier(centerLabel, ctx);
     if (!center.ok) return err(center.message);
     const factorEval = evalScalarArg(args[2]);
-    if (!factorEval.ok) return err("Dilate factor must evaluate to a finite number");
+    if (!factorEval.ok) return err(`${name} factor must evaluate to a finite number`);
     return {
       kind: "cmd",
       cmd: { type: "CreatePointByDilation", pointId: point.id, centerId: center.id, factorExpr: args[2].trim() },

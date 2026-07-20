@@ -101,7 +101,9 @@ input[type="range"] {
   flex: 0 0 auto;
   overflow: visible;
   position: relative;
-  z-index: 40;
+  /* Above the command bar (z 60) so tool flyouts opened from the bottom of
+     the toolbar are not clipped behind it. */
+  z-index: 70;
   transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1), padding 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -109,6 +111,7 @@ input[type="range"] {
   padding: 8px 6px;
   align-items: center;
 }
+
 
 .rightSidebar {
   display: flex;
@@ -1126,6 +1129,14 @@ input[type="range"] {
   align-items: center;
   gap: 8px;
   padding: 8px;
+}
+
+/* The palette button sits at the bottom of the toolbar; grow the flyout
+   upward so it never runs under the command bar. Compound selector so it
+   wins over the later .toolFlyout top anchor. */
+.toolFlyout.profilePaletteFlyout {
+  top: auto;
+  bottom: 0;
 }
 
 .profileSwatchButton {

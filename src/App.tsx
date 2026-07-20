@@ -43,10 +43,19 @@ function WorkspaceApp() {
           uiColorProfileId: getRecommendedUiProfileForColorProfile(storedConstruction.colorProfileId),
         };
       }
-      return {
+      const merged = {
         ...(storedConstruction ?? {}),
         ...(storedUi ?? {}),
-      };
+      } as const;
+
+      if (merged.colorProfileId === "image_palette" && merged.uiColorProfileId === "vanilla") {
+        return {
+          ...merged,
+          uiColorProfileId: getRecommendedUiProfileForColorProfile(merged.colorProfileId),
+        };
+      }
+
+      return merged;
     })();
     if (merged) {
       applyAppPreferences(merged);

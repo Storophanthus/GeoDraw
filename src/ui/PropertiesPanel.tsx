@@ -95,6 +95,8 @@ export function PropertiesPanel({
   const setCircleFixedTool = useGeoStore((store) => store.setCircleFixedTool);
   const setRegularPolygonTool = useGeoStore((store) => store.setRegularPolygonTool);
   const setTransformTool = useGeoStore((store) => store.setTransformTool);
+  const createNumber = useGeoStore((store) => store.createNumber);
+  const updateNumberDefinitionById = useGeoStore((store) => store.updateNumberDefinitionById);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
   const clearPendingSelection = useGeoStore((store) => store.clearPendingSelection);
   const updateSelectedPointStyle = useGeoStore((store) => store.updateSelectedPointStyle);
@@ -258,6 +260,51 @@ export function PropertiesPanel({
     () => evaluateAngleExpressionDegrees(scene, transformTool.angleExpr),
     [scene, transformTool.angleExpr]
   );
+  const transformFactorSlider = useMemo(() => {
+    const name = transformTool.factorExpr.trim();
+    if (!name) return null;
+    const num = scene.numbers.find((item) => item.name === name && item.definition.kind === "slider");
+    if (!num || num.definition.kind !== "slider") return null;
+    const def = num.definition;
+    const min = Math.min(def.min, def.max);
+    const max = Math.max(def.min, def.max);
+    return {
+      id: num.id,
+      name: num.name,
+      value: Math.min(max, Math.max(min, def.value)),
+      min,
+      max,
+      step: Number.isFinite(def.step) && def.step > 0 ? def.step : 0.1,
+    };
+  }, [scene.numbers, transformTool.factorExpr]);
+  const createTransformFactorSlider = () => {
+    const resolved =
+      transformFactorPreview.ok && Number.isFinite(transformFactorPreview.value) ? transformFactorPreview.value : 2;
+    const usedNames = new Set(scene.numbers.map((item) => item.name));
+    let name = "k";
+    for (let i = 1; usedNames.has(name); i += 1) name = `k_${i}`;
+    const createdId = createNumber(
+      {
+        kind: "slider",
+        value: resolved,
+        min: Math.min(-3, Math.floor(resolved)),
+        max: Math.max(3, Math.ceil(resolved)),
+        step: 0.1,
+      },
+      name
+    );
+    if (!createdId) return;
+    setTransformTool({ factorExpr: name });
+  };
+  const updateTransformFactorSliderValue = (value: number) => {
+    if (!transformFactorSlider || !Number.isFinite(value)) return;
+    const num = scene.numbers.find((item) => item.id === transformFactorSlider.id);
+    if (!num || num.definition.kind !== "slider") return;
+    const def = num.definition;
+    const lo = Math.min(def.min, def.max);
+    const hi = Math.max(def.min, def.max);
+    updateNumberDefinitionById(num.id, { ...def, value: Math.min(hi, Math.max(lo, value)) });
+  };
   const toolDefaultKind = useMemo(() => getToolDefaultKind(activeTool), [activeTool]);
   const recentCreatedPanelClaimRef = useRef<RecentCreatedPanelClaim | null>(null);
   const recentCreatedPanelState = reconcileRecentCreatedPanelClaim({
@@ -676,6 +723,9 @@ export function PropertiesPanel({
         setTransformTool={setTransformTool}
         transformFactorPreview={transformFactorPreview}
         transformAnglePreview={transformAnglePreview}
+        transformFactorSlider={transformFactorSlider}
+        createTransformFactorSlider={createTransformFactorSlider}
+        updateTransformFactorSliderValue={updateTransformFactorSliderValue}
         pendingSelection={pendingSelection}
         pendingCircleFixedCenterLabel={
           pendingSelection && pendingSelection.tool === "circle_fixed"

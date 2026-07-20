@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useGeoStore } from "../../state/geoStore";
+import { persistCurrentConstructionPreferences } from "../../state/constructionPreferencesSync";
 import {
     COLOR_PROFILE_OPTIONS,
     buildDefaultStylesForProfile,
@@ -199,7 +200,7 @@ function PreferenceSelectControl({
 }
 
 export function ConstructionSettings() {
-    const applyAppPreferences = useGeoStore((state) => state.applyAppPreferences);
+    const applyAppPreferencesAction = useGeoStore((state) => state.applyAppPreferences);
     const colorProfileId = useGeoStore((state) => state.colorProfileId);
     const canvasThemeOverrides = useGeoStore((state) => state.canvasThemeOverrides);
     const pointDefaults = useGeoStore((state) => state.pointDefaults);
@@ -212,8 +213,19 @@ export function ConstructionSettings() {
     const labelToolDefaults = useGeoStore((state) => state.labelToolDefaults);
     const textboxToolDefaults = useGeoStore((state) => state.textboxToolDefaults);
     const richTextToolDefaults = useGeoStore((state) => state.richTextToolDefaults);
-    const setColorProfile = useGeoStore((state) => state.setColorProfile);
+    const setColorProfileAction = useGeoStore((state) => state.setColorProfile);
     const [category, setCategory] = useState<ConstructionCategory>("canvas");
+
+    // Edits made in this dialog become the preferred defaults for new tabs and
+    // the next app start, so persist them right after applying to the store.
+    const applyAppPreferences = (next: Parameters<typeof applyAppPreferencesAction>[0]) => {
+        applyAppPreferencesAction(next);
+        persistCurrentConstructionPreferences();
+    };
+    const setColorProfile = (profileId: Parameters<typeof setColorProfileAction>[0]) => {
+        setColorProfileAction(profileId);
+        persistCurrentConstructionPreferences();
+    };
 
     const canvasTheme = useMemo(
         () => getCanvasColorTheme(colorProfileId, canvasThemeOverrides),

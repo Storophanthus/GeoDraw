@@ -6,6 +6,7 @@ import {
   type ComponentType,
 } from "react";
 import { useGeoStore, type ActiveTool } from "../state/geoStore";
+import { persistCurrentConstructionPreferences } from "../state/constructionPreferencesSync";
 import { COLOR_PROFILE_OPTIONS, getColorProfile } from "../state/colorProfiles";
 import { ConstructionProfileSwatch } from "./ConstructionProfileSwatch";
 import { ToolGroupButton } from "./ToolGroupButton";
@@ -67,8 +68,8 @@ export const TOOL_REGISTRY: Record<ActiveTool, ToolDef> = {
   translate: { icon: IconTranslate, tooltip: "Translate Object", ariaLabel: "Translate tool" },
   rotate: { icon: IconRotate, tooltip: "Rotate Object", ariaLabel: "Rotate tool" },
   reflect: { icon: IconReflect, tooltip: "Reflect Object", ariaLabel: "Reflect tool" },
-  dilate: { icon: IconDilate, tooltip: "Dilate Object", ariaLabel: "Dilate tool" },
-  invert: { icon: IconInvert, tooltip: "Invert Line/Circle", ariaLabel: "Invert tool" },
+  dilate: { icon: IconDilate, tooltip: "Homothety (Dilate)", ariaLabel: "Dilate tool" },
+  invert: { icon: IconInvert, tooltip: "Invert Point/Line/Circle", ariaLabel: "Invert tool" },
   copyStyle: { icon: Paintbrush, tooltip: "Copy Style (C)", ariaLabel: "Copy style tool" },
   label: { icon: Type, tooltip: "Label Tool", ariaLabel: "Label tool" },
   textbox: { icon: IconTextbox, tooltip: "Textbox Tool", ariaLabel: "Textbox tool" },
@@ -343,6 +344,7 @@ export function ToolPalette({
                       className="profileSwatchButton"
                       onClick={() => {
                         setColorProfile(option.id);
+                        persistCurrentConstructionPreferences();
                         setProfileFlyoutOpen(false);
                       }}
                       title={option.label}

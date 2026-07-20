@@ -223,6 +223,8 @@ export function createUiActions(
         const prevRecommendedUi = getRecommendedUiProfileForColorProfile(prev.colorProfileId);
         const nextRecommendedUi = getRecommendedUiProfileForColorProfile(profileId);
         const keepProfilePairing = prev.uiColorProfileId === prevRecommendedUi;
+        const shouldForceUiPairing =
+          nextRecommendedUi === "image" || nextRecommendedUi === "image_palette";
         const nextDefaults = applyProfileColorsToDefaults(
           {
             pointDefaults: prev.pointDefaults,
@@ -241,7 +243,7 @@ export function createUiActions(
         return {
           ...prev,
           colorProfileId: profileId,
-          uiColorProfileId: keepProfilePairing ? nextRecommendedUi : prev.uiColorProfileId,
+          uiColorProfileId: shouldForceUiPairing || keepProfilePairing ? nextRecommendedUi : prev.uiColorProfileId,
           scene: recolorSceneForProfile(prev.scene, prev.colorProfileId, profileId),
           pointDefaults: nextDefaults.pointDefaults,
           segmentDefaults: nextDefaults.segmentDefaults,
@@ -383,6 +385,10 @@ export function createUiActions(
           const canvasThemeOverrides = next.canvasThemeOverrides
             ? { ...next.canvasThemeOverrides }
             : prev.canvasThemeOverrides;
+          const normalizedUiColorProfileId =
+            next.uiColorProfileId === "image"
+              ? "image_palette"
+              : next.uiColorProfileId;
 
           return {
             ...prev,
@@ -391,7 +397,7 @@ export function createUiActions(
               ? recolorSceneForProfile(prev.scene, prev.colorProfileId, nextColorProfileId)
               : prev.scene,
             canvasThemeOverrides,
-            uiColorProfileId: next.uiColorProfileId ?? prev.uiColorProfileId,
+            uiColorProfileId: normalizedUiColorProfileId ?? prev.uiColorProfileId,
             uiCssOverrides: next.uiCssOverrides ? { ...next.uiCssOverrides } : prev.uiCssOverrides,
             gridEnabled: next.gridEnabled ?? prev.gridEnabled,
             axesEnabled: next.axesEnabled ?? prev.axesEnabled,

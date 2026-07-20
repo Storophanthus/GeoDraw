@@ -418,7 +418,7 @@ export function handleToolClick(
     if (activeTool === "invert") {
       if (!pendingInvert) {
         const source = resolveTransformSource();
-        if (!source || (source.type !== "line" && source.type !== "circle")) return;
+        if (!source || (source.type !== "point" && source.type !== "line" && source.type !== "circle")) return;
         io.setPendingSelection({
           tool: "invert",
           step: 2,
@@ -992,7 +992,7 @@ export function isValidTarget(
   }
   if (activeTool === "invert") {
     if (!pendingSelection || pendingSelection.tool !== "invert") {
-      return hoveredHit.type === "line2p" || hoveredHit.type === "circle";
+      return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "circle";
     }
     return hoveredHit.type === "circle";
   }

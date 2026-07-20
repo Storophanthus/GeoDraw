@@ -307,6 +307,22 @@ function makeHarness(activeTool: ActiveTool): {
 }
 
 {
+  const h = makeHarness("invert");
+  h.click({ hitObject: { type: "point", id: "pP" }, hitPointId: "pP" });
+  const step2 = h.getPending();
+  assert(!!step2 && step2.tool === "invert" && step2.step === 2 && step2.source.id === "pP", "Invert step 1 should accept a point source.");
+  h.click({ hitObject: { type: "circle", id: "c_inv" } });
+  assert(h.logs.invert.length === 1, "Point invert should invoke object transform once.");
+  assert(
+    h.logs.invert[0].source.type === "point" &&
+      h.logs.invert[0].source.id === "pP" &&
+      h.logs.invert[0].inversionCircleId === "c_inv",
+    "Invert should call transformObjectByInversion(point, inversionCircle)."
+  );
+  assert(h.getPending() === null, "Point invert should clear pending state.");
+}
+
+{
   const h = makeHarness("reflect");
   h.click({ hitObject: { type: "polygon", id: "poly1" } });
   const step2 = h.getPending();

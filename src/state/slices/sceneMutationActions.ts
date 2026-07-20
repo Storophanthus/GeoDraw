@@ -70,6 +70,7 @@ export function createSceneMutationActions({
   | "updateSelectedAngleFields"
   | "updateAngleFieldsByIds"
   | "updateSelectedNumberDefinition"
+  | "updateNumberDefinitionById"
   | "updateSelectedTextLabelFields"
   | "updateTextLabelFieldsByIds"
   | "updateSelectedTextLabelStyle"
@@ -1363,6 +1364,29 @@ export function createSceneMutationActions({
           },
         };
       });
+    },
+
+    updateNumberDefinitionById(id, nextDefinition) {
+      setState((prev) => {
+        if (!isValidNumberDefinition(nextDefinition, prev.scene)) return prev;
+        let changed = false;
+        const nextNumbers = prev.scene.numbers.map((num) => {
+          if (num.id !== id) return num;
+          changed = true;
+          return {
+            ...num,
+            definition: nextDefinition,
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            numbers: nextNumbers,
+          },
+        };
+      }, { history: "coalesce", actionKey: `updateNumberDefinition:${id}` });
     },
 
     updateSelectedTextLabelFields(next) {
