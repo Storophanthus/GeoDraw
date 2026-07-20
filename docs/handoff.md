@@ -25,6 +25,33 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Integrate the tkz-euclide-*independent* export work onto main
+  (branch `codex/text-editor-rewrite` commits `090eda6` + `c2a1618`):
+  - `main` had already moved ahead with the UI-revamp Phase 3 export refactor,
+    which *extracted* `buildStandaloneSource` / `deriveDefaultOptionalPreamble`
+    out of `TikzPreviewWindow.tsx` into `src/export/tikz/standaloneDocument.ts`.
+    Meanwhile `c2a1618` edited those same functions *in place* and added a
+    "Save Full LaTeX (.tex)" feature. Brought the two together via a temp
+    integration branch (cherry-pick onto `main`), NOT by rebasing/force-pushing
+    the shared `codex/text-editor-rewrite` ref — that branch is left untouched;
+    its content is now on `main`, so it can be deleted or rebased later (git
+    will skip the already-applied patches).
+  - Sole conflict: `TikzPreviewWindow.tsx`. Resolved by keeping the extraction
+    and porting their additive features (`savePreviewTex`, the `.tex`
+    save-dialog signatures, header + context-menu buttons, `MENU_HEIGHT`).
+  - Two files git did NOT flag but the fix required, because the functions now
+    live in the extracted module: `standaloneDocument.ts`
+    (`deriveDefaultOptionalPreamble` gained a `tikzCode` param +
+    `containsDvipsNamedColorUsage` so a dvips color name like `Goldenrod`
+    pulls in `\usepackage[dvipsnames]{xcolor}`) and `ExportPanel.tsx`
+    (Copy Full Document call-site updated to the 2-arg signature).
+  - Flag for review (harmless, not a blocker): that added
+    `\usepackage[dvipsnames]{xcolor}` line looks redundant with
+    `REQUIRED_PREAMBLE`'s existing `\PassOptionsToPackage{dvipsnames}{xcolor}`
+    — re-requesting an already-active option is a subset (no clash), so it
+    compiles fine, but it can likely be dropped.
+  - Verified: `npm run build` (tsc), `test:export` (102 fixtures),
+    `test:command`, `test:scene` all pass.
 - 2026-07-21 Unblock the GitHub Pages deploy (cherry-pick of `8a91660`):
   - The Pages workflow builds with `npm run build` (= `tsc && vite build`),
     a *full* type-check. A pre-existing error in
