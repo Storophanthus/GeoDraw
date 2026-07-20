@@ -75,4 +75,29 @@ if (!tkz.includes("\\tkzDrawSegment") || !tkz.includes("\\tkzDrawLine") || !tkz.
   throw new Error("Expected tkz backend to retain tkz draw macros.");
 }
 
+const fixedRadiusScene: SceneModel = {
+  points: [
+    { id: "O", kind: "free", name: "O", captionTex: "O", visible: true, showLabel: "name", position: { x: 0, y: 0 }, style: pointStyle },
+    { id: "P", kind: "free", name: "P", captionTex: "P", visible: true, showLabel: "name", position: { x: 3, y: 0 }, style: pointStyle },
+  ],
+  numbers: [],
+  lines: [],
+  segments: [],
+  circles: [{ id: "u", kind: "fixedRadius", centerId: "O", radius: 2.5, visible: true, style: circleStyle }],
+  polygons: [],
+  angles: [],
+};
+
+const fixedRadiusPlain = exportTikzWithOptions(fixedRadiusScene, {
+  drawLayerBackend: "plain",
+  bakePointCoordinates: true,
+  emitTkzSetup: false,
+});
+if (fixedRadiusPlain.includes("\\tkzDefCircle") || fixedRadiusPlain.includes("\\tkzDrawCircle") || fixedRadiusPlain.includes("\\tkzFillCircle")) {
+  throw new Error("Expected plain fixed-radius export to avoid tkz circle helpers.");
+}
+if (!fixedRadiusPlain.includes("\\draw") || !fixedRadiusPlain.includes("circle [radius=")) {
+  throw new Error("Expected plain fixed-radius export to use direct \\draw circle radius syntax.");
+}
+
 console.log("✓ export draw-layer plain backend test passed");

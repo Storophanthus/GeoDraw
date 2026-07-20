@@ -125,25 +125,35 @@ export function appendRenderedDrawLayers({
         : "";
       out.push(`\\tkzFillSector${opts}(${cmd.o},${cmd.a})(${cmd.b})`);
     } else if (cmd.kind === "DrawCircleRadius") {
-      caps.assertCircleFixedMacro("tkzDefCircle");
-      caps.assertCircleFixedMacro("tkzGetPoint");
-      caps.assertCircleFixedMacro("tkzDrawCircle");
-      ctx.state.drawCircleRadiusTmpIdx += 1;
-      const tmpThrough = `tkzCircleRDraw_${ctx.state.drawCircleRadiusTmpIdx}`;
-      out.push(`\\tkzDefCircle[R](${cmd.o},${circleRadiusArg(ctx, cmd, "DrawCircle")}) \\tkzGetPoint{${tmpThrough}}`);
       const aliasedStyle = resolveDrawStyleAlias(cmd.style, drawStyleAliases);
       const opts = aliasedStyle ? `[${aliasedStyle}]` : "";
-      out.push(`\\tkzDrawCircle${opts}(${cmd.o},${tmpThrough})`);
+      const radiusArg = circleRadiusArg(ctx, cmd, "DrawCircle");
+      if (ctx.options.drawLayerBackend === "plain") {
+        out.push(`\\draw${opts} (${cmd.o}) circle [radius=${radiusArg}];`);
+      } else {
+        caps.assertCircleFixedMacro("tkzDefCircle");
+        caps.assertCircleFixedMacro("tkzGetPoint");
+        caps.assertCircleFixedMacro("tkzDrawCircle");
+        ctx.state.drawCircleRadiusTmpIdx += 1;
+        const tmpThrough = `tkzCircleRDraw_${ctx.state.drawCircleRadiusTmpIdx}`;
+        out.push(`\\tkzDefCircle[R](${cmd.o},${radiusArg}) \\tkzGetPoint{${tmpThrough}}`);
+        out.push(`\\tkzDrawCircle${opts}(${cmd.o},${tmpThrough})`);
+      }
     } else if (cmd.kind === "FillCircleRadius") {
-      caps.assertCircleFixedMacro("tkzDefCircle");
-      caps.assertCircleFixedMacro("tkzGetPoint");
-      caps.assertCircleFixedMacro("tkzFillCircle");
-      ctx.state.drawCircleRadiusTmpIdx += 1;
-      const tmpThrough = `tkzCircleRFill_${ctx.state.drawCircleRadiusTmpIdx}`;
-      out.push(`\\tkzDefCircle[R](${cmd.o},${circleRadiusArg(ctx, cmd, "FillCircle")}) \\tkzGetPoint{${tmpThrough}}`);
       const aliasedStyle = resolveDrawStyleAlias(cmd.style, drawStyleAliases);
       const opts = aliasedStyle ? `[${aliasedStyle}]` : "";
-      out.push(`\\tkzFillCircle${opts}(${cmd.o},${tmpThrough})`);
+      const radiusArg = circleRadiusArg(ctx, cmd, "FillCircle");
+      if (ctx.options.drawLayerBackend === "plain") {
+        out.push(`\\fill${opts} (${cmd.o}) circle [radius=${radiusArg}];`);
+      } else {
+        caps.assertCircleFixedMacro("tkzDefCircle");
+        caps.assertCircleFixedMacro("tkzGetPoint");
+        caps.assertCircleFixedMacro("tkzFillCircle");
+        ctx.state.drawCircleRadiusTmpIdx += 1;
+        const tmpThrough = `tkzCircleRFill_${ctx.state.drawCircleRadiusTmpIdx}`;
+        out.push(`\\tkzDefCircle[R](${cmd.o},${radiusArg}) \\tkzGetPoint{${tmpThrough}}`);
+        out.push(`\\tkzFillCircle${opts}(${cmd.o},${tmpThrough})`);
+      }
     } else if (cmd.kind === "FillAngle") {
       caps.assertAngleMacro("tkzFillAngle", "Angle.fill");
       const opts = cmd.style ? `[${cmd.style}]` : "";
