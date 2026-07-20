@@ -1,4 +1,5 @@
 import { exportTikzWithOptions } from "../tikz.ts";
+import type { SceneModel } from "../../scene/points.ts";
 
 const pointStyle = {
   shape: "circle" as const,
@@ -31,7 +32,7 @@ const circleStyle = {
   fillOpacity: 0.2,
 };
 
-const scene = {
+const scene: SceneModel = {
   points: [
     { id: "A", kind: "free", name: "A", captionTex: "A", visible: true, showLabel: "name", position: { x: 0, y: 0 }, style: pointStyle },
     { id: "B", kind: "free", name: "B", captionTex: "B", visible: true, showLabel: "name", position: { x: 4, y: 0 }, style: pointStyle },
