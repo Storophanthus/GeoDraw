@@ -266,6 +266,75 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
   };
 }
 
+export type ExportEmitTkzSetupMode = "auto" | "on" | "off";
+export type ExportTikzMode = "visualExact" | "reconstructible";
+
+export type ExportPreferencesState = {
+  useCurrentView: boolean;
+  compactCode: boolean;
+  emitTkzSetup: ExportEmitTkzSetupMode;
+  labelGlow: boolean;
+  tikzExportMode: ExportTikzMode;
+  globalScale: string;
+  pointScale: string;
+  lineScale: string;
+  labelScale: string;
+};
+
+const EXPORT_PREFERENCES_KEY = "geodraw.export-preferences.v1";
+
+export const DEFAULT_EXPORT_PREFERENCES: ExportPreferencesState = {
+  useCurrentView: true,
+  compactCode: true,
+  emitTkzSetup: "auto",
+  labelGlow: true,
+  tikzExportMode: "visualExact",
+  globalScale: "1",
+  pointScale: "1",
+  lineScale: "1",
+  labelScale: "1",
+};
+
+function normalizeBoolean(raw: unknown, fallback: boolean): boolean {
+  return typeof raw === "boolean" ? raw : fallback;
+}
+
+function normalizeEmitTkzSetup(raw: unknown): ExportEmitTkzSetupMode {
+  return raw === "on" || raw === "off" ? raw : "auto";
+}
+
+function normalizeTikzExportMode(raw: unknown): ExportTikzMode {
+  return raw === "reconstructible" ? "reconstructible" : "visualExact";
+}
+
+function normalizeScaleString(raw: unknown, fallback: string): string {
+  if (typeof raw !== "string") return fallback;
+  const value = Number.parseFloat(raw);
+  if (!Number.isFinite(value) || value < 0.05 || value > 10) return fallback;
+  return raw;
+}
+
+// Unlike UI/construction prefs, a bad field falls back to its own default instead of invalidating the whole envelope.
+export function loadStoredExportPreferences(): ExportPreferencesState {
+  const envelope = readStoredEnvelope<unknown>(EXPORT_PREFERENCES_KEY);
+  const raw = envelope && isRecord(envelope.value) ? envelope.value : {};
+  return {
+    useCurrentView: normalizeBoolean(raw.useCurrentView, DEFAULT_EXPORT_PREFERENCES.useCurrentView),
+    compactCode: normalizeBoolean(raw.compactCode, DEFAULT_EXPORT_PREFERENCES.compactCode),
+    emitTkzSetup: normalizeEmitTkzSetup(raw.emitTkzSetup),
+    labelGlow: normalizeBoolean(raw.labelGlow, DEFAULT_EXPORT_PREFERENCES.labelGlow),
+    tikzExportMode: normalizeTikzExportMode(raw.tikzExportMode),
+    globalScale: normalizeScaleString(raw.globalScale, DEFAULT_EXPORT_PREFERENCES.globalScale),
+    pointScale: normalizeScaleString(raw.pointScale, DEFAULT_EXPORT_PREFERENCES.pointScale),
+    lineScale: normalizeScaleString(raw.lineScale, DEFAULT_EXPORT_PREFERENCES.lineScale),
+    labelScale: normalizeScaleString(raw.labelScale, DEFAULT_EXPORT_PREFERENCES.labelScale),
+  };
+}
+
+export function saveStoredExportPreferences(state: ExportPreferencesState): boolean {
+  return writeStoredEnvelope(EXPORT_PREFERENCES_KEY, state);
+}
+
 export function hasStoredConstructionPreferences(): boolean {
   return Boolean(readStoredEnvelope(CONSTRUCTION_PREFERENCES_KEY));
 }

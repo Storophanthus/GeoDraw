@@ -193,3 +193,37 @@
 .scaleGridInput:focus {
     outline: none;
 }
+
+.exportStatusRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.exportRefreshButton {
+    border: 1px solid var(--gd-ui-border, #cbd5e1);
+    border-radius: 999px;
+    background: var(--gd-ui-surface, #ffffff);
+    color: var(--gd-ui-text-muted, #475569);
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.exportRefreshButton:hover,
+.exportRefreshButton:focus-visible {
+    border-color: var(--gd-ui-border-strong, #94a3b8);
+    color: var(--gd-ui-text-strong, #0f172a);
+    outline: none;
+}
+
+.exportAdvancedBlock {
+    margin-top: 8px;
+}
+
+.statusText a {
+    color: var(--gd-ui-accent, #2563eb);
+}

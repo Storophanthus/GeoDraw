@@ -25,6 +25,67 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Export tab redesigned for the teacher path (UI/UX revamp Phase 3a-3c):
+  - The Export tab had ~18 flat controls with jargon labels ("Emit tkz setup
+    (Init/Clip/SetUpLine)"), almost no tooltips, and every option reset on
+    remount — nothing persisted. Math teachers just want to copy their
+    figure's code or get a PDF; the TikZ mechanics they never asked for were
+    given equal visual weight. Restructured:
+    - `src/state/appPreferences.ts`: new `geodraw.export-preferences.v1`
+      envelope (`ExportPreferencesState` — 9 fields) following the file's
+      existing `StoredEnvelope` pattern, but **per-field** normalize rather
+      than all-or-nothing like the UI/construction loaders — one bad field
+      falls back to its own default instead of invalidating everything else,
+      since these are independent toggles with no reason to be coupled.
+    - `src/ui/ExportPanel.tsx`: hydrates all persisted options via lazy
+      `useState` initializers, writes them back via one `useEffect`. New
+      layout: action row (**Copy Code** — auto-regenerates via the existing
+      `tikzOutdated` signal, then copies; **Copy Full Document**; desktop-only
+      **Open PDF Preview**) → plain-language simple options with real
+      tooltips → status line with a "Refresh code" button that only appears
+      when outdated → `<details>` "Advanced options" (reusing the
+      `.exportLogDetails` CSS already in `ExportPanel.css`) holding the TikZ
+      mechanics (compact code, tkz setup lines, clip selection, code style) →
+      Model JSON now itself a `<details>` "Scene data (JSON) — advanced".
+      Web build (no Tauri): Preview button hidden, replaced with a plain-link
+      nudge toward pasting the full document into overleaf.com.
+    - `src/export/tikz/standaloneDocument.ts` (new): moved
+      `REQUIRED_PREAMBLE`, `buildStandaloneSource`, `looksLikeFullDocument`,
+      `deriveDefaultOptionalPreamble` out of `TikzPreviewWindow.tsx` — pure
+      code motion, both that file and `ExportPanel`'s new "Copy Full
+      Document" import from here now.
+  - Tests: new `src/scene/__tests__/export-preferences.test.ts` (in-memory
+    `window.localStorage` stub assigned to `globalThis` before a *dynamic*
+    `import()` of `appPreferences.ts`, since static imports are hoisted
+    before the stub would exist) — round-trip, garbage JSON, wrong envelope
+    version, per-field fallback, missing key. Wired into `test:scene`.
+  - Validation:
+    - `npx tsc --noEmit` — no new errors (same pre-existing unrelated one)
+    - `npm run test:scene` (19/19), `npm run test:command` (5/5),
+      `npm run test:export` (all 102 fixtures) — all green
+    - Directly unit-checked the extracted `standaloneDocument.ts` against a
+      sample input (documentclass/begin/end present, idempotent re-wrap,
+      correct hex→RGB conversion for the page-color preamble) rather than
+      relying only on UI clicks, since `TikzPreviewWindow.tsx` has zero
+      existing automated coverage — this was the highest-risk slice of the
+      phase per the plan's own risk register.
+    - Manual browser pass: one-click Copy Code (generate+copy in one
+      action, verified via the "Copied" state and the regenerated code
+      appearing); Copy Full Document confirmed via direct module check
+      (clipboard read is permission-blocked in this environment); changed
+      Halo/Global scale, reloaded the page, confirmed both survived — the
+      generated code text itself correctly did *not* persist (by design);
+      Advanced closed by default; Code style segmented control and its
+      dependent checkbox label both update correctly; dark theme clean.
+  - Deferred to the v0.2.0 desktop batch (3d, per the plan): promoting the
+    preview window's right-click Save PDF/SVG/PNG to visible buttons — can't
+    be verified from a web-only session since PDF preview requires Tauri.
+  - Next: Phase 4 (minimal onboarding — empty-canvas hint card), then the
+    3d + desktop smoke pass before tagging v0.2.0. Plan at
+    `~/.claude/plans/rippling-rolling-thunder.md`.
+  - Risks: none new. Same TikzPreviewWindow-has-no-tests risk noted in the
+    plan — mitigated here by the direct module verification above, but a
+    real desktop compile smoke test is still owed before v0.2.0 ships.
 - 2026-07-20 In-app command reference popup (UI/UX revamp Phase 2):
   - The only in-app command help was one cryptic placeholder string in the
     command bar; the real reference (`docs/command-bar-reference.md`) was
