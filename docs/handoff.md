@@ -25,6 +25,67 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Visual pass V3: field grid + pilot migration on
+  `PointPropertiesSection.tsx` (approved `sidebar-visual-pass.md` plan,
+  check-in point before V4 propagates the pattern):
+  - Added `.propGrid`/`.propField`/`.propFieldFull`/`.propFieldLabel`/
+    `.propSliderControl`/`.checkboxRowGroup` primitives to `App.css`
+    (label-above-control, 2-col `1fr 1fr`, `min-width: 0` on every grid
+    child). `.controlRow`/`.controlRowWithNumeric` are untouched and stay
+    the active pattern for every panel V4 hasn't reached yet.
+  - Point pairing map implemented: Name+Apply stays a full-width row,
+    structurally unchanged; Caption (TeX) | Show Label paired (Caption is
+    `mode="object"`-only, so Show Label falls back to `.propFieldFull` in
+    tool-default mode rather than stranding a half-empty grid cell);
+    Label Color | Halo Color paired (still gated on
+    `showLabel !== "none"`, unchanged condition); Fix Object + Auxiliary
+    Object grouped into one full-width `.checkboxRowGroup` row rather than
+    two grid cells; Shape stays full-width (its popover needs the room,
+    and has no size-matched partner once the sliders were pulled out);
+    Stroke Color | Fill Color paired -- required reordering Fill Color to
+    sit immediately after Stroke Color (was after Stroke Width/Opacity) so
+    the two colors land in the same grid row, a pure layout reorder with
+    no handler/prop changes; Size, Stroke Width, Stroke Opacity, Fill
+    Opacity all stay full-width slider rows per the plan's own
+    "sliders never pair, to avoid overflow" rule.
+  - Root-caused and fixed a real overflow bug surfaced by the probe:
+    `.colorFieldNativeInput` (the invisible 1x1 `<input type=color>` every
+    `ColorSwatchInput` uses to open the OS picker) had no `top`/`left`
+    anchor, so its browser-computed static position landed past the end of
+    the full-width trigger button, inflating `scrollWidth` by ~6px on
+    every host row. Reproduced the identical 6px overflow on an untouched
+    `.controlRow` (Circle's Stroke Color) before touching anything,
+    confirming this predates V1/V2 and isn't new debt. Fixed with
+    `top: 0; left: 0` in `App.css` -- global, zero visual/behavioral
+    change (element stays `opacity: 0`/`pointer-events: none`), and it
+    de-risks V4's ~9 remaining ColorSwatchInput-in-`.propGrid` migrations.
+  - `StyleSectionHeader.tsx` (header-row layout move + "Set Default"
+    relabel from "Make this default for this object") was already on disk
+    from an interrupted prior session; judgment call was to keep it.
+    Measured live at the sidebar's real width (312px, a few px above the
+    300px documented minimum): header row 269px, "Point Style" title
+    ~70px, leaving 191px for the toggle -- "Set Default" fits at 89px, the
+    original sentence measures 224px and would overflow by ~33px. The
+    plan's own mockup-language section already names "Set Default" as the
+    example text for this control, and two other consumers have longer
+    titles than Point's ("Polygon Style", "Segment Style", 13 chars),
+    making the short label the safer choice everywhere this shared header
+    renders, not just here.
+  - `ObjectBrowser.tsx` needed no markup changes -- the monospace command
+    text and accent-tinted `.active` row state the plan calls for were
+    already fully covered by `App.css` rules already on disk before this
+    commit (`.objectItemLabel` 12px/600, `.objectItemCommand` 11px
+    monospace muted, `.objectItem.active` accent-bg + inset accent ring).
+  - Verified live in Vanilla and Dark Mode via Preferences: build and all
+    three test suites exit 0, console clean. Exercised rename+Apply, shape
+    popover open/select/close, a Stroke Color change through the pill, a
+    Size slider drag, Fix Object/Auxiliary Object toggles, and selecting a
+    different object (Point A -> Point B) -- all reverted after. Overflow
+    probe (`scrollWidth <= clientWidth`) clean on both `.propGrid`
+    instances and `.rightSidebar` at the current width (312px) and at the
+    documented minimum (300px; forced via direct style for the probe,
+    since the resize handle's pointer-capture drag isn't reliably
+    driveable from browser automation).
 - 2026-07-21 Visual pass V2: ColorSwatchInput panel variant becomes a
   full-width `[swatch][HEX]` pill (`src/ui/ColorField.tsx` + `src/App.css`),
   one component change reaching all ~30 call sites with zero call-site

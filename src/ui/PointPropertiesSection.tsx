@@ -97,73 +97,75 @@ export function PointPropertiesSection({
         </div>
       )}
 
-      {mode === "object" && (
-        <div className="fieldBlock">
-          <label className="fieldLabel">Caption (TeX)</label>
-          <input
-            className="renameInput"
-            value={selectedPoint.captionTex}
-            onChange={(e) => updateSelectedPointFields({ captionTex: e.target.value })}
-          />
-        </div>
-      )}
+      <div className="propGrid">
+        {mode === "object" && (
+          <div className="propField">
+            <label className="propFieldLabel">Caption (TeX)</label>
+            <input
+              className="renameInput"
+              value={selectedPoint.captionTex}
+              onChange={(e) => updateSelectedPointFields({ captionTex: e.target.value })}
+            />
+          </div>
+        )}
 
-      <div className="fieldBlock">
-        <label className="fieldLabel">Show Label</label>
-        <select
-          className="selectInput"
-          value={selectedPoint.showLabel}
-          onChange={(e) => updateSelectedPointFields({ showLabel: e.target.value as "none" | "name" | "caption" })}
-        >
-          <option value="none">None</option>
-          <option value="name">Name</option>
-          <option value="caption">Caption</option>
-        </select>
+        <div className={mode === "object" ? "propField" : "propField propFieldFull"}>
+          <label className="propFieldLabel">Show Label</label>
+          <select
+            className="selectInput"
+            value={selectedPoint.showLabel}
+            onChange={(e) => updateSelectedPointFields({ showLabel: e.target.value as "none" | "name" | "caption" })}
+          >
+            <option value="none">None</option>
+            <option value="name">Name</option>
+            <option value="caption">Caption</option>
+          </select>
+        </div>
+
+        {selectedPoint.showLabel !== "none" && (
+          <>
+            <div className="propField">
+              <label className="propFieldLabel">Label Color</label>
+              <ColorSwatchInput
+                value={selectedPoint.style.labelColor}
+                onChange={(e) => updateSelectedPointStyle({ labelColor: e.target.value })}
+              />
+            </div>
+
+            <div className="propField">
+              <label className="propFieldLabel">Halo Color</label>
+              <ColorSwatchInput
+                value={selectedPoint.style.labelHaloColor}
+                onChange={(e) => updateSelectedPointStyle({ labelHaloColor: e.target.value })}
+              />
+            </div>
+          </>
+        )}
+
+        {mode === "object" && (
+          <div className="checkboxRowGroup propFieldFull">
+            <label className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={Boolean(selectedPoint.locked)}
+                onChange={(e) => updateSelectedPointFields({ locked: e.target.checked })}
+              />
+              Fix Object
+            </label>
+
+            <label className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={Boolean(selectedPoint.auxiliary)}
+                onChange={(e) => updateSelectedPointFields({ auxiliary: e.target.checked })}
+              />
+              Auxiliary Object
+            </label>
+          </div>
+        )}
       </div>
 
-      {selectedPoint.showLabel !== "none" && (
-        <>
-          <div className="controlRow">
-            <label className="controlLabel">Label Color</label>
-            <ColorSwatchInput
-              value={selectedPoint.style.labelColor}
-              onChange={(e) => updateSelectedPointStyle({ labelColor: e.target.value })}
-            />
-          </div>
-
-          <div className="controlRow">
-            <label className="controlLabel">Halo Color</label>
-            <ColorSwatchInput
-              value={selectedPoint.style.labelHaloColor}
-              onChange={(e) => updateSelectedPointStyle({ labelHaloColor: e.target.value })}
-            />
-          </div>
-        </>
-      )}
-
-      {mode === "object" && (
-        <>
-          <label className="checkboxRow">
-            <input
-              type="checkbox"
-              checked={Boolean(selectedPoint.locked)}
-              onChange={(e) => updateSelectedPointFields({ locked: e.target.checked })}
-            />
-            Fix Object
-          </label>
-
-          <label className="checkboxRow">
-            <input
-              type="checkbox"
-              checked={Boolean(selectedPoint.auxiliary)}
-              onChange={(e) => updateSelectedPointFields({ auxiliary: e.target.checked })}
-            />
-            Auxiliary Object
-          </label>
-
-          {renameError && <div className="errorText">{renameError}</div>}
-        </>
-      )}
+      {mode === "object" && renameError && <div className="errorText">{renameError}</div>}
 
       <div className="cosmeticsBlock pointStyleBlock">
         <StyleSectionHeader
@@ -173,114 +175,124 @@ export function PointPropertiesSection({
           mode={mode}
         />
 
-        <div className="fieldBlock" ref={shapePickerRef}>
-          <label className="fieldLabel">Shape</label>
-          <button className="shapeButton" onClick={() => setShapePickerOpen((v: boolean) => !v)} type="button">
-            <ShapeGlyph shape={selectedPoint.style.shape} />
-            <span>{selectedPoint.style.shape}</span>
-          </button>
-          {shapePickerOpen && (
-            <div className="shapePopover">
-              {SHAPES.map((shape: PointShape) => (
-                <button
-                  key={shape}
-                  className={shape === selectedPoint.style.shape ? "shapeCell active" : "shapeCell"}
-                  onClick={() => {
-                    updateSelectedPointStyle({ shape });
-                    setShapePickerOpen(false);
-                  }}
-                  type="button"
-                >
-                  <ShapeGlyph shape={shape} />
-                </button>
-              ))}
+        <div className="propGrid">
+          <div className="propField propFieldFull" ref={shapePickerRef}>
+            <label className="propFieldLabel">Shape</label>
+            <button className="shapeButton" onClick={() => setShapePickerOpen((v: boolean) => !v)} type="button">
+              <ShapeGlyph shape={selectedPoint.style.shape} />
+              <span>{selectedPoint.style.shape}</span>
+            </button>
+            {shapePickerOpen && (
+              <div className="shapePopover">
+                {SHAPES.map((shape: PointShape) => (
+                  <button
+                    key={shape}
+                    className={shape === selectedPoint.style.shape ? "shapeCell active" : "shapeCell"}
+                    onClick={() => {
+                      updateSelectedPointStyle({ shape });
+                      setShapePickerOpen(false);
+                    }}
+                    type="button"
+                  >
+                    <ShapeGlyph shape={shape} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="propField propFieldFull">
+            <label className="propFieldLabel">Size</label>
+            <div className="propSliderControl">
+              <input
+                className="sizeSlider"
+                type="range"
+                min={2}
+                max={18}
+                value={selectedPoint.style.sizePx}
+                onChange={(e) => updateSelectedPointStyle({ sizePx: Number(e.target.value) })}
+              />
+              <input
+                className="scaleInputCompact"
+                type="number"
+                min={2}
+                max={18}
+                step={1}
+                value={selectedPoint.style.sizePx}
+                onChange={(e) => updateSelectedPointStyle({ sizePx: Number(e.target.value) })}
+              />
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="controlRow controlRowWithNumeric">
-          <label className="controlLabel">Size</label>
-          <input
-            className="sizeSlider"
-            type="range"
-            min={2}
-            max={18}
-            value={selectedPoint.style.sizePx}
-            onChange={(e) => updateSelectedPointStyle({ sizePx: Number(e.target.value) })}
-          />
-          <input
-            className="scaleInputCompact"
-            type="number"
-            min={2}
-            max={18}
-            step={1}
-            value={selectedPoint.style.sizePx}
-            onChange={(e) => updateSelectedPointStyle({ sizePx: Number(e.target.value) })}
-          />
-        </div>
+          <div className="propField">
+            <label className="propFieldLabel">Stroke Color</label>
+            <ColorSwatchInput
+              value={selectedPoint.style.strokeColor}
+              onChange={(e) => updateSelectedPointStyle({ strokeColor: e.target.value })}
+            />
+          </div>
 
-        <div className="controlRow">
-          <label className="controlLabel">Stroke Color</label>
-          <ColorSwatchInput
-            value={selectedPoint.style.strokeColor}
-            onChange={(e) => updateSelectedPointStyle({ strokeColor: e.target.value })}
-          />
-        </div>
+          <div className="propField">
+            <label className="propFieldLabel">Fill Color</label>
+            <ColorSwatchInput
+              value={selectedPoint.style.fillColor}
+              onChange={(e) => updateSelectedPointStyle({ fillColor: e.target.value })}
+            />
+          </div>
 
-        <div className="controlRow controlRowWithNumeric">
-          <label className="controlLabel">Stroke Width</label>
-          <input
-            className="sizeSlider"
-            type="range"
-            min={0.5}
-            max={6}
-            step={0.1}
-            value={selectedPoint.style.strokeWidth}
-            onChange={(e) => updateSelectedPointStyle({ strokeWidth: Number(e.target.value) })}
-          />
-          <input
-            className="scaleInputCompact"
-            type="number"
-            min={0.5}
-            max={6}
-            step={0.1}
-            value={selectedPoint.style.strokeWidth}
-            onChange={(e) => updateSelectedPointStyle({ strokeWidth: Number(e.target.value) })}
-          />
-        </div>
+          <div className="propField propFieldFull">
+            <label className="propFieldLabel">Stroke Width</label>
+            <div className="propSliderControl">
+              <input
+                className="sizeSlider"
+                type="range"
+                min={0.5}
+                max={6}
+                step={0.1}
+                value={selectedPoint.style.strokeWidth}
+                onChange={(e) => updateSelectedPointStyle({ strokeWidth: Number(e.target.value) })}
+              />
+              <input
+                className="scaleInputCompact"
+                type="number"
+                min={0.5}
+                max={6}
+                step={0.1}
+                value={selectedPoint.style.strokeWidth}
+                onChange={(e) => updateSelectedPointStyle({ strokeWidth: Number(e.target.value) })}
+              />
+            </div>
+          </div>
 
-        <div className="controlRow">
-          <label className="controlLabel">Stroke Opacity</label>
-          <input
-            className="sizeSlider"
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={selectedPoint.style.strokeOpacity}
-            onChange={(e) => updateSelectedPointStyle({ strokeOpacity: Number(e.target.value) })}
-          />
-        </div>
+          <div className="propField propFieldFull">
+            <label className="propFieldLabel">Stroke Opacity</label>
+            <div className="propSliderControl">
+              <input
+                className="sizeSlider"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={selectedPoint.style.strokeOpacity}
+                onChange={(e) => updateSelectedPointStyle({ strokeOpacity: Number(e.target.value) })}
+              />
+            </div>
+          </div>
 
-        <div className="controlRow">
-          <label className="controlLabel">Fill Color</label>
-          <ColorSwatchInput
-            value={selectedPoint.style.fillColor}
-            onChange={(e) => updateSelectedPointStyle({ fillColor: e.target.value })}
-          />
-        </div>
-
-        <div className="controlRow">
-          <label className="controlLabel">Fill Opacity</label>
-          <input
-            className="sizeSlider"
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={selectedPoint.style.fillOpacity}
-            onChange={(e) => updateSelectedPointStyle({ fillOpacity: Number(e.target.value) })}
-          />
+          <div className="propField propFieldFull">
+            <label className="propFieldLabel">Fill Opacity</label>
+            <div className="propSliderControl">
+              <input
+                className="sizeSlider"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={selectedPoint.style.fillOpacity}
+                onChange={(e) => updateSelectedPointStyle({ fillOpacity: Number(e.target.value) })}
+              />
+            </div>
+          </div>
         </div>
       </div>
 

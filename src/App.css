@@ -1962,20 +1962,38 @@ body.sidebar-resizing * {
   accent-color: var(--gd-ui-accent, #2563eb);
 }
 
+.styleSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.styleSectionHeader .subSectionTitle {
+  margin-bottom: 0;
+}
+
 .defaultStyleToggle {
-  margin-top: 0;
-  margin-bottom: 12px;
-  padding: 9px 10px;
-  border: 1px solid var(--gd-ui-border-soft, #ddd3c1);
-  border-radius: 12px;
-  background: var(--gd-ui-surface-soft, #fbf5e9);
-  align-items: flex-start;
-  line-height: 1.35;
-  color: var(--gd-ui-text-muted, #5f5143);
+  margin: 0;
+  padding: 0;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  line-height: 1.2;
+  color: var(--gd-ui-text-subtle, #64748b);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .defaultStyleToggle input[type="checkbox"] {
-  margin-top: 1px;
+  width: 13px;
+  height: 13px;
+  margin: 0;
 }
 
 .actionButton,
@@ -2404,6 +2422,63 @@ body.sidebar-resizing * {
   font-size: 12px;
 }
 
+/* Field grid primitives (V3): label-above-control pattern, compact fields
+   pair two per row. New primitives -- .controlRow/.controlRowWithNumeric
+   stay as-is for every panel not yet migrated onto this grid. */
+.propGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  margin-top: 10px;
+}
+
+.propGrid > * {
+  min-width: 0;
+}
+
+.propField {
+  display: grid;
+  gap: 4px;
+}
+
+.propFieldFull {
+  grid-column: 1 / -1;
+}
+
+.propFieldLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--gd-ui-text-muted, #475569);
+}
+
+.propSliderControl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.propSliderControl .sizeSlider {
+  flex: 1;
+  min-width: 0;
+}
+
+.propSliderControl .scaleInputCompact {
+  flex: 0 0 56px;
+  width: 56px;
+}
+
+.checkboxRowGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+}
+
+.checkboxRowGroup .checkboxRow {
+  margin-top: 0;
+}
+
 .sectionHeaderRow {
   display: flex;
   align-items: center;
@@ -2720,6 +2795,13 @@ body.sidebar-resizing * {
 
 .colorFieldNativeInput {
   position: absolute;
+  /* Pin to the trigger's top-left corner. Without an explicit anchor this
+     invisible 1x1 input's browser-computed static position can land past
+     the end of the preceding full-width button, which was inflating
+     scrollWidth on every ColorSwatchInput host (.controlRow, .propGrid)
+     by a few px even though nothing was ever visibly clipped. */
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   opacity: 0;
@@ -2997,6 +3079,8 @@ body.sidebar-resizing * {
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.25;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .objectItemText {
@@ -3014,6 +3098,7 @@ body.sidebar-resizing * {
   line-height: 1.25;
   font-weight: 500;
   color: var(--gd-ui-text-subtle, #64748b);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 .objectItemActions {
@@ -3093,6 +3178,7 @@ body.sidebar-resizing * {
 .objectListScrollArea .objectItem.active {
   background: var(--gd-ui-accent-bg-strong, #eff6ff);
   color: var(--gd-ui-accent-deeper, #1e40af);
+  box-shadow: inset 0 0 0 1px var(--gd-ui-accent-strong, #1d4ed8);
 }
 
 .objectListScrollArea .objectItem.selected {
