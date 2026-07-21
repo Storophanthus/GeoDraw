@@ -58,7 +58,9 @@ export function ColorSwatchInput({
   const nativeInputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
-  const pickerValue = toColorInputValue(value) ?? "#000000";
+  const resolvedHex = toColorInputValue(value);
+  const pickerValue = resolvedHex ?? "#000000";
+  const displayText = resolvedHex ? resolvedHex.toUpperCase() : value;
   const nativeChange = onChange as ChangeEventHandler<HTMLInputElement> | undefined;
 
   useEffect(() => {
@@ -145,15 +147,17 @@ export function ColorSwatchInput({
         type="button"
         className={joinClassNames(
           "colorFieldTrigger",
-          variant === "token" ? "preferencesTokenColor" : "colorInput",
+          variant === "token" ? "preferencesTokenColor" : "colorFieldPill",
           className
         )}
         style={style as CSSProperties | undefined}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
         aria-label={props["aria-label"] ?? "Choose color"}
+        title={variant === "panel" ? value : undefined}
       >
         <span className="colorFieldSwatch" style={{ background: pickerValue }} aria-hidden />
+        {variant === "panel" && <span className="colorFieldHexText">{displayText}</span>}
       </button>
 
       <input

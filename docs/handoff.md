@@ -25,6 +25,42 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Visual pass V2: ColorSwatchInput panel variant becomes a
+  full-width `[swatch][HEX]` pill (`src/ui/ColorField.tsx` + `src/App.css`),
+  one component change reaching all ~30 call sites with zero call-site
+  edits, per the approved `sidebar-visual-pass.md` plan:
+  - Added `resolvedHex`/`displayText`: shows `toColorInputValue(value)`
+    uppercased when it parses as a color, otherwise the raw string
+    (matches non-hex style values like named/`none` colors without
+    forcing them through the hex formatter); `title` is always the raw
+    value.
+  - The trigger's panel-variant class changed from `.colorInput` (a fixed
+    36x28 swatch-only button) to a new `.colorFieldPill` (full-width, 30px,
+    swatch chip + monospace hex text) that reuses the existing shared
+    `.colorFieldTrigger` hover/focus/disabled states, so no new interaction
+    CSS was needed. `.colorInput` had no other consumers, so it was
+    replaced rather than left dead.
+  - `variant="token"` (Preferences, paired with its own text input per
+    `ThemeColorControl`) takes a different branch entirely -- the hex-text
+    span and pill class only render for `variant="panel"` -- so it is
+    byte-for-byte the same JSX/CSS path as before. Verified in the
+    Preferences dialog: swatch still 36x30, no hex text on the swatch
+    itself.
+  - Found one pre-existing outlier while spot-checking every style tab:
+    `src/ui/object-styles/ArrowListControl.tsx:447` pins its
+    `ColorSwatchInput` to an inline `style={{ width: "64px" }}`, which (by
+    design, inline styles beat the class) overrides the new pill's
+    full width, so "Arrow Color" now shows a heavily truncated
+    `#E...`-style pill instead of a hex readout. Not broken --
+    `text-overflow: ellipsis` keeps it inside its box and `title` still
+    carries the full value on hover -- but it's the one place the pill
+    reads worse than before. Left untouched (no call-site edits is the
+    point of V2, and `ArrowListControl` is explicit V4 -- object-styles --
+    territory); flagging here so V4 knows to drop that inline override.
+  - Verified live in Vanilla and Dark Mode: build and all three test
+    suites exit 0, console clean, no `.rightSidebar`/`.styleTabList`
+    overflow, pill checked in Point/Circle/Sector style tabs (Stroke,
+    Fill, Label) and the Preferences token rows.
 - 2026-07-21 Visual pass V1: restyle sidebar control primitives onto the
   owner's Figma-style mockup language (approved plan
   `sidebar-visual-pass.md`), CSS-only in `src/App.css`, zero markup edits:
