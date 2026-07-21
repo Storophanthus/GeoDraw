@@ -25,6 +25,33 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Export panel: attach the copy actions to the code they copy
+  (owner-reported: "before, the copy is actually above the code, so it is clear
+  what we are copying"; and the long-labelled buttons looked bad):
+  - The copy buttons sat at the top of the panel, separated from the textarea by
+    the option checkboxes, the Figure sizing card and the status row -- four
+    sections between an action and its object. Copy/Copy full file now live on a
+    header row belonging to the code block itself, flush on top of the textarea,
+    with the status text and Refresh folded into that same row.
+  - `Open PDF Preview` was never a copy action, so it no longer sits with them:
+    it moved to the section header beside the "Export" title as a compact
+    `Open PDF` pill (still desktop-only).
+  - Labels shortened (`Copy Code` -> `Copy`, `Copy Full Document` ->
+    `Copy full file`, `Refresh code` -> `Refresh`) so they fit the sidebar.
+  - The ugly two-line buttons were a CSS bug, not just long text: `.actionButton`
+    sets a fixed `height: 38px` with no `white-space`, so a long label wrapped
+    onto a second line and was then clipped by that height. Its container was
+    `.actionsRowWrap`, which despite the name set `flex-wrap: nowrap`, so the row
+    could not reflow either -- buttons could only squeeze their own text.
+    Added `white-space: nowrap` to the base rule, which also pre-emptively fixes
+    `.findReplaceControls .actionButton` (fixed 32px, "Replace All").
+    `.actionsRowWrap` had no other user and was removed.
+  - Overleaf guidance moved to sit directly under the copy buttons (where the
+    code is about to be pasted from) instead of near the removed PDF button.
+  - Verified live: both buttons render single-line (26px, `nowrap`), the header
+    sits above the textarea, and clicking Copy generates 1599 chars and flips the
+    status to "Up to date". That same check also confirmed the viewport-clip fix
+    end to end -- the generated plain-backend output contains `\clip (`.
 - 2026-07-21 Fix "Export what I see now" in Exact Coordinates, and un-orphan the
   export unit tests that would have caught it (owner-reported: the exported PDF
   contained the whole drawing instead of the visible canvas region; correct in

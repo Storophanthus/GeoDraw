@@ -270,34 +270,17 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       <section className="sidebarSection">
         <div className="sectionHeaderRow">
           <h2 className="sectionTitle">Export</h2>
-        </div>
-
-        <div className="actionsRow actionsRowWrap">
-          <button className="actionButton primary" onClick={() => void copyCode()}>
-            {tikzCopied ? "Copied" : "Copy Code"}
-          </button>
-          <button
-            className="actionButton secondary"
-            onClick={() => void copyFullDocument()}
-            title="A complete LaTeX file — paste it into any LaTeX editor and compile"
-          >
-            {fullDocumentCopied ? "Copied" : "Copy Full Document"}
-          </button>
           {isTauriRuntime && (
-            <button className="actionButton secondary" onClick={openPreviewWindow}>
-              Open PDF Preview
+            <button
+              type="button"
+              className="exportHeaderButton"
+              onClick={openPreviewWindow}
+              title="Compile this figure and open it as a PDF"
+            >
+              Open PDF
             </button>
           )}
         </div>
-        {!isTauriRuntime && (
-          <div className="statusText">
-            PDF preview needs the desktop app. Copy the full document and paste it into a LaTeX editor such as{" "}
-            <a href="https://www.overleaf.com" target="_blank" rel="noreferrer">
-              overleaf.com
-            </a>{" "}
-            to get a PDF.
-          </div>
-        )}
 
         <div className="optionsBlock">
           <label className="checkboxRow" title="Crop to the current canvas view. Turn off to include every object.">
@@ -391,21 +374,53 @@ export function ExportPanel({ visible }: ExportPanelProps) {
           </div>
         </div>
 
-        <div className="statusText exportStatusRow">
-          <span>{tikzStatusText}</span>
-          {tikzOutdated && (
-            <button type="button" className="exportRefreshButton" onClick={() => generateTikz()}>
-              Refresh code
-            </button>
+        <div className="exportCodeBlock">
+          <div className="exportCodeHeader">
+            <div className="exportCodeHeaderLeft">
+              <span className="exportCodeTitle">TikZ code</span>
+              <span>{tikzStatusText}</span>
+              {tikzOutdated && (
+                <button type="button" className="exportRefreshButton" onClick={() => generateTikz()}>
+                  Refresh
+                </button>
+              )}
+            </div>
+            <div className="exportCodeActions">
+              <button
+                type="button"
+                className="exportCodeCopyButton primary"
+                onClick={() => void copyCode()}
+                title="Copy just the figure code, to paste inside an existing LaTeX document"
+              >
+                {tikzCopied ? "Copied" : "Copy"}
+              </button>
+              <button
+                type="button"
+                className="exportCodeCopyButton"
+                onClick={() => void copyFullDocument()}
+                title="A complete LaTeX file — paste it into any LaTeX editor and compile"
+              >
+                {fullDocumentCopied ? "Copied" : "Copy full file"}
+              </button>
+            </div>
+          </div>
+          {!isTauriRuntime && (
+            <div className="statusText exportWebGuidance">
+              No LaTeX editor? Use “Copy full file”, then paste into{" "}
+              <a href="https://www.overleaf.com" target="_blank" rel="noreferrer">
+                overleaf.com
+              </a>{" "}
+              to get a PDF.
+            </div>
           )}
+          <textarea
+            className="exportTextarea"
+            value={tikzText}
+            readOnly
+            placeholder="Click Copy to generate your figure's TikZ code"
+            spellCheck={false}
+          />
         </div>
-        <textarea
-          className="exportTextarea"
-          value={tikzText}
-          readOnly
-          placeholder="Click Copy Code to generate your figure's TikZ code"
-          spellCheck={false}
-        />
 
         <details className="exportLogDetails">
           <summary>Advanced options</summary>

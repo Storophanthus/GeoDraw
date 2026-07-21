@@ -1973,6 +1973,11 @@ body.sidebar-resizing * {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* A fixed height with no nowrap let long labels wrap onto a second line
+     and get clipped against that height. Buttons should shrink the row
+     around them or drop to a new line (flex-wrap on the container), not
+     wrap their own text. */
+  white-space: nowrap;
 }
 
 .actionButton:disabled {
@@ -1984,10 +1989,6 @@ body.sidebar-resizing * {
   display: flex;
   gap: 8px;
   margin-top: 12px;
-}
-
-.actionsRowWrap {
-  flex-wrap: nowrap;
 }
 
 .actionButton.primary {
