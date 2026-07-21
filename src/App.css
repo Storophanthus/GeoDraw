@@ -1754,6 +1754,11 @@ body.sidebar-resizing * {
 }
 
 .constructionInfo {
+  /* Same treatment as .toolInfo: the label shares the line with its text. */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 8px;
+  align-items: baseline;
   margin-bottom: 6px;
   font-size: 12px;
   color: var(--gd-ui-text, #334155);
@@ -1771,7 +1776,7 @@ body.sidebar-resizing * {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--gd-ui-text-subtle, #64748b);
-  margin-bottom: 2px;
+  margin-bottom: 0;
   font-weight: 700;
 }
 
@@ -1804,13 +1809,34 @@ body.sidebar-resizing * {
 }
 
 .toolInfo {
-  margin-bottom: 8px;
+  /* Label sits beside its value rather than on its own line: one short stat
+     does not need two rows. Extra stat rows stack down column 2. */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 8px;
+  align-items: baseline;
+  margin-bottom: 6px;
   font-size: 12px;
   color: var(--gd-ui-text-muted, #475569);
   background: var(--gd-ui-surface-soft, #f8fafc);
   border: 1px solid var(--gd-ui-border-soft, #e2e8f0);
   border-radius: 8px;
-  padding: 8px;
+  padding: 5px 8px;
+}
+
+.toolInfo .subSectionTitle {
+  grid-column: 1;
+  grid-row: 1;
+  margin-bottom: 0;
+}
+
+.toolInfo .detailRow {
+  grid-column: 2;
+  margin-bottom: 0;
+  /* Short stats ("Sweep  70.35°") stay beside their label. A long value
+     (a circle equation) drops to its own line and gets the full column
+     width, rather than being squeezed and broken mid-expression. */
+  flex-wrap: wrap;
 }
 
 .detailRow {

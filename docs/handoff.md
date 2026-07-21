@@ -25,6 +25,23 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Construction/stat cards: label moved onto the value's line.
+  - Two earlier attempts only shaved padding and moved these 44 -> 42px, which
+    was rightly rejected. Padding was never the cost: the card was two *stacked
+    text lines* (an uppercase label row, then the value row), and ~8px of its
+    42px was padding. No amount of padding work reaches that.
+  - `.constructionInfo` and `.toolInfo` are now a two-column grid
+    (`auto minmax(0, 1fr)`) so the label sits beside its value instead of above
+    it. Nothing was removed — label, value and the card itself all remain.
+    Construction 44 -> 26px, sector stat 42 -> 28px.
+  - `.toolInfo .detailRow` keeps `grid-column: 2` so object types with several
+    stats stack correctly down column two rather than spilling into the label
+    column.
+  - `flex-wrap: wrap` on that row is load-bearing, not cosmetic: a circle's
+    equation is too wide to sit beside its "Equation" label, and without wrap
+    it broke mid-expression (`(x+5.25)^2+` / `(y+3.75)^2=12.03^2`). With wrap
+    it drops to its own full-width line and stays unbroken, while short stats
+    like `Sweep  70.35°` still share the line. Verified both live.
 - 2026-07-21 Second sidebar pass, after owner review of the first:
   - **Style tab strip was clipping labels** ("STROKE" rendered as "KE").
     Measured cause: `.styleTabButton` is `flex: 0 0 auto` + `min-width:
