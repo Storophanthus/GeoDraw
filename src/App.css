@@ -1772,7 +1772,7 @@ body.sidebar-resizing * {
 }
 
 .constructionTitle {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--gd-ui-text-subtle, #64748b);
@@ -2194,7 +2194,7 @@ body.sidebar-resizing * {
 }
 
 .subSectionTitle {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--gd-ui-text-subtle, #64748b);
