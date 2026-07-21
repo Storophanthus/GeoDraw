@@ -80,7 +80,9 @@ if (!pointStyleLines.some((line) => line.includes("regular polygon, regular poly
   throw new Error("Expected triangular point shapes to be exported via regular polygon.");
 }
 
-if (!tikz.includes("\\usetikzlibrary{shapes.geometric}")) {
+// Libraries are emitted as a single combined \usetikzlibrary{a,b,c} declaration,
+// so match the entry inside the braces rather than an exact one-library line.
+if (!/\\usetikzlibrary\{[^}]*\bshapes\.geometric\b[^}]*\}/.test(tikz)) {
   throw new Error("Expected exporter to inject shapes.geometric when geometric point shapes are used.");
 }
 

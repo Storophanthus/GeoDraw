@@ -25,6 +25,53 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Fix "Export what I see now" in Exact Coordinates, and un-orphan the
+  export unit tests that would have caught it (owner-reported: the exported PDF
+  contained the whole drawing instead of the visible canvas region; correct in
+  Geometric Constructions, wrong in Exact Coordinates):
+  - Root cause: viewport clipping is emitted at exactly one place,
+    `renderSetupAndPoints.ts`, gated on `emitTkzSetup`. `ExportPanel.tsx` sets
+    `exportEmitTkzSetup = exportBakeCoordinates ? false : (...)`, and
+    `exportBakeCoordinates` is true precisely in `visualExact` -- so Exact
+    Coordinates force-disabled the only code path that clips to the viewport.
+    Introduced by `ad383db`, integrated as part of the tkz-independence work.
+    The intent was right (`\tkzInit`/`\tkzClip` ARE tkz-euclide macros and had
+    to go), but no pure-TikZ replacement was put in, so the feature did not get
+    ported -- it disappeared.
+  - Fix: when the plain backend has a viewport and no explicit clip rect/polygon,
+    emit `\clip (xmin,ymin) rectangle (xmax,ymax)` inflated by
+    `setupViewport.space` (matching `\tkzClip[space=n]`, which grows the region
+    by n per side). Deliberately keyed on `drawLayerBackend === "plain"` rather
+    than on `!emitTkzSetup`, so a user who manually unticks the setup-lines
+    option in tkz mode keeps today's behaviour.
+  - The explicit clip tools were never affected: `clipRect`/`clipPolygon` emit a
+    plain `\clip` and are not gated, which is why "Only export the clipped area"
+    kept working in both modes.
+  - **Why nothing caught this:** every file in `src/export/__tests__` was
+    orphaned -- referenced by no npm script and no workflow. (`line-extents`
+    appeared wired but only via `test:export:watch`, a watch helper.)
+    `setup-toggle.test.ts` asserts this exact `\tkzClip` behaviour and never
+    ran; `draw-layer-backend-plain.test.ts`, which the tkz work itself extended
+    with ~148 lines of assertions, never ran either -- that change was never
+    verified by its own tests.
+  - A second regression from the same commit surfaced once they were run:
+    `point-shape-style-export.test.ts` asserted the exact string
+    `\usetikzlibrary{shapes.geometric}`, but libraries are now emitted as one
+    combined declaration (`{shapes.geometric,arrows}`). Bisected to the same
+    commit. The code is fine -- arguably better, since `arrows` is now pulled in
+    for the `>=triangle 45` it already used -- so the stale assertion was
+    converted to a regex, the same way the fixture assertions in
+    `scripts/test-export.ts` already were.
+  - `scripts/test-export-unit.mjs` (new) runs all of them and is chained into
+    `test:export`. It discovers files by scanning the directory rather than
+    listing them: a hand-maintained list is what created this gap, and a new
+    test file would be orphaned again the first time someone forgot to register
+    it. 18 files, all passing.
+  - New `viewport-clip-plain-backend.test.ts` covers the regression: asserts the
+    plain backend emits a `\clip` and no `\tkzClip`/`\tkzInit`, that the
+    rectangle matches the viewport, that it precedes the draw commands, that an
+    explicit clip rect does not produce two clips, and that tkz mode still uses
+    `\tkzClip`. Confirmed it fails with the fix reverted and passes with it.
 - 2026-07-21 Phase 3d: promote Save PDF/SVG/PNG to visible preview-window
   buttons (last item of the UI-revamp plan; owner confirmed the desktop PDF
   compile works before this started):
