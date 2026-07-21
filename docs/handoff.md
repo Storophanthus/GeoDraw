@@ -25,6 +25,49 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Visual pass V1: restyle sidebar control primitives onto the
+  owner's Figma-style mockup language (approved plan
+  `sidebar-visual-pass.md`), CSS-only in `src/App.css`, zero markup edits:
+  - Sliders (`.sizeSlider`/`.numberSliderTrack`): track 7px gradient -> 4px
+    flat (`--gd-ui-border-soft` fill, `--gd-ui-border` hairline); thumb
+    20/18px accent-filled -> 14px surface-filled with a 2px
+    `--gd-ui-text-strong` ring (falls back to a token, not a hardcoded hex,
+    per the plan's dark-contrast note). Firefox's `-moz-range-progress`
+    keeps its accent fill, just flattened to match.
+  - Inputs/selects/number boxes (`renameInput`, `selectInput`,
+    `scaleInputCompact`, `shapeButton`, and the bare `controlRow` number
+    input for consistency) normalized to a shared 30px height / 6px radius
+    and a single merged `:focus-visible` rule -- `selectInput` and
+    `shapeButton` previously fell through to the browser's default focus
+    ring instead of the app's accent outline.
+  - `.deleteButton` gained a hover/focus danger-tint background
+    (`color-mix` with `--gd-ui-danger`); it was already outline-style
+    (red border/text on a neutral fill) but had no interactive state.
+  - `.rightTabs`/`.rightTabButton` (the Objects/Export segmented switch):
+    dropped the gradient tray, gradient active-pill and `translateY` lift
+    for a flat gray tray + white active pill with a hairline shadow,
+    matching the `.objectBrowserTab` pattern already used one panel down.
+  - `.objectBrowserTabs`/`.objectBrowserTab` (the Points/Lines/Circles...
+    filter icons) were declared twice (~2861 and ~3196, known debt from the
+    density pass) with the second silently winning on the properties that
+    conflicted while the first's `overflow-x` leaked through underneath.
+    Consolidated into one declaration each, matching current effective
+    behavior exactly, then deleted the duplicate.
+  - `.sidebarHeaderBar` de-gradiented to a plain surface card; it plus
+    `.sidebarSection` and `.styleControlGroup` moved onto the plan's radius
+    scale (16/18/14px -> 8px "card" tier; controls already normalized above
+    sit at 6px).
+  - `.rightSidebar` gained a styled thin scrollbar (`scrollbar-width: thin`
+    + `::-webkit-scrollbar*`), token-colored, additive only.
+  - Deliberately left untouched: `.sidebarToggleButton` (still gradient --
+    it opens the Quick Help card, which V5 owns alongside a full contrast
+    sweep) and radii outside the right-sidebar/properties-panel surface
+    (left toolbar, document tabs, command bar) -- out of scope per the plan.
+  - Verified live in both Vanilla and Dark Mode via Preferences: build and
+    all three test suites exit 0, console clean, `.rightSidebar`/
+    `.objectBrowserTabs`/`.rightTabs`/`.styleTabList` all report
+    `scrollWidth === clientWidth` (no overflow) at the default sidebar
+    width in both themes.
 - 2026-07-21 Export panel: attach the copy actions to the code they copy
   (owner-reported: "before, the copy is actually above the code, so it is clear
   what we are copying"; and the long-labelled buttons looked bad):
