@@ -1760,7 +1760,8 @@ body.sidebar-resizing * {
   background: var(--gd-ui-surface-soft, #f8fafc);
   border: 1px solid var(--gd-ui-border-soft, #dbe4ef);
   border-radius: 8px;
-  padding: 6px;
+  padding: 4px 6px;
+  line-height: 1.3;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -1825,14 +1826,14 @@ body.sidebar-resizing * {
 }
 
 .fieldBlock {
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .fieldLabel {
   display: block;
   color: var(--gd-ui-text-muted, #475569);
   font-size: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .renameRow {
@@ -1904,7 +1905,7 @@ body.sidebar-resizing * {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 6px;
   font-size: 12px;
   color: var(--gd-ui-text, #334155);
 }
@@ -2170,7 +2171,7 @@ body.sidebar-resizing * {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--gd-ui-text-subtle, #64748b);
-  margin-bottom: 5px;
+  margin-bottom: 4px;
   font-weight: 700;
 }
 
@@ -2203,7 +2204,7 @@ body.sidebar-resizing * {
 }
 
 .styleControlTabs {
-  margin-top: 10px;
+  margin-top: 6px;
   border: 1px solid var(--gd-ui-border-soft, #e2d7c6);
   border-radius: 8px;
   background: color-mix(in srgb, var(--gd-ui-surface-soft, #fbf5e9) 82%, transparent);
@@ -2212,9 +2213,9 @@ body.sidebar-resizing * {
 
 .styleTabList {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   align-items: flex-end;
-  padding: 6px 6px 0;
+  padding: 4px 4px 0;
   border-bottom: 1px solid var(--gd-ui-border-soft, #e2d7c6);
   overflow-x: auto;
   scrollbar-width: thin;
@@ -2226,12 +2227,14 @@ body.sidebar-resizing * {
   border: 1px solid transparent;
   border-bottom: 0;
   border-radius: 8px 8px 0 0;
-  padding: 7px 9px 8px;
+  /* Tight horizontally on purpose: five tabs (Stroke/Fill/Label/Arrow/Mark)
+     have to fit the sidebar width, and they do not shrink. */
+  padding: 5px 4px 6px;
   background: transparent;
   color: var(--gd-ui-text-muted, #5f5143);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   cursor: pointer;
 }
@@ -2251,7 +2254,7 @@ body.sidebar-resizing * {
 }
 
 .styleTabPanel {
-  padding: 10px;
+  padding: 8px;
   background: var(--gd-ui-surface, #fffaf1);
 }
 
@@ -2331,7 +2334,7 @@ body.sidebar-resizing * {
   grid-template-columns: minmax(92px, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 9px;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .controlRow > * {
@@ -2843,7 +2846,7 @@ body.sidebar-resizing * {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px;
+  padding: 3px;
   border: none;
   background: transparent;
   color: var(--gd-ui-text-subtle, #64748b);
@@ -3168,9 +3171,9 @@ body.object-browser-dragging * {
   justify-content: space-between;
   gap: 2px;
   background: var(--gd-ui-border-soft, #e2e8f0);
-  padding: 3px;
+  padding: 2px;
   border-radius: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   flex: 0 0 auto;
 }
 
@@ -3181,7 +3184,7 @@ body.object-browser-dragging * {
   justify-content: center;
   border: none;
   background: transparent;
-  padding: 6px;
+  padding: 3px;
   border-radius: 6px;
   color: var(--gd-ui-text-subtle, #64748b);
   cursor: pointer;

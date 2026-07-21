@@ -25,6 +25,31 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Second sidebar pass, after owner review of the first:
+  - **Style tab strip was clipping labels** ("STROKE" rendered as "KE").
+    Measured cause: `.styleTabButton` is `flex: 0 0 auto` + `min-width:
+    max-content` (tabs never shrink), and a sector shows five of them
+    (Stroke/Fill/Label/Arrow/Mark). scrollWidth 314 vs clientWidth 267 —
+    a 47px overflow that `overflow-x: auto` then hid by scrolling.
+    Fixed by recovering the width: button padding `7px 9px 8px -> 5px 4px 6px`
+    (-10px per tab) and `letter-spacing 0.04em -> 0.02em`. Now scrollWidth ==
+    clientWidth (267), all five labels visible. Strip height 37 -> 31px.
+    Note this was pre-existing, not caused by the first pass — that pass gave
+    the strip 12px *more* room.
+  - Type chooser row 36 -> 32px, and construction card 44 -> 42px. Both hit a
+    floor that padding cannot pass, worth knowing before anyone tries again:
+    the chooser row is a hardcoded icon (`ObjectBrowser.tsx`, `size` prop,
+    now 16) plus 3px padding; the construction card now sums *exactly* to
+    8px padding + 14px title + 2px margin + 16px value + 2px border. Going
+    further needs smaller fonts or a structural change, both ruled out.
+  - Compounding margins are where the remaining gain came from, since the
+    style panel has many rows: `.controlRow`/`.fieldBlock`/`.checkboxRow`
+    margin-top `10 -> 6px`, `.fieldLabel` margin-bottom `6 -> 4px`,
+    `.styleControlTabs` margin-top `10 -> 6px`, `.styleTabPanel` padding
+    `10 -> 8px`.
+  - `.objectBrowserTabs` / `.objectBrowserTab` are ALSO duplicated in App.css
+    (2831 and 3166), same trap as `.objectListScrollArea`. Left in place this
+    time but both copies were edited together; worth consolidating later.
 - 2026-07-21 Right sidebar vertical-space pass (owner-reported: style controls
   like arrow/stroke sit at the bottom but get under a third of the panel):
   - Root cause of most of it was a bug, not proportions: `.objectListScrollArea`

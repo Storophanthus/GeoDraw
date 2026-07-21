@@ -925,7 +925,7 @@ export function ObjectBrowser({
                         onClick={() => setActiveTab(tab.id)}
                         title={tab.description}
                     >
-                        <tab.icon size={18} strokeWidth={2} />
+                        <tab.icon size={16} strokeWidth={2} />
                     </button>
                 ))}
                 <button
