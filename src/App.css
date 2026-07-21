@@ -2871,13 +2871,21 @@ body.sidebar-resizing * {
 }
 
 .objectListScrollArea {
-  height: 320px;
-  /* Fixed height as requested */
+  display: flex;
+  flex-direction: column;
+  /* Sizes to its content and caps out, instead of reserving a fixed block.
+     flex-grow stays 0 on purpose: with grow enabled the box inflates to fill
+     leftover sidebar space and strands empty rows above the properties panel. */
+  flex: 0 1 auto;
+  /* 320px matches the old fixed height, so a long list is no smaller than
+     before; the vh term only kicks in on short viewports. */
+  max-height: min(45vh, 320px);
+  min-height: 0;
   overflow-y: auto;
   border: 1px solid var(--gd-ui-border-soft, #e2e8f0);
   border-radius: 8px;
   background: var(--gd-ui-surface, #ffffff);
-  padding: 8px;
+  padding: 8px 2px 8px 8px;
 }
 
 /* Ensure the objectItem looks good inside the scroll area */
@@ -3188,16 +3196,6 @@ body.object-browser-dragging * {
   color: var(--gd-ui-accent, #2563eb);
   box-shadow: 0 1px 2px var(--gd-ui-overlay-shadow, rgba(0, 0, 0, 0.05));
 }
-
-.objectListScrollArea {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  overflow-y: auto;
-  min-height: 0;
-  padding-right: 2px;
-}
-
 
 /* Command Bar */
 .commandBarWrap {
