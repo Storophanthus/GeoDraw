@@ -836,6 +836,15 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
           <button className="actionButton secondary" onClick={() => void copyEditedTikz()}>
             {copied ? "Copied" : "Copy Edited TikZ"}
           </button>
+          <button className="actionButton secondary" onClick={() => void savePreviewPdf()} disabled={!pdfData}>
+            Save PDF
+          </button>
+          <button className="actionButton secondary" onClick={() => void savePreviewSvg()} disabled={!pdfData}>
+            Save SVG
+          </button>
+          <button className="actionButton secondary" onClick={() => void savePreviewPng()} disabled={!pdfData}>
+            Save PNG
+          </button>
           <button className="actionButton secondary" onClick={() => void savePreviewTex()}>
             Save Full LaTeX (.tex)
           </button>

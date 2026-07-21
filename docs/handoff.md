@@ -25,6 +25,27 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Phase 3d: promote Save PDF/SVG/PNG to visible preview-window
+  buttons (last item of the UI-revamp plan; owner confirmed the desktop PDF
+  compile works before this started):
+  - `TikzPreviewWindow.tsx` `previewWindowActions`: added Save PDF/SVG/PNG
+    next to the existing Copy Edited TikZ and Save Full LaTeX (.tex), calling
+    the same `savePreviewPdf`/`savePreviewSvg`/`savePreviewPng` handlers the
+    right-click context menu already used (no new logic). `disabled={!pdfData}`
+    per the plan; Save Full LaTeX stays enabled since it builds from source,
+    not from a compiled PDF. Right-click menu is unchanged -- both surfaces
+    now exist side by side, same pattern as the .tex button already set.
+  - Verified in the browser by seeding a `gd:tikz-preview:<token>` localStorage
+    session and loading `/?tikzPreview=<token>` directly (this window only
+    normally opens via `WebviewWindow`, which needs Tauri) -- confirmed all six
+    header buttons render on one line via the existing `flex-wrap`, and that
+    Save PDF/SVG/PNG are `disabled=true` with no compiled PDF while Copy Edited
+    TikZ and Save Full LaTeX stay enabled. Could not verify the buttons going
+    enabled after a real compile or an actual file write from this session --
+    `pdfData` is internal React state, not something reachable from outside,
+    and the compile path is native/Tauri-only. That needs a real desktop
+    session: confirm the three buttons enable once a PDF exists and each
+    produces a real file.
 - 2026-07-21 Construction/stat cards: label moved onto the value's line.
   - Two earlier attempts only shaved padding and moved these 44 -> 42px, which
     was rightly rejected. Padding was never the cost: the card was two *stacked
