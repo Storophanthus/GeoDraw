@@ -25,6 +25,33 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 Right sidebar vertical-space pass (owner-reported: style controls
+  like arrow/stroke sit at the bottom but get under a third of the panel):
+  - Root cause of most of it was a bug, not proportions: `.objectListScrollArea`
+    was declared **twice** in `App.css`, merging to `height: 320px` (rule 1) plus
+    `flex: 1 1 auto` (rule 2). The list reserved 320px regardless of content and
+    then grew into leftover space. Consolidated to one rule: `flex-grow: 0` plus
+    `max-height: min(45vh, 320px)`. Measured empty list 320px -> 34px.
+    The 320px ceiling is deliberate — it matches the old fixed height so a long
+    list is no smaller than before. An earlier draft used `35vh`, which resolved
+    to 252px at a 720px viewport and would have *shrunk* long lists; caught by
+    measuring in the browser rather than trusting the value.
+  - Density pass on the rest, size only. Nothing was moved, merged, hidden, or
+    removed — explicitly out of scope per the owner, who tuned these panels for
+    utility. Only padding/margin/line-height changed; no font sizes.
+    Header 68->54px, tab button 42->34px, object row 50->44px,
+    `.sidebarSection` padding 16->10px.
+  - Note `.sidebarSection` is shared by three panels (Objects, Properties and
+    Export), so the padding change tightens the Export tab too.
+  - `.rightTabButton` min-height went 42->34px. There are no `pointer: coarse`
+    media queries anywhere in `App.css`, so this is unconditional; if touch
+    targets matter later, restore 42px additively inside a coarse-pointer block
+    rather than reverting this.
+  - Verified: `npm run build`, `test:command`, `test:scene`, `test:export` all
+    pass; heights measured live in the browser. Only the light color profile was
+    seen visually — the app uses its own profiles rather than
+    `prefers-color-scheme`, but these changes carry no color values, so geometry
+    is identical across profiles.
 - 2026-07-21 Integrate the tkz-euclide-*independent* export work onto main
   (branch `codex/text-editor-rewrite` commits `090eda6` + `c2a1618`):
   - `main` had already moved ahead with the UI-revamp Phase 3 export refactor,
