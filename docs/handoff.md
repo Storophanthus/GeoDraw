@@ -25,6 +25,54 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 RGB inputs + recently-used colors in `ColorSwatchInput`
+  (owner-reported gap: the popover offered presets and an OS custom-color
+  picker, but no way to type R/G/B values, and nothing remembered what you'd
+  used before):
+  - `ColorField.tsx`: new "RGB" section at the top of the `variant="panel"`
+    popover — three number inputs (0-255), derived from `pickerValue` via
+    the existing `parseColorToRgb`, committed through the existing
+    `commitValue` path (so recents/persistence apply uniformly regardless of
+    entry method). New "Recent" section renders only when non-empty, reusing
+    the existing `.colorFieldPresetGrid`/`.colorFieldPreset` classes verbatim
+    -- no new swatch styling, just a new data source.
+  - Recording is centralized: a `recordRecentColor` helper is called from
+    `commitValue` (covers RGB inputs AND preset clicks) and separately from
+    the native `<input type="color">`'s `onChange` (which bypasses
+    `commitValue`'s synthetic-event path since it already has a real one).
+    Both paths converge on the same MRU list.
+  - Recent list is intentionally **global**, not per-field-instance: read
+    fresh from `localStorage` whenever a popover opens (`useEffect` on
+    `[open]`), not cached in component state across renders. Verified this
+    live -- a color set via one field (Stroke) appeared in a completely
+    different field's (Fill) Recent section without a page reload.
+  - `appPreferences.ts`: `loadStoredRecentColors`/`saveStoredRecentColors`,
+    same `StoredEnvelope` pattern as every other preference here.
+    `MAX_RECENT_COLORS = 10`. Validation lives in the loader (regex
+    `/^#[0-9a-f]{6}$/`, dedupe, cap) so garbage/oversized/malformed stored
+    data degrades to a shorter valid list instead of the usual all-or-nothing
+    envelope failure -- matches the export-preferences precedent of
+    per-field fallback over whole-envelope invalidation.
+  - `variant="token"` (Preferences dialog's theme-color fields) is
+    unaffected -- the RGB/Recent additions are `variant="panel"` only,
+    matches the plan's existing panel/token split.
+  - Verified live end-to-end, not just built: typing into R/G/B updates the
+    trigger's swatch and hex text immediately; three sequential edits landed
+    in `localStorage` as `["#0a64c8","#0a64f0","#0ae8f0"]` in the correct
+    envelope shape; survived a full page reload; clicking a Recent swatch
+    applies it and moves it to front (dedupe confirmed -- stayed at 3
+    entries, not 4); Dark Mode checked -- legible, though the whole
+    `.colorFieldPopover` (predating this change) is hardcoded cream/beige
+    rather than token-driven, so it does not itself go dark. Flagging for
+    the visual-pass plan's V5 theme sweep rather than fixing here, since
+    fixing it means re-theming presets/borders/shadows that this change
+    didn't touch.
+  - New `src/scene/__tests__/recent-colors.test.ts` (localStorage-stub
+    pattern, matching `export-preferences.test.ts`): round-trip, cap at
+    `MAX_RECENT_COLORS` keeping the front of the list, garbage entries
+    dropped individually rather than invalidating the whole list, duplicate
+    entries deduped on load, malformed JSON and non-array values both
+    degrade to empty rather than throwing. Wired into `test:scene`.
 - 2026-07-21 Visual pass V3: field grid + pilot migration on
   `PointPropertiesSection.tsx` (approved `sidebar-visual-pass.md` plan,
   check-in point before V4 propagates the pattern):
