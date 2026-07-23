@@ -1,5 +1,6 @@
 import { exportTikzWithOptions } from "../tikz.ts";
 import type { AngleStyle, SceneModel } from "../../scene/points.ts";
+import { compileTikzSnippet } from "../../../scripts/compile-tex.mjs";
 
 const pointStyle = {
   shape: "circle" as const,
@@ -66,8 +67,8 @@ if (plain.includes("circle [through=")) {
 if (!plain.includes("circle [radius=")) {
   throw new Error("Expected plain backend to emit circle [radius=...] for non-fixed circles.");
 }
-if (!plain.includes("gd plain draw backend: DrawLine exported as anchor segment")) {
-  throw new Error("Expected plain backend DrawLine approximation marker.");
+if (!plain.includes("gd plain draw backend: DrawLine exported as finite viewport segment")) {
+  throw new Error("Expected plain backend to clip infinite lines to the export viewport.");
 }
 if (plain.includes("\\tkzDrawSegment") || plain.includes("\\tkzDrawLine") || plain.includes("\\tkzDrawCircle")) {
   throw new Error("Expected plain backend to avoid tkz draw macros for line/segment/circle.");
@@ -177,6 +178,9 @@ const arrowPlain = exportTikzWithOptions(arrowScene, {
 if (!arrowPlain.includes("\\usetikzlibrary{") || !arrowPlain.includes("arrows")) {
   throw new Error("Expected plain backend to include arrows library when arrow marks require it.");
 }
+if (arrowPlain.includes("\\tkzDrawSegment")) {
+  throw new Error("Expected plain endpoint arrows to use direct TikZ draw paths.");
+}
 
 const plainSectorStyle: AngleStyle = {
   strokeColor: "#0f172a",
@@ -244,6 +248,62 @@ if (!plainSector.includes("\\fill[") || !plainSector.includes("arc[start angle="
 
 if (!plainSector.includes("\\draw") || !plainSector.includes("--")) {
   throw new Error("Expected plain sector export to emit a sector stroke path.");
+}
+
+const hugeCircleScene: SceneModel = {
+  points: [
+    { id: "hugeO", kind: "free", name: "O_huge", captionTex: "O", visible: true, showLabel: "none", position: { x: 10000, y: 0 }, style: pointStyle },
+  ],
+  numbers: [],
+  lines: [],
+  segments: [],
+  circles: [{
+    id: "hugeCrossing",
+    kind: "fixedRadius",
+    centerId: "hugeO",
+    radius: 9998,
+    visible: true,
+    style: { ...circleStyle, fillOpacity: 0.4 },
+  }],
+  polygons: [],
+  angles: [],
+};
+const hugeCircleOptions = {
+  drawLayerBackend: "plain" as const,
+  bakePointCoordinates: true,
+  viewport: { xmin: -5, xmax: 5, ymin: -4, ymax: 4 },
+  clipRectWorld: { xmin: -5, xmax: 5, ymin: -4, ymax: 4 },
+  screenPxPerWorld: 1,
+};
+const hugeCirclePlain = exportTikzWithOptions(hugeCircleScene, hugeCircleOptions);
+if (!hugeCirclePlain.includes("huge circle rendered as clipped tangent") || !hugeCirclePlain.includes("(2,4) -- (2,-4)")) {
+  throw new Error(`Expected enormous crossing circle to export as a clipped tangent.\n\n${hugeCirclePlain}`);
+}
+if (hugeCirclePlain.includes("10000") || hugeCirclePlain.includes("9998") || hugeCirclePlain.includes("\\fill[")) {
+  throw new Error(`Huge plain circle must not emit its remote centre, radius, or fill.\n\n${hugeCirclePlain}`);
+}
+await compileTikzSnippet("visual-exact-huge-circle", hugeCirclePlain);
+
+const hugeContainedPlain = exportTikzWithOptions({
+  ...hugeCircleScene,
+  points: [{ id: "hugeO", kind: "free", name: "O_huge", captionTex: "O", visible: false, showLabel: "none", position: { x: 0, y: 0 }, style: pointStyle }],
+  circles: [{ id: "hugeContained", kind: "fixedRadius", centerId: "hugeO", radius: 10000, visible: true, style: { ...circleStyle, fillOpacity: 0.4 } }],
+}, hugeCircleOptions);
+if (hugeContainedPlain.includes("huge circle rendered") || hugeContainedPlain.includes("\\draw[") || hugeContainedPlain.includes("\\fill[")) {
+  throw new Error("A huge circle containing the viewport must emit no visible geometry.");
+}
+
+const hugeOffscreenPlain = exportTikzWithOptions({
+  ...hugeCircleScene,
+  circles: [{ id: "hugeOffscreen", kind: "fixedRadius", centerId: "hugeO", radius: 9000, visible: true, style: { ...circleStyle, fillOpacity: 0.4 } }],
+}, hugeCircleOptions);
+if (hugeOffscreenPlain.includes("huge circle rendered") || hugeOffscreenPlain.includes("10000") || hugeOffscreenPlain.includes("9000")) {
+  throw new Error("An offscreen huge circle must emit neither geometry nor hidden dependency coordinates.");
+}
+
+const hugeTkz = exportTikzWithOptions(hugeCircleScene, { ...hugeCircleOptions, drawLayerBackend: "tkz", bakePointCoordinates: false });
+if (!hugeTkz.includes("\\tkzDrawCircle") || !hugeTkz.includes("10000")) {
+  throw new Error("Reconstructible tkz output must retain its existing circle construction path.");
 }
 
 console.log("✓ export draw-layer plain backend test passed");

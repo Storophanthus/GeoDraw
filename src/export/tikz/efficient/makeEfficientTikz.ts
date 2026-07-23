@@ -1,8 +1,25 @@
 import { baseColorTable } from "./colorTable";
 
-export function makeEfficientTikz(standardTex: string): string {
+export interface MakeEfficientTikzOptions {
+    /**
+     * Preserve numeric values that can change exported geometry or placement.
+     *
+     * Visual Exact uses this mode so coordinates, placement, stroke widths,
+     * dash lengths, font sizes, and every other numeric visual metric retain
+     * the precision produced by the renderer. Color and label compaction remain
+     * enabled because they preserve the rendered value.
+     *
+     * Defaults to false to preserve the existing reconstructible-export output.
+     */
+    preserveGeometry?: boolean;
+}
+
+export function makeEfficientTikz(
+    standardTex: string,
+    options: MakeEfficientTikzOptions = {}
+): string {
     let tex = standardTex;
-    tex = applyNumericRounding(tex);
+    tex = applyNumericRounding(tex, options.preserveGeometry === true);
     tex = applyColorSimplification(tex);
     tex = applyLabelGrouping(tex);
     // Final cleanup: remove multiple blank lines
@@ -12,7 +29,13 @@ export function makeEfficientTikz(standardTex: string): string {
 
 // --- 1. Numeric Rounding ---
 
-function applyNumericRounding(tex: string): string {
+function applyNumericRounding(tex: string, preserveGeometry: boolean): string {
+    // In Visual Exact, even "presentation" numbers are geometry: rounding a
+    // stroke width, dash length, or font size changes the rendered PDF. Keep
+    // the generated numeric stream intact and limit efficient-mode compaction
+    // to equivalent color names and label grouping.
+    if (preserveGeometry) return tex;
+
     // Any numeric input to a tkz construction can affect incidence, branch
     // identity, or even whether an intersection exists. Keep those lines exact;
     // efficient export may shorten presentation values, but not topology.
@@ -73,7 +96,7 @@ function applyNumericRounding(tex: string): string {
     // Note: dash pattern is complex (on Xpt off Ypt).
 
     // Simple keys first
-    const simpleKeys = ["line width", "length", "width", "size"]; // Added size= for angles
+    const simpleKeys = ["line width", "length", "width", "size"];
     const simpleKeysRegex = new RegExp(`(${simpleKeys.join("|")})=(${numberToken})pt`, "g");
     tex = tex.replace(simpleKeysRegex, (_, key, val) => `${key}=${fmt(val)}pt`);
 

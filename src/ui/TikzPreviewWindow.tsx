@@ -43,12 +43,9 @@ const MAX_PDF_ZOOM = 4;
 const PDF_CANVAS_PADDING = 18;
 const DVIPS_XCOLOR_PREAMBLE_LINE = "\\usepackage[dvipsnames]{xcolor}";
 
-const REQUIRED_PREAMBLE = `\\PassOptionsToPackage{dvipsnames}{xcolor}
-\\documentclass[tikz,border=2pt]{standalone}
-\\usepackage{tkz-euclide}
-\\usepackage{xfp}
-\\usepackage{contour}
-\\usetikzlibrary{arrows.meta,bending,decorations.markings,patterns,patterns.meta,shapes.geometric}`;
+const REQUIRED_PREAMBLE_PREFIX = "\\PassOptionsToPackage{dvipsnames}{xcolor}";
+const REQUIRED_TIKZ_LIBRARIES =
+  "\\usetikzlibrary{arrows.meta,bending,decorations.markings,patterns,patterns.meta,shapes.geometric}";
 
 export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   const session = useMemo(() => loadTikzPreviewSession(token), [token]);
@@ -1014,8 +1011,22 @@ function buildStandaloneSource(tikzCode: string, optionalPreamble: string): stri
   const trimmed = tikzCode.trim();
   if (looksLikeFullDocument(trimmed)) return tikzCode;
   const extra = optionalPreamble.trim();
-  const preamble = extra ? `${REQUIRED_PREAMBLE}\n${extra}` : REQUIRED_PREAMBLE;
+  const requiredPreamble = buildRequiredPreamble(tikzCode);
+  const preamble = extra ? `${requiredPreamble}\n${extra}` : requiredPreamble;
   return `${preamble}\n\\begin{document}\n${tikzCode}\n\\end{document}\n`;
+}
+
+function buildRequiredPreamble(tikzCode: string): string {
+  const hasExplicitCanvasBounds = /\\path\s*\[[^\]]*\buse as bounding box\b[^\]]*\]/u.test(tikzCode);
+  const usesTkzEuclide = /\\tkz[A-Za-z@]+/u.test(tikzCode);
+  return [
+    REQUIRED_PREAMBLE_PREFIX,
+    `\\documentclass[tikz,border=${hasExplicitCanvasBounds ? "0pt" : "2pt"}]{standalone}`,
+    ...(usesTkzEuclide ? ["\\usepackage{tkz-euclide}"] : []),
+    "\\usepackage{xfp}",
+    "\\usepackage{contour}",
+    REQUIRED_TIKZ_LIBRARIES,
+  ].join("\n");
 }
 
 function deriveDefaultOptionalPreamble(tikzCode: string, uiCssVariables: Record<string, string> | undefined): string {

@@ -146,4 +146,87 @@ runTest("preserves near-tangent construction coordinates", () => {
     assertOk(output.includes("2/0.9996/B"), "Construction rounding must retain both exact line anchors.");
 });
 
+runTest("preserves Visual Exact geometry precision while retaining harmless compaction", () => {
+    const input = `
+\\definecolor{gdAccent}{RGB}{255,0,0}
+\\begin{tikzpicture}[scale=0.457687446419683]
+\\tkzInit[xmin=-5.123456789012345,xmax=11.987654321098765,ymin=-8.765432109876543,ymax=10.123456789012345]
+\\coordinate (A) at (0.12345678901234567,-9.8765432109876543);
+\\draw[color=gdAccent, line width=0.47654321pt] (A) arc (12.3456789012345:98.7654321098765:4.56789012345678);
+\\draw (A) arc[start angle=12.3456789012345,end angle=98.7654321098765,radius=4.56789012345678];
+\\path[postaction={decorate,decoration={markings,mark=at position 0.825000000000001 with {\\arrow{>}}}}] (A) -- (1.9876543210987654,2.1234567890123456);
+\\foreach \\gdPos in {0.825000000000001,0.912345678901234}{\\path (A) -- (1,1);}
+\\tkzMarkAngle[size=0.376926862445237, mksize=0.123456789012345, mkpos=0.654321098765432, angle=24.0822396243238](B,A,C)
+\\tkzLabelAngle[dist=0.376926862445237, angle=24.0822396243238](B,A,C){$30^{\\circ}$}
+\\end{tikzpicture}
+    `.trim();
+
+    const output = makeEfficientTikz(input, { preserveGeometry: true });
+
+    assertOk(
+        output.includes("\\tkzInit[xmin=-5.123456789012345,xmax=11.987654321098765,ymin=-8.765432109876543,ymax=10.123456789012345]"),
+        "Visual Exact viewport bounds must retain their full precision."
+    );
+    assertOk(
+        output.includes("(0.12345678901234567,-9.8765432109876543)"),
+        "Visual Exact coordinates must retain their full precision."
+    );
+    assertOk(
+        output.includes("arc (12.3456789012345:98.7654321098765:4.56789012345678)"),
+        "Visual Exact legacy arc geometry must retain its full precision."
+    );
+    assertOk(
+        output.includes("arc[start angle=12.3456789012345,end angle=98.7654321098765,radius=4.56789012345678]"),
+        "Visual Exact keyed arc geometry must retain its full precision."
+    );
+    assertOk(
+        output.includes("mark=at position 0.825000000000001"),
+        "Visual Exact mark positions must retain their full precision."
+    );
+    assertOk(
+        output.includes("\\foreach \\gdPos in {0.825000000000001,0.912345678901234}"),
+        "Visual Exact numeric foreach positions must retain their full precision."
+    );
+    assertOk(
+        output.includes("size=0.376926862445237, mksize=0.123456789012345, mkpos=0.654321098765432, angle=24.0822396243238"),
+        "Visual Exact angle and mark geometry must retain its full precision."
+    );
+    assertOk(
+        output.includes("dist=0.376926862445237, angle=24.0822396243238"),
+        "Visual Exact label placement must retain its full precision."
+    );
+    assertOk(output.includes("color=red"), "Equivalent color compaction should remain enabled.");
+    assertOk(
+        output.includes("line width=0.47654321pt"),
+        "Visual Exact stroke widths must retain their full precision."
+    );
+});
+
+runTest("preserves Visual Exact font and dash metrics", () => {
+    const input = String.raw`\begin{tikzpicture}
+\draw[line width=0.47654321pt,dash pattern=on 1.23456789pt off 2.34567891pt] (0,0) -- (1,1);
+\node[font=\fontsize{12.19384756pt}{14.63261707pt}\selectfont] at (0,0) {$A$};
+\end{tikzpicture}`;
+
+    const output = makeEfficientTikz(input, { preserveGeometry: true });
+    assertOk(output.includes("line width=0.47654321pt"));
+    assertOk(output.includes("on 1.23456789pt off 2.34567891pt"));
+    assertOk(output.includes("\\fontsize{12.19384756pt}{14.63261707pt}"));
+});
+
+runTest("keeps existing efficient rounding as the default", () => {
+    const input = `
+\\begin{tikzpicture}
+\\tkzInit[xmin=-5.123456789012345,xmax=11.987654321098765]
+\\coordinate (A) at (0.12345678901234567,-9.8765432109876543);
+\\draw (A) arc (12.3456789012345:98.7654321098765:4.56789012345678);
+\\end{tikzpicture}
+    `.trim();
+
+    const output = makeEfficientTikz(input);
+    assertOk(output.includes("\\tkzInit[xmin=-5.12,xmax=11.99]"));
+    assertOk(output.includes("(0.12,-9.88)"));
+    assertOk(output.includes("arc (12.35:98.77:4.57)"));
+});
+
 console.log("All tests passed");
