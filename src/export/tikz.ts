@@ -1,5 +1,5 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
-import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
+import { resolveAngleRightStatus, type AngleRightStatus } from "../domain/rightAngleProvenance";
 import { normalizeSceneIntegrity } from "../domain/sceneIntegrity";
 import { exportFriendlyColorNameByRgbKey, parseColorToRgb, resolveExportFriendlyColorName } from "../exportFriendlyColors";
 import {
@@ -16,6 +16,7 @@ import {
   getLineWorldAnchors,
   getPointWorldPos,
   resolveTextLabelAlignment,
+  resolveTextLabelBoxHeightPx,
   resolveTextLabelBoxWidthPx,
   resolveTextLabelDisplayText,
   resolveTextLabelRenderMode,
@@ -66,6 +67,9 @@ export type TikzExportOptions = {
   worldToTikzScale?: number;
   screenPxPerWorld?: number;
   labelGlow?: boolean;
+  // Canvas-wide halo used by angle/object/free-text overlays. Point labels keep
+  // their own per-point halo color.
+  labelHaloColor?: string;
   drawLayerBackend?: DrawLayerBackendKind;
   segmentStrokeScale?: number;
   pointStrokeScale?: number;
@@ -89,6 +93,12 @@ export type TikzExportOptions = {
   // it is pixel-faithful to the canvas and immune to tkz-euclide's fixed-point
   // intersection drift and `common=` ordering fragility.
   bakePointCoordinates?: boolean;
+};
+
+type ResolvedTikzExportOptions = TikzExportOptions & {
+  // Derived after viewport auto-fit. This is intentionally internal: callers
+  // provide canvas density, while the exporter resolves the final PDF metric.
+  resolvedCanvasPxToTikzPt?: number;
 };
 
 export type TikzCommand =
@@ -159,8 +169,24 @@ export type TikzCommand =
   | { kind: "LabelAngle"; a: string; b: string; c: string; text: string; style?: string; useGlow?: boolean }
   | { kind: "DrawPoints"; style: string; points: string[] }
   | { kind: "LabelPoints"; points: string[] }
-  | { kind: "LabelPoint"; name: string; text: string; options?: string; useGlow?: boolean }
-  | { kind: "LabelAt"; x: number; y: number; text: string; options?: string; useGlow?: boolean; textMode?: "math" | "raw" };
+  | {
+    kind: "LabelPoint";
+    name: string;
+    text: string;
+    options?: string;
+    useGlow?: boolean;
+    plainGlow?: { widthPt: number; color?: string };
+  }
+  | {
+    kind: "LabelAt";
+    x: number;
+    y: number;
+    text: string;
+    options?: string;
+    useGlow?: boolean;
+    textMode?: "math" | "raw";
+    plainGlow?: { widthPt: number; color?: string };
+  };
 
 const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.8;
 
@@ -174,6 +200,8 @@ type LabelPlacement = {
   yShiftPt: number;
   rawXShiftPt: number;
   rawYShiftPt: number;
+  offsetXPx: number;
+  offsetYPx: number;
   scale: number;
   bubbleRadiusPt: number;
 };
@@ -194,6 +222,7 @@ type PathArrowExportMetrics = {
   pathLengthWorld?: number;
   screenPxPerWorld?: number;
   canvasPxToTikzPt?: number;
+  canvasExact?: boolean;
 };
 
 function edgeKey(aId: string, bId: string): string {
@@ -259,6 +288,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const fitScale = Math.min(maxWidthCm / worldWidth, maxHeightCm / worldHeight);
   coordScale = clampPositive(coordScale * fitScale, 0.01, 100);
   const canvasPxToTikzPt = (coordScale * TIKZ_PT_PER_CM) / exportPxPerWorld;
+  options = {
+    ...options,
+    resolvedCanvasPxToTikzPt: canvasPxToTikzPt,
+  } as ResolvedTikzExportOptions;
   defs.push({ kind: "SetupUnits", scale: coordScale });
   defs.push({ kind: "SetupLabelScale", scale: labelScale });
   defs.push({
@@ -271,10 +304,17 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   });
   const globalAdd = options.globalLineAdd ?? 5;
   const lineDrawClipBounds = lineDrawClipBoundsForOptions(viewport, options);
+  const plainLineDrawClipBounds = rawLineDrawClipBoundsForOptions(viewport, options);
   defs.push({ kind: "SetupLine", addLeft: globalAdd, addRight: globalAdd });
   if (options.clipRectWorld) {
     // Slightly expand explicit clip rectangle to avoid antialias/stroke edge shaving.
-    const clipPadWorld = 14 / exportPxPerWorld;
+    // Visual Exact must preserve the user's selected crop literally: padding
+    // changes both the visible PDF and its bounding box. Keep legacy tkz output
+    // unchanged.
+    const clipPadWorld =
+      options.drawLayerBackend === "plain" && options.bakePointCoordinates
+        ? 0
+        : 14 / exportPxPerWorld;
     defs.push({
       kind: "ClipRect",
       xmin: Math.min(options.clipRectWorld.xmin, options.clipRectWorld.xmax) - clipPadWorld,
@@ -284,7 +324,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     });
   }
   if (options.clipPolygonWorld && options.clipPolygonWorld.length >= 3) {
-    const clipPadWorld = 14 / exportPxPerWorld;
+    const clipPadWorld =
+      options.drawLayerBackend === "plain" && options.bakePointCoordinates
+        ? 0
+        : 14 / exportPxPerWorld;
     const points = options.clipPolygonWorld.map((p) => ({ x: p.x, y: p.y }));
     const center = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
     center.x /= points.length;
@@ -1900,6 +1943,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   };
 
   for (const point of scene.points) {
+    // Visual Exact has no constructive dependency graph to preserve. Avoid
+    // emitting invisible orphan coordinates (especially huge off-canvas ones);
+    // visible geometry resolves its hidden anchors on demand below.
+    if (emitPlainConstructions && !point.visible) continue;
     const pointWorld = getPointWorldPosCached(scene, point.id);
     // Dynamic intersections can legitimately become undefined under drag.
     // A point with no evaluated position is not drawn on the canvas, so it
@@ -1907,16 +1954,27 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (!pointWorld) {
       continue;
     }
+    if (emitPlainConstructions) {
+      // Standalone point markers/labels are clipped by the canvas. Do not put
+      // remote coordinates into TeX merely because the source point is marked
+      // visible; geometry that actually needs the point resolves it on demand.
+      const visualPadWorld = 64 / exportPxPerWorld;
+      if (
+        pointWorld.x < plainLineDrawClipBounds.xmin - visualPadWorld ||
+        pointWorld.x > plainLineDrawClipBounds.xmax + visualPadWorld ||
+        pointWorld.y < plainLineDrawClipBounds.ymin - visualPadWorld ||
+        pointWorld.y > plainLineDrawClipBounds.ymax + visualPadWorld
+      ) {
+        continue;
+      }
+    }
     resolvePoint(point.id);
-  }
-
-  if (freeItems.length > 0) {
-    freeItems.sort((a, b) => a.name.localeCompare(b.name));
-    defs.push({ kind: "DefPoints", items: freeItems });
   }
 
   for (const seg of scene.segments) {
     if (!seg.visible) continue;
+    resolvePoint(seg.aId);
+    resolvePoint(seg.bId);
     if (!definedPointIds.has(seg.aId) || !definedPointIds.has(seg.bId)) {
       throw new Error(`Cannot export undefined segment geometry: ${seg.id}`);
     }
@@ -1933,6 +1991,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         style: segmentStyleToTikz(seg.style, options, hasEnabledEndpointSegmentArrow(segmentArrows)),
       });
     }
+    const aWorld = getPointWorldPosCached(scene, seg.aId);
+    const bWorld = getPointWorldPosCached(scene, seg.bId);
     const markCommands = segmentMarksToTikz(
       seg.style,
       seg.style.strokeColor,
@@ -1940,11 +2000,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       seg.style.opacity,
       options,
       aName,
-      bName
+      bName,
+      aWorld ?? undefined,
+      bWorld ?? undefined
     );
     segmentBundle.push(...markCommands);
-    const aWorld = getPointWorldPosCached(scene, seg.aId);
-    const bWorld = getPointWorldPosCached(scene, seg.bId);
     const segmentLengthWorld = aWorld && bWorld ? distance(aWorld, bWorld) : undefined;
     const arrowOverlay = segmentArrowsToTikz(
       segmentArrows,
@@ -1961,8 +2021,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         pathLengthWorld: segmentLengthWorld,
         screenPxPerWorld: exportPxPerWorld,
         canvasPxToTikzPt,
+        canvasExact: options.drawLayerBackend === "plain",
       },
-      options.pathDotMarkSizeScale
+      options.pathDotMarkSizeScale,
+      options.drawLayerBackend === "plain"
     );
     if (arrowOverlay) {
       if (arrowOverlay.kind === "tkz") {
@@ -2012,9 +2074,13 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const drawAWorld = resolveLineDrawReferenceWorld(scene, line, ext.drawAId, lineWorldAnchors);
     const drawBWorld = resolveLineDrawReferenceWorld(scene, line, ext.drawBId, lineWorldAnchors);
     const drawSpanWorld = drawAWorld && drawBWorld ? distance(drawAWorld, drawBWorld) : distance(lineWorldAnchors.a, lineWorldAnchors.b);
-    const finiteFallback = shouldUseFiniteLineDrawFallback(drawSpanWorld, globalAdd)
-      ? lineSegmentThroughRect(lineWorldAnchors.a, lineWorldAnchors.b, lineDrawClipBounds)
-      : null;
+    const finiteFallback =
+      options.drawLayerBackend === "plain"
+        ? lineSegmentThroughRect(lineWorldAnchors.a, lineWorldAnchors.b, plainLineDrawClipBounds)
+        : shouldUseFiniteLineDrawFallback(drawSpanWorld, globalAdd)
+          ? lineSegmentThroughRect(lineWorldAnchors.a, lineWorldAnchors.b, lineDrawClipBounds)
+          : null;
+    if (options.drawLayerBackend === "plain" && !finiteFallback) continue;
     pushGeometryCommands({ type: "line", id: line.id }, [{
       kind: "DrawLine",
       a: drawAName,
@@ -2027,11 +2093,47 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   }
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
+    // Visual Exact deliberately bakes the canvas result, rather than its
+    // construction.  A very large circle is a special case: putting its
+    // distant centre or enormous radius into TikZ can exceed TeX's dimension
+    // limit even though only a nearly-straight sliver is visible on canvas.
+    // Keep this strictly out of the reconstructible/tkz path.
+    const isPlainVisualExact = options.drawLayerBackend === "plain" && bakePointCoordinates;
+    const preflightGeom = isPlainVisualExact ? circleGeomById(circle.id) : null;
+    const hugePlainCircle = Boolean(preflightGeom && preflightGeom.radius * exportPxPerWorld > 6000);
+    if (hugePlainCircle && preflightGeom) {
+      const visibleCircle = hugeCircleVisibleBoundary(preflightGeom, plainLineDrawClipBounds);
+      if (!visibleCircle.intersects) {
+        // The canvas clip makes this circle entirely invisible.  In
+        // particular, do not resolve its centre just to emit a clipped-away
+        // coordinate definition.
+        continue;
+      }
+      if (visibleCircle.containsBounds) {
+        // Canvas has no circle boundary to show here; suppress fill as well
+        // rather than asking TikZ to paint an enormous disc.
+        continue;
+      }
+      const tangent = hugeCircleTangentSegment(preflightGeom, plainLineDrawClipBounds);
+      if (tangent) {
+        pushGeometryCommands({ type: "circle", id: circle.id }, [{
+          kind: "DrawRaw",
+          tex: `% gd plain visual-exact: huge circle rendered as clipped tangent\n\\draw[${circleStrokeStyleToTikz(circle.style, options)}] (${fmt(tangent.ax)},${fmt(tangent.ay)}) -- (${fmt(tangent.bx)},${fmt(tangent.by)});`,
+        }]);
+      }
+      // Arrow decorations are parameterized over the huge circumference and
+      // would reintroduce a giant path. The canvas-scale boundary above is the
+      // safe visual representation for this exceptional case.
+      continue;
+    }
     const centerName = ensureCircleCenterName(circle.id);
     const throughName = incircleConstructedCircleIds.has(circle.id) ? ensureCircleThroughName(circle.id) : null;
     const shouldExportPlainCirclesAsRadius = options.drawLayerBackend === "plain";
     const circleRadiusForPlain = shouldExportPlainCirclesAsRadius ? circleGeomById(circle.id).radius : null;
-    const fixedRadiusExpr = circle.kind === "fixedRadius" ? pgfSafeRadiusExpression(circle.radiusExpr) : undefined;
+    const fixedRadiusExpr =
+      circle.kind === "fixedRadius" && !shouldExportPlainCirclesAsRadius
+        ? pgfSafeRadiusExpression(circle.radiusExpr)
+        : undefined;
     const fillStyle = circleFillStyleToTikz(circle.style);
     const strokeStyle = circleStrokeStyleToTikz(circle.style, options);
     const circleBundle: TikzCommand[] = [];
@@ -2040,7 +2142,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       if (!Number.isFinite(geom.radius) || geom.radius <= 0) {
         throw new Error(`Unsupported construction: CircleFixedRadius (invalid radius for ${circle.id})`);
       }
-      const radiusExpr = pgfSafeRadiusExpression(circle.radiusExpr);
+      const radiusExpr = shouldExportPlainCirclesAsRadius
+        ? undefined
+        : pgfSafeRadiusExpression(circle.radiusExpr);
       if (fillStyle) {
         circleBundle.push({
           kind: "FillCircleRadius",
@@ -2193,6 +2297,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         pathLengthWorld: 2 * Math.PI * circleGeom.radius,
         screenPxPerWorld: exportPxPerWorld,
         canvasPxToTikzPt,
+        canvasExact: options.drawLayerBackend === "plain",
       },
       undefined, // arcDef undefined -> Use markings (Decoration)
       { bend: true }, // Circle arrows use bend
@@ -2300,7 +2405,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         const drawOpts = sectorDrawStyle ? `[${sectorDrawStyle}]` : "";
         angleBundle.push({
           kind: "DrawRaw",
-          tex: `\\draw${drawOpts} ${sectorArcPath};`,
+          tex: `\\draw${drawOpts} (${bName}) -- ${sectorArcPath} -- cycle;`,
         });
       } else {
         if (sectorFillStyle) {
@@ -2328,6 +2433,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           pathLengthWorld: Math.abs(theta) * sectorRadius,
           screenPxPerWorld: exportPxPerWorld,
           canvasPxToTikzPt,
+          canvasExact: false,
         },
         {
           center: bWorld,
@@ -2339,25 +2445,94 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         options.pathDotMarkSizeScale
       );
       if (sectorArrowOverlay) {
-        angleBundle.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
+        if (options.drawLayerBackend !== "plain") {
+          angleBundle.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
+        }
       }
-      const sectorMarkOverlay = sectorMarksToTikz(
-        angle.style,
-        sectorArcPath,
-        {
-          strokeColor: angle.style.strokeColor,
-          strokeWidth: angle.style.strokeWidth,
-          opacity: angle.style.strokeOpacity,
-        },
-        options
-      );
+      const normalizedSectorMarkStyle =
+        angle.style.markStyle === "right"
+          ? "rightSquare"
+          : angle.style.markStyle;
+      const shouldDrawSectorArcMarks =
+        options.drawLayerBackend !== "plain" ||
+        normalizedSectorMarkStyle === "arc";
+      if (
+        options.drawLayerBackend === "plain" &&
+        normalizedSectorMarkStyle === "arc" &&
+        resolveAngleMarks(angle.style).length > 0
+      ) {
+        angleBundle.push({
+          kind: "DrawRaw",
+          tex: `\\draw[${sectorDrawStyle}] ${sectorArcPath};`,
+        });
+      }
+      const sectorMarkOverlay = shouldDrawSectorArcMarks
+        ? sectorMarksToTikz(
+            angle.style,
+            sectorArcPath,
+            {
+              strokeColor: angle.style.strokeColor,
+              strokeWidth: angle.style.strokeWidth,
+              opacity: angle.style.strokeOpacity,
+            },
+            options
+          )
+        : null;
       if (sectorMarkOverlay) {
         angleBundle.push({ kind: "DrawRaw", tex: sectorMarkOverlay });
       }
+      if (
+        options.drawLayerBackend === "plain" &&
+        sectorArrowOverlay
+      ) {
+        angleBundle.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
+      }
       pushGeometryCommands({ type: "angle", id: angle.id }, angleBundle);
+      if (
+        options.drawLayerBackend === "plain" &&
+        (angle.style.showLabel || angle.style.showValue)
+      ) {
+        const labelText = buildAngleLabelTex(
+          angle.style.labelText,
+          angle.style.showLabel,
+          angle.style.showValue,
+          theta
+        );
+        const labelCommand = labelText
+          ? plainAngleLabelCommand(angle, labelText, options)
+          : null;
+        if (labelCommand) drawLabelsLayer.push(labelCommand);
+      }
       continue;
     }
     const rightStatus = resolveAngleRightStatus(scene, angle);
+    if (options.drawLayerBackend === "plain") {
+      angleBundle.push(
+        ...plainNonSectorAngleCommands(
+          angle,
+          aWorld,
+          bWorld,
+          cWorld,
+          theta,
+          rightStatus,
+          options
+        )
+      );
+      pushGeometryCommands({ type: "angle", id: angle.id }, angleBundle);
+      if (angle.style.showLabel || angle.style.showValue) {
+        const labelText = buildAngleLabelTex(
+          angle.style.labelText,
+          angle.style.showLabel,
+          angle.style.showValue,
+          theta
+        );
+        const labelCommand = labelText
+          ? plainAngleLabelCommand(angle, labelText, options)
+          : null;
+        if (labelCommand) drawLabelsLayer.push(labelCommand);
+      }
+      continue;
+    }
     const exportAsRight = rightStatus === "exact" || (rightStatus === "approx" && Boolean(angle.style.promoteToSolid));
     const markKind = resolveAngleMarkKind(angle.style.markStyle, exportAsRight);
     const rightSquareFillStyle =
@@ -2402,6 +2577,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           pathLengthWorld: Math.abs(theta) * arcRadius,
           screenPxPerWorld: exportPxPerWorld,
           canvasPxToTikzPt,
+          canvasExact: false,
         },
         {
           center: bWorld,
@@ -2461,8 +2637,44 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (point.showLabel === "none") continue;
     const name = pointName.get(point.id);
     if (!name) continue;
-    const labelOptions = pointLabelOptionsToTikz(point, labelPlacementById.get(point.id) ?? null, options);
+    const placement = labelPlacementById.get(point.id) ?? null;
     const labelGlowEnabled = options.labelGlow ?? true;
+    const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    if (plainPxToPt !== null) {
+      const pointWorld = getPointWorldPosCached(scene, point.id);
+      if (!pointWorld) continue;
+      const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+      const offsetXPx = placement?.offsetXPx ?? point.style.labelOffsetPx.x;
+      const offsetYPx = placement?.offsetYPx ?? point.style.labelOffsetPx.y;
+      const canvasKatexScale =
+        point.showLabel === "caption" ? 0.95 : 1;
+      const fontPt = Math.max(
+        1,
+        point.style.labelFontPx * canvasKatexScale * plainPxToPt
+      );
+      const baselinePt = Math.max(fontPt, fontPt * 1.2);
+      drawLabelsLayer.push({
+        kind: "LabelAt",
+        x: pointWorld.x + offsetXPx / pxPerWorld,
+        y: pointWorld.y - offsetYPx / pxPerWorld,
+        text: point.showLabel === "name" ? point.name || name : point.captionTex || point.name || name,
+        options: [
+          point.showLabel === "caption" ? "anchor=north west" : "anchor=west",
+          "inner sep=0pt",
+          `text=${rgbColorExpr(point.style.labelColor)}`,
+          `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
+        ].join(", "),
+        useGlow: labelGlowEnabled && point.style.labelHaloWidthPx > 0,
+        plainGlow: {
+          widthPt: point.style.labelHaloWidthPx * plainPxToPt,
+          color: rgbColorExpr(
+            options.labelHaloColor ?? point.style.labelHaloColor
+          ),
+        },
+      });
+      continue;
+    }
+    const labelOptions = pointLabelOptionsToTikz(point, placement, options);
     if (point.showLabel === "name") {
       labels.push({
         name,
@@ -2576,6 +2788,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const displayText = resolveTextLabelDisplayText(label, scene);
     const renderMode = resolveTextLabelRenderMode(label.style);
     const boxWidthPx = resolveTextLabelBoxWidthPx(label.style);
+    const boxHeightPx = resolveTextLabelBoxHeightPx(label.style);
     const textAlign = resolveTextLabelAlignment(label.style);
     const text =
       renderMode === "tex"
@@ -2583,12 +2796,51 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         : renderMode === "mixed"
           ? buildMixedTextLabelNodeText(displayText)
           : buildPlainTextLabelNodeText(displayText);
-    const fontPt = Math.max(1, Math.min(72, label.style.textSize + 0.19));
+    const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    const fontPt =
+      plainPxToPt === null
+        ? Math.max(1, Math.min(72, label.style.textSize + 0.19))
+        : Math.max(
+            1,
+            Math.max(8, label.style.textSize) *
+              TEXT_LABEL_CANVAS_SIZE_SCALE *
+              (renderMode === "tex" ? 0.95 : 1) *
+              plainPxToPt
+          );
     const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
     const rotationDeg =
       typeof label.style.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
         ? label.style.rotationDeg
         : 0;
+    const boxOptions =
+      plainPxToPt === null
+        ? boxWidthPx && renderMode !== "tex"
+          ? [
+              `text width=${fmt(
+                boxWidthPx / TEXT_LABEL_CANVAS_SIZE_SCALE
+              )}pt`,
+            ]
+          : []
+        : boxWidthPx || boxHeightPx
+          ? [
+              `inner xsep=${fmt(12 * plainPxToPt)}pt`,
+              `inner ysep=${fmt(10 * plainPxToPt)}pt`,
+              ...(boxWidthPx
+                ? [
+                    `text width=${fmt(
+                      Math.max(1, boxWidthPx - 24) * plainPxToPt
+                    )}pt`,
+                  ]
+                : []),
+              ...(boxHeightPx
+                ? [
+                    `minimum height=${fmt(
+                      boxHeightPx * plainPxToPt
+                    )}pt`,
+                  ]
+                : []),
+            ]
+          : [];
     drawLabelsLayer.push({
       kind: "LabelAt",
       x: label.positionWorld.x,
@@ -2599,20 +2851,37 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         `align=${textAlign}`,
         `text=${rgbColorExpr(label.style.textColor)}`,
         `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
-        ...(boxWidthPx && renderMode !== "tex"
-          ? [`text width=${fmt(boxWidthPx / TEXT_LABEL_CANVAS_SIZE_SCALE)}pt`]
+        ...boxOptions,
+        ...(Math.abs(rotationDeg) > 1e-9
+          ? [`rotate=${fmt(plainPxToPt === null ? rotationDeg : -rotationDeg)}`]
           : []),
-        ...(Math.abs(rotationDeg) > 1e-9 ? [`rotate=${fmt(rotationDeg)}`] : []),
       ].join(", "),
       textMode: renderMode === "tex" ? "math" : "raw",
       useGlow: (options.labelGlow ?? true) && Boolean(label.style.labelGlow),
+      ...(plainPxToPt === null
+        ? {}
+        : {
+            plainGlow: {
+              widthPt: 3.5 * plainPxToPt,
+              color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
+            },
+          }),
     });
   }
 
   for (const node of scene.richTextNodes ?? []) {
     if (!node.visible) continue;
     const text = buildRichTextNodeText(node.document);
-    const fontPt = Math.max(1, Math.min(72, node.style.textSize + 0.19));
+    const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    const fontPt =
+      plainPxToPt === null
+        ? Math.max(1, Math.min(72, node.style.textSize + 0.19))
+        : Math.max(
+            1,
+            Math.max(8, node.style.textSize) *
+              TEXT_LABEL_CANVAS_SIZE_SCALE *
+              plainPxToPt
+          );
     const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
     const rotationDeg =
       typeof node.style.rotationDeg === "number" && Number.isFinite(node.style.rotationDeg)
@@ -2628,10 +2897,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         `align=${node.style.textAlign}`,
         `text=${rgbColorExpr(node.style.textColor)}`,
         `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
-        ...(Math.abs(rotationDeg) > 1e-9 ? [`rotate=${fmt(rotationDeg)}`] : []),
+        ...(Math.abs(rotationDeg) > 1e-9
+          ? [`rotate=${fmt(plainPxToPt === null ? rotationDeg : -rotationDeg)}`]
+          : []),
       ].join(", "),
       textMode: "raw",
       useGlow: (options.labelGlow ?? true) && Boolean(node.style.labelGlow),
+      ...(plainPxToPt === null
+        ? {}
+        : {
+            plainGlow: {
+              widthPt: 3.5 * plainPxToPt,
+              color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
+            },
+          }),
     });
   }
 
@@ -2647,19 +2926,46 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     return a.id.localeCompare(b.id);
   });
   for (const item of objectLabels) {
+    const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    const fontOptions =
+      plainPxToPt === null
+        ? []
+        : [
+            `font=\\fontsize{${fmt(16 * 0.95 * plainPxToPt)}pt}{${fmt(
+              19.2 * 0.95 * plainPxToPt
+            )}pt}\\selectfont`,
+          ];
     drawLabelsLayer.push({
       kind: "LabelAt",
       x: item.x,
       y: item.y,
       text: item.text,
-      options: [`anchor=center`, `text=${rgbColorExpr(item.color)}`].join(", "),
+      options: [
+        plainPxToPt === null ? "anchor=center" : "anchor=north west",
+        ...(plainPxToPt === null ? [] : ["inner sep=0pt"]),
+        `text=${rgbColorExpr(item.color)}`,
+        ...fontOptions,
+      ].join(", "),
       useGlow: item.useGlow,
+      ...(plainPxToPt === null
+        ? {}
+        : {
+            plainGlow: {
+              widthPt: 3.5 * plainPxToPt,
+              color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
+            },
+          }),
     });
   }
 
   const drawObjectsLayer = [...getGeometryLayerOrder(scene)]
     .reverse()
     .flatMap((ref) => geometryBundles.get(geometryLayerKey(ref)) ?? []);
+
+  if (freeItems.length > 0) {
+    freeItems.sort((a, b) => a.name.localeCompare(b.name));
+    defs.push({ kind: "DefPoints", items: freeItems });
+  }
 
   return [
     ...defs,
@@ -2949,7 +3255,12 @@ export function exportTikzEfficientWithOptions(scene: SceneModel, options: TikzE
     groupMarkAngles: true,
   });
   assertNoUnknownTkzMacro(standard);
-  return makeEfficientTikz(standard);
+  return makeEfficientTikz(
+    standard,
+    options.drawLayerBackend === "plain" && options.bakePointCoordinates
+      ? { preserveGeometry: true }
+      : undefined
+  );
 }
 
 export function exportTikzWithOptions(scene: SceneModel, options: TikzExportOptions): string {
@@ -3633,6 +3944,17 @@ function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: numb
 
 const TKZ_DRAW_LINE_SAFE_EXTENDED_LENGTH = 400;
 
+function rawLineDrawClipBoundsForOptions(
+  viewport: TikzExportViewport,
+  options: TikzExportOptions
+): TikzExportViewport {
+  if (options.clipRectWorld) return normalizeViewportRect(options.clipRectWorld);
+  if (options.clipPolygonWorld && options.clipPolygonWorld.length >= 3) {
+    return boundsForPoints(options.clipPolygonWorld);
+  }
+  return normalizeViewportRect(viewport);
+}
+
 function lineDrawClipBoundsForOptions(
   viewport: TikzExportViewport,
   options: TikzExportOptions
@@ -3752,6 +4074,49 @@ function lineSegmentThroughRect(
     bx: nearest.x + ux * halfSpan,
     by: nearest.y + uy * halfSpan,
   };
+}
+
+function hugeCircleVisibleBoundary(
+  circle: { center: { x: number; y: number }; radius: number },
+  bounds: TikzExportViewport
+): { intersects: boolean; containsBounds: boolean } {
+  const { center, radius } = circle;
+  if (!Number.isFinite(radius) || radius <= 0) return { intersects: false, containsBounds: false };
+  const nearestX = Math.max(bounds.xmin, Math.min(bounds.xmax, center.x));
+  const nearestY = Math.max(bounds.ymin, Math.min(bounds.ymax, center.y));
+  const minDistance = Math.hypot(nearestX - center.x, nearestY - center.y);
+  const maxDistance = Math.max(
+    Math.hypot(bounds.xmin - center.x, bounds.ymin - center.y),
+    Math.hypot(bounds.xmin - center.x, bounds.ymax - center.y),
+    Math.hypot(bounds.xmax - center.x, bounds.ymin - center.y),
+    Math.hypot(bounds.xmax - center.x, bounds.ymax - center.y)
+  );
+  const epsilon = Math.max(1e-9, radius * 1e-12);
+  return {
+    intersects: radius >= minDistance - epsilon && radius <= maxDistance + epsilon,
+    containsBounds: radius > maxDistance + epsilon,
+  };
+}
+
+function hugeCircleTangentSegment(
+  circle: { center: { x: number; y: number }; radius: number },
+  bounds: TikzExportViewport
+): { ax: number; ay: number; bx: number; by: number } | null {
+  // Match drawHugeCircleAsClippedLine on the canvas: approximate the visible
+  // arc at the radial point facing the viewport center.
+  const viewportCenter = {
+    x: (bounds.xmin + bounds.xmax) * 0.5,
+    y: (bounds.ymin + bounds.ymax) * 0.5,
+  };
+  const dx = viewportCenter.x - circle.center.x;
+  const dy = viewportCenter.y - circle.center.y;
+  const length = Math.hypot(dx, dy);
+  if (!(length > 1e-12)) return null;
+  const point = {
+    x: circle.center.x + (dx / length) * circle.radius,
+    y: circle.center.y + (dy / length) * circle.radius,
+  };
+  return lineSegmentThroughRect(point, { x: point.x - dy / length, y: point.y + dx / length }, bounds);
 }
 
 function computeLineDrawPlacement(
@@ -4000,6 +4365,55 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   const draw = rgbColorExpr(s.strokeColor);
   const fill = rgbColorExpr(s.fillColor);
   const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
+  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  if (plainPxToPt !== null) {
+    const radiusPx = Math.max(1.5, s.sizePx * pointScale);
+    const strokeWidthPt = Math.max(0.1, s.strokeWidth * pointScale * plainPxToPt);
+    const radiusPt = radiusPx * plainPxToPt;
+    if (shape.kind === "dot") {
+      const diameterPt = Math.max(1.2, radiusPx * 0.4) * 2 * plainPxToPt;
+      const opts = [
+        "shape=circle",
+        "draw=none",
+        `fill=${fill}`,
+        "line width=0pt",
+        "inner sep=0pt",
+        "outer sep=0pt",
+        `minimum size=${fmt(diameterPt)}pt`,
+      ];
+      if (s.fillOpacity < 0.999) opts.push(`fill opacity=${fmt(clamp01(s.fillOpacity))}`);
+      return opts.join(", ");
+    }
+    if (shape.kind === "lineGlyph") {
+      const plainShapeName =
+        s.shape === "plus" ? "rectangle" : shape.shapeName;
+      const overlayPlus = s.shape === "plus" || shape.overlayPlus;
+      const opts = [
+        `shape=${plainShapeName}`,
+        s.shape === "plus" ? "draw=none" : `draw=${draw}`,
+        "fill=none",
+        `line width=${fmt(strokeWidthPt)}pt`,
+        "inner sep=0pt",
+        "outer sep=0pt",
+        `minimum size=${fmt(radiusPt * 2)}pt`,
+      ];
+      if (s.strokeOpacity < 0.999) opts.push(`draw opacity=${fmt(clamp01(s.strokeOpacity))}`);
+      if (overlayPlus) opts.push(crossPlusOverlayPathPicture(draw, strokeWidthPt, s.strokeOpacity));
+      return opts.join(", ");
+    }
+    const opts = [
+      `shape=${shape.shapeName}`,
+      `draw=${draw}`,
+      `fill=${fill}`,
+      `line width=${fmt(strokeWidthPt)}pt`,
+      "inner sep=0pt",
+      "outer sep=0pt",
+      `minimum size=${fmt(radiusPt * 2)}pt`,
+    ];
+    if (s.strokeOpacity < 0.999) opts.push(`draw opacity=${fmt(clamp01(s.strokeOpacity))}`);
+    if (s.fillOpacity < 0.999) opts.push(`fill opacity=${fmt(clamp01(s.fillOpacity))}`);
+    return opts.join(", ");
+  }
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
   const pointConv = TIKZ_EXPORT_CALIBRATION.pointConversion;
   const pointStrokeScale = clampPositive(options.pointStrokeScale ?? 1, 0.01, 100);
@@ -4139,11 +4553,33 @@ function segmentMarksToTikz(
   segmentOpacity: number,
   options: TikzExportOptions,
   aName: string,
-  bName: string
+  bName: string,
+  aWorld?: { x: number; y: number },
+  bWorld?: { x: number; y: number }
 ): TikzCommand[] {
   const marks = resolveSegmentMarks(style);
   if (marks.length === 0) return [];
   const out: TikzCommand[] = [];
+  if (options.drawLayerBackend === "plain") {
+    if (!aWorld || !bWorld) return out;
+    for (const mark of marks) {
+      const positions = collectSegmentMarkPositions(mark, 0.5);
+      for (const pos of positions) {
+        const tex = plainSegmentMarkToTikz(
+          mark,
+          pos,
+          aWorld,
+          bWorld,
+          segmentStrokeColor,
+          segmentStrokeWidth,
+          segmentOpacity,
+          options
+        );
+        if (tex) out.push({ kind: "DrawRaw", tex });
+      }
+    }
+    return out;
+  }
   for (const mark of marks) {
     const positions = collectSegmentMarkPositions(mark, 0.5);
     if ((mark.distribution ?? "single") === "multi" && positions.length > 1) {
@@ -4171,6 +4607,125 @@ function segmentMarksToTikz(
   return out;
 }
 
+function plainSegmentMarkToTikz(
+  mark: NonNullable<SceneModel["segments"][number]["style"]["segmentMark"]>,
+  posRaw: number,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  segmentStrokeColor: string,
+  segmentStrokeWidth: number,
+  segmentOpacity: number,
+  options: TikzExportOptions
+): string | null {
+  if (!mark.enabled || mark.mark === "none") return null;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (!Number.isFinite(length) || length <= 1e-12) return null;
+  const ux = dx / length;
+  const uy = dy / length;
+  // Canvas builds its normal in screen coordinates (Y down). Converted back
+  // into world/TikZ coordinates (Y up), that normal is (uy,-ux).
+  const nx = uy;
+  const ny = -ux;
+  const pos = clamp01(Number.isFinite(posRaw) ? posRaw : 0.5);
+  const center = { x: a.x + dx * pos, y: a.y + dy * pos };
+  const sizePx = Math.max(1, mark.sizePt);
+  const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const sizeWorld = sizePx / pxPerWorld;
+  const tickHalfWorld = (sizePx * 2.2) / pxPerWorld;
+  const gapWorld = Math.max(2, sizePx * 0.85) / pxPerWorld;
+  const lineWidthPx = Math.max(0.5, mark.lineWidthPt ?? segmentStrokeWidth);
+  const lineWidthPt =
+    lineWidthPx *
+    clampPositive(options.lineScale ?? 1, 0.05, 10) *
+    (resolvedPlainCanvasPxToTikzPt(options) ?? FALLBACK_CANVAS_PX_TO_TIKZ_PT);
+  const color = rgbColorExpr(mark.color ?? segmentStrokeColor);
+  const opacity = normalizedOpacity(segmentOpacity);
+  const drawOpts = [
+    `color=${color}`,
+    `line width=${fmt(Math.max(0.1, lineWidthPt))}pt`,
+    "line cap=round",
+    "line join=round",
+  ];
+  if (opacity < 0.999) drawOpts.push(`opacity=${fmt(opacity)}`);
+  const draw = (points: Array<{ x: number; y: number }>, close = false): string => {
+    const path = points.map((p) => `(${fmt(p.x)},${fmt(p.y)})`).join(" -- ");
+    return `\\draw[${drawOpts.join(", ")}] ${path}${close ? " -- cycle" : ""};`;
+  };
+  const along = (amount: number) => ({
+    x: center.x + ux * amount,
+    y: center.y + uy * amount,
+  });
+  const cross = (origin: { x: number; y: number }, amount: number) => ({
+    x: origin.x + nx * amount,
+    y: origin.y + ny * amount,
+  });
+  const tick = (offset: number): string => {
+    const origin = along(offset);
+    return draw([cross(origin, -tickHalfWorld), cross(origin, tickHalfWorld)]);
+  };
+  const slash = (offset: number): string => {
+    const origin = along(offset);
+    const p1 = {
+      x: origin.x - ux * tickHalfWorld - nx * tickHalfWorld * 0.55,
+      y: origin.y - uy * tickHalfWorld - ny * tickHalfWorld * 0.55,
+    };
+    const p2 = {
+      x: origin.x + ux * tickHalfWorld + nx * tickHalfWorld * 0.55,
+      y: origin.y + uy * tickHalfWorld + ny * tickHalfWorld * 0.55,
+    };
+    return draw([p1, p2]);
+  };
+
+  if (mark.mark === "|") return tick(0);
+  if (mark.mark === "||") return `${tick(-gapWorld * 0.5)}\n${tick(gapWorld * 0.5)}`;
+  if (mark.mark === "|||") return `${tick(-gapWorld)}\n${tick(0)}\n${tick(gapWorld)}`;
+  if (mark.mark === "s") return slash(0);
+  if (mark.mark === "s|") return `${slash(-gapWorld * 0.5)}\n${tick(gapWorld * 0.5)}`;
+  if (mark.mark === "s||") return `${slash(-gapWorld)}\n${tick(0)}\n${tick(gapWorld)}`;
+  if (mark.mark === "x") {
+    return [
+      draw([
+        { x: center.x - nx * sizeWorld - ux * sizeWorld * 0.6, y: center.y - ny * sizeWorld - uy * sizeWorld * 0.6 },
+        { x: center.x + nx * sizeWorld + ux * sizeWorld * 0.6, y: center.y + ny * sizeWorld + uy * sizeWorld * 0.6 },
+      ]),
+      draw([
+        { x: center.x - nx * sizeWorld + ux * sizeWorld * 0.6, y: center.y - ny * sizeWorld + uy * sizeWorld * 0.6 },
+        { x: center.x + nx * sizeWorld - ux * sizeWorld * 0.6, y: center.y + ny * sizeWorld - uy * sizeWorld * 0.6 },
+      ]),
+    ].join("\n");
+  }
+  if (mark.mark === "o") {
+    const radius = Math.max(1.2, sizePx * 0.6) / pxPerWorld;
+    return `\\draw[${drawOpts.join(", ")}] (${fmt(center.x)},${fmt(center.y)}) circle[radius=${fmt(radius)}];`;
+  }
+  if (mark.mark === "oo") {
+    const radius = Math.max(1.2, sizePx * 0.55) / pxPerWorld;
+    const left = along(-gapWorld * 0.55);
+    const right = along(gapWorld * 0.55);
+    return [
+      `\\draw[${drawOpts.join(", ")}] (${fmt(left.x)},${fmt(left.y)}) circle[radius=${fmt(radius)}];`,
+      `\\draw[${drawOpts.join(", ")}] (${fmt(right.x)},${fmt(right.y)}) circle[radius=${fmt(radius)}];`,
+    ].join("\n");
+  }
+  if (mark.mark === "dot") {
+    const radius = Math.max(1.2, sizePx * 0.58) / pxPerWorld;
+    const fillOpts = [`fill=${color}`];
+    if (opacity < 0.999) fillOpts.push(`fill opacity=${fmt(opacity)}`);
+    return `\\fill[${fillOpts.join(", ")}] (${fmt(center.x)},${fmt(center.y)}) circle[radius=${fmt(radius)}];`;
+  }
+  if (mark.mark === "z") {
+    return draw([
+      { x: center.x - ux * gapWorld - nx * sizeWorld * 0.8, y: center.y - uy * gapWorld - ny * sizeWorld * 0.8 },
+      { x: center.x + ux * gapWorld + nx * sizeWorld * 0.8, y: center.y + uy * gapWorld - ny * sizeWorld * 0.2 },
+      { x: center.x - ux * gapWorld - nx * sizeWorld * 0.8, y: center.y - uy * gapWorld + ny * sizeWorld * 0.8 },
+      { x: center.x + ux * gapWorld + nx * sizeWorld * 0.8, y: center.y + uy * gapWorld + ny * sizeWorld * 0.2 },
+    ]);
+  }
+  return null;
+}
+
 function segmentArrowsToTikz(
   styleArrows: SegmentArrowMark | SegmentArrowMark[] | undefined,
   aName: string,
@@ -4183,7 +4738,8 @@ function segmentArrowsToTikz(
     segmentStrokeCarrierKey: string | null;
   },
   metrics?: PathArrowExportMetrics,
-  dotSizeScale?: number
+  dotSizeScale?: number,
+  plainBackend = false
 ): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
   const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
   if (arrows.length === 0) return null;
@@ -4191,6 +4747,14 @@ function segmentArrowsToTikz(
   if (effectiveArrows.length === 0) return null;
 
   const rawTexs: string[] = [];
+  const drawEndpointSegment = (
+    style: string,
+    from: string,
+    to: string
+  ): string =>
+    plainBackend
+      ? `\\draw[${style}] (${from}) -- (${to});`
+      : `\\tkzDrawSegment[${style}](${from},${to})`;
 
   for (const effectiveArrow of effectiveArrows) {
     const tip = resolveArrowTipName(effectiveArrow.tip, "SegmentArrowMark");
@@ -4279,30 +4843,76 @@ function segmentArrowsToTikz(
 
     if (effectiveArrow.direction === "->") {
       if (preferHeadOnlyEndpointOverlay) {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${aName})!${shortTailT}!(${bName})$,${bName})`);
+        rawTexs.push(
+          drawEndpointSegment(
+            drawStyleForward,
+            `$(${aName})!${shortTailT}!(${bName})$`,
+            bName
+          )
+        );
       } else {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}](${aName},${bName})`);
+        rawTexs.push(
+          drawEndpointSegment(drawStyleForward, aName, bName)
+        );
       }
     } else if (effectiveArrow.direction === "<-") {
       if (preferHeadOnlyEndpointOverlay) {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${bName})!${shortTailT}!(${aName})$,${aName})`);
+        rawTexs.push(
+          drawEndpointSegment(
+            drawStyleForward,
+            `$(${bName})!${shortTailT}!(${aName})$`,
+            aName
+          )
+        );
       } else {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}](${bName},${aName})`);
+        rawTexs.push(
+          drawEndpointSegment(drawStyleForward, bName, aName)
+        );
       }
     } else if (effectiveArrow.direction === "<->") {
       if (preferHeadOnlyEndpointOverlay) {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${aName})!${shortTailT}!(${bName})$,${bName})`);
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${bName})!${shortTailT}!(${aName})$,${aName})`);
+        rawTexs.push(
+          drawEndpointSegment(
+            drawStyleForward,
+            `$(${aName})!${shortTailT}!(${bName})$`,
+            bName
+          )
+        );
+        rawTexs.push(
+          drawEndpointSegment(
+            drawStyleForward,
+            `$(${bName})!${shortTailT}!(${aName})$`,
+            aName
+          )
+        );
       } else {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleBase},{${tipSpec}}-{${tipSpec}}](${aName},${bName})`);
+        rawTexs.push(
+          drawEndpointSegment(
+            `${drawStyleBase},{${tipSpec}}-{${tipSpec}}`,
+            aName,
+            bName
+          )
+        );
       }
     } else {
       // >-< inward endpoint arrows need a short extension outside each endpoint
       // to orient arrowheads toward the segment interior.
       const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * clampPositive(effectiveArrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20)));
       const tNeg = fmt(-tailFrac);
-      rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${aName})!${tNeg}!(${bName})$,${aName})`);
-      rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${bName})!${tNeg}!(${aName})$,${bName})`);
+      rawTexs.push(
+        drawEndpointSegment(
+          drawStyleForward,
+          `$(${aName})!${tNeg}!(${bName})$`,
+          aName
+        )
+      );
+      rawTexs.push(
+        drawEndpointSegment(
+          drawStyleForward,
+          `$(${bName})!${tNeg}!(${aName})$`,
+          bName
+        )
+      );
     }
   }
 
@@ -4636,16 +5246,29 @@ function sectorMarksToTikz(
 ): string | null {
   const marks = resolveAngleMarks(style);
   if (marks.length === 0) return null;
-  const lineWidthPt = strokeWidthToTikzPt(base.strokeWidth, options);
+  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  const lineWidthPt =
+    plainPxToPt === null
+      ? strokeWidthToTikzPt(base.strokeWidth, options)
+      : strokeWidthToTikzPt(
+          base.strokeWidth * ANGLE_CANVAS_STROKE_SCALE,
+          options
+        );
   const overlays: string[] = [];
   for (let i = 0; i < marks.length; i += 1) {
     const mark = marks[i];
+    const markSize =
+      (mark.markSize ?? 1.2) *
+      clampPositive(options.angleMarkSizeScale ?? 1, 0.01, 100);
     const markCommand = sectorMarkSymbolCommandToTikz(
       mark.markSymbol,
-      Math.max(0.2, (mark.markSize ?? 1.2) * FALLBACK_CANVAS_PX_TO_TIKZ_PT),
+      plainPxToPt === null
+        ? Math.max(0.2, markSize * FALLBACK_CANVAS_PX_TO_TIKZ_PT)
+        : markSize,
       rgbColorExpr(mark.markColor ?? style.markColor ?? base.strokeColor),
       lineWidthPt,
-      normalizedOpacity(base.opacity)
+      normalizedOpacity(base.opacity),
+      plainPxToPt ?? undefined
     );
     if (!markCommand) continue;
     const positions = collectAngleMarkPositions(mark, style.markPos ?? 0.5);
@@ -4660,17 +5283,28 @@ function sectorMarksToTikz(
 
 function sectorMarkSymbolCommandToTikz(
   symbol: AngleMarkSymbol,
-  sizePt: number,
+  size: number,
   colorExpr: string,
   lineWidthPt: number,
-  opacity: number
+  opacity: number,
+  canvasPxToTikzPt?: number
 ): string | null {
   const count = symbol === "|" ? 1 : symbol === "||" ? 2 : symbol === "|||" ? 3 : 0;
   if (count === 0) return null;
-  const tickHalf = Math.max(0.2, sizePt * 2.2);
-  const gap = Math.max(0.2, sizePt * 0.85);
+  const tickHalf =
+    canvasPxToTikzPt === undefined
+      ? Math.max(0.2, size * 2.2)
+      : Math.max(1.4, size * 2.2) * canvasPxToTikzPt;
+  const gap =
+    canvasPxToTikzPt === undefined
+      ? Math.max(0.2, size * 0.85)
+      : Math.max(1.8, size * 0.85) * canvasPxToTikzPt;
   const offsets = count === 1 ? [0] : count === 2 ? [-gap * 0.5, gap * 0.5] : [-gap, 0, gap];
-  const drawOpts = [`color=${colorExpr}`, `line width=${fmt(Math.max(0.1, lineWidthPt))}pt`, "line cap=round"];
+  const drawOpts = [
+    `color=${colorExpr}`,
+    `line width=${fmt(Math.max(0.1, lineWidthPt))}pt`,
+    canvasPxToTikzPt === undefined ? "line cap=round" : "line cap=butt",
+  ];
   if (opacity < 0.999) drawOpts.push(`opacity=${fmt(opacity)}`);
   return offsets
     .map((offset) => {
@@ -5080,6 +5714,395 @@ function resolveAngleMarkKind(
   return "rightSquare";
 }
 
+const ANGLE_CANVAS_STROKE_SCALE = 3.25 / 1.8;
+const LABEL_GLOW_WIDTH_PX = 3.5;
+
+function plainAngleStrokeStyleToTikz(
+  style: SceneModel["angles"][number]["style"],
+  options: TikzExportOptions,
+  dashPx?: readonly [number, number]
+): string {
+  const plainPxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const widthPt = Math.max(
+    0.1,
+    style.strokeWidth * ANGLE_CANVAS_STROKE_SCALE * lineScale * plainPxToPt
+  );
+  const out = [
+    `color=${rgbColorExpr(style.strokeColor)}`,
+    `line width=${fmt(widthPt)}pt`,
+    "line cap=butt",
+    "line join=miter",
+  ];
+  if (dashPx) {
+    out.push(
+      `dash pattern=on ${fmt(dashPx[0] * lineScale * plainPxToPt)}pt off ${fmt(
+        dashPx[1] * lineScale * plainPxToPt
+      )}pt`
+    );
+  }
+  const opacity = normalizedOpacity(style.strokeOpacity);
+  if (opacity < 0.999) out.push(`opacity=${fmt(opacity)}`);
+  return out.join(", ");
+}
+
+function plainAngleFillStyleToTikz(
+  style: SceneModel["angles"][number]["style"]
+): string {
+  return sectorFillStyleToTikz(style);
+}
+
+function plainAngleRightGeometry(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  c: { x: number; y: number },
+  sizeWorld: number
+): {
+  p1: { x: number; y: number };
+  p2: { x: number; y: number };
+  p3: { x: number; y: number };
+  u: { x: number; y: number };
+  v: { x: number; y: number };
+} | null {
+  const adx = a.x - b.x;
+  const ady = a.y - b.y;
+  const cdx = c.x - b.x;
+  const cdy = c.y - b.y;
+  const alen = Math.hypot(adx, ady);
+  const clen = Math.hypot(cdx, cdy);
+  if (alen <= 1e-12 || clen <= 1e-12) return null;
+  const u = { x: adx / alen, y: ady / alen };
+  const v = { x: cdx / clen, y: cdy / clen };
+  const p1 = { x: b.x + u.x * sizeWorld, y: b.y + u.y * sizeWorld };
+  const p3 = { x: b.x + v.x * sizeWorld, y: b.y + v.y * sizeWorld };
+  const p2 = { x: p1.x + v.x * sizeWorld, y: p1.y + v.y * sizeWorld };
+  return { p1, p2, p3, u, v };
+}
+
+function plainWorldPath(points: Array<{ x: number; y: number }>): string {
+  return points
+    .map((point) => `(${fmt(point.x)},${fmt(point.y)})`)
+    .join(" -- ");
+}
+
+function plainAngleBarMarksToTikz(
+  mark: ReturnType<typeof resolveAngleMarks>[number],
+  style: SceneModel["angles"][number]["style"],
+  center: { x: number; y: number },
+  startRad: number,
+  sweepRad: number,
+  radiusWorld: number,
+  radiusPx: number,
+  options: TikzExportOptions,
+  collectDistributedPositions: boolean
+): string[] {
+  const count =
+    mark.markSymbol === "|"
+      ? 1
+      : mark.markSymbol === "||"
+        ? 2
+        : mark.markSymbol === "|||"
+          ? 3
+          : 0;
+  if (count === 0) return [];
+  const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const plainPxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const markSizeScale = clampPositive(options.angleMarkSizeScale ?? 1, 0.01, 100);
+  const sizePx =
+    (Number.isFinite(mark.markSize) ? Math.max(0.2, mark.markSize) : 1.2) *
+    markSizeScale;
+  const tickHalfPx = Math.max(1.4, sizePx * 2.2);
+  const gapPx = Math.max(1.8, sizePx * 0.85);
+  const baseStep = Math.max(0.01, Math.min(0.2, gapPx / Math.max(1, radiusPx)));
+  const lineWidthPt =
+    Math.max(
+      0.5,
+      style.strokeWidth * ANGLE_CANVAS_STROKE_SCALE * lineScale
+    ) * plainPxToPt;
+  const color = rgbColorExpr(
+    mark.markColor ?? style.markColor ?? style.strokeColor
+  );
+  const drawOptions = [
+    `color=${color}`,
+    `line width=${fmt(Math.max(0.1, lineWidthPt))}pt`,
+    "line cap=butt",
+  ];
+  const opacity = normalizedOpacity(style.strokeOpacity);
+  if (opacity < 0.999) drawOptions.push(`opacity=${fmt(opacity)}`);
+  const positions = collectDistributedPositions
+    ? collectAngleMarkPositions(mark, 0.5)
+    : [clamp01(mark.markPos)];
+  const out: string[] = [];
+  for (const pos of positions) {
+    const baseAngle = startRad + sweepRad * clamp01(pos);
+    for (let i = 0; i < count; i += 1) {
+      // Canvas lays bars along the screen-space arc. Reversing Y reverses that
+      // angular offset in world coordinates.
+      const phi =
+        baseAngle - (i - (count - 1) * 0.5) * baseStep;
+      const nx = Math.cos(phi);
+      const ny = Math.sin(phi);
+      const cx = center.x + nx * radiusWorld;
+      const cy = center.y + ny * radiusWorld;
+      const halfWorld = tickHalfPx / pxPerWorld;
+      out.push(
+        `\\draw[${drawOptions.join(", ")}] (${fmt(
+          cx - nx * halfWorld
+        )},${fmt(cy - ny * halfWorld)}) -- (${fmt(
+          cx + nx * halfWorld
+        )},${fmt(cy + ny * halfWorld)});`
+      );
+    }
+  }
+  return out;
+}
+
+function plainNonSectorAngleCommands(
+  angle: SceneModel["angles"][number],
+  aWorld: { x: number; y: number },
+  bWorld: { x: number; y: number },
+  cWorld: { x: number; y: number },
+  theta: number,
+  rightStatus: AngleRightStatus,
+  options: TikzExportOptions
+): TikzCommand[] {
+  const style = angle.style;
+  const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const plainPxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const arcSizeScale = clampPositive(
+    options.angleArcSizeScale ?? 1,
+    0.01,
+    100
+  );
+  const radiusPx =
+    Math.max(18, Math.min(120, style.arcRadius * 34)) * arcSizeScale;
+  const radiusWorld = radiusPx / pxPerWorld;
+  const startRad = Math.atan2(
+    aWorld.y - bWorld.y,
+    aWorld.x - bWorld.x
+  );
+  const arcPath = arcPathExprFromWorld(
+    bWorld,
+    radiusWorld,
+    startRad,
+    theta
+  );
+  const rightLike = rightStatus !== "none";
+  const rightSolid =
+    rightStatus === "exact" ||
+    (rightStatus === "approx" && Boolean(style.promoteToSolid));
+  const markKind = resolveAngleMarkKind(style.markStyle, rightLike);
+  const mappedStrokePx =
+    style.strokeWidth * ANGLE_CANVAS_STROKE_SCALE * lineScale;
+  const rightSizePx =
+    Math.max(7, radiusPx * 0.34 + mappedStrokePx * 0.3) *
+    clampPositive(options.rightAngleSizeScale ?? 1, 0.01, 100);
+  const rightGeometry = plainAngleRightGeometry(
+    aWorld,
+    bWorld,
+    cWorld,
+    rightSizePx / pxPerWorld
+  );
+  const approximateDash =
+    rightStatus === "approx" &&
+    !rightSolid &&
+    (markKind === "rightSquare" || markKind === "rightArcDot")
+      ? ([6, 4] as const)
+      : undefined;
+  const strokeStyle = plainAngleStrokeStyleToTikz(
+    style,
+    options,
+    approximateDash
+  );
+  const commands: TikzCommand[] = [];
+
+  if (style.fillEnabled && style.fillOpacity > 0) {
+    const fillStyle = plainAngleFillStyleToTikz(style);
+    if (rightLike && markKind === "rightSquare" && rightGeometry) {
+      commands.push({
+        kind: "DrawRaw",
+        tex: `\\fill[${fillStyle}] ${plainWorldPath([
+          bWorld,
+          rightGeometry.p1,
+          rightGeometry.p2,
+          rightGeometry.p3,
+        ])} -- cycle;`,
+      });
+    } else {
+      commands.push({
+        kind: "DrawRaw",
+        tex: `\\fill[${fillStyle}] (${fmt(bWorld.x)},${fmt(
+          bWorld.y
+        )}) -- ${arcPath} -- cycle;`,
+      });
+    }
+  }
+
+  if (markKind === "rightSquare" && rightGeometry) {
+    commands.push({
+      kind: "DrawRaw",
+      tex: `\\draw[${strokeStyle}] ${plainWorldPath([
+        rightGeometry.p1,
+        rightGeometry.p2,
+        rightGeometry.p3,
+      ])};`,
+    });
+  } else if (markKind === "rightArcDot") {
+    commands.push({
+      kind: "DrawRaw",
+      tex: `\\draw[${strokeStyle}] ${arcPath};`,
+    });
+    if (rightGeometry) {
+      const dotCenter = {
+        x:
+          bWorld.x +
+          (rightGeometry.u.x + rightGeometry.v.x) *
+            (rightSizePx / pxPerWorld) *
+            0.55,
+        y:
+          bWorld.y +
+          (rightGeometry.u.y + rightGeometry.v.y) *
+            (rightSizePx / pxPerWorld) *
+            0.55,
+      };
+      const dotRadiusWorld =
+        Math.max(1.8, Math.min(4.5, rightSizePx * 0.18)) /
+        pxPerWorld;
+      const dotOpts = [`fill=${rgbColorExpr(style.strokeColor)}`];
+      const opacity = normalizedOpacity(style.strokeOpacity);
+      if (opacity < 0.999) {
+        dotOpts.push(`fill opacity=${fmt(opacity)}`);
+      }
+      commands.push({
+        kind: "DrawRaw",
+        tex: `\\fill[${dotOpts.join(", ")}] (${fmt(
+          dotCenter.x
+        )},${fmt(dotCenter.y)}) circle[radius=${fmt(
+          dotRadiusWorld
+        )}];`,
+      });
+    }
+  } else if (markKind === "arc") {
+    const marks = resolveAngleMarks(style);
+    let arcLayerOffset = 0;
+    for (const mark of marks) {
+      for (let layer = 0; layer < mark.arcMultiplicity; layer += 1) {
+        const layerRadiusPx =
+          radiusPx + (arcLayerOffset + layer) * 6;
+        commands.push({
+          kind: "DrawRaw",
+          tex: `\\draw[${strokeStyle}] ${arcPathExprFromWorld(
+            bWorld,
+            layerRadiusPx / pxPerWorld,
+            startRad,
+            theta
+          )};`,
+        });
+      }
+      const markRadiusPx =
+        radiusPx +
+        (arcLayerOffset + (mark.arcMultiplicity - 1) * 0.5) * 6;
+      const marksTex = plainAngleBarMarksToTikz(
+        mark,
+        style,
+        bWorld,
+        startRad,
+        theta,
+        markRadiusPx / pxPerWorld,
+        markRadiusPx,
+        options,
+        false
+      );
+      for (const tex of marksTex) {
+        commands.push({ kind: "DrawRaw", tex });
+      }
+      arcLayerOffset += mark.arcMultiplicity;
+    }
+  }
+
+  if (markKind === "arc" || markKind === "rightArcDot") {
+    const arrowOverlay = pathArrowOverlayToTikz(
+      style.arcArrowMarks ?? style.arcArrowMark,
+      arcPath,
+      {
+        strokeColor: style.strokeColor,
+        strokeWidth: mappedStrokePx,
+        opacity: style.strokeOpacity,
+      },
+      style.markPos ?? 0.5,
+      {
+        pathLengthWorld: Math.abs(theta) * radiusWorld,
+        screenPxPerWorld: pxPerWorld,
+        canvasPxToTikzPt: plainPxToPt,
+        canvasExact: true,
+      },
+      {
+        center: bWorld,
+        radius: radiusWorld,
+        startRad,
+        sweepRad: theta,
+      },
+      { flex: true },
+      options.pathDotMarkSizeScale
+    );
+    if (arrowOverlay) {
+      commands.push({ kind: "DrawRaw", tex: arrowOverlay });
+    }
+  }
+  return commands;
+}
+
+function plainAngleLabelCommand(
+  angle: SceneModel["angles"][number],
+  text: string,
+  options: TikzExportOptions
+): Extract<TikzCommand, { kind: "LabelAt" }> | null {
+  if (!isFiniteLabelPosWorld(angle.style.labelPosWorld)) return null;
+  const plainPxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+  const fontScale = clampPositive(
+    options.angleLabelFontScale ?? 1,
+    0.01,
+    100
+  );
+  const fontPx =
+    Math.max(8, angle.style.textSize * (25 / 16)) *
+    0.95 *
+    fontScale;
+  const fontPt = fontPx * plainPxToPt;
+  return {
+    kind: "LabelAt",
+    x: angle.style.labelPosWorld.x,
+    y: angle.style.labelPosWorld.y,
+    text,
+    options: [
+      "anchor=north west",
+      "inner sep=0pt",
+      `text=${rgbColorExpr(angle.style.textColor)}`,
+      `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(
+        fontPt * 1.2
+      )}pt}\\selectfont`,
+    ].join(", "),
+    useGlow:
+      (options.labelGlow ?? true) && Boolean(angle.style.labelGlow),
+    plainGlow: {
+      widthPt: LABEL_GLOW_WIDTH_PX * plainPxToPt,
+      color: options.labelHaloColor
+        ? rgbColorExpr(options.labelHaloColor)
+        : undefined,
+    },
+  };
+}
+
 function angleFillStyleToTikz(style: SceneModel["angles"][number]["style"], options: TikzExportOptions): string {
   if (!Number.isFinite(style.fillOpacity)) {
     throw new Error("Unsupported Angle style: fillOpacity is not finite.");
@@ -5167,6 +6190,15 @@ function angleLabelStyleToTikz(
 }
 
 function sectorDrawStyleToTikz(style: SceneModel["angles"][number]["style"], options: TikzExportOptions): string {
+  if (options.drawLayerBackend === "plain") {
+    const dash =
+      style.strokeDash === "dashed"
+        ? ([7, 5] as const)
+        : style.strokeDash === "dotted"
+          ? ([2, 4] as const)
+          : undefined;
+    return plainAngleStrokeStyleToTikz(style, options, dash);
+  }
   return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash ?? "solid", style.strokeOpacity, options);
 }
 
@@ -5240,18 +6272,33 @@ function lineLikeStyleToTikz(
   options: TikzExportOptions
 ): string {
   const widthPt = strokeWidthToTikzPt(strokeWidth, options);
+  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
   const opts: string[] = [
     `color=${rgbColorExpr(strokeColor)}`,
     `line width=${fmt(widthPt)}pt`,
   ];
+  if (plainPxToPt !== null && dash !== "dotted") {
+    // Canvas applyStrokeDash uses butt caps for solid and dashed geometry.
+    opts.push("line cap=butt");
+  }
   if (dash === "dashed") {
-    const onPt = Math.max(1.5, Math.min(12, 3 * widthPt));
-    const offPt = Math.max(2, Math.min(16, 4 * widthPt));
+    const onPt =
+      plainPxToPt === null
+        ? Math.max(1.5, Math.min(12, 3 * widthPt))
+        : 8 * lineScale * plainPxToPt;
+    const offPt =
+      plainPxToPt === null
+        ? Math.max(2, Math.min(16, 4 * widthPt))
+        : 6 * lineScale * plainPxToPt;
     opts.push(`dash pattern=on ${fmt(onPt)}pt off ${fmt(offPt)}pt`);
   }
   if (dash === "dotted") {
     // Use explicit round-cap dots so thick dotted strokes stay dotted (not tiny dashes).
-    const offPt = Math.max(1.8, Math.min(20, 3.2 * widthPt));
+    const offPt =
+      plainPxToPt === null
+        ? Math.max(1.8, Math.min(20, 3.2 * widthPt))
+        : Math.max(4, strokeWidth * 2.4) * lineScale * plainPxToPt;
     opts.push("line cap=round");
     opts.push(`dash pattern=on 0pt off ${fmt(offPt)}pt`);
   }
@@ -5261,8 +6308,16 @@ function lineLikeStyleToTikz(
 
 function strokeWidthToTikzPt(strokeWidth: number, options: TikzExportOptions): number {
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
-  const pxToPt = TIKZ_EXPORT_CALIBRATION.pointConversion.matchCanvasPxToPt;
+  const pxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    TIKZ_EXPORT_CALIBRATION.pointConversion.matchCanvasPxToPt;
   return Math.max(0.1, strokeWidth * lineScale * pxToPt);
+}
+
+function resolvedPlainCanvasPxToTikzPt(options: TikzExportOptions): number | null {
+  if (options.drawLayerBackend !== "plain") return null;
+  const value = (options as ResolvedTikzExportOptions).resolvedCanvasPxToTikzPt;
+  return Number.isFinite(value) && (value as number) > 0 ? (value as number) : null;
 }
 
 function crossPlusOverlayPathPicture(draw: string, lineWidthPt: number, strokeOpacity: number): string {
@@ -5344,7 +6399,8 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
   const result = new Map<string, LabelPlacement>();
   const scale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
   const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
-  const ptPerPxForShift = 0.75 / scale;
+  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  const ptPerPxForShift = plainPxToPt ?? 0.75 / scale;
   const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
   const labelStack = new Map<string, number>();
   for (const point of scene.points) {
@@ -5360,19 +6416,22 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
     const spread = stackIndex === 0 ? 0 : 10 * ring;
 
     // Follow canvas semantics: stored offset plus deterministic stack spread.
-    let dxPx = point.style.labelOffsetPx.x + Math.cos(angle) * spread;
-    let dyPx = point.style.labelOffsetPx.y + Math.sin(angle) * spread;
+    const appliesStackSpread = point.showLabel === "name";
+    let dxPx = point.style.labelOffsetPx.x + (appliesStackSpread ? Math.cos(angle) * spread : 0);
+    let dyPx = point.style.labelOffsetPx.y + (appliesStackSpread ? Math.sin(angle) * spread : 0);
 
     // Keep label clear of marker even if user offset is tiny.
-    const metrics = pointStyleMetricsPx(point, pointScale);
     const text = point.showLabel === "caption" ? point.captionTex || point.name : point.name;
     const labelRpx = computeLabelBubbleRadiusPx(text, point.style.labelFontPx, point.style.labelHaloWidthPx);
-    const minClearPx = metrics.markerRadiusPx + labelRpx + Math.max(2, point.style.labelHaloWidthPx * 0.35);
-    const dist = Math.hypot(dxPx, dyPx);
-    if (dist < minClearPx) {
-      const dir = dist > 1e-6 ? { x: dxPx / dist, y: dyPx / dist } : normalize2({ x: 1, y: -1 });
-      dxPx = dir.x * minClearPx;
-      dyPx = dir.y * minClearPx;
+    if (plainPxToPt === null) {
+      const metrics = pointStyleMetricsPx(point, pointScale);
+      const minClearPx = metrics.markerRadiusPx + labelRpx + Math.max(2, point.style.labelHaloWidthPx * 0.35);
+      const dist = Math.hypot(dxPx, dyPx);
+      if (dist < minClearPx) {
+        const dir = dist > 1e-6 ? { x: dxPx / dist, y: dyPx / dist } : normalize2({ x: 1, y: -1 });
+        dxPx = dir.x * minClearPx;
+        dyPx = dir.y * minClearPx;
+      }
     }
 
     // Keep caption labels on the same quadrant rule as name labels.
@@ -5386,6 +6445,8 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
       yShiftPt: -dyPx * ptPerPxForShift,
       rawXShiftPt: rawDxPx * ptPerPxForShift,
       rawYShiftPt: -rawDyPx * ptPerPxForShift,
+      offsetXPx: dxPx,
+      offsetYPx: dyPx,
       scale,
       bubbleRadiusPt: labelRpx * ptPerPxForShift,
     });
@@ -5504,6 +6565,8 @@ function injectOptionalTikzLibraries(lines: string[], defaultLibs: boolean): str
   let needsArrowsLibrary = false;
   let needsThroughLibrary = false;
   let needsShapesGeometric = false;
+  let needsShapesMisc = false;
+  let needsCalc = false;
   const patternRegex = /pattern\s*=|pattern color\s*=/;
   const patternMetaRegex = /pattern\s*=\s*\{/;
   const decorationRegex = /postaction\s*=\s*decorate|decoration\s*=\s*\{markings/i;
@@ -5511,7 +6574,9 @@ function injectOptionalTikzLibraries(lines: string[], defaultLibs: boolean): str
     /-\{(?:Stealth|Latex|Triangle)\[[^\]]*\]|\\arrow(?:reversed)?\[[^\]]*\]\{(?:Stealth|Latex|Triangle)(?:\[[^\]]*\])?\}/;
   const arrowStyleRegex = />=\s*triangle|triangle\s+45/i;
   const geometricShapeRegex = /shape\s*=\s*diamond|regular polygon(?:\s|,|$)/;
+  const miscShapeRegex = /shape\s*=\s*cross out(?:\s|,|$)/;
   const throughRegex = /through=/i;
+  const calcCoordinateRegex = /\(\$\s*\(/;
   for (const line of lines) {
     if (patternMetaRegex.test(line)) {
       needsPatternsMeta = true;
@@ -5524,14 +6589,18 @@ function injectOptionalTikzLibraries(lines: string[], defaultLibs: boolean): str
   if (arrowStyleRegex.test(line)) needsArrowsLibrary = true;
   if (throughRegex.test(line)) needsThroughLibrary = true;
   if (geometricShapeRegex.test(line)) needsShapesGeometric = true;
+  if (miscShapeRegex.test(line)) needsShapesMisc = true;
+  if (calcCoordinateRegex.test(line)) needsCalc = true;
   }
 
   const requestedLibs: string[] = defaultLibs ? ["patterns", "through", "arrows"] : [];
   if (needsShapesGeometric) requestedLibs.push("shapes.geometric");
+  if (defaultLibs && needsShapesMisc) requestedLibs.push("shapes.misc");
   if (needsPatterns) requestedLibs.push("patterns");
   if (needsPatternsMeta) requestedLibs.push("patterns.meta");
   if (needsThroughLibrary) requestedLibs.push("through");
   if (needsDecorationsMarkings) requestedLibs.push("decorations.markings");
+  if (defaultLibs && needsCalc) requestedLibs.push("calc");
   if (needsArrowsLibrary || needsArrowsMeta) requestedLibs.push("arrows");
   if (needsArrowsMeta) {
     requestedLibs.push("arrows.meta");

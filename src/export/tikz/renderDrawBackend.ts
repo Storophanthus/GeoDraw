@@ -33,6 +33,64 @@ function renderLabelText(ctx: TikzRendererContext, text: string, useGlow?: boole
   return useGlow ? `\\gdLabelGlow{$${escaped}$}` : `$${escaped}$`;
 }
 
+function splitTopLevelTexLines(content: string): string[] {
+  const lines: string[] = [];
+  let current = "";
+  let braceDepth = 0;
+  let inMath = false;
+
+  for (let i = 0; i < content.length; i += 1) {
+    const char = content[i];
+    const next = content[i + 1];
+    if (char === "\\" && next === "\\" && !inMath && braceDepth === 0) {
+      lines.push(current);
+      current = "";
+      i += 1;
+      continue;
+    }
+    current += char;
+    if (char === "$" && (i === 0 || content[i - 1] !== "\\")) {
+      inMath = !inMath;
+    } else if (!inMath && char === "{") {
+      braceDepth += 1;
+    } else if (!inMath && char === "}") {
+      braceDepth = Math.max(0, braceDepth - 1);
+    }
+  }
+  lines.push(current);
+  return lines;
+}
+
+function renderPlainLabelText(
+  ctx: TikzRendererContext,
+  cmd: Pick<LabelPointCommand | LabelAtCommand, "text" | "useGlow" | "plainGlow"> & {
+    textMode?: "math" | "raw";
+  }
+): string {
+  const content = renderLabelText(ctx, cmd.text, false, cmd.textMode);
+  if (!cmd.useGlow) return content;
+  const lines =
+    cmd.textMode === "raw" ? splitTopLevelTexLines(content) : [content];
+  if (!cmd.plainGlow) {
+    // The legacy glow helper uses contour, whose argument is LR-mode and
+    // cannot contain a node-level line break.
+    return lines.length > 1 ? content : `\\gdLabelGlow{${content}}`;
+  }
+  const widthPt = Math.max(0, cmd.plainGlow.widthPt);
+  const contourColor = cmd.plainGlow.color;
+  const contourLine = (line: string): string => {
+    const lineContent = line.trim().length > 0 ? line : "\\mbox{}";
+    const contour = contourColor && contourColor.trim()
+      ? `\\contour{${contourColor}}{${lineContent}}`
+      : `\\ifcsname thepagecolor\\endcsname\\contour{\\thepagecolor}{${lineContent}}\\else\\contour{white}{${lineContent}}\\fi`;
+    // TikZ's align implementation ends the current TeX group at each `\\`.
+    // Keep the contour setup inside each individual line instead of spanning
+    // the node-level line break.
+    return `\\begingroup\\ifcsname contour\\endcsname\\contourlength{${ctx.capabilities.fmt(widthPt)}pt}${contour}\\else ${lineContent}\\fi\\endgroup`;
+  };
+  return lines.map(contourLine).join("\\\\");
+}
+
 function createTkzDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayerBackendEmitter {
   const caps = ctx.capabilities;
   return {
@@ -107,11 +165,11 @@ function createPlainDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayer
     },
     emitLabelPoint: (cmd) => {
       const opts = cmd.options ? `[${cmd.options}]` : "";
-      return [`\\node${opts} at (${cmd.name}){${renderLabelText(ctx, cmd.text, cmd.useGlow)}};`];
+      return [`\\node${opts} at (${cmd.name}){${renderPlainLabelText(ctx, cmd)}};`];
     },
     emitLabelAt: (cmd) => {
       const opts = cmd.options ? `[${cmd.options}]` : "";
-      return [`\\node${opts} at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${renderLabelText(ctx, cmd.text, cmd.useGlow, cmd.textMode)}};`];
+      return [`\\node${opts} at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${renderPlainLabelText(ctx, cmd)}};`];
     },
   };
 }
