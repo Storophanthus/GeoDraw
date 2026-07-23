@@ -61,7 +61,7 @@ export function PointPropertiesSection({
   return (
     <>
       {mode === "object" && (
-        <div className="toolInfo">
+        <div className="toolInfo toolInfoStat">
           <div className="subSectionTitle">Point</div>
           <div className="detailRow">
             <span className="detailLabel">Position</span>

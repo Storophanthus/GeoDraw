@@ -1824,12 +1824,6 @@ body.sidebar-resizing * {
 }
 
 .toolInfo {
-  /* Label sits beside its value rather than on its own line: one short stat
-     does not need two rows. Extra stat rows stack down column 2. */
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0 8px;
-  align-items: baseline;
   margin-bottom: 6px;
   font-size: 12px;
   color: var(--gd-ui-text-muted, #475569);
@@ -1839,13 +1833,20 @@ body.sidebar-resizing * {
   padding: 5px 8px;
 }
 
-.toolInfo .subSectionTitle {
+.toolInfoStat {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 8px;
+  align-items: baseline;
+}
+
+.toolInfoStat .subSectionTitle {
   grid-column: 1;
   grid-row: 1;
   margin-bottom: 0;
 }
 
-.toolInfo .detailRow {
+.toolInfoStat .detailRow {
   grid-column: 2;
   margin-bottom: 0;
   /* Short stats ("Sweep  70.35°") stay beside their label. A long value
