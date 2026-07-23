@@ -5558,7 +5558,11 @@ function injectOptionalTikzLibraries(lines: string[], defaultLibs: boolean): str
 
 function escapeTikzText(value: string): string {
   // Pass TeX label content through so commands like \alpha and ^{\circ} work.
-  return value;
+  // Every caller wraps the result in $...$ (math mode). A blank line (2+
+  // consecutive newlines — e.g. pressing Enter twice in the label textarea)
+  // is a LaTeX paragraph break, and \par is illegal inside math mode, so
+  // collapse and trim rather than emitting a document that won't compile.
+  return value.replace(/\n{2,}/g, "\n").trim();
 }
 
 function escapeTikzPlainText(value: string): string {

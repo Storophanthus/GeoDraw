@@ -34,7 +34,11 @@ export function TextLabelStyleSection({
 }: TextLabelStyleSectionProps) {
     const renderMode = resolveTextLabelRenderMode(selectedTextLabel.style);
     return (
-        <div className="toolInfo">
+        // Not `.toolInfo`: that class is a 2-column grid meant for a title beside a
+        // single short stat. Used as a generic wrapper it auto-places every field
+        // into alternating columns instead of stacking them (see PointPropertiesSection's
+        // V3 migration, which hit the same bug).
+        <>
             <StyleSectionHeader
                 title="Text Label"
                 selectedStyleAsDefault={selectedStyleAsDefault}
@@ -262,6 +266,6 @@ export function TextLabelStyleSection({
                     {deleteLabel}
                 </button>
             )}
-        </div>
+        </>
     );
 }
