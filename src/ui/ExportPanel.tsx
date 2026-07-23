@@ -11,6 +11,7 @@ import { useGeoStore } from "../state/geoStore";
 import type { Camera } from "../view/camera";
 import { createTikzPreviewSession } from "./tikzPreviewSession";
 import { IconGlobe, IconPoint, IconLine, IconType } from "./icons";
+import { Crop, Scissors } from "lucide-react";
 import "./ExportPanel.css";
 
 type ExportPanelProps = {
@@ -24,6 +25,8 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const camera = useGeoStore((store) => store.camera);
   const exportClipWorld = useGeoStore((store) => store.exportClipWorld);
   const clearExportClipWorld = useGeoStore((store) => store.clearExportClipWorld);
+  const activeTool = useGeoStore((store) => store.activeTool);
+  const setActiveTool = useGeoStore((store) => store.setActiveTool);
   const uiColorProfileId = useGeoStore((store) => store.uiColorProfileId);
   const colorProfileId = useGeoStore((store) => store.colorProfileId);
   const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
@@ -94,6 +97,14 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     exportLineScale,
     exportLabelScale,
   ]);
+
+  // Drawing a clip area is a deliberate act, so honour it right away instead of
+  // making the user find a second checkbox. Clearing the area turns it back off.
+  useEffect(() => {
+    setExportUseClipSelection(Boolean(exportClipWorld));
+  }, [exportClipWorld]);
+
+  const clipToolActive = activeTool === "export_clip_rect" || activeTool === "export_clip";
 
   const clipSig = exportClipWorld
     ? exportClipWorld.kind === "rect"
@@ -304,6 +315,105 @@ export function ExportPanel({ visible }: ExportPanelProps) {
           </label>
         </div>
 
+        <div className={clipToolActive ? "clipBlock clipBlockArmed" : "clipBlock"}>
+          <div className="clipBlockHeader">
+            <span className="subSectionTitle">Crop area</span>
+            {(clipToolActive || exportClipWorld) && (
+              <span className="clipBlockActions">
+                {clipToolActive ? (
+                  <button
+                    type="button"
+                    className="exportRefreshButton"
+                    onClick={() => setActiveTool("move")}
+                    title="Stop drawing and go back to the move tool"
+                  >
+                    Done
+                  </button>
+                ) : (
+                  exportClipWorld && (
+                    <button
+                      type="button"
+                      className="exportRefreshButton"
+                      onClick={() =>
+                        setActiveTool(exportClipWorld.kind === "polygon" ? "export_clip" : "export_clip_rect")
+                      }
+                      title="Draw the crop area again"
+                    >
+                      Redraw
+                    </button>
+                  )
+                )}
+                {exportClipWorld && (
+                  <button
+                    type="button"
+                    className="exportRefreshButton"
+                    onClick={clearExportClipWorld}
+                    title="Clear crop area — export the whole figure again"
+                  >
+                    Clear
+                  </button>
+                )}
+              </span>
+            )}
+          </div>
+
+          {exportClipWorld ? (
+            <>
+              <label
+                className="checkboxRow"
+                title="Uncheck to export the whole figure without losing the area you drew."
+              >
+                <input
+                  type="checkbox"
+                  checked={exportUseClipSelection}
+                  onChange={(e) => setExportUseClipSelection(e.target.checked)}
+                />
+                Export only the {exportClipWorld.kind === "polygon" ? "shape" : "box"} I drew
+              </label>
+              {!clipToolActive && (
+                <div className="clipBlockHint">
+                  Drag the square handles on the canvas to adjust it.
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="clipBlockHint">Export just one part of the figure — draw the area on the canvas.</div>
+              <div className="clipToolRow">
+                <button
+                  type="button"
+                  className={activeTool === "export_clip_rect" ? "clipToolButton active" : "clipToolButton"}
+                  onClick={() => setActiveTool("export_clip_rect")}
+                  title="Click two opposite corners on the canvas"
+                >
+                  <Crop size={14} />
+                  Box
+                </button>
+                <button
+                  type="button"
+                  className={activeTool === "export_clip" ? "clipToolButton active" : "clipToolButton"}
+                  onClick={() => setActiveTool("export_clip")}
+                  title="Click each corner on the canvas, then click the first one again to close"
+                >
+                  <Scissors size={14} />
+                  Freeform
+                </button>
+              </div>
+            </>
+          )}
+
+          {clipToolActive && (
+            <div className="clipBlockStep">
+              {/* The tool stays armed after a box is committed, so once one exists the
+                  next set of clicks replaces it — say so instead of repeating "now click". */}
+              {exportClipWorld ? "To replace this area, click" : "Now click"}{" "}
+              {activeTool === "export_clip_rect"
+                ? "two opposite corners on the canvas."
+                : "each corner on the canvas, then click the first one again to close."}
+            </div>
+          )}
+        </div>
+
         <div className="scaleBlock">
           <div className="subSectionTitle">Figure sizing</div>
           <div className="compactScaleGrid">
@@ -447,25 +557,6 @@ export function ExportPanel({ visible }: ExportPanelProps) {
                 ? "Include drawing-area setup lines (not used in Exact coordinates mode)"
                 : "Include drawing-area setup lines"}
             </label>
-            <label
-              className="checkboxRow"
-              title="Draw the area first with the Export Clip Rectangle or Export Clip Polygon tool (in the Move group on the left)."
-            >
-              <input
-                type="checkbox"
-                checked={exportUseClipSelection}
-                onChange={(e) => setExportUseClipSelection(e.target.checked)}
-                disabled={!exportClipWorld}
-              />
-              Only export the clipped area
-            </label>
-            {exportClipWorld && (
-              <div className="actionsRow">
-                <button className="actionButton secondary" onClick={clearExportClipWorld}>
-                  Clear clip selection
-                </button>
-              </div>
-            )}
             <div className="exportModeBlock">
               <div className="subSectionTitle">Code style</div>
               <div className="exportModeSegmented" role="radiogroup" aria-label="TikZ code style">

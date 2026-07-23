@@ -20,6 +20,12 @@ import { drawAngleObject, drawCircleObject, drawEllipseObject, drawLineObject, d
 import type { DrawableObjectSelection } from "./renderers/types";
 import type { ResolvedAngle } from "./labelOverlays";
 import { drawInteractionHighlights } from "./interactionHighlights";
+import {
+  EXPORT_CLIP_HANDLE_HIT_PX,
+  EXPORT_CLIP_HANDLE_SIZE_PX,
+  exportClipHandleScreen,
+  listExportClipHandles,
+} from "./exportClipHandles";
 import { highlightSnapObject } from "./snapHighlight";
 
 type PendingPreviewTolerances = {
@@ -200,7 +206,17 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
       pendingSelection && pendingSelection.tool === "export_clip"
         ? pendingSelection.points.map((p) => p.world)
         : [];
-    drawExportClipOverlay(ctx, exportClipWorld, clipPreviewPoints, cursorWorld, camera, vp, previewTheme);
+    drawExportClipOverlay(
+      ctx,
+      exportClipWorld,
+      clipPreviewPoints,
+      cursorWorld,
+      camera,
+      vp,
+      previewTheme,
+      activeTool,
+      hoverScreen
+    );
 
     if (hoverSnap && (activeTool === "point" || activeTool === "move")) {
       const s = camMath.worldToScreen(hoverSnap.world, camera, vp);
@@ -229,7 +245,9 @@ function drawExportClipOverlay(
   cursorWorld: Vec2 | null,
   camera: Camera,
   vp: Viewport,
-  previewTheme: PendingPreviewTheme
+  previewTheme: PendingPreviewTheme,
+  activeTool: ActiveTool,
+  hoverScreen: Vec2 | null
 ): void {
   ctx.save();
   ctx.setLineDash([5, 4]);
@@ -273,6 +291,43 @@ function drawExportClipOverlay(
       const c = camMath.worldToScreen(cursorWorld, camera, vp);
       ctx.lineTo(c.x, c.y);
     }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Grab handles ride on top of the dashed outline, and only under the move tool
+  // — while a clip tool is armed the next clicks draw a replacement area, so
+  // showing handles there would advertise an interaction that isn't available.
+  if (clip && activeTool === "move") {
+    drawExportClipHandles(ctx, clip, camera, vp, previewTheme, hoverScreen);
+  }
+}
+
+function drawExportClipHandles(
+  ctx: CanvasRenderingContext2D,
+  clip: ExportClipWorld,
+  camera: Camera,
+  vp: Viewport,
+  previewTheme: PendingPreviewTheme,
+  hoverScreen: Vec2 | null
+): void {
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.lineWidth = Math.max(1, previewTheme.lineWidthPx);
+  const half = EXPORT_CLIP_HANDLE_SIZE_PX / 2;
+
+  for (const handle of listExportClipHandles(clip)) {
+    const screen = exportClipHandleScreen(clip, handle, camera, vp);
+    if (!screen) continue;
+    const hovered =
+      hoverScreen !== null
+      && Math.hypot(hoverScreen.x - screen.x, hoverScreen.y - screen.y) <= EXPORT_CLIP_HANDLE_HIT_PX;
+    const size = hovered ? half + 1.5 : half;
+    ctx.fillStyle = hovered ? previewTheme.strokeStrong : previewTheme.fillStrong;
+    ctx.strokeStyle = previewTheme.strokeStrong;
+    ctx.beginPath();
+    ctx.rect(screen.x - size, screen.y - size, size * 2, size * 2);
+    ctx.fill();
     ctx.stroke();
   }
   ctx.restore();

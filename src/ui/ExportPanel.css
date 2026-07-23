@@ -89,6 +89,100 @@
     max-height: none !important;
 }
 
+.clipBlock {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--gd-ui-surface-soft, #f8fafc);
+    border: 1px solid var(--gd-ui-border-soft, #e2e8f0);
+    border-radius: 8px;
+}
+
+/* While a clip tool is armed the canvas is waiting for clicks, so the block
+   has to read as "your turn" from the corner of the eye. */
+.clipBlock.clipBlockArmed {
+    border-color: var(--gd-ui-accent, #2563eb);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--gd-ui-accent, #2563eb) 14%, transparent);
+}
+
+.clipBlockHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 20px;
+}
+
+.clipBlockHeader .subSectionTitle {
+    margin-bottom: 0;
+}
+
+.clipBlockActions {
+    display: inline-flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.clipBlockActions .exportRefreshButton {
+    padding: 1px 8px;
+    font-size: 10.5px;
+}
+
+.clipBlockHint {
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--gd-ui-text-subtle, #64748b);
+}
+
+.clipBlockStep {
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.35;
+    font-weight: 600;
+    color: var(--gd-ui-accent-strong, #1d4ed8);
+}
+
+.clipToolRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.clipToolButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--gd-ui-border, #cbd5e1);
+    border-radius: 8px;
+    background: var(--gd-ui-surface, #ffffff);
+    color: var(--gd-ui-text, #334155);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 650;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.clipToolButton:hover {
+    border-color: var(--gd-ui-border-strong, #94a3b8);
+    color: var(--gd-ui-text-strong, #0f172a);
+}
+
+.clipToolButton.active {
+    background: var(--gd-ui-accent-strong, #1d4ed8);
+    border-color: var(--gd-ui-accent-strong, #1d4ed8);
+    color: var(--gd-ui-surface, #ffffff);
+}
+
+.clipToolButton:focus-visible {
+    outline: 2px solid var(--gd-ui-focus-outline, rgba(37, 99, 235, 0.2));
+    outline-offset: 2px;
+}
+
 .scaleBlock {
     margin-top: 12px;
     padding: 10px 12px;

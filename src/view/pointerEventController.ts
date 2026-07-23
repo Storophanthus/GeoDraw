@@ -1,4 +1,5 @@
 import type { Vec2 } from "../geo/vec2";
+import type { ExportClipHandle } from "./exportClipHandles";
 import type { PointerMode } from "./pointerInteraction";
 import { bufferDragForMode, resetDragBuffers, type DragBufferAccess } from "./pointerDragInteraction";
 
@@ -7,6 +8,7 @@ type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
+  clipHandle: ExportClipHandle | null;
   objectType: "point" | "angle" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "textLabel" | "richText" | null;
   lastX: number;
   lastY: number;
@@ -19,6 +21,7 @@ type PointerStateRef = { current: PointerState };
 type DragFrameRef = { current: number | null };
 
 type PointerHits = {
+  hitClipHandle?: ExportClipHandle | null;
   hitTextLabelId?: string | null;
   hitRichTextNodeId?: string | null;
   hitPointId: string | null;
@@ -42,6 +45,7 @@ type PointerHits = {
 type MoveDecision = {
   mode: PointerMode;
   pointId: string | null;
+  clipHandle: ExportClipHandle | null;
   dragObjectType: "segment" | "line" | "circle" | "ellipse" | "polygon" | null;
   selectedObject:
     | { type: "point"; id: string }
@@ -68,7 +72,8 @@ type CreatePointerHandlersDeps = {
   computeHoveredHit: (screen: Vec2) => { type: "point" | "angle" | "segment" | "line2p" | "circle" | "ellipse" | "polygon"; id: string } | null;
   applyCursor: (
     hovered: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "ellipse" | "polygon"; id: string } | null,
-    modeOverride?: PointerMode
+    modeOverride?: PointerMode,
+    screen?: Vec2
   ) => void;
   scheduleDragUpdate: () => void;
   flushDragUpdate: () => void;
@@ -109,7 +114,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
     deps.setCursorWorldFromScreen(screen);
     const hovered = deps.computeHoveredHit(screen);
     deps.setHoveredHit(hovered);
-    deps.applyCursor(hovered);
+    deps.applyCursor(hovered, undefined, screen);
   };
 
   const scheduleHoverUpdate = (screen: Vec2, shiftKey: boolean) => {
@@ -139,14 +144,20 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
 
     let mode: PointerMode = "idle";
     let pointId: string | null = null;
+    let clipHandle: ExportClipHandle | null = null;
     let objectType: PointerState["objectType"] = null;
 
     if (deps.activeTool === "move") {
       const decision = deps.decideMovePointerDown(hits);
       mode = decision.mode;
       pointId = decision.pointId;
+      clipHandle = decision.clipHandle;
       objectType = decision.selectedObject?.type ?? decision.dragObjectType ?? null;
-      deps.setSelectedObject(decision.selectedObject);
+      // Grabbing a crop handle is not a selection change, so leave the current
+      // selection alone rather than clearing it.
+      if (mode !== "drag-clip-handle") {
+        deps.setSelectedObject(decision.selectedObject);
+      }
     } else if (deps.activeTool === "label" || deps.activeTool === "textbox") {
       const decision = deps.decideMovePointerDown(hits);
       const shouldEnterTextboxEdit =
@@ -184,6 +195,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pid: e.pointerId,
       mode,
       pointId,
+      clipHandle,
       objectType,
       lastX: e.clientX,
       lastY: e.clientY,
@@ -191,7 +203,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       startY: e.clientY,
       moved: false,
     };
-    deps.applyCursor(hovered, mode);
+    deps.applyCursor(hovered, mode, screen);
   };
 
   const onMove = (e: PointerEvent) => {
@@ -199,6 +211,10 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
     const st = deps.pointerRef.current;
     if (st.active && st.pid === e.pointerId && st.mode !== "tool-click") {
       deps.setSnapDisabled(e.shiftKey);
+      // The hovered-handle highlight is derived from hoverScreen, which the drag
+      // path otherwise leaves frozen at the grab point — stale by the time the
+      // box has resized under the cursor.
+      if (st.mode === "drag-clip-handle") deps.setHoverScreen(screen);
       const dx = e.clientX - st.lastX;
       const dy = e.clientY - st.lastY;
       st.lastX = e.clientX;
@@ -251,6 +267,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
       pid: -1,
       mode: "idle",
       pointId: null,
+      clipHandle: null,
       objectType: null,
       lastX: 0,
       lastY: 0,
@@ -264,7 +281,7 @@ export function createPointerHandlers(deps: CreatePointerHandlersDeps) {
     const screen = deps.readScreen(e);
     const hovered = deps.computeHoveredHit(screen);
     deps.setHoveredHit(hovered);
-    deps.applyCursor(hovered);
+    deps.applyCursor(hovered, undefined, screen);
   };
 
   return { onDown, onMove, finish, cancelPendingHoverUpdate };
