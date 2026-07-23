@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { RefObject } from "react";
 import type { Vec2 } from "../geo/vec2";
 import type { ActiveTool, HoveredHit, PendingSelection, SelectedObject } from "../state/geoStore";
+import type { ExportClipWorld } from "../state/slices/storeTypes";
 import type { Camera, Viewport } from "./camera";
 import { camera as camMath } from "./camera";
 import { runConstructClickAdapter, type ConstructClickIo } from "./constructClickAdapter";
@@ -13,6 +14,11 @@ import {
   createReadScreen,
 } from "./canvasInteractionHelpers";
 import { getAngleTextRenderSize, type ResolvedAngle } from "./labelOverlays";
+import {
+  hitTestExportClipHandle,
+  moveExportClipHandle,
+  type ExportClipHandle,
+} from "./exportClipHandles";
 import { createCanvasAuxHandlers, createPointerHandlers } from "./pointerEventController";
 import {
   computeCanvasCursor,
@@ -52,6 +58,7 @@ export type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
+  clipHandle: ExportClipHandle | null;
   objectType: "point" | "angle" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "textLabel" | "richText" | null;
   lastX: number;
   lastY: number;
@@ -79,6 +86,7 @@ type InteractionActions = {
   moveTextLabelTo: (id: string, world: Vec2) => void;
   moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   moveRichTextNodeByWorldDelta: (id: string, deltaWorld: Vec2) => void;
+  setExportClipWorld: (clip: ExportClipWorld) => void;
   setHoverScreen: (value: Vec2 | null) => void;
   setSnapDisabled: (value: boolean) => void;
   setCursorWorld: (value: Vec2 | null) => void;
@@ -111,6 +119,7 @@ type InteractionDeps = {
   resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>;
   resolvedAngles: ResolvedAngle[];
   hoveredHit: HoveredHit;
+  exportClipWorld: ExportClipWorld | null;
   selectedObject: { type: "point" | "line" | "segment" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
   pointLabelOffsetPx: Vec2;
   angleFixedTool: AngleFixedToolState;
@@ -138,6 +147,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     resolvedPoints,
     resolvedAngles,
     hoveredHit,
+    exportClipWorld,
     selectedObject,
     pointLabelOffsetPx,
     angleFixedTool,
@@ -164,9 +174,15 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       tolerances,
     });
 
-    const applyCursor = (nextHovered: HoveredHit, modeOverride?: PointerMode) => {
+    // Clip handles only exist while a crop area does, and only the move tool can
+    // grab them — the clip tools themselves are busy drawing a replacement.
+    const resolveClipHandle = (screen: Vec2): ExportClipHandle | null =>
+      activeTool === "move" ? hitTestExportClipHandle(screen, exportClipWorld, camera, vp) : null;
+
+    const applyCursor = (nextHovered: HoveredHit, modeOverride?: PointerMode, screen?: Vec2) => {
       const mode = modeOverride ?? pointerRef.current.mode;
-      canvas.style.cursor = computeCanvasCursor(activeTool, mode, nextHovered, pendingSelection);
+      const hoveredClipHandle = screen ? resolveClipHandle(screen) : null;
+      canvas.style.cursor = computeCanvasCursor(activeTool, mode, nextHovered, pendingSelection, hoveredClipHandle);
     };
 
     const flushDragUpdate = () => {
@@ -206,6 +222,15 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           moveTextLabelTo: actions.moveTextLabelTo,
           moveTextLabelByWorldDelta: actions.moveTextLabelByWorldDelta,
           moveRichTextNodeByWorldDelta: actions.moveRichTextNodeByWorldDelta,
+          moveExportClipHandleTo: (handle, world) => {
+            if (!exportClipWorld) return;
+            const result = moveExportClipHandle(exportClipWorld, handle, world);
+            // A bound that crossed its opposite renames the grabbed handle; keep
+            // the pointer holding the same physical corner/edge so the rest of
+            // the drag still tracks the cursor.
+            pointerRef.current.clipHandle = result.handle;
+            actions.setExportClipWorld(result.clip);
+          },
           screenToWorld: (screen) => camMath.screenToWorld(screen, camera, vp),
           screenDeltaToWorldDelta: (delta) => {
             const world0 = camMath.screenToWorld({ x: 0, y: 0 }, camera, vp);
@@ -235,6 +260,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     });
 
     const resolveCanvasHits = (screen: Vec2, clientX: number, clientY: number) => ({
+      hitClipHandle: resolveClipHandle(screen),
       hitTextLabelId: hitTestTextLabelFromDom(clientX, clientY, labelsLayerRef.current),
       hitRichTextNodeId: hitTestRichTextNodeFromDom(clientX, clientY, labelsLayerRef.current),
       hitPointId: engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
@@ -414,6 +440,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     actions,
     clickEpsilonPx,
     hoveredHit,
+    exportClipWorld,
     selectedObject,
     pendingSelection,
     pointLabelOffsetPx,

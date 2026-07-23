@@ -20,8 +20,8 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { loadTikzPreviewSession } from "./tikzPreviewSession";
 import { buildStandaloneSource, deriveDefaultOptionalPreamble } from "../export/tikz/standaloneDocument";
+import { loadTikzPreviewSession } from "./tikzPreviewSession";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -42,7 +42,6 @@ const MAX_TIKZ_EDITOR_HISTORY = 250;
 const MIN_PDF_ZOOM = 0.4;
 const MAX_PDF_ZOOM = 4;
 const PDF_CANVAS_PADDING = 18;
-
 export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   const session = useMemo(() => loadTikzPreviewSession(token), [token]);
   const isTauriRuntime = useMemo(

@@ -9,7 +9,14 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { EXPORT_FRIENDLY_COLOR_PRESETS, PRIMARY_EXPORT_FRIENDLY_COLOR_PRESETS } from "../exportFriendlyColors";
+import {
+  colorToHex,
+  EXPORT_FRIENDLY_COLOR_PRESETS,
+  parseColorToRgb,
+  PRIMARY_EXPORT_FRIENDLY_COLOR_PRESETS,
+  rgbToHex,
+} from "../exportFriendlyColors";
+import { loadStoredRecentColors, MAX_RECENT_COLORS, saveStoredRecentColors } from "../state/appPreferences";
 import { toColorInputValue } from "./preferences/utils";
 
 function joinClassNames(...parts: Array<string | undefined | false | null>) {
@@ -58,8 +65,16 @@ export function ColorSwatchInput({
   const nativeInputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
-  const pickerValue = toColorInputValue(value) ?? "#000000";
+  const [recentColors, setRecentColors] = useState<string[]>([]);
+  const resolvedHex = toColorInputValue(value);
+  const pickerValue = resolvedHex ?? "#000000";
+  const displayText = resolvedHex ? resolvedHex.toUpperCase() : value;
   const nativeChange = onChange as ChangeEventHandler<HTMLInputElement> | undefined;
+  const rgb = parseColorToRgb(pickerValue) ?? { r: 0, g: 0, b: 0 };
+
+  useEffect(() => {
+    if (open) setRecentColors(loadStoredRecentColors());
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -128,8 +143,27 @@ export function ColorSwatchInput({
     };
   }, [open, variant]);
 
+  const recordRecentColor = (hex: string) => {
+    const next = [hex, ...loadStoredRecentColors().filter((existing) => existing !== hex)].slice(
+      0,
+      MAX_RECENT_COLORS
+    );
+    saveStoredRecentColors(next);
+    setRecentColors(next);
+  };
+
   const commitValue = (nextValue: string) => {
     nativeChange?.(createColorChangeEvent(nextValue));
+    const hex = colorToHex(nextValue);
+    if (hex) recordRecentColor(hex);
+  };
+
+  const commitChannel = (channel: "r" | "g" | "b", raw: string) => {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    const clamped = Math.max(0, Math.min(255, Math.round(parsed)));
+    const nextRgb = { ...rgb, [channel]: clamped };
+    commitValue(rgbToHex(nextRgb.r, nextRgb.g, nextRgb.b));
   };
 
   const openNativePicker = () => {
@@ -145,15 +179,17 @@ export function ColorSwatchInput({
         type="button"
         className={joinClassNames(
           "colorFieldTrigger",
-          variant === "token" ? "preferencesTokenColor" : "colorInput",
+          variant === "token" ? "preferencesTokenColor" : "colorFieldPill",
           className
         )}
         style={style as CSSProperties | undefined}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
         aria-label={props["aria-label"] ?? "Choose color"}
+        title={variant === "panel" ? value : undefined}
       >
         <span className="colorFieldSwatch" style={{ background: pickerValue }} aria-hidden />
+        {variant === "panel" && <span className="colorFieldHexText">{displayText}</span>}
       </button>
 
       <input
@@ -164,6 +200,7 @@ export function ColorSwatchInput({
         disabled={disabled}
         onChange={(event) => {
           nativeChange?.(event);
+          recordRecentColor(event.target.value);
           setOpen(false);
         }}
         tabIndex={-1}
@@ -183,6 +220,69 @@ export function ColorSwatchInput({
             )}
             style={popoverStyle ?? undefined}
           >
+            <div className="colorFieldSection colorFieldSectionRgb">
+              <div className="colorFieldSectionLabel">RGB</div>
+              <div className="colorFieldRgbRow">
+                <label className="colorFieldRgbField">
+                  <span>R</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={255}
+                    step={1}
+                    value={rgb.r}
+                    onChange={(e) => commitChannel("r", e.target.value)}
+                    aria-label="Red"
+                  />
+                </label>
+                <label className="colorFieldRgbField">
+                  <span>G</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={255}
+                    step={1}
+                    value={rgb.g}
+                    onChange={(e) => commitChannel("g", e.target.value)}
+                    aria-label="Green"
+                  />
+                </label>
+                <label className="colorFieldRgbField">
+                  <span>B</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={255}
+                    step={1}
+                    value={rgb.b}
+                    onChange={(e) => commitChannel("b", e.target.value)}
+                    aria-label="Blue"
+                  />
+                </label>
+              </div>
+            </div>
+            {recentColors.length > 0 && (
+              <div className="colorFieldSection colorFieldSectionRecent">
+                <div className="colorFieldSectionLabel">Recent</div>
+                <div className="colorFieldPresetGrid">
+                  {recentColors.map((hex) => (
+                    <button
+                      key={hex}
+                      type="button"
+                      className={joinClassNames("colorFieldPreset", hex === pickerValue && "colorFieldPresetActive")}
+                      onClick={() => {
+                        commitValue(hex);
+                        setOpen(false);
+                      }}
+                      title={hex.toUpperCase()}
+                      aria-label={hex.toUpperCase()}
+                    >
+                      <span className="colorFieldPresetSwatch" style={{ background: hex }} aria-hidden />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="colorFieldSection colorFieldSectionPrimary">
               <div className="colorFieldSectionLabel">Main</div>
               <div className="colorFieldPrimaryGrid">

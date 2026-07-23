@@ -11,6 +11,7 @@ import { useGeoStore } from "../state/geoStore";
 import type { Camera } from "../view/camera";
 import { createTikzPreviewSession } from "./tikzPreviewSession";
 import { IconGlobe, IconPoint, IconLine, IconType } from "./icons";
+import { Crop, Scissors } from "lucide-react";
 import "./ExportPanel.css";
 
 type ExportPanelProps = {
@@ -19,11 +20,18 @@ type ExportPanelProps = {
 
 type TikzExportMode = "visualExact" | "reconstructible";
 
+type CanvasViewportSize = {
+  widthPx: number;
+  heightPx: number;
+};
+
 export function ExportPanel({ visible }: ExportPanelProps) {
   const scene = useGeoStore((store) => store.scene);
   const camera = useGeoStore((store) => store.camera);
   const exportClipWorld = useGeoStore((store) => store.exportClipWorld);
   const clearExportClipWorld = useGeoStore((store) => store.clearExportClipWorld);
+  const activeTool = useGeoStore((store) => store.activeTool);
+  const setActiveTool = useGeoStore((store) => store.setActiveTool);
   const uiColorProfileId = useGeoStore((store) => store.uiColorProfileId);
   const colorProfileId = useGeoStore((store) => store.colorProfileId);
   const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
@@ -51,18 +59,24 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [lastTikzSceneRef, setLastTikzSceneRef] = useState<SceneModel | null>(null);
   const [lastTikzOptionSig, setLastTikzOptionSig] = useState("");
   const [lastTikzGeneratedAt, setLastTikzGeneratedAt] = useState<number | null>(null);
+  const [canvasViewportSize, setCanvasViewportSize] = useState<CanvasViewportSize | null>(
+    () => readDrawingCanvasSize()
+  );
   const isTauriRuntime = useMemo(
     () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as object),
     []
   );
+  const canvasTheme = useMemo(
+    () => getCanvasColorTheme(colorProfileId, canvasThemeOverrides),
+    [colorProfileId, canvasThemeOverrides]
+  );
   const uiCssVariables = useMemo(() => {
     const uiVars = getUiCssVariables(uiColorProfileId, uiCssOverrides);
-    const canvasTheme = getCanvasColorTheme(colorProfileId, canvasThemeOverrides);
     return {
       ...uiVars,
       "--gd-scene-bg": canvasTheme.backgroundColor,
     };
-  }, [uiColorProfileId, uiCssOverrides, colorProfileId, canvasThemeOverrides]);
+  }, [uiColorProfileId, uiCssOverrides, canvasTheme.backgroundColor]);
   const hasVisibleLineObject = useMemo(
     () => scene.lines.some((line) => line.visible),
     [scene.lines]
@@ -95,12 +109,53 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     exportLabelScale,
   ]);
 
+  // Drawing a clip area is a deliberate act, so honour it right away instead of
+  // making the user find a second checkbox. Clearing the area turns it back off.
+  useEffect(() => {
+    setExportUseClipSelection(Boolean(exportClipWorld));
+  }, [exportClipWorld]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const canvas = document.querySelector<HTMLCanvasElement>(".drawingCanvas");
+    if (!canvas) return;
+
+    const updateCanvasViewportSize = () => {
+      const next = readDrawingCanvasSize(canvas);
+      if (!next) return;
+      setCanvasViewportSize((previous) =>
+        previous?.widthPx === next.widthPx && previous.heightPx === next.heightPx
+          ? previous
+          : next
+      );
+    };
+
+    updateCanvasViewportSize();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateCanvasViewportSize);
+      return () => window.removeEventListener("resize", updateCanvasViewportSize);
+    }
+
+    const resizeObserver = new ResizeObserver(updateCanvasViewportSize);
+    resizeObserver.observe(canvas);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  const clipToolActive = activeTool === "export_clip_rect" || activeTool === "export_clip";
+
   const clipSig = exportClipWorld
     ? exportClipWorld.kind === "rect"
       ? `rect:${exportClipWorld.xmin},${exportClipWorld.xmax},${exportClipWorld.ymin},${exportClipWorld.ymax}`
       : `poly:${exportClipWorld.points.map((p) => `${p.x},${p.y}`).join(";")}`
     : "none";
-  const currentTikzOptionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${tikzExportMode}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
+  const canvasViewportSig = exportBakeCoordinates
+    ? canvasViewportSize
+      ? `${canvasViewportSize.widthPx}x${canvasViewportSize.heightPx}`
+      : "canvas-unavailable"
+    : "reconstructible-legacy-viewport";
+  const tikzOptionSigForCanvas = (canvasSig: string) =>
+    `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${tikzExportMode}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${canvasSig}|${exportBakeCoordinates ? canvasTheme.backgroundColor : "reconstructible-label-halo"}|${clipSig}`;
+  const currentTikzOptionSig = tikzOptionSigForCanvas(canvasViewportSig);
   const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
   const tikzStatusText = useMemo(
     () =>
@@ -117,12 +172,37 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     const lineScale = Number(exportLineScale);
     const labelScale = Number(exportLabelScale);
     const globalScale = Number(exportGlobalScale);
-    const optionSig = `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${tikzExportMode}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${clipSig}`;
-    const viewport = exportUseCurrentView ? getViewportFromCanvas(camera) : undefined;
+    const exportCanvasViewportSize = exportBakeCoordinates
+      ? readDrawingCanvasSize() ?? canvasViewportSize
+      : null;
+    if (
+      exportCanvasViewportSize &&
+      (
+        canvasViewportSize?.widthPx !== exportCanvasViewportSize.widthPx ||
+        canvasViewportSize.heightPx !== exportCanvasViewportSize.heightPx
+      )
+    ) {
+      setCanvasViewportSize(exportCanvasViewportSize);
+    }
+    const optionSig = exportBakeCoordinates
+      ? tikzOptionSigForCanvas(
+          exportCanvasViewportSize
+            ? `${exportCanvasViewportSize.widthPx}x${exportCanvasViewportSize.heightPx}`
+            : "canvas-unavailable"
+        )
+      : currentTikzOptionSig;
+    const viewport = exportUseCurrentView
+      ? exportBakeCoordinates
+        ? exportCanvasViewportSize
+          ? getViewportFromCanvas(camera, exportCanvasViewportSize)
+          : undefined
+        : getLegacyViewportFromCanvasPane(camera)
+      : undefined;
     const clipRect =
       exportUseClipSelection && exportClipWorld?.kind === "rect" ? exportClipWorld : undefined;
     const clipPolygon =
       exportUseClipSelection && exportClipWorld?.kind === "polygon" ? exportClipWorld.points : undefined;
+    const useCanvasExactMetrics = exportDrawLayerBackend === "plain";
     const tikzOptions = {
       viewport,
       clipRectWorld: clipRect,
@@ -131,25 +211,26 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       pointScale: Number.isFinite(pointScale) ? pointScale : 1,
       lineScale:
         (Number.isFinite(lineScale) ? lineScale : 1) *
-        TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter,
+        (useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter),
       labelScale: Number.isFinite(labelScale) ? labelScale : 1,
       screenPxPerWorld: camera.zoom,
       emitTkzSetup: exportEmitTkzSetup,
       drawLayerBackend: exportDrawLayerBackend,
       labelGlow: exportLabelGlow,
+      labelHaloColor: useCanvasExactMetrics ? canvasTheme.backgroundColor : undefined,
       bakePointCoordinates: exportBakeCoordinates,
-      pointStrokeScale: TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
-      pointInnerSepFixedPt: getPointInnerSepFixedPt(),
-      pointInnerSepScale: TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
-      segmentMarkSizeScale: TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale,
-      segmentMarkRoundSizeScale: TIKZ_EXPORT_CALIBRATION.segmentMarkRoundSizeScale,
-      segmentMarkNonRoundSizeScale: TIKZ_EXPORT_CALIBRATION.segmentMarkNonRoundSizeScale,
-      segmentMarkLineWidthScale: TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale,
-      pathDotMarkSizeScale: TIKZ_EXPORT_CALIBRATION.pathDotMarkSizeScale,
-      angleLabelFontScale: TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
-      angleArcSizeScale: TIKZ_EXPORT_CALIBRATION.angleArcSizeScale,
-      angleMarkSizeScale: TIKZ_EXPORT_CALIBRATION.angleMarkSizeScale,
-      rightAngleSizeScale: TIKZ_EXPORT_CALIBRATION.rightAngleSizeScale,
+      pointStrokeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
+      pointInnerSepFixedPt: useCanvasExactMetrics ? undefined : getPointInnerSepFixedPt(),
+      pointInnerSepScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
+      segmentMarkSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale,
+      segmentMarkRoundSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkRoundSizeScale,
+      segmentMarkNonRoundSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkNonRoundSizeScale,
+      segmentMarkLineWidthScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale,
+      pathDotMarkSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pathDotMarkSizeScale,
+      angleLabelFontScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
+      angleArcSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.angleArcSizeScale,
+      angleMarkSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.angleMarkSizeScale,
+      rightAngleSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.rightAngleSizeScale,
       autoScaleToFitCm: {
         maxWidthCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
         maxHeightCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,
@@ -304,6 +385,105 @@ export function ExportPanel({ visible }: ExportPanelProps) {
           </label>
         </div>
 
+        <div className={clipToolActive ? "clipBlock clipBlockArmed" : "clipBlock"}>
+          <div className="clipBlockHeader">
+            <span className="subSectionTitle">Crop area</span>
+            {(clipToolActive || exportClipWorld) && (
+              <span className="clipBlockActions">
+                {clipToolActive ? (
+                  <button
+                    type="button"
+                    className="exportRefreshButton"
+                    onClick={() => setActiveTool("move")}
+                    title="Stop drawing and go back to the move tool"
+                  >
+                    Done
+                  </button>
+                ) : (
+                  exportClipWorld && (
+                    <button
+                      type="button"
+                      className="exportRefreshButton"
+                      onClick={() =>
+                        setActiveTool(exportClipWorld.kind === "polygon" ? "export_clip" : "export_clip_rect")
+                      }
+                      title="Draw the crop area again"
+                    >
+                      Redraw
+                    </button>
+                  )
+                )}
+                {exportClipWorld && (
+                  <button
+                    type="button"
+                    className="exportRefreshButton"
+                    onClick={clearExportClipWorld}
+                    title="Clear crop area — export the whole figure again"
+                  >
+                    Clear
+                  </button>
+                )}
+              </span>
+            )}
+          </div>
+
+          {exportClipWorld ? (
+            <>
+              <label
+                className="checkboxRow"
+                title="Uncheck to export the whole figure without losing the area you drew."
+              >
+                <input
+                  type="checkbox"
+                  checked={exportUseClipSelection}
+                  onChange={(e) => setExportUseClipSelection(e.target.checked)}
+                />
+                Export only the {exportClipWorld.kind === "polygon" ? "shape" : "box"} I drew
+              </label>
+              {!clipToolActive && (
+                <div className="clipBlockHint">
+                  Drag the square handles on the canvas to adjust it.
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="clipBlockHint">Export just one part of the figure — draw the area on the canvas.</div>
+              <div className="clipToolRow">
+                <button
+                  type="button"
+                  className={activeTool === "export_clip_rect" ? "clipToolButton active" : "clipToolButton"}
+                  onClick={() => setActiveTool("export_clip_rect")}
+                  title="Click two opposite corners on the canvas"
+                >
+                  <Crop size={14} />
+                  Box
+                </button>
+                <button
+                  type="button"
+                  className={activeTool === "export_clip" ? "clipToolButton active" : "clipToolButton"}
+                  onClick={() => setActiveTool("export_clip")}
+                  title="Click each corner on the canvas, then click the first one again to close"
+                >
+                  <Scissors size={14} />
+                  Freeform
+                </button>
+              </div>
+            </>
+          )}
+
+          {clipToolActive && (
+            <div className="clipBlockStep">
+              {/* The tool stays armed after a box is committed, so once one exists the
+                  next set of clicks replaces it — say so instead of repeating "now click". */}
+              {exportClipWorld ? "To replace this area, click" : "Now click"}{" "}
+              {activeTool === "export_clip_rect"
+                ? "two opposite corners on the canvas."
+                : "each corner on the canvas, then click the first one again to close."}
+            </div>
+          )}
+        </div>
+
         <div className="scaleBlock">
           <div className="subSectionTitle">Figure sizing</div>
           <div className="compactScaleGrid">
@@ -447,25 +627,6 @@ export function ExportPanel({ visible }: ExportPanelProps) {
                 ? "Include drawing-area setup lines (not used in Exact coordinates mode)"
                 : "Include drawing-area setup lines"}
             </label>
-            <label
-              className="checkboxRow"
-              title="Draw the area first with the Export Clip Rectangle or Export Clip Polygon tool (in the Move group on the left)."
-            >
-              <input
-                type="checkbox"
-                checked={exportUseClipSelection}
-                onChange={(e) => setExportUseClipSelection(e.target.checked)}
-                disabled={!exportClipWorld}
-              />
-              Only export the clipped area
-            </label>
-            {exportClipWorld && (
-              <div className="actionsRow">
-                <button className="actionButton secondary" onClick={clearExportClipWorld}>
-                  Clear clip selection
-                </button>
-              </div>
-            )}
             <div className="exportModeBlock">
               <div className="subSectionTitle">Code style</div>
               <div className="exportModeSegmented" role="radiogroup" aria-label="TikZ code style">
@@ -529,7 +690,38 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   );
 }
 
-function getViewportFromCanvas(camera: Camera): { xmin: number; xmax: number; ymin: number; ymax: number } | undefined {
+function readDrawingCanvasSize(
+  canvas?: HTMLCanvasElement
+): CanvasViewportSize | null {
+  if (typeof document === "undefined") return null;
+  const drawingCanvas = canvas ?? document.querySelector<HTMLCanvasElement>(".drawingCanvas");
+  if (!drawingCanvas) return null;
+  const rect = drawingCanvas.getBoundingClientRect();
+  if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
+  return { widthPx: rect.width, heightPx: rect.height };
+}
+
+function getViewportFromCanvas(
+  camera: Camera,
+  canvasSize: CanvasViewportSize
+): { xmin: number; xmax: number; ymin: number; ymax: number } {
+  const widthPx = canvasSize.widthPx;
+  const heightPx = canvasSize.heightPx;
+  const halfWorldW = widthPx / (2 * Math.max(1e-6, camera.zoom));
+  const halfWorldH = heightPx / (2 * Math.max(1e-6, camera.zoom));
+  return {
+    xmin: camera.pos.x - halfWorldW,
+    xmax: camera.pos.x + halfWorldW,
+    ymin: camera.pos.y - halfWorldH,
+    ymax: camera.pos.y + halfWorldH,
+  };
+}
+
+function getLegacyViewportFromCanvasPane(
+  camera: Camera
+): { xmin: number; xmax: number; ymin: number; ymax: number } | undefined {
   if (typeof document === "undefined") return undefined;
   const canvasPane = document.querySelector(".canvasPane") as HTMLElement | null;
   const widthPx = Math.max(240, canvasPane?.clientWidth ?? window.innerWidth);

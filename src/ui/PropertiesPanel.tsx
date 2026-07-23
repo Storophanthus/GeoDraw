@@ -797,7 +797,7 @@ export function PropertiesPanel({
         />
       )}
       {!showToolPreconfigurePanel && selectedLine && (
-        <div className="toolInfo">
+        <div className="toolInfo toolInfoStat">
           <div className="subSectionTitle">Line</div>
           <div className="detailRow">
             <span className="detailLabel">Equation</span>
@@ -806,7 +806,7 @@ export function PropertiesPanel({
         </div>
       )}
       {!showToolPreconfigurePanel && selectedCircle && (
-        <div className="toolInfo">
+        <div className="toolInfo toolInfoStat">
           <div className="subSectionTitle">Circle</div>
           <div className="detailRow">
             <span className="detailLabel">Equation</span>
@@ -815,7 +815,7 @@ export function PropertiesPanel({
         </div>
       )}
       {!showToolPreconfigurePanel && selectedEllipse && (
-        <div className="toolInfo">
+        <div className="toolInfo toolInfoStat">
           <div className="subSectionTitle">Ellipse</div>
           <div className="detailRow">
             <span className="detailLabel">Semiaxes</span>
@@ -824,7 +824,7 @@ export function PropertiesPanel({
         </div>
       )}
       {!showToolPreconfigurePanel && selectedAngle && (
-        <div className="toolInfo">
+        <div className="toolInfo toolInfoStat">
           <div className="subSectionTitle">{selectedAngle.kind === "sector" ? "Sector" : "Angle"}</div>
           <div className="detailRow">
             <span className="detailLabel">{selectedAngle.kind === "sector" ? "Sweep" : "Value"}</span>

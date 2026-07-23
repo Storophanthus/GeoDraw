@@ -155,10 +155,16 @@ export function appendRenderedDrawLayers({
         out.push(`\\tkzFillCircle${opts}(${cmd.o},${tmpThrough})`);
       }
     } else if (cmd.kind === "FillAngle") {
+      if (ctx.options.drawLayerBackend === "plain") {
+        throw new Error("Plain draw backend received a non-materialized FillAngle command.");
+      }
       caps.assertAngleMacro("tkzFillAngle", "Angle.fill");
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzFillAngle${opts}(${cmd.a},${cmd.b},${cmd.c})`);
     } else if (cmd.kind === "MarkAngle") {
+      if (ctx.options.drawLayerBackend === "plain") {
+        throw new Error("Plain draw backend received a non-materialized MarkAngle command.");
+      }
       const run: MarkAngleCommand[] = [cmd];
       let scan = drawIdx + 1;
       while (scan < drawObjects.length) {
@@ -179,6 +185,9 @@ export function appendRenderedDrawLayers({
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzMarkAngle${opts}(${cmd.a},${cmd.b},${cmd.c})`);
     } else if (cmd.kind === "MarkRightAngle") {
+      if (ctx.options.drawLayerBackend === "plain") {
+        throw new Error("Plain draw backend received a non-materialized MarkRightAngle command.");
+      }
       caps.assertAngleMacro("tkzMarkRightAngles", "Angle.markRight");
       const opts = cmd.style ? `[${cmd.style}]` : "";
       out.push(`\\tkzMarkRightAngles${opts}(${cmd.a},${cmd.b},${cmd.c})`);
@@ -201,6 +210,12 @@ export function appendRenderedDrawLayers({
   for (const cmd of drawPointLabels) {
     if (cmd.kind === "LabelPoints") {
       if (cmd.points.length === 0) continue;
+      if (ctx.options.drawLayerBackend === "plain") {
+        for (const point of cmd.points) {
+          out.push(`\\node at (${point}){$${caps.escapeTikzText(point)}$};`);
+        }
+        continue;
+      }
       caps.assertTkzMacro("tkzLabelPoints");
       out.push(`\\tkzLabelPoints(${cmd.points.join(",")})`);
       continue;
@@ -211,6 +226,9 @@ export function appendRenderedDrawLayers({
 
   for (const cmd of drawAngleLabels) {
     if (cmd.kind !== "LabelAngle") continue;
+    if (ctx.options.drawLayerBackend === "plain") {
+      throw new Error("Plain draw backend received a non-materialized LabelAngle command.");
+    }
     caps.assertAngleMacro("tkzLabelAngle", "Angle.label");
     const opts = cmd.style ? `[${cmd.style}]` : "";
     const text = caps.escapeTikzText(cmd.text);

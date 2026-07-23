@@ -1,10 +1,12 @@
 import type { Vec2 } from "../geo/vec2";
+import type { ExportClipHandle } from "./exportClipHandles";
 import type { PointerMode } from "./pointerInteraction";
 
 type PointerStateLike = {
   active: boolean;
   mode: PointerMode;
   pointId: string | null;
+  clipHandle?: ExportClipHandle | null;
   objectType: "point" | "angle" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "textLabel" | "richText" | null;
 };
 
@@ -34,6 +36,7 @@ type DragUpdateOps = {
   moveTextLabelTo: (id: string, world: Vec2) => void;
   moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   moveRichTextNodeByWorldDelta: (id: string, deltaWorld: Vec2) => void;
+  moveExportClipHandleTo: (handle: ExportClipHandle, world: Vec2) => void;
   screenToWorld: (screen: Vec2) => Vec2;
   screenDeltaToWorldDelta: (delta: Vec2) => Vec2;
 };
@@ -110,6 +113,15 @@ export function applyBufferedDragUpdate(
     return;
   }
 
+  // Shares the point-drag screen buffer: the two modes are mutually exclusive.
+  if (st.mode === "drag-clip-handle" && st.clipHandle) {
+    const handleScreen = buffers.getPointScreen();
+    if (handleScreen) {
+      ops.moveExportClipHandleTo(st.clipHandle, ops.screenToWorld(handleScreen));
+    }
+    return;
+  }
+
   if (st.mode === "drag-point") {
     const pointScreen = buffers.getPointScreen();
     const pointId = buffers.getPointId();
@@ -137,6 +149,11 @@ export function bufferDragForMode(
 
   if (st.mode === "drag-point" && st.pointId) {
     buffers.setPointId(st.pointId);
+    buffers.setPointScreen(screen);
+    return true;
+  }
+
+  if (st.mode === "drag-clip-handle" && st.clipHandle) {
     buffers.setPointScreen(screen);
     return true;
   }

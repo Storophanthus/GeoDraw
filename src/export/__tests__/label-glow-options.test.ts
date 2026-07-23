@@ -1,5 +1,6 @@
 import { exportTikzWithOptions } from "../tikz.ts";
 import type { AngleStyle, PointStyle, SceneModel } from "../../scene/points.ts";
+import { compileTikzSnippet } from "../../../scripts/compile-tex.mjs";
 
 const pointStyle: PointStyle = {
   shape: "circle",
@@ -184,5 +185,35 @@ const globallyDisabledTikz = exportTikzWithOptions(glowScene, { labelGlow: false
 if (globallyDisabledTikz.includes("\\gdLabelGlow")) {
   throw new Error("Expected global labelGlow=false to suppress all glow wrappers.");
 }
+
+const multilineGlowScene = makeBaseScene();
+multilineGlowScene.textLabels = [
+  {
+    id: "multiline",
+    name: "Multiline",
+    text: "First line\nSecond line",
+    visible: true,
+    positionWorld: { x: 1, y: 1 },
+    style: {
+      textColor: "#0f172a",
+      textSize: 14,
+      useTex: false,
+      textMode: "plain",
+      textAlign: "center",
+      labelGlow: true,
+    },
+  },
+];
+const multilinePlainTikz = exportTikzWithOptions(multilineGlowScene, {
+  drawLayerBackend: "plain",
+  bakePointCoordinates: true,
+  viewport: { xmin: -1, xmax: 3, ymin: -1, ymax: 3 },
+  screenPxPerWorld: 80,
+  labelHaloColor: "#fffaf0",
+});
+if (!multilinePlainTikz.includes("\\contour{")) {
+  throw new Error("Expected Visual Exact multiline labels to retain their halo.");
+}
+await compileTikzSnippet("visual-exact-multiline-glow", multilinePlainTikz);
 
 console.log("✓ label glow options export test passed");

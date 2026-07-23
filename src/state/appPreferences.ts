@@ -370,3 +370,25 @@ export function loadStoredOnboardingFlags(): OnboardingFlags {
 export function saveStoredOnboardingFlags(flags: OnboardingFlags): boolean {
   return writeStoredEnvelope(ONBOARDING_KEY, flags);
 }
+
+const RECENT_COLORS_KEY = "geodraw.recent-colors.v1";
+export const MAX_RECENT_COLORS = 10;
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/;
+
+export function loadStoredRecentColors(): string[] {
+  const envelope = readStoredEnvelope<unknown>(RECENT_COLORS_KEY);
+  const raw = Array.isArray(envelope?.value) ? envelope.value : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string" || !HEX_COLOR_RE.test(entry) || seen.has(entry)) continue;
+    seen.add(entry);
+    out.push(entry);
+    if (out.length >= MAX_RECENT_COLORS) break;
+  }
+  return out;
+}
+
+export function saveStoredRecentColors(colors: string[]): boolean {
+  return writeStoredEnvelope(RECENT_COLORS_KEY, colors.slice(0, MAX_RECENT_COLORS));
+}

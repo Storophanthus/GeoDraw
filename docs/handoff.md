@@ -25,6 +25,194 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-21 RGB inputs + recently-used colors in `ColorSwatchInput`
+  (owner-reported gap: the popover offered presets and an OS custom-color
+  picker, but no way to type R/G/B values, and nothing remembered what you'd
+  used before):
+  - `ColorField.tsx`: new "RGB" section at the top of the `variant="panel"`
+    popover — three number inputs (0-255), derived from `pickerValue` via
+    the existing `parseColorToRgb`, committed through the existing
+    `commitValue` path (so recents/persistence apply uniformly regardless of
+    entry method). New "Recent" section renders only when non-empty, reusing
+    the existing `.colorFieldPresetGrid`/`.colorFieldPreset` classes verbatim
+    -- no new swatch styling, just a new data source.
+  - Recording is centralized: a `recordRecentColor` helper is called from
+    `commitValue` (covers RGB inputs AND preset clicks) and separately from
+    the native `<input type="color">`'s `onChange` (which bypasses
+    `commitValue`'s synthetic-event path since it already has a real one).
+    Both paths converge on the same MRU list.
+  - Recent list is intentionally **global**, not per-field-instance: read
+    fresh from `localStorage` whenever a popover opens (`useEffect` on
+    `[open]`), not cached in component state across renders. Verified this
+    live -- a color set via one field (Stroke) appeared in a completely
+    different field's (Fill) Recent section without a page reload.
+  - `appPreferences.ts`: `loadStoredRecentColors`/`saveStoredRecentColors`,
+    same `StoredEnvelope` pattern as every other preference here.
+    `MAX_RECENT_COLORS = 10`. Validation lives in the loader (regex
+    `/^#[0-9a-f]{6}$/`, dedupe, cap) so garbage/oversized/malformed stored
+    data degrades to a shorter valid list instead of the usual all-or-nothing
+    envelope failure -- matches the export-preferences precedent of
+    per-field fallback over whole-envelope invalidation.
+  - `variant="token"` (Preferences dialog's theme-color fields) is
+    unaffected -- the RGB/Recent additions are `variant="panel"` only,
+    matches the plan's existing panel/token split.
+  - Verified live end-to-end, not just built: typing into R/G/B updates the
+    trigger's swatch and hex text immediately; three sequential edits landed
+    in `localStorage` as `["#0a64c8","#0a64f0","#0ae8f0"]` in the correct
+    envelope shape; survived a full page reload; clicking a Recent swatch
+    applies it and moves it to front (dedupe confirmed -- stayed at 3
+    entries, not 4); Dark Mode checked -- legible, though the whole
+    `.colorFieldPopover` (predating this change) is hardcoded cream/beige
+    rather than token-driven, so it does not itself go dark. Flagging for
+    the visual-pass plan's V5 theme sweep rather than fixing here, since
+    fixing it means re-theming presets/borders/shadows that this change
+    didn't touch.
+  - New `src/scene/__tests__/recent-colors.test.ts` (localStorage-stub
+    pattern, matching `export-preferences.test.ts`): round-trip, cap at
+    `MAX_RECENT_COLORS` keeping the front of the list, garbage entries
+    dropped individually rather than invalidating the whole list, duplicate
+    entries deduped on load, malformed JSON and non-array values both
+    degrade to empty rather than throwing. Wired into `test:scene`.
+- 2026-07-21 Visual pass V3: field grid + pilot migration on
+  `PointPropertiesSection.tsx` (approved `sidebar-visual-pass.md` plan,
+  check-in point before V4 propagates the pattern):
+  - Added `.propGrid`/`.propField`/`.propFieldFull`/`.propFieldLabel`/
+    `.propSliderControl`/`.checkboxRowGroup` primitives to `App.css`
+    (label-above-control, 2-col `1fr 1fr`, `min-width: 0` on every grid
+    child). `.controlRow`/`.controlRowWithNumeric` are untouched and stay
+    the active pattern for every panel V4 hasn't reached yet.
+  - Point pairing map implemented: Name+Apply stays a full-width row,
+    structurally unchanged; Caption (TeX) | Show Label paired (Caption is
+    `mode="object"`-only, so Show Label falls back to `.propFieldFull` in
+    tool-default mode rather than stranding a half-empty grid cell);
+    Label Color | Halo Color paired (still gated on
+    `showLabel !== "none"`, unchanged condition); Fix Object + Auxiliary
+    Object grouped into one full-width `.checkboxRowGroup` row rather than
+    two grid cells; Shape stays full-width (its popover needs the room,
+    and has no size-matched partner once the sliders were pulled out);
+    Stroke Color | Fill Color paired -- required reordering Fill Color to
+    sit immediately after Stroke Color (was after Stroke Width/Opacity) so
+    the two colors land in the same grid row, a pure layout reorder with
+    no handler/prop changes; Size, Stroke Width, Stroke Opacity, Fill
+    Opacity all stay full-width slider rows per the plan's own
+    "sliders never pair, to avoid overflow" rule.
+  - Root-caused and fixed a real overflow bug surfaced by the probe:
+    `.colorFieldNativeInput` (the invisible 1x1 `<input type=color>` every
+    `ColorSwatchInput` uses to open the OS picker) had no `top`/`left`
+    anchor, so its browser-computed static position landed past the end of
+    the full-width trigger button, inflating `scrollWidth` by ~6px on
+    every host row. Reproduced the identical 6px overflow on an untouched
+    `.controlRow` (Circle's Stroke Color) before touching anything,
+    confirming this predates V1/V2 and isn't new debt. Fixed with
+    `top: 0; left: 0` in `App.css` -- global, zero visual/behavioral
+    change (element stays `opacity: 0`/`pointer-events: none`), and it
+    de-risks V4's ~9 remaining ColorSwatchInput-in-`.propGrid` migrations.
+  - `StyleSectionHeader.tsx` (header-row layout move + "Set Default"
+    relabel from "Make this default for this object") was already on disk
+    from an interrupted prior session; judgment call was to keep it.
+    Measured live at the sidebar's real width (312px, a few px above the
+    300px documented minimum): header row 269px, "Point Style" title
+    ~70px, leaving 191px for the toggle -- "Set Default" fits at 89px, the
+    original sentence measures 224px and would overflow by ~33px. The
+    plan's own mockup-language section already names "Set Default" as the
+    example text for this control, and two other consumers have longer
+    titles than Point's ("Polygon Style", "Segment Style", 13 chars),
+    making the short label the safer choice everywhere this shared header
+    renders, not just here.
+  - `ObjectBrowser.tsx` needed no markup changes -- the monospace command
+    text and accent-tinted `.active` row state the plan calls for were
+    already fully covered by `App.css` rules already on disk before this
+    commit (`.objectItemLabel` 12px/600, `.objectItemCommand` 11px
+    monospace muted, `.objectItem.active` accent-bg + inset accent ring).
+  - Verified live in Vanilla and Dark Mode via Preferences: build and all
+    three test suites exit 0, console clean. Exercised rename+Apply, shape
+    popover open/select/close, a Stroke Color change through the pill, a
+    Size slider drag, Fix Object/Auxiliary Object toggles, and selecting a
+    different object (Point A -> Point B) -- all reverted after. Overflow
+    probe (`scrollWidth <= clientWidth`) clean on both `.propGrid`
+    instances and `.rightSidebar` at the current width (312px) and at the
+    documented minimum (300px; forced via direct style for the probe,
+    since the resize handle's pointer-capture drag isn't reliably
+    driveable from browser automation).
+- 2026-07-21 Visual pass V2: ColorSwatchInput panel variant becomes a
+  full-width `[swatch][HEX]` pill (`src/ui/ColorField.tsx` + `src/App.css`),
+  one component change reaching all ~30 call sites with zero call-site
+  edits, per the approved `sidebar-visual-pass.md` plan:
+  - Added `resolvedHex`/`displayText`: shows `toColorInputValue(value)`
+    uppercased when it parses as a color, otherwise the raw string
+    (matches non-hex style values like named/`none` colors without
+    forcing them through the hex formatter); `title` is always the raw
+    value.
+  - The trigger's panel-variant class changed from `.colorInput` (a fixed
+    36x28 swatch-only button) to a new `.colorFieldPill` (full-width, 30px,
+    swatch chip + monospace hex text) that reuses the existing shared
+    `.colorFieldTrigger` hover/focus/disabled states, so no new interaction
+    CSS was needed. `.colorInput` had no other consumers, so it was
+    replaced rather than left dead.
+  - `variant="token"` (Preferences, paired with its own text input per
+    `ThemeColorControl`) takes a different branch entirely -- the hex-text
+    span and pill class only render for `variant="panel"` -- so it is
+    byte-for-byte the same JSX/CSS path as before. Verified in the
+    Preferences dialog: swatch still 36x30, no hex text on the swatch
+    itself.
+  - Found one pre-existing outlier while spot-checking every style tab:
+    `src/ui/object-styles/ArrowListControl.tsx:447` pins its
+    `ColorSwatchInput` to an inline `style={{ width: "64px" }}`, which (by
+    design, inline styles beat the class) overrides the new pill's
+    full width, so "Arrow Color" now shows a heavily truncated
+    `#E...`-style pill instead of a hex readout. Not broken --
+    `text-overflow: ellipsis` keeps it inside its box and `title` still
+    carries the full value on hover -- but it's the one place the pill
+    reads worse than before. Left untouched (no call-site edits is the
+    point of V2, and `ArrowListControl` is explicit V4 -- object-styles --
+    territory); flagging here so V4 knows to drop that inline override.
+  - Verified live in Vanilla and Dark Mode: build and all three test
+    suites exit 0, console clean, no `.rightSidebar`/`.styleTabList`
+    overflow, pill checked in Point/Circle/Sector style tabs (Stroke,
+    Fill, Label) and the Preferences token rows.
+- 2026-07-21 Visual pass V1: restyle sidebar control primitives onto the
+  owner's Figma-style mockup language (approved plan
+  `sidebar-visual-pass.md`), CSS-only in `src/App.css`, zero markup edits:
+  - Sliders (`.sizeSlider`/`.numberSliderTrack`): track 7px gradient -> 4px
+    flat (`--gd-ui-border-soft` fill, `--gd-ui-border` hairline); thumb
+    20/18px accent-filled -> 14px surface-filled with a 2px
+    `--gd-ui-text-strong` ring (falls back to a token, not a hardcoded hex,
+    per the plan's dark-contrast note). Firefox's `-moz-range-progress`
+    keeps its accent fill, just flattened to match.
+  - Inputs/selects/number boxes (`renameInput`, `selectInput`,
+    `scaleInputCompact`, `shapeButton`, and the bare `controlRow` number
+    input for consistency) normalized to a shared 30px height / 6px radius
+    and a single merged `:focus-visible` rule -- `selectInput` and
+    `shapeButton` previously fell through to the browser's default focus
+    ring instead of the app's accent outline.
+  - `.deleteButton` gained a hover/focus danger-tint background
+    (`color-mix` with `--gd-ui-danger`); it was already outline-style
+    (red border/text on a neutral fill) but had no interactive state.
+  - `.rightTabs`/`.rightTabButton` (the Objects/Export segmented switch):
+    dropped the gradient tray, gradient active-pill and `translateY` lift
+    for a flat gray tray + white active pill with a hairline shadow,
+    matching the `.objectBrowserTab` pattern already used one panel down.
+  - `.objectBrowserTabs`/`.objectBrowserTab` (the Points/Lines/Circles...
+    filter icons) were declared twice (~2861 and ~3196, known debt from the
+    density pass) with the second silently winning on the properties that
+    conflicted while the first's `overflow-x` leaked through underneath.
+    Consolidated into one declaration each, matching current effective
+    behavior exactly, then deleted the duplicate.
+  - `.sidebarHeaderBar` de-gradiented to a plain surface card; it plus
+    `.sidebarSection` and `.styleControlGroup` moved onto the plan's radius
+    scale (16/18/14px -> 8px "card" tier; controls already normalized above
+    sit at 6px).
+  - `.rightSidebar` gained a styled thin scrollbar (`scrollbar-width: thin`
+    + `::-webkit-scrollbar*`), token-colored, additive only.
+  - Deliberately left untouched: `.sidebarToggleButton` (still gradient --
+    it opens the Quick Help card, which V5 owns alongside a full contrast
+    sweep) and radii outside the right-sidebar/properties-panel surface
+    (left toolbar, document tabs, command bar) -- out of scope per the plan.
+  - Verified live in both Vanilla and Dark Mode via Preferences: build and
+    all three test suites exit 0, console clean, `.rightSidebar`/
+    `.objectBrowserTabs`/`.rightTabs`/`.styleTabList` all report
+    `scrollWidth === clientWidth` (no overflow) at the default sidebar
+    width in both themes.
 - 2026-07-21 Export panel: attach the copy actions to the code they copy
   (owner-reported: "before, the copy is actually above the code, so it is clear
   what we are copying"; and the long-labelled buttons looked bad):
