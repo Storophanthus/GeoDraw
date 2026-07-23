@@ -15,6 +15,7 @@ import {
   getLineWorldAnchors,
   getPointWorldPos,
   isRightAngle,
+  isRightAngleSweepRad,
   type LineLikeObjectRef,
   type SceneModel,
 } from "../../scene/points";
@@ -34,7 +35,7 @@ export type AngleFixedToolState = { angleExpr: string; direction: "CCW" | "CW" }
 export type CircleFixedToolState = { radius: string };
 export type RegularPolygonToolState = { sides: number; direction: "CCW" | "CW" };
 export type TransformToolState = {
-  mode: "translate" | "rotate" | "dilate" | "reflect";
+  mode: "translate" | "rotate" | "dilate" | "reflect" | "invert";
   angleExpr: string;
   direction: "CCW" | "CW";
   factorExpr: string;
@@ -62,6 +63,24 @@ function circumcircleFromThreePoints(a: Vec2, b: Vec2, c: Vec2): { center: Vec2;
   const radius = Math.hypot(center.x - a.x, center.y - a.y);
   if (!Number.isFinite(radius) || radius <= 1e-12) return null;
   return { center, radius };
+}
+
+function ellipseFromFociPoint(focusA: Vec2, focusB: Vec2, through: Vec2): { center: Vec2; semiMajor: number; semiMinor: number; rotationRad: number } | null {
+  const dx = focusB.x - focusA.x;
+  const dy = focusB.y - focusA.y;
+  const focusDistance = Math.hypot(dx, dy);
+  if (!Number.isFinite(focusDistance) || focusDistance <= 1e-12) return null;
+  const semiMajor = (Math.hypot(through.x - focusA.x, through.y - focusA.y) + Math.hypot(through.x - focusB.x, through.y - focusB.y)) / 2;
+  const focalDistance = focusDistance / 2;
+  if (!Number.isFinite(semiMajor) || semiMajor <= focalDistance + 1e-9) return null;
+  const semiMinorSq = semiMajor * semiMajor - focalDistance * focalDistance;
+  if (!Number.isFinite(semiMinorSq) || semiMinorSq <= 1e-18) return null;
+  return {
+    center: { x: (focusA.x + focusB.x) / 2, y: (focusA.y + focusB.y) / 2 },
+    semiMajor,
+    semiMinor: Math.sqrt(semiMinorSq),
+    rotationRad: Math.atan2(dy, dx),
+  };
 }
 
 function rotateAround(center: Vec2, p: Vec2, angleRad: number): Vec2 {
@@ -354,6 +373,32 @@ export function drawPendingPreview(
         ctx.lineWidth = previewTheme.lineWidthPx;
         ctx.beginPath();
         ctx.arc(c.x, c.y, geom.radius * camera.zoom, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  if (p1 && pendingSelection.tool === "ellipse_foci_point" && pendingSelection.step === 2 && cursorScreen) {
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = previewTheme.lineWidthPx;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(cursorScreen.x, cursorScreen.y);
+    ctx.stroke();
+  }
+
+  if (pendingSelection.tool === "ellipse_foci_point" && pendingSelection.step === 3 && firstWorld && pendingSelection.second && cursorScreen) {
+    const focusBPoint = scene.points.find((p) => p.id === pendingSelection.second.id);
+    const focusBWorld = focusBPoint ? getPointWorldPos(focusBPoint, scene) : null;
+    const throughWorld = camMath.screenToWorld(cursorScreen, camera, vp);
+    if (focusBWorld) {
+      const geom = ellipseFromFociPoint(firstWorld, focusBWorld, throughWorld);
+      if (geom) {
+        const c = camMath.worldToScreen(geom.center, camera, vp);
+        ctx.globalAlpha = 0.45;
+        ctx.lineWidth = previewTheme.lineWidthPx;
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, geom.semiMajor * camera.zoom, geom.semiMinor * camera.zoom, -geom.rotationRad, 0, Math.PI * 2);
         ctx.stroke();
       }
     }
@@ -873,8 +918,7 @@ export function drawPendingPreview(
             ? hoveredHit.id
             : null;
       if (hoveredCircleId && hoveredCircleId !== pendingSelection.first.id) {
-        const fallbackStyle = { strokeColor: "#334155", strokeWidth: 1.2, dash: "solid" as const, opacity: 1 };
-        const previewStyle = scene.lines[0]?.style ?? fallbackStyle;
+        const previewStyle = { strokeColor: "#334155", strokeWidth: 1.2, dash: "solid" as const, opacity: 1 };
         const signatures = new Set<string>();
         const signatureFor = (a: Vec2, b: Vec2): string => {
           const dx = b.x - a.x;
@@ -1009,15 +1053,18 @@ export function drawPendingPreview(
         const bs = camMath.worldToScreen(b, camera, vp);
         const cs = camMath.worldToScreen(c, camera, vp);
         const radiusPx = nonSectorAngleRadiusPx(anglePreviewArcRadius);
-        const rightStatus: "none" | "approx" | "exact" = cId
-          ? isRightExactByProvenance(scene, pendingSelection.first.id, pendingSelection.second.id, cId)
-            ? "exact"
+        const displayedRight = isRightAngleSweepRad(theta, 1e-2);
+        const rightStatus: "none" | "approx" | "exact" = displayedRight
+          ? cId
+            ? isRightExactByProvenance(scene, pendingSelection.first.id, pendingSelection.second.id, cId)
+              ? "exact"
+              : isRightAngle(a, b, c, 1e-2)
+                ? "approx"
+                : "none"
             : isRightAngle(a, b, c, 1e-2)
               ? "approx"
               : "none"
-          : isRightAngle(a, b, c, 1e-2)
-            ? "approx"
-            : "none";
+          : "none";
         if (rightStatus === "none") {
           drawAngleArcPreview(ctx, as, bs, theta, radiusPx);
         } else {
@@ -1199,7 +1246,8 @@ function formatPreviewAngleDegrees(degRaw: number): string {
   const deg = ((degRaw % 360) + 360) % 360;
   const nearest5 = Math.round(deg / 5) * 5;
   if (Math.abs(deg - nearest5) <= 1e-3) return String(nearest5);
-  return deg.toFixed(2);
+  const rounded = deg.toFixed(2).replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0+$/u, "");
+  return rounded === "-0" ? "0" : rounded;
 }
 
 function geoPointWorld(scene: SceneModel, pointId: string): Vec2 | null {

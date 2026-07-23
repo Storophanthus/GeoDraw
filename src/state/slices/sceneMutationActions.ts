@@ -4,6 +4,8 @@ import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos, type Ang
 import {
   defaultCircleLabelPosWorld,
   defaultCircleLabelText,
+  defaultEllipseLabelPosWorld,
+  defaultEllipseLabelText,
   defaultLineLabelPosWorld,
   defaultLineLabelText,
   defaultPolygonLabelPosWorld,
@@ -13,9 +15,10 @@ import {
   isFiniteLabelPosWorld,
   resolveObjectLabelText,
 } from "../../scene/objectLabels";
-import { applyDeletion, collectCascadeDelete, isSelectedObjectAlive } from "../../domain/geometryGraph";
+import { geometryLayerKey, moveGeometryLayerWithinTab } from "../../scene/geometryLayerOrder";
+import { applyDeletion, collectCascadeDeleteMany, isSelectedObjectAlive } from "../../domain/geometryGraph";
 import { isValidNumberDefinition } from "../../domain/numberDefinitions";
-import { rebuildRightAngleProvenance } from "../../domain/rightAngleProvenance";
+import { rebuildRightAngleProvenance, registerSegmentPair } from "../../domain/rightAngleProvenance";
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
 
@@ -37,24 +40,57 @@ export function createSceneMutationActions({
   | "enableObjectLabel"
   | "updateSelectedPointStyle"
   | "updateSelectedPointFields"
+  | "updatePointStyleByIds"
+  | "updatePointFieldsByIds"
   | "updateSelectedSegmentStyle"
+  | "updateSegmentStyleByIds"
   | "updateSelectedLineStyle"
+  | "updateLineStyleByIds"
   | "updateSelectedCircleStyle"
+  | "updateCircleStyleByIds"
+  | "updateSelectedEllipseStyle"
+  | "updateEllipseStyleByIds"
   | "updateSelectedPolygonStyle"
+  | "updatePolygonStyleByIds"
   | "updateSelectedAngleStyle"
+  | "updateAngleStyleByIds"
   | "updateSelectedSegmentFields"
+  | "updateSegmentFieldsByIds"
   | "updateSelectedLineFields"
+  | "convertSelectedLineToSegment"
+  | "convertLinesToSegmentsByIds"
+  | "updateLineFieldsByIds"
   | "updateSelectedCircleFields"
+  | "updateCircleFieldsByIds"
+  | "updateSelectedEllipseFields"
+  | "updateEllipseFieldsByIds"
   | "updateSelectedPolygonFields"
+  | "updatePolygonFieldsByIds"
   | "setSelectedPolygonOwnedSegmentsVisible"
   | "updateSelectedAngleFields"
+  | "updateAngleFieldsByIds"
   | "updateSelectedNumberDefinition"
+  | "updateNumberDefinitionById"
   | "updateSelectedTextLabelFields"
+  | "updateTextLabelFieldsByIds"
   | "updateSelectedTextLabelStyle"
+  | "updateTextLabelStyleByIds"
+  | "moveRichTextNodeTo"
+  | "moveRichTextNodeByWorldDelta"
+  | "updateSelectedRichTextFields"
+  | "updateRichTextFieldsByIds"
+  | "updateSelectedRichTextStyle"
+  | "updateRichTextStyleByIds"
+  | "updateSelectedRichTextDocument"
+  | "updateRichTextDocumentByIds"
   | "setObjectVisibility"
+  | "setObjectsVisibility"
+  | "reorderGeometryLayerInTab"
   | "deleteSelectedObject"
+  | "deleteObjects"
   | "setCopyStyleSource"
   | "applyCopyStyleTo"
+  | "applyCopyStyleToMany"
   | "clearCopyStyle"
 > {
   return {
@@ -230,6 +266,17 @@ export function createSceneMutationActions({
               },
             };
           }
+          if (obj.type === "ellipse") {
+            return {
+              ...prev,
+              scene: {
+                ...prev.scene,
+                ellipses: (prev.scene.ellipses ?? []).map((ellipse) =>
+                  ellipse.id === obj.id ? { ...ellipse, labelPosWorld: { x: world.x, y: world.y } } : ellipse
+                ),
+              },
+            };
+          }
           if (obj.type === "polygon") {
             return {
               ...prev,
@@ -260,6 +307,154 @@ export function createSceneMutationActions({
           },
         }),
         { history: "coalesce", actionKey: `moveTextLabelTo:${id}` }
+      );
+    },
+
+
+
+    moveRichTextNodeTo(id, world) {
+      if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+              node.id === id ? { ...node, positionWorld: { x: world.x, y: world.y } } : node
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: `moveRichTextNodeTo:${id}` }
+      );
+    },
+
+    moveRichTextNodeByWorldDelta(id, deltaWorld) {
+      if (!Number.isFinite(deltaWorld.x) || !Number.isFinite(deltaWorld.y)) return;
+      if (Math.abs(deltaWorld.x) <= 1e-12 && Math.abs(deltaWorld.y) <= 1e-12) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+              node.id === id
+                ? {
+                    ...node,
+                    positionWorld: {
+                      x: node.positionWorld.x + deltaWorld.x,
+                      y: node.positionWorld.y + deltaWorld.y,
+                    },
+                  }
+                : node
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: `moveRichTextNodeTo:${id}` }
+      );
+    },
+
+    updateSelectedRichTextFields(next) {
+      setState(
+        (prev) => {
+          if (!prev.selectedObject || prev.selectedObject.type !== "richText") return prev;
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+                node.id === prev.selectedObject!.id ? { ...node, ...next } : node
+              ),
+            },
+          };
+        },
+        { history: "coalesce", actionKey: "updateSelectedRichTextFields" }
+      );
+    },
+
+    updateRichTextFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+              idSet.has(node.id) ? { ...node, ...next } : node
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: "updateRichTextFieldsByIds" }
+      );
+    },
+
+    updateSelectedRichTextStyle(next) {
+      setState(
+        (prev) => {
+          if (!prev.selectedObject || prev.selectedObject.type !== "richText") return prev;
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+                node.id === prev.selectedObject!.id ? { ...node, style: { ...node.style, ...next } } : node
+              ),
+            },
+          };
+        },
+        { history: "coalesce", actionKey: "updateSelectedRichTextStyle" }
+      );
+    },
+
+    updateRichTextStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+              idSet.has(node.id) ? { ...node, style: { ...node.style, ...next } } : node
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: "updateRichTextStyleByIds" }
+      );
+    },
+
+    updateSelectedRichTextDocument(document) {
+      setState(
+        (prev) => {
+          if (!prev.selectedObject || prev.selectedObject.type !== "richText") return prev;
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+                node.id === prev.selectedObject!.id ? { ...node, document } : node
+              ),
+            },
+          };
+        },
+        { history: "coalesce", actionKey: "updateSelectedRichTextDocument" }
+      );
+    },
+
+    updateRichTextDocumentByIds(ids, document) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState(
+        (prev) => ({
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: (prev.scene.richTextNodes ?? []).map((node) =>
+              idSet.has(node.id) ? { ...node, document } : node
+            ),
+          },
+        }),
+        { history: "coalesce", actionKey: "updateRichTextDocumentByIds" }
       );
     },
 
@@ -361,6 +556,18 @@ export function createSceneMutationActions({
             },
           };
         }
+        if (obj.type === "ellipse") {
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              ellipses: (prev.scene.ellipses ?? []).map((ellipse) => {
+                if (ellipse.id !== obj.id) return ellipse;
+                return ensureEllipseLabelFields({ ...ellipse, showLabel: true }, prev.scene);
+              }),
+            },
+          };
+        }
         if (obj.type === "polygon") {
           return {
             ...prev,
@@ -401,6 +608,34 @@ export function createSceneMutationActions({
       });
     },
 
+    updatePointStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const points = prev.scene.points.map((point) => {
+          if (!idSet.has(point.id)) return point;
+          changed = true;
+          return {
+            ...point,
+            style: {
+              ...point.style,
+              ...next,
+              labelOffsetPx: { ...point.style.labelOffsetPx },
+            },
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points,
+          },
+        };
+      });
+    },
+
     updateSelectedPointFields(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "point") return prev;
@@ -421,6 +656,30 @@ export function createSceneMutationActions({
       });
     },
 
+    updatePointFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const points = prev.scene.points.map((point) => {
+          if (!idSet.has(point.id)) return point;
+          changed = true;
+          return {
+            ...point,
+            ...next,
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points,
+          },
+        };
+      });
+    },
+
     updateSelectedSegmentStyle(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "segment") return prev;
@@ -431,6 +690,33 @@ export function createSceneMutationActions({
             segments: prev.scene.segments.map((seg) =>
               seg.id === prev.selectedObject!.id ? { ...seg, style: { ...seg.style, ...next } } : seg
             ),
+          },
+        };
+      });
+    },
+
+    updateSegmentStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const segments = prev.scene.segments.map((segment) => {
+          if (!idSet.has(segment.id)) return segment;
+          changed = true;
+          return {
+            ...segment,
+            style: {
+              ...segment.style,
+              ...next,
+            },
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            segments,
           },
         };
       });
@@ -451,6 +737,33 @@ export function createSceneMutationActions({
       });
     },
 
+    updateLineStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const lines = prev.scene.lines.map((line) => {
+          if (!idSet.has(line.id)) return line;
+          changed = true;
+          return {
+            ...line,
+            style: {
+              ...line.style,
+              ...next,
+            },
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            lines,
+          },
+        };
+      });
+    },
+
     updateSelectedCircleStyle(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "circle") return prev;
@@ -461,6 +774,75 @@ export function createSceneMutationActions({
             circles: prev.scene.circles.map((circle) =>
               circle.id === prev.selectedObject!.id ? { ...circle, style: { ...circle.style, ...next } } : circle
             ),
+          },
+        };
+      });
+    },
+
+    updateCircleStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const circles = prev.scene.circles.map((circle) => {
+          if (!idSet.has(circle.id)) return circle;
+          changed = true;
+          return {
+            ...circle,
+            style: {
+              ...circle.style,
+              ...next,
+            },
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            circles,
+          },
+        };
+      });
+    },
+
+    updateSelectedEllipseStyle(next) {
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "ellipse") return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses: (prev.scene.ellipses ?? []).map((ellipse) =>
+              ellipse.id === prev.selectedObject!.id ? { ...ellipse, style: { ...ellipse.style, ...next } } : ellipse
+            ),
+          },
+        };
+      });
+    },
+
+    updateEllipseStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const ellipses = (prev.scene.ellipses ?? []).map((ellipse) => {
+          if (!idSet.has(ellipse.id)) return ellipse;
+          changed = true;
+          return {
+            ...ellipse,
+            style: {
+              ...ellipse.style,
+              ...next,
+            },
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses,
           },
         };
       });
@@ -498,6 +880,55 @@ export function createSceneMutationActions({
       });
     },
 
+    updatePolygonStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        const segmentStylePatch = lineStylePatchFromPolygonStrokePatch(next);
+        let polygonChanged = false;
+        const polygons = prev.scene.polygons.map((polygon) => {
+          if (!idSet.has(polygon.id)) return polygon;
+          polygonChanged = true;
+          return {
+            ...polygon,
+            style: {
+              ...polygon.style,
+              ...next,
+            },
+          };
+        });
+        let segmentChanged = false;
+        const segments =
+          segmentStylePatch == null
+            ? prev.scene.segments
+            : prev.scene.segments.map((segment) => {
+                if (
+                  !Array.isArray(segment.ownedByPolygonIds) ||
+                  !segment.ownedByPolygonIds.some((ownerId) => idSet.has(ownerId))
+                ) {
+                  return segment;
+                }
+                segmentChanged = true;
+                return {
+                  ...segment,
+                  style: {
+                    ...segment.style,
+                    ...segmentStylePatch,
+                  },
+                };
+              });
+        if (!polygonChanged && !segmentChanged) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            polygons,
+            segments,
+          },
+        };
+      });
+    },
+
     updateSelectedAngleStyle(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "angle") return prev;
@@ -514,6 +945,33 @@ export function createSceneMutationActions({
       }, { history: "coalesce", actionKey: "updateSelectedAngleStyle" });
     },
 
+    updateAngleStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const angles = prev.scene.angles.map((angle) => {
+          if (!idSet.has(angle.id)) return angle;
+          changed = true;
+          return {
+            ...angle,
+            style: {
+              ...angle.style,
+              ...next,
+            },
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            angles,
+          },
+        };
+      }, { history: "coalesce", actionKey: "updateAngleStyleByIds" });
+    },
+
     updateSelectedSegmentFields(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "segment") return prev;
@@ -526,6 +984,27 @@ export function createSceneMutationActions({
                 ? ensureSegmentLabelFields({ ...seg, ...next }, prev.scene)
                 : seg
             ),
+          },
+        };
+      });
+    },
+
+    updateSegmentFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const segments = prev.scene.segments.map((segment) => {
+          if (!idSet.has(segment.id)) return segment;
+          changed = true;
+          return ensureSegmentLabelFields({ ...segment, ...next }, prev.scene);
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            segments,
           },
         };
       });
@@ -548,6 +1027,141 @@ export function createSceneMutationActions({
       });
     },
 
+    convertSelectedLineToSegment() {
+      let createdSegmentId: string | null = null;
+      let createdSegmentAId = "";
+      let createdSegmentBId = "";
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "line") return prev;
+        const selectedLine = prev.scene.lines.find((line) => line.id === prev.selectedObject!.id);
+        if (!selectedLine) return prev;
+        if (!("aId" in selectedLine) || !("bId" in selectedLine)) return prev;
+        if (selectedLine.aId === selectedLine.bId) return prev;
+        if (!prev.scene.points.some((point) => point.id === selectedLine.aId)) return prev;
+        if (!prev.scene.points.some((point) => point.id === selectedLine.bId)) return prev;
+
+        const nextSegmentId = `s_${prev.nextSegmentId}`;
+        createdSegmentId = nextSegmentId;
+        createdSegmentAId = selectedLine.aId;
+        createdSegmentBId = selectedLine.bId;
+
+        const segment = ensureSegmentLabelFields({
+          id: nextSegmentId,
+          aId: selectedLine.aId,
+          bId: selectedLine.bId,
+          visible: true,
+          showLabel: Boolean(selectedLine.showLabel),
+          labelText: selectedLine.labelText,
+          labelPosWorld: selectedLine.labelPosWorld ? { ...selectedLine.labelPosWorld } : undefined,
+          labelGlow: selectedLine.labelGlow,
+          style: { ...selectedLine.style },
+        }, prev.scene);
+
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            lines: prev.scene.lines.map((line) =>
+              line.id === selectedLine.id
+                ? { ...line, visible: false }
+                : line
+            ),
+            segments: [...prev.scene.segments, segment],
+          },
+          selectedObject: { type: "segment", id: nextSegmentId },
+          recentCreatedObject: { type: "segment", id: nextSegmentId },
+          nextSegmentId: prev.nextSegmentId + 1,
+        };
+      });
+      if (createdSegmentId) {
+        registerSegmentPair(createdSegmentId, createdSegmentAId, createdSegmentBId);
+      }
+      return createdSegmentId;
+    },
+
+    convertLinesToSegmentsByIds(ids) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return [];
+      const createdSegmentIds: string[] = [];
+      const createdSegmentPairs: Array<{ id: string; aId: string; bId: string }> = [];
+      setState((prev) => {
+        const pointIdSet = new Set(prev.scene.points.map((point) => point.id));
+        let nextSegmentId = prev.nextSegmentId;
+        const newSegments: SceneModel["segments"] = [];
+        const nextLines = prev.scene.lines.map((line) => {
+          if (!idSet.has(line.id)) return line;
+          if (!("aId" in line) || !("bId" in line)) return line;
+          if (line.aId === line.bId) return line;
+          if (!pointIdSet.has(line.aId) || !pointIdSet.has(line.bId)) return line;
+
+          const segmentId = `s_${nextSegmentId}`;
+          nextSegmentId += 1;
+          createdSegmentIds.push(segmentId);
+          createdSegmentPairs.push({ id: segmentId, aId: line.aId, bId: line.bId });
+
+          newSegments.push(
+            ensureSegmentLabelFields(
+              {
+                id: segmentId,
+                aId: line.aId,
+                bId: line.bId,
+                visible: true,
+                showLabel: Boolean(line.showLabel),
+                labelText: line.labelText,
+                labelPosWorld: line.labelPosWorld ? { ...line.labelPosWorld } : undefined,
+                labelGlow: line.labelGlow,
+                style: { ...line.style },
+              },
+              prev.scene
+            )
+          );
+
+          return line.visible ? { ...line, visible: false } : line;
+        });
+
+        if (newSegments.length === 0) return prev;
+        const firstCreatedId = createdSegmentIds[0];
+        const lastCreatedId = createdSegmentIds[createdSegmentIds.length - 1];
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            lines: nextLines,
+            segments: [...prev.scene.segments, ...newSegments],
+          },
+          selectedObject: { type: "segment", id: firstCreatedId },
+          recentCreatedObject: { type: "segment", id: lastCreatedId },
+          nextSegmentId,
+        };
+      });
+      for (let i = 0; i < createdSegmentPairs.length; i += 1) {
+        const pair = createdSegmentPairs[i];
+        registerSegmentPair(pair.id, pair.aId, pair.bId);
+      }
+      return createdSegmentIds;
+    },
+
+    updateLineFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const lines = prev.scene.lines.map((line) => {
+          if (!idSet.has(line.id)) return line;
+          changed = true;
+          return ensureLineLabelFields({ ...line, ...next }, prev.scene);
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            lines,
+          },
+        };
+      });
+    },
+
     updateSelectedCircleFields(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "circle") return prev;
@@ -565,6 +1179,65 @@ export function createSceneMutationActions({
       });
     },
 
+    updateCircleFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const circles = prev.scene.circles.map((circle) => {
+          if (!idSet.has(circle.id)) return circle;
+          changed = true;
+          return ensureCircleLabelFields({ ...circle, ...next }, prev.scene);
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            circles,
+          },
+        };
+      });
+    },
+
+    updateSelectedEllipseFields(next) {
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "ellipse") return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses: (prev.scene.ellipses ?? []).map((ellipse) =>
+              ellipse.id === prev.selectedObject!.id
+                ? ensureEllipseLabelFields({ ...ellipse, ...next }, prev.scene)
+                : ellipse
+            ),
+          },
+        };
+      });
+    },
+
+    updateEllipseFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const ellipses = (prev.scene.ellipses ?? []).map((ellipse) => {
+          if (!idSet.has(ellipse.id)) return ellipse;
+          changed = true;
+          return ensureEllipseLabelFields({ ...ellipse, ...next }, prev.scene);
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses,
+          },
+        };
+      });
+    },
+
     updateSelectedPolygonFields(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "polygon") return prev;
@@ -577,6 +1250,27 @@ export function createSceneMutationActions({
                 ? ensurePolygonLabelFields({ ...polygon, ...next }, prev.scene)
                 : polygon
             ),
+          },
+        };
+      });
+    },
+
+    updatePolygonFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const polygons = prev.scene.polygons.map((polygon) => {
+          if (!idSet.has(polygon.id)) return polygon;
+          changed = true;
+          return ensurePolygonLabelFields({ ...polygon, ...next }, prev.scene);
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            polygons,
           },
         };
       });
@@ -624,6 +1318,30 @@ export function createSceneMutationActions({
       });
     },
 
+    updateAngleFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const angles = prev.scene.angles.map((angle) => {
+          if (!idSet.has(angle.id)) return angle;
+          changed = true;
+          return {
+            ...angle,
+            ...next,
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            angles,
+          },
+        };
+      });
+    },
+
     updateSelectedNumberDefinition(nextDefinition) {
       setState((prev) => {
         if (prev.selectedObject?.type !== "number") return prev;
@@ -648,24 +1366,83 @@ export function createSceneMutationActions({
       });
     },
 
-    updateSelectedTextLabelFields(next) {
+    updateNumberDefinitionById(id, nextDefinition) {
       setState((prev) => {
-        if (!prev.selectedObject || prev.selectedObject.type !== "textLabel") return prev;
+        if (!isValidNumberDefinition(nextDefinition, prev.scene)) return prev;
+        let changed = false;
+        const nextNumbers = prev.scene.numbers.map((num) => {
+          if (num.id !== id) return num;
+          changed = true;
+          return {
+            ...num,
+            definition: nextDefinition,
+          };
+        });
+        if (!changed) return prev;
         return {
           ...prev,
           scene: {
             ...prev.scene,
-            textLabels: (prev.scene.textLabels ?? []).map((label) =>
-              label.id === prev.selectedObject!.id
-                ? {
-                    ...label,
-                    ...next,
-                    positionWorld: next.positionWorld
-                      ? { x: next.positionWorld.x, y: next.positionWorld.y }
-                      : label.positionWorld,
-                  }
-                : label
-            ),
+            numbers: nextNumbers,
+          },
+        };
+      }, { history: "coalesce", actionKey: `updateNumberDefinition:${id}` });
+    },
+
+    updateSelectedTextLabelFields(next) {
+      setState((prev) => {
+        if (!prev.selectedObject || prev.selectedObject.type !== "textLabel") return prev;
+        let changed = false;
+        const textLabels = (prev.scene.textLabels ?? []).map((label) => {
+          if (label.id !== prev.selectedObject!.id) return label;
+          const positionWorld = next.positionWorld
+            ? { x: next.positionWorld.x, y: next.positionWorld.y }
+            : label.positionWorld;
+          const nextLabel = {
+            ...label,
+            ...next,
+            positionWorld,
+          };
+          if (JSON.stringify(nextLabel) === JSON.stringify(label)) return label;
+          changed = true;
+          return nextLabel;
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels,
+          },
+        };
+      });
+    },
+
+    updateTextLabelFieldsByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const textLabels = (prev.scene.textLabels ?? []).map((label) => {
+          if (!idSet.has(label.id)) return label;
+          const positionWorld = next.positionWorld
+            ? { x: next.positionWorld.x, y: next.positionWorld.y }
+            : label.positionWorld;
+          const nextLabel = {
+            ...label,
+            ...next,
+            positionWorld,
+          };
+          if (JSON.stringify(nextLabel) === JSON.stringify(label)) return label;
+          changed = true;
+          return nextLabel;
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels,
           },
         };
       });
@@ -674,21 +1451,55 @@ export function createSceneMutationActions({
     updateSelectedTextLabelStyle(next) {
       setState((prev) => {
         if (!prev.selectedObject || prev.selectedObject.type !== "textLabel") return prev;
+        let changed = false;
+        const textLabels = (prev.scene.textLabels ?? []).map((label) => {
+          if (label.id !== prev.selectedObject!.id) return label;
+          const nextStyle = {
+            ...label.style,
+            ...next,
+          };
+          if (JSON.stringify(nextStyle) === JSON.stringify(label.style)) return label;
+          changed = true;
+          return {
+            ...label,
+            style: nextStyle,
+          };
+        });
+        if (!changed) return prev;
         return {
           ...prev,
           scene: {
             ...prev.scene,
-            textLabels: (prev.scene.textLabels ?? []).map((label) =>
-              label.id === prev.selectedObject!.id
-                ? {
-                    ...label,
-                    style: {
-                      ...label.style,
-                      ...next,
-                    },
-                  }
-                : label
-            ),
+            textLabels,
+          },
+        };
+      });
+    },
+
+    updateTextLabelStyleByIds(ids, next) {
+      const idSet = toIdSet(ids);
+      if (idSet.size === 0) return;
+      setState((prev) => {
+        let changed = false;
+        const textLabels = (prev.scene.textLabels ?? []).map((label) => {
+          if (!idSet.has(label.id)) return label;
+          const nextStyle = {
+            ...label.style,
+            ...next,
+          };
+          if (JSON.stringify(nextStyle) === JSON.stringify(label.style)) return label;
+          changed = true;
+          return {
+            ...label,
+            style: nextStyle,
+          };
+        });
+        if (!changed) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels,
           },
         };
       });
@@ -696,123 +1507,57 @@ export function createSceneMutationActions({
 
     setObjectVisibility(obj, visible) {
       setState((prev) => {
-        if (obj.type === "point") {
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              points: prev.scene.points.map((point) =>
-                point.id === obj.id ? { ...point, visible } : point
-              ),
-            },
-          };
-        }
-        if (obj.type === "segment") {
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              segments: prev.scene.segments.map((seg) =>
-                seg.id === obj.id ? { ...seg, visible } : seg
-              ),
-            },
-          };
-        }
-        if (obj.type === "line") {
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              lines: prev.scene.lines.map((line) =>
-                line.id === obj.id ? { ...line, visible } : line
-              ),
-            },
-          };
-        }
-        if (obj.type === "circle") {
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              circles: prev.scene.circles.map((circle) =>
-                circle.id === obj.id ? { ...circle, visible } : circle
-              ),
-            },
-          };
-        }
-        if (obj.type === "polygon") {
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              polygons: prev.scene.polygons.map((polygon) =>
-                polygon.id === obj.id ? { ...polygon, visible } : polygon
-              ),
-            },
-          };
-        }
-        if (obj.type === "angle") {
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              angles: prev.scene.angles.map((angle) =>
-                angle.id === obj.id ? { ...angle, visible } : angle
-              ),
-            },
-          };
-        }
-        if (obj.type === "textLabel") {
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              textLabels: (prev.scene.textLabels ?? []).map((label) =>
-                label.id === obj.id ? { ...label, visible } : label
-              ),
-            },
-          };
-        }
-        if (obj.type === "number") {
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              numbers: prev.scene.numbers.map((num) =>
-                num.id === obj.id ? { ...num, visible } : num
-              ),
-            },
-          };
-        }
-        return prev;
+        const nextScene = applyVisibilityToScene(prev.scene, [obj], visible);
+        if (nextScene === prev.scene) return prev;
+        return {
+          ...prev,
+          scene: nextScene,
+        };
+      });
+    },
+
+    setObjectsVisibility(objects, visible) {
+      const targets = dedupeSelectedObjects(objects);
+      if (targets.length === 0) return;
+      setState((prev) => {
+        const nextScene = applyVisibilityToScene(prev.scene, targets, visible);
+        if (nextScene === prev.scene) return prev;
+        return {
+          ...prev,
+          scene: nextScene,
+        };
+      });
+    },
+
+    reorderGeometryLayerInTab(dragged, target, tab, placement) {
+      setState((prev) => {
+        const nextOrder = moveGeometryLayerWithinTab(prev.scene, dragged, target, tab, placement);
+        const prevOrder = Array.isArray(prev.scene.geometryLayerOrder) ? prev.scene.geometryLayerOrder : [];
+        const sameOrder =
+          prevOrder.length === nextOrder.length &&
+          prevOrder.every((ref, idx) => geometryLayerKey(ref) === geometryLayerKey(nextOrder[idx]));
+        if (sameOrder) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            geometryLayerOrder: nextOrder,
+          },
+        };
       });
     },
 
     deleteSelectedObject() {
       setState((prev) => {
         if (!prev.selectedObject) return prev;
-        const deleted = collectCascadeDelete(prev.scene, prev.selectedObject);
-        const nextScene = applyDeletion(prev.scene, deleted);
-        rebuildRightAngleProvenance(nextScene);
-        return {
-          ...prev,
-          scene: nextScene,
-          selectedObject: null,
-          recentCreatedObject: null,
-          copyStyle: isSelectedObjectAlive(nextScene, prev.copyStyle.source)
-            ? prev.copyStyle
-            : {
-                source: null,
-                pointStyle: null,
-                lineStyle: null,
-                circleStyle: null,
-                polygonStyle: null,
-                angleStyle: null,
-                textLabelStyle: null,
-                showLabel: null,
-              },
-        };
+        return deleteObjectsFromState(prev, [prev.selectedObject]);
       });
+    },
+
+    deleteObjects(objects) {
+      const targets = dedupeSelectedObjects(objects);
+      if (targets.length === 0) return;
+      setState((prev) => deleteObjectsFromState(prev, targets));
     },
 
     setCopyStyleSource(obj) {
@@ -833,7 +1578,10 @@ export function createSceneMutationActions({
               polygonStyle: null,
               angleStyle: null,
               textLabelStyle: null,
-              showLabel: point.showLabel,
+              richTextStyle: null,
+              pointShowLabel: point.showLabel,
+              objectShowLabel: null,
+              objectLabelGlow: null,
             },
           };
         }
@@ -851,7 +1599,10 @@ export function createSceneMutationActions({
               polygonStyle: polygonStyleFromLineStyle(segment.style),
               angleStyle: angleStyleFromLineStyle(segment.style),
               textLabelStyle: null,
-              showLabel: null,
+              richTextStyle: null,
+              pointShowLabel: null,
+              objectShowLabel: Boolean(segment.showLabel),
+              objectLabelGlow: segment.labelGlow !== false,
             },
           };
         }
@@ -869,7 +1620,31 @@ export function createSceneMutationActions({
               polygonStyle: polygonStyleFromCircleStyle(circle.style),
               angleStyle: angleStyleFromCircleStyle(circle.style),
               textLabelStyle: null,
-              showLabel: null,
+              richTextStyle: null,
+              pointShowLabel: null,
+              objectShowLabel: Boolean(circle.showLabel),
+              objectLabelGlow: circle.labelGlow !== false,
+            },
+          };
+        }
+
+        if (obj.type === "ellipse") {
+          const ellipse = (prev.scene.ellipses ?? []).find((item) => item.id === obj.id);
+          if (!ellipse) return prev;
+          return {
+            ...prev,
+            copyStyle: {
+              source: obj,
+              pointStyle: null,
+              lineStyle: lineStyleFromCircleStyle(ellipse.style),
+              circleStyle: { ...ellipse.style },
+              polygonStyle: polygonStyleFromCircleStyle(ellipse.style),
+              angleStyle: angleStyleFromCircleStyle(ellipse.style),
+              textLabelStyle: null,
+              richTextStyle: null,
+              pointShowLabel: null,
+              objectShowLabel: Boolean(ellipse.showLabel),
+              objectLabelGlow: ellipse.labelGlow !== false,
             },
           };
         }
@@ -887,7 +1662,10 @@ export function createSceneMutationActions({
               polygonStyle: { ...polygon.style },
               angleStyle: angleStyleFromCircleStyle(circleStyleFromPolygonStyle(polygon.style)),
               textLabelStyle: null,
-              showLabel: null,
+              richTextStyle: null,
+              pointShowLabel: null,
+              objectShowLabel: Boolean(polygon.showLabel),
+              objectLabelGlow: polygon.labelGlow !== false,
             },
           };
         }
@@ -931,7 +1709,10 @@ export function createSceneMutationActions({
                 labelPosWorld: { ...angle.style.labelPosWorld },
               },
               textLabelStyle: null,
-              showLabel: null,
+              richTextStyle: null,
+              pointShowLabel: null,
+              objectShowLabel: null,
+              objectLabelGlow: null,
             },
           };
         }
@@ -949,10 +1730,36 @@ export function createSceneMutationActions({
               polygonStyle: null,
               angleStyle: null,
               textLabelStyle: { ...textLabel.style },
-              showLabel: null,
+              richTextStyle: null,
+              pointShowLabel: null,
+              objectShowLabel: null,
+              objectLabelGlow: null,
             },
           };
         }
+
+        if (obj.type === "richText") {
+          const richText = (prev.scene.richTextNodes ?? []).find((item) => item.id === obj.id);
+          if (!richText) return prev;
+          return {
+            ...prev,
+            copyStyle: {
+              source: obj,
+              pointStyle: null,
+              lineStyle: null,
+              circleStyle: null,
+              polygonStyle: null,
+              angleStyle: null,
+              textLabelStyle: null,
+              richTextStyle: { ...richText.style },
+              pointShowLabel: null,
+              objectShowLabel: null,
+              objectLabelGlow: null,
+            },
+          };
+        }
+
+        if (obj.type === "number") return prev;
 
         const line = prev.scene.lines.find((item) => item.id === obj.id);
         if (!line) return prev;
@@ -966,157 +1773,38 @@ export function createSceneMutationActions({
             polygonStyle: polygonStyleFromLineStyle(line.style),
             angleStyle: angleStyleFromLineStyle(line.style),
             textLabelStyle: null,
-            showLabel: null,
+            richTextStyle: null,
+            pointShowLabel: null,
+            objectShowLabel: Boolean(line.showLabel),
+            objectLabelGlow: line.labelGlow !== false,
           },
         };
-      });
+      }, { history: "skip" });
     },
 
     applyCopyStyleTo(obj) {
       setState((prev) => {
-        if (obj.type === "textLabel") {
-          if (!prev.copyStyle.textLabelStyle) return prev;
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              textLabels: (prev.scene.textLabels ?? []).map((label) =>
-                label.id === obj.id
-                  ? {
-                      ...label,
-                      style: {
-                        ...label.style,
-                        ...prev.copyStyle.textLabelStyle,
-                      },
-                    }
-                  : label
-              ),
-            },
-          };
-        }
-
-        if (obj.type === "point") {
-          const sourcePointStyle =
-            prev.copyStyle.pointStyle ??
-            (prev.copyStyle.lineStyle ? pointStyleFromLineStyle(prev.copyStyle.lineStyle) : null) ??
-            (prev.copyStyle.circleStyle ? pointStyleFromCircleStyle(prev.copyStyle.circleStyle) : null);
-          if (!sourcePointStyle) return prev;
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              points: prev.scene.points.map((point) =>
-                point.id !== obj.id
-                  ? point
-                  : {
-                      ...point,
-                      showLabel: prev.copyStyle.showLabel ?? point.showLabel,
-                      style: {
-                        ...point.style,
-                        ...sourcePointStyle,
-                        labelOffsetPx: { ...point.style.labelOffsetPx },
-                      },
-                    }
-              ),
-            },
-          };
-        }
-
-        if (obj.type === "segment") {
-          const sourceLineStyle =
-            prev.copyStyle.lineStyle ??
-            (prev.copyStyle.polygonStyle ? lineStyleFromPolygonStyle(prev.copyStyle.polygonStyle) : null) ??
-            (prev.copyStyle.circleStyle ? lineStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
-            (prev.copyStyle.pointStyle ? lineStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
-          if (!sourceLineStyle) return prev;
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              segments: prev.scene.segments.map((segment) =>
-                segment.id === obj.id ? { ...segment, style: { ...segment.style, ...sourceLineStyle } } : segment
-              ),
-            },
-          };
-        }
-
-        if (obj.type === "circle") {
-          const sourceCircleStyle =
-            prev.copyStyle.circleStyle ??
-            (prev.copyStyle.polygonStyle ? circleStyleFromPolygonStyle(prev.copyStyle.polygonStyle) : null) ??
-            (prev.copyStyle.lineStyle ? circleStyleFromLineStyle(prev.copyStyle.lineStyle) : null) ??
-            (prev.copyStyle.pointStyle ? circleStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
-          if (!sourceCircleStyle) return prev;
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              circles: prev.scene.circles.map((circle) =>
-                circle.id === obj.id ? { ...circle, style: { ...circle.style, ...sourceCircleStyle } } : circle
-              ),
-            },
-          };
-        }
-
-        if (obj.type === "polygon") {
-          const sourcePolygonStyle =
-            prev.copyStyle.polygonStyle ??
-            (prev.copyStyle.circleStyle ? polygonStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
-            (prev.copyStyle.lineStyle ? polygonStyleFromLineStyle(prev.copyStyle.lineStyle) : null);
-          if (!sourcePolygonStyle) return prev;
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              polygons: prev.scene.polygons.map((polygon) =>
-                polygon.id === obj.id ? { ...polygon, style: { ...polygon.style, ...sourcePolygonStyle } } : polygon
-              ),
-            },
-          };
-        }
-
-        if (obj.type === "angle") {
-          const sourceAngleStyle =
-            prev.copyStyle.angleStyle ??
-            (prev.copyStyle.polygonStyle ? angleStyleFromCircleStyle(circleStyleFromPolygonStyle(prev.copyStyle.polygonStyle)) : null) ??
-            (prev.copyStyle.lineStyle ? angleStyleFromLineStyle(prev.copyStyle.lineStyle) : null) ??
-            (prev.copyStyle.circleStyle ? angleStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
-            (prev.copyStyle.pointStyle ? angleStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
-          if (!sourceAngleStyle) return prev;
-          return {
-            ...prev,
-            scene: {
-              ...prev.scene,
-              angles: prev.scene.angles.map((angle) =>
-                angle.id === obj.id
-                  ? {
-                      ...angle,
-                      style: {
-                        ...angle.style,
-                        ...sourceAngleStyle,
-                        labelPosWorld: { ...angle.style.labelPosWorld },
-                      },
-                    }
-                  : angle
-              ),
-            },
-          };
-        }
-
-        const sourceLineStyle =
-          prev.copyStyle.lineStyle ??
-          (prev.copyStyle.polygonStyle ? lineStyleFromPolygonStyle(prev.copyStyle.polygonStyle) : null) ??
-          (prev.copyStyle.circleStyle ? lineStyleFromCircleStyle(prev.copyStyle.circleStyle) : null) ??
-          (prev.copyStyle.pointStyle ? lineStyleFromPointStyle(prev.copyStyle.pointStyle) : null);
-        if (!sourceLineStyle) return prev;
+        const nextScene = applyCopyStyleToScene(prev.scene, prev.copyStyle, obj);
+        if (nextScene === prev.scene) return prev;
         return {
           ...prev,
-          scene: {
-            ...prev.scene,
-            lines: prev.scene.lines.map((line) =>
-              line.id === obj.id ? { ...line, style: { ...line.style, ...sourceLineStyle } } : line
-            ),
-          },
+          scene: nextScene,
+        };
+      });
+    },
+
+    applyCopyStyleToMany(objects) {
+      const targets = dedupeSelectedObjects(objects);
+      if (targets.length === 0) return;
+      setState((prev) => {
+        let nextScene = prev.scene;
+        for (let i = 0; i < targets.length; i += 1) {
+          nextScene = applyCopyStyleToScene(nextScene, prev.copyStyle, targets[i]);
+        }
+        if (nextScene === prev.scene) return prev;
+        return {
+          ...prev,
+          scene: nextScene,
         };
       });
     },
@@ -1124,19 +1812,386 @@ export function createSceneMutationActions({
     clearCopyStyle() {
       setState((prev) => ({
         ...prev,
-        copyStyle: {
-          source: null,
-          pointStyle: null,
-          lineStyle: null,
-          circleStyle: null,
-          polygonStyle: null,
-          angleStyle: null,
-          textLabelStyle: null,
-          showLabel: null,
-        },
-      }));
+        copyStyle: emptyCopyStyle(),
+      }), { history: "skip" });
     },
   };
+}
+
+type SelectedObjectRef = Exclude<GeoState["selectedObject"], null>;
+
+function toIdSet(ids: string[]): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i < ids.length; i += 1) {
+    const id = ids[i];
+    if (!id) continue;
+    out.add(id);
+  }
+  return out;
+}
+
+function selectedObjectKey(obj: SelectedObjectRef): string {
+  return `${obj.type}:${obj.id}`;
+}
+
+function dedupeSelectedObjects(objects: SelectedObjectRef[]): SelectedObjectRef[] {
+  const out: SelectedObjectRef[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < objects.length; i += 1) {
+    const obj = objects[i];
+    const key = selectedObjectKey(obj);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(obj);
+  }
+  return out;
+}
+
+function emptyCopyStyle(): GeoState["copyStyle"] {
+  return {
+    source: null,
+    pointStyle: null,
+    lineStyle: null,
+    circleStyle: null,
+    polygonStyle: null,
+    angleStyle: null,
+    textLabelStyle: null,
+    richTextStyle: null,
+    pointShowLabel: null,
+    objectShowLabel: null,
+    objectLabelGlow: null,
+  };
+}
+
+function applyVisibilityToScene(scene: SceneModel, objects: SelectedObjectRef[], visible: boolean): SceneModel {
+  const pointIds = new Set<string>();
+  const segmentIds = new Set<string>();
+  const lineIds = new Set<string>();
+  const circleIds = new Set<string>();
+  const ellipseIds = new Set<string>();
+  const polygonIds = new Set<string>();
+  const angleIds = new Set<string>();
+  const textLabelIds = new Set<string>();
+  const richTextIds = new Set<string>();
+  const numberIds = new Set<string>();
+  for (let i = 0; i < objects.length; i += 1) {
+    const obj = objects[i];
+    if (obj.type === "point") pointIds.add(obj.id);
+    else if (obj.type === "segment") segmentIds.add(obj.id);
+    else if (obj.type === "line") lineIds.add(obj.id);
+    else if (obj.type === "circle") circleIds.add(obj.id);
+    else if (obj.type === "ellipse") ellipseIds.add(obj.id);
+    else if (obj.type === "polygon") polygonIds.add(obj.id);
+    else if (obj.type === "angle") angleIds.add(obj.id);
+    else if (obj.type === "textLabel") textLabelIds.add(obj.id);
+    else if (obj.type === "richText") richTextIds.add(obj.id);
+    else numberIds.add(obj.id);
+  }
+
+  let nextScene = scene;
+  if (pointIds.size > 0) {
+    let changed = false;
+    const points = scene.points.map((point) => {
+      if (!pointIds.has(point.id) || point.visible === visible) return point;
+      changed = true;
+      return { ...point, visible };
+    });
+    if (changed) nextScene = { ...nextScene, points };
+  }
+  if (segmentIds.size > 0) {
+    let changed = false;
+    const segments = nextScene.segments.map((segment) => {
+      if (!segmentIds.has(segment.id) || segment.visible === visible) return segment;
+      changed = true;
+      return { ...segment, visible };
+    });
+    if (changed) nextScene = { ...nextScene, segments };
+  }
+  if (lineIds.size > 0) {
+    let changed = false;
+    const lines = nextScene.lines.map((line) => {
+      if (!lineIds.has(line.id) || line.visible === visible) return line;
+      changed = true;
+      return { ...line, visible };
+    });
+    if (changed) nextScene = { ...nextScene, lines };
+  }
+  if (circleIds.size > 0) {
+    let changed = false;
+    const circles = nextScene.circles.map((circle) => {
+      if (!circleIds.has(circle.id) || circle.visible === visible) return circle;
+      changed = true;
+      return { ...circle, visible };
+    });
+    if (changed) nextScene = { ...nextScene, circles };
+  }
+  if (ellipseIds.size > 0) {
+    let changed = false;
+    const ellipses = (nextScene.ellipses ?? []).map((ellipse) => {
+      if (!ellipseIds.has(ellipse.id) || ellipse.visible === visible) return ellipse;
+      changed = true;
+      return { ...ellipse, visible };
+    });
+    if (changed) nextScene = { ...nextScene, ellipses };
+  }
+  if (polygonIds.size > 0) {
+    let changed = false;
+    const polygons = nextScene.polygons.map((polygon) => {
+      if (!polygonIds.has(polygon.id) || polygon.visible === visible) return polygon;
+      changed = true;
+      return { ...polygon, visible };
+    });
+    if (changed) nextScene = { ...nextScene, polygons };
+  }
+  if (angleIds.size > 0) {
+    let changed = false;
+    const angles = nextScene.angles.map((angle) => {
+      if (!angleIds.has(angle.id) || angle.visible === visible) return angle;
+      changed = true;
+      return { ...angle, visible };
+    });
+    if (changed) nextScene = { ...nextScene, angles };
+  }
+  if (textLabelIds.size > 0) {
+    let changed = false;
+    const textLabels = (nextScene.textLabels ?? []).map((label) => {
+      if (!textLabelIds.has(label.id) || label.visible === visible) return label;
+      changed = true;
+      return { ...label, visible };
+    });
+    if (changed) nextScene = { ...nextScene, textLabels };
+  }
+  if (richTextIds.size > 0) {
+    let changed = false;
+    const richTextNodes = (nextScene.richTextNodes ?? []).map((node) => {
+      if (!richTextIds.has(node.id) || node.visible === visible) return node;
+      changed = true;
+      return { ...node, visible };
+    });
+    if (changed) nextScene = { ...nextScene, richTextNodes };
+  }
+  if (numberIds.size > 0) {
+    let changed = false;
+    const numbers = nextScene.numbers.map((num) => {
+      if (!numberIds.has(num.id) || num.visible === visible) return num;
+      changed = true;
+      return { ...num, visible };
+    });
+    if (changed) nextScene = { ...nextScene, numbers };
+  }
+
+  return nextScene;
+}
+
+function deleteObjectsFromState(prev: GeoState, targets: SelectedObjectRef[]): GeoState {
+  const aliveTargets: SelectedObjectRef[] = [];
+  for (let i = 0; i < targets.length; i += 1) {
+    if (isSelectedObjectAlive(prev.scene, targets[i])) aliveTargets.push(targets[i]);
+  }
+  if (aliveTargets.length === 0) return prev;
+
+  const deleted = collectCascadeDeleteMany(prev.scene, aliveTargets);
+  if (deleted.size === 0) return prev;
+
+  const nextScene = applyDeletion(prev.scene, deleted);
+  rebuildRightAngleProvenance(nextScene);
+  return {
+    ...prev,
+    scene: nextScene,
+    selectedObject: isSelectedObjectAlive(nextScene, prev.selectedObject) ? prev.selectedObject : null,
+    recentCreatedObject: isSelectedObjectAlive(nextScene, prev.recentCreatedObject) ? prev.recentCreatedObject : null,
+    copyStyle: isSelectedObjectAlive(nextScene, prev.copyStyle.source) ? prev.copyStyle : emptyCopyStyle(),
+  };
+}
+
+function applyCopyStyleToScene(
+  scene: SceneModel,
+  copyStyle: GeoState["copyStyle"],
+  obj: SelectedObjectRef
+): SceneModel {
+  if (obj.type === "textLabel") {
+    if (!copyStyle.textLabelStyle) return scene;
+    let changed = false;
+    const textLabels = (scene.textLabels ?? []).map((label) => {
+      if (label.id !== obj.id) return label;
+      changed = true;
+      return {
+        ...label,
+        style: {
+          ...label.style,
+          ...copyStyle.textLabelStyle,
+        },
+      };
+    });
+    return changed ? { ...scene, textLabels } : scene;
+  }
+
+  if (obj.type === "richText") {
+    if (!copyStyle.richTextStyle) return scene;
+    let changed = false;
+    const richTextNodes = (scene.richTextNodes ?? []).map((node) => {
+      if (node.id !== obj.id) return node;
+      changed = true;
+      return {
+        ...node,
+        style: {
+          ...node.style,
+          ...copyStyle.richTextStyle,
+        },
+      };
+    });
+    return changed ? { ...scene, richTextNodes } : scene;
+  }
+
+  if (obj.type === "point") {
+    const sourcePointStyle =
+      copyStyle.pointStyle ??
+      (copyStyle.lineStyle ? pointStyleFromLineStyle(copyStyle.lineStyle) : null) ??
+      (copyStyle.circleStyle ? pointStyleFromCircleStyle(copyStyle.circleStyle) : null);
+    if (!sourcePointStyle) return scene;
+    let changed = false;
+    const points = scene.points.map((point) => {
+      if (point.id !== obj.id) return point;
+      changed = true;
+      return {
+        ...point,
+        showLabel: copyStyle.pointShowLabel ?? point.showLabel,
+        style: {
+          ...point.style,
+          ...sourcePointStyle,
+          labelOffsetPx: { ...point.style.labelOffsetPx },
+        },
+      };
+    });
+    return changed ? { ...scene, points } : scene;
+  }
+
+  if (obj.type === "segment") {
+    const sourceLineStyle =
+      copyStyle.lineStyle ??
+      (copyStyle.polygonStyle ? lineStyleFromPolygonStyle(copyStyle.polygonStyle) : null) ??
+      (copyStyle.circleStyle ? lineStyleFromCircleStyle(copyStyle.circleStyle) : null) ??
+      (copyStyle.pointStyle ? lineStyleFromPointStyle(copyStyle.pointStyle) : null);
+    if (!sourceLineStyle) return scene;
+    let changed = false;
+    const segments = scene.segments.map((segment) => {
+      if (segment.id !== obj.id) return segment;
+      changed = true;
+      return {
+        ...segment,
+        showLabel: copyStyle.objectShowLabel ?? segment.showLabel,
+        labelGlow: copyStyle.objectLabelGlow ?? segment.labelGlow,
+        style: { ...segment.style, ...sourceLineStyle },
+      };
+    });
+    return changed ? { ...scene, segments } : scene;
+  }
+
+  if (obj.type === "circle") {
+    const sourceCircleStyle =
+      copyStyle.circleStyle ??
+      (copyStyle.polygonStyle ? circleStyleFromPolygonStyle(copyStyle.polygonStyle) : null) ??
+      (copyStyle.lineStyle ? circleStyleFromLineStyle(copyStyle.lineStyle) : null) ??
+      (copyStyle.pointStyle ? circleStyleFromPointStyle(copyStyle.pointStyle) : null);
+    if (!sourceCircleStyle) return scene;
+    let changed = false;
+    const circles = scene.circles.map((circle) => {
+      if (circle.id !== obj.id) return circle;
+      changed = true;
+      return {
+        ...circle,
+        showLabel: copyStyle.objectShowLabel ?? circle.showLabel,
+        labelGlow: copyStyle.objectLabelGlow ?? circle.labelGlow,
+        style: { ...circle.style, ...sourceCircleStyle },
+      };
+    });
+    return changed ? { ...scene, circles } : scene;
+  }
+
+  if (obj.type === "ellipse") {
+    const sourceCircleStyle =
+      copyStyle.circleStyle ??
+      (copyStyle.polygonStyle ? circleStyleFromPolygonStyle(copyStyle.polygonStyle) : null) ??
+      (copyStyle.lineStyle ? circleStyleFromLineStyle(copyStyle.lineStyle) : null) ??
+      (copyStyle.pointStyle ? circleStyleFromPointStyle(copyStyle.pointStyle) : null);
+    if (!sourceCircleStyle) return scene;
+    let changed = false;
+    const ellipses = (scene.ellipses ?? []).map((ellipse) => {
+      if (ellipse.id !== obj.id) return ellipse;
+      changed = true;
+      return {
+        ...ellipse,
+        showLabel: copyStyle.objectShowLabel ?? ellipse.showLabel,
+        labelGlow: copyStyle.objectLabelGlow ?? ellipse.labelGlow,
+        style: { ...ellipse.style, ...sourceCircleStyle },
+      };
+    });
+    return changed ? { ...scene, ellipses } : scene;
+  }
+
+  if (obj.type === "polygon") {
+    const sourcePolygonStyle =
+      copyStyle.polygonStyle ??
+      (copyStyle.circleStyle ? polygonStyleFromCircleStyle(copyStyle.circleStyle) : null) ??
+      (copyStyle.lineStyle ? polygonStyleFromLineStyle(copyStyle.lineStyle) : null);
+    if (!sourcePolygonStyle) return scene;
+    let changed = false;
+    const polygons = scene.polygons.map((polygon) => {
+      if (polygon.id !== obj.id) return polygon;
+      changed = true;
+      return {
+        ...polygon,
+        showLabel: copyStyle.objectShowLabel ?? polygon.showLabel,
+        labelGlow: copyStyle.objectLabelGlow ?? polygon.labelGlow,
+        style: { ...polygon.style, ...sourcePolygonStyle },
+      };
+    });
+    return changed ? { ...scene, polygons } : scene;
+  }
+
+  if (obj.type === "angle") {
+    const sourceAngleStyle =
+      copyStyle.angleStyle ??
+      (copyStyle.polygonStyle ? angleStyleFromCircleStyle(circleStyleFromPolygonStyle(copyStyle.polygonStyle)) : null) ??
+      (copyStyle.lineStyle ? angleStyleFromLineStyle(copyStyle.lineStyle) : null) ??
+      (copyStyle.circleStyle ? angleStyleFromCircleStyle(copyStyle.circleStyle) : null) ??
+      (copyStyle.pointStyle ? angleStyleFromPointStyle(copyStyle.pointStyle) : null);
+    if (!sourceAngleStyle) return scene;
+    let changed = false;
+    const angles = scene.angles.map((angle) => {
+      if (angle.id !== obj.id) return angle;
+      changed = true;
+      return {
+        ...angle,
+        style: {
+          ...angle.style,
+          ...sourceAngleStyle,
+          labelPosWorld: { ...angle.style.labelPosWorld },
+        },
+      };
+    });
+    return changed ? { ...scene, angles } : scene;
+  }
+
+  if (obj.type === "number") return scene;
+  const sourceLineStyle =
+    copyStyle.lineStyle ??
+    (copyStyle.polygonStyle ? lineStyleFromPolygonStyle(copyStyle.polygonStyle) : null) ??
+    (copyStyle.circleStyle ? lineStyleFromCircleStyle(copyStyle.circleStyle) : null) ??
+    (copyStyle.pointStyle ? lineStyleFromPointStyle(copyStyle.pointStyle) : null);
+  if (!sourceLineStyle) return scene;
+  let changed = false;
+  const lines = scene.lines.map((line) => {
+    if (line.id !== obj.id) return line;
+    changed = true;
+    return {
+      ...line,
+      showLabel: copyStyle.objectShowLabel ?? line.showLabel,
+      labelGlow: copyStyle.objectLabelGlow ?? line.labelGlow,
+      style: { ...line.style, ...sourceLineStyle },
+    };
+  });
+  return changed ? { ...scene, lines } : scene;
 }
 
 function ensureSegmentLabelFields(
@@ -1183,6 +2238,22 @@ function ensureCircleLabelFields(
   return {
     ...circle,
     showLabel: Boolean(circle.showLabel),
+    labelText,
+    labelPosWorld,
+  };
+}
+
+function ensureEllipseLabelFields(
+  ellipse: NonNullable<SceneModel["ellipses"]>[number],
+  scene: SceneModel
+): NonNullable<SceneModel["ellipses"]>[number] {
+  const fallbackText = defaultEllipseLabelText(ellipse, scene);
+  const labelText = resolveObjectLabelText(ellipse.labelText, fallbackText);
+  const fallbackPos = defaultEllipseLabelPosWorld(ellipse, scene) ?? undefined;
+  const labelPosWorld = isFiniteLabelPosWorld(ellipse.labelPosWorld) ? ellipse.labelPosWorld : fallbackPos;
+  return {
+    ...ellipse,
+    showLabel: Boolean(ellipse.showLabel),
     labelText,
     labelPosWorld,
   };

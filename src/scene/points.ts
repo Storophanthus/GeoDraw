@@ -27,6 +27,7 @@ import {
 import { evalPointUncheckedInSceneWithFacades } from "./eval/scenePointEvalFacade";
 import { evalPointWithCtxInScene } from "./eval/pointRuntime";
 import { type SceneEvalContext } from "./eval/sceneContextBuilder";
+import type { RichTextDocument, RichTextStyle } from "../text-editor/richTextModel";
 
 export {
   isNameUnique,
@@ -85,7 +86,7 @@ export type LineStyle = {
 
 export type ArrowDirection = "->" | "<-" | "<->" | ">-<";
 
-export type ArrowTipStyle = "Stealth" | "Latex" | "Triangle";
+export type ArrowTipStyle = "Stealth" | "Latex" | "Triangle" | "Dot" | "OpenDot";
 
 export type PathArrowMark = {
   enabled: boolean;
@@ -107,7 +108,7 @@ export type SegmentArrowMark = PathArrowMark & {
   mode: "end" | "mid";
 };
 
-export type SegmentMarkSymbol = "none" | "|" | "||" | "|||" | "s" | "s|" | "s||" | "x" | "o" | "oo" | "z";
+export type SegmentMarkSymbol = "none" | "|" | "||" | "|||" | "s" | "s|" | "s||" | "x" | "o" | "oo" | "z" | "dot";
 
 export type SegmentMark = {
   enabled: boolean;
@@ -195,6 +196,7 @@ export type AngleStyle = {
   labelPosWorld: Vec2;
   showLabel: boolean;
   showValue: boolean;
+  labelGlow?: boolean;
   promoteToSolid?: boolean;
   arcArrowMark?: PathArrowMark;
   arcArrowMarks?: PathArrowMark[];
@@ -353,6 +355,21 @@ export type PointByReflection = {
   style: PointStyle;
 };
 
+export type PointByProjection = {
+  id: string;
+  kind: "pointByProjection";
+  name: string;
+  captionTex: string;
+  visible: boolean;
+  showLabel: ShowLabelMode;
+  locked?: boolean;
+  auxiliary?: boolean;
+  pointId: string;
+  axisAId: string;
+  axisBId: string;
+  style: PointStyle;
+};
+
 export type CircleCenterPoint = {
   id: string;
   kind: "circleCenter";
@@ -366,7 +383,7 @@ export type CircleCenterPoint = {
   style: PointStyle;
 };
 
-export type TriangleCenterKind = "incenter" | "orthocenter" | "centroid";
+export type TriangleCenterKind = "incenter" | "orthocenter" | "centroid" | "circumcenter";
 
 export type TriangleCenterPoint = {
   id: string;
@@ -390,8 +407,19 @@ export type GeometryObjectRef =
   | { type: "circle"; id: string }
   | { type: "angle"; id: string };
 
+export type SceneGeometryLayerRef =
+  | { type: "segment"; id: string }
+  | { type: "line"; id: string }
+  | { type: "circle"; id: string }
+  | { type: "ellipse"; id: string }
+  | { type: "polygon"; id: string }
+  | { type: "angle"; id: string };
+
 export type LineLikeObjectRef = { type: "line"; id: string } | { type: "segment"; id: string };
-export type ReflectionObjectRef = LineLikeObjectRef | { type: "point"; id: string };
+export type ReflectionObjectRef =
+  | LineLikeObjectRef
+  | { type: "point"; id: string }
+  | { type: "pointPair"; aId: string; bId: string };
 
 export type SceneVectorFromPoints = {
   id: string;
@@ -502,6 +530,7 @@ export type ScenePoint =
   | PointByTranslation
   | PointByDilation
   | PointByReflection
+  | PointByProjection
   | CircleCenterPoint
   | TriangleCenterPoint
   | IntersectionPoint
@@ -514,6 +543,7 @@ export type ObjectLabelFields = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
 };
 
 export type SceneSegment = {
@@ -530,6 +560,7 @@ export type SceneSegment = {
   showLabel: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -542,6 +573,7 @@ export type SceneLineTwoPoint = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -554,6 +586,7 @@ export type SceneLinePerpendicular = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -566,6 +599,7 @@ export type SceneLineParallel = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -579,6 +613,7 @@ export type SceneLineAngleBisector = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -592,6 +627,7 @@ export type SceneLineTangent = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -606,6 +642,7 @@ export type SceneLineCircleCircleTangent = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: LineStyle;
 };
 
@@ -626,6 +663,7 @@ export type SceneCircleTwoPoint = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: CircleStyle;
 };
 
@@ -639,6 +677,7 @@ export type SceneCircleThreePoint = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: CircleStyle;
 };
 
@@ -652,10 +691,27 @@ export type SceneCircleFixedRadius = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: CircleStyle;
 };
 
 export type SceneCircle = SceneCircleTwoPoint | SceneCircleThreePoint | SceneCircleFixedRadius;
+
+export type SceneEllipseFociPoint = {
+  id: string;
+  kind: "fociPoint";
+  focusAId: string;
+  focusBId: string;
+  throughId: string;
+  visible: boolean;
+  showLabel?: boolean;
+  labelText?: string;
+  labelPosWorld?: Vec2;
+  labelGlow?: boolean;
+  style: CircleStyle;
+};
+
+export type SceneEllipse = SceneEllipseFociPoint;
 
 export type ScenePolygon = {
   id: string;
@@ -664,6 +720,7 @@ export type ScenePolygon = {
   showLabel?: boolean;
   labelText?: string;
   labelPosWorld?: Vec2;
+  labelGlow?: boolean;
   style: PolygonStyle;
 };
 
@@ -716,6 +773,16 @@ export type SceneNumberCircleArea = {
   circleId: string;
 };
 
+export type SceneNumberPolygonPerimeter = {
+  kind: "polygonPerimeter";
+  polygonId: string;
+};
+
+export type SceneNumberPolygonArea = {
+  kind: "polygonArea";
+  polygonId: string;
+};
+
 export type SceneNumberAngleDegrees = {
   kind: "angleDegrees";
   angleId: string;
@@ -739,6 +806,8 @@ export type SceneNumberDefinition =
   | SceneNumberSegmentLength
   | SceneNumberCircleRadius
   | SceneNumberCircleArea
+  | SceneNumberPolygonPerimeter
+  | SceneNumberPolygonArea
   | SceneNumberAngleDegrees
   | SceneNumberRatio
   | SceneNumberExpression;
@@ -750,17 +819,27 @@ export type SceneNumber = {
   definition: SceneNumberDefinition;
 };
 
+export type TextLabelRenderMode = "tex" | "plain" | "mixed";
+export type TextLabelToolKind = "label" | "textbox";
+export type TextLabelAlignment = "left" | "center" | "right";
+
 export type SceneTextLabelStyle = {
   textColor: string;
   textSize: number;
   useTex: boolean;
+  textMode?: TextLabelRenderMode;
+  textAlign?: TextLabelAlignment;
+  boxWidthPx?: number;
+  boxHeightPx?: number;
   rotationDeg?: number;
+  labelGlow?: boolean;
 };
 
 export type SceneTextLabel = {
   id: string;
   name: string;
   text: string;
+  toolKind?: TextLabelToolKind;
   contentMode?: "static" | "number" | "expression";
   numberId?: string;
   expr?: string;
@@ -769,16 +848,35 @@ export type SceneTextLabel = {
   style: SceneTextLabelStyle;
 };
 
+export type SceneRichTextStyle = RichTextStyle;
+
+export type SceneRichTextNode = {
+  id: string;
+  type: "richText";
+  name: string;
+  visible: boolean;
+  positionWorld: Vec2;
+  document: RichTextDocument;
+  style: SceneRichTextStyle;
+  boundsPx?: {
+    widthPx: number;
+    heightPx: number;
+  };
+};
+
 export type SceneModel = {
   points: ScenePoint[];
   vectors?: SceneVector[];
   segments: SceneSegment[];
   lines: SceneLine[];
   circles: SceneCircle[];
+  ellipses?: SceneEllipse[];
   polygons: ScenePolygon[];
   angles: SceneAngle[];
   numbers: SceneNumber[];
   textLabels?: SceneTextLabel[];
+  richTextNodes?: SceneRichTextNode[];
+  geometryLayerOrder?: SceneGeometryLayerRef[];
 };
 
 const sceneEvalState = createSceneEvalStateStore();
@@ -850,12 +948,90 @@ export function getCircleWorldGeometry(circle: SceneCircle, scene: SceneModel): 
   });
 }
 
+export type EllipseWorldGeometry = {
+  center: Vec2;
+  focusA: Vec2;
+  focusB: Vec2;
+  through: Vec2;
+  semiMajor: number;
+  semiMinor: number;
+  focalDistance: number;
+  rotationRad: number;
+};
+
+export function getEllipseWorldGeometry(ellipse: SceneEllipse, scene: SceneModel): EllipseWorldGeometry | null {
+  const focusA = scene.points.find((point) => point.id === ellipse.focusAId);
+  const focusB = scene.points.find((point) => point.id === ellipse.focusBId);
+  const through = scene.points.find((point) => point.id === ellipse.throughId);
+  if (!focusA || !focusB || !through) return null;
+
+  const aWorld = getPointWorldPos(focusA, scene);
+  const bWorld = getPointWorldPos(focusB, scene);
+  const throughWorld = getPointWorldPos(through, scene);
+  if (!aWorld || !bWorld || !throughWorld) return null;
+
+  const dx = bWorld.x - aWorld.x;
+  const dy = bWorld.y - aWorld.y;
+  const focusDistance = Math.hypot(dx, dy);
+  if (!Number.isFinite(focusDistance) || focusDistance <= 1e-12) return null;
+
+  const semiMajor = (Math.hypot(throughWorld.x - aWorld.x, throughWorld.y - aWorld.y) + Math.hypot(throughWorld.x - bWorld.x, throughWorld.y - bWorld.y)) / 2;
+  const focalDistance = focusDistance / 2;
+  if (!Number.isFinite(semiMajor) || semiMajor <= focalDistance + 1e-9) return null;
+
+  const semiMinorSq = semiMajor * semiMajor - focalDistance * focalDistance;
+  if (!Number.isFinite(semiMinorSq) || semiMinorSq <= 1e-18) return null;
+
+  return {
+    center: {
+      x: (aWorld.x + bWorld.x) / 2,
+      y: (aWorld.y + bWorld.y) / 2,
+    },
+    focusA: aWorld,
+    focusB: bWorld,
+    through: throughWorld,
+    semiMajor,
+    semiMinor: Math.sqrt(semiMinorSq),
+    focalDistance,
+    rotationRad: Math.atan2(dy, dx),
+  };
+}
+
 export function getNumberValue(numOrId: SceneNumber | string, scene: SceneModel): number | null {
   return getNumberValueInScenePublic(numOrId, scene, {
     getOrCreateSceneEvalContext: sceneEvalState.getOrCreateSceneEvalContext,
     evalNumberById,
     updateImplicitEvalStats: (s, c) => updateImplicitEvalStats(s, c, sceneEvalState.sceneLastEvalStats),
   });
+}
+
+export function resolveTextLabelRenderMode(style: SceneTextLabelStyle): TextLabelRenderMode {
+  if (style.textMode === "plain" || style.textMode === "mixed" || style.textMode === "tex") {
+    return style.textMode;
+  }
+  return style.useTex ? "tex" : "plain";
+}
+
+export function resolveTextLabelAlignment(style: SceneTextLabelStyle): TextLabelAlignment {
+  if (style.textAlign === "left" || style.textAlign === "center" || style.textAlign === "right") {
+    return style.textAlign;
+  }
+  return resolveTextLabelRenderMode(style) === "mixed" ? "left" : "center";
+}
+
+export function resolveTextLabelBoxWidthPx(style: SceneTextLabelStyle): number | null {
+  if (typeof style.boxWidthPx !== "number" || !Number.isFinite(style.boxWidthPx)) return null;
+  return Math.max(80, Math.min(960, style.boxWidthPx));
+}
+
+export function resolveTextLabelBoxHeightPx(style: SceneTextLabelStyle): number | null {
+  if (typeof style.boxHeightPx !== "number" || !Number.isFinite(style.boxHeightPx)) return null;
+  return Math.max(56, Math.min(640, style.boxHeightPx));
+}
+
+export function resolveTextLabelToolKind(label: SceneTextLabel): TextLabelToolKind {
+  if (label.toolKind === "textbox" || label.toolKind === "label") return label.toolKind;
+  return resolveTextLabelRenderMode(label.style) === "mixed" ? "textbox" : "label";
 }
 
 export function resolveTextLabelDisplayText(label: SceneTextLabel, scene: SceneModel): string {
@@ -871,7 +1047,14 @@ function evalNumberById(id: string, scene: SceneModel, ctx: SceneEvalContext): n
   });
 }
 
-export { computeConvexAngleRad, computeOrientedAngleRad, isRightAngle, RIGHT_ANGLE_EPS } from "./eval/angleMath";
+export {
+  computeConvexAngleRad,
+  computeOrientedAngleRad,
+  isRightAngle,
+  isRightAngleSweepRad,
+  RIGHT_ANGLE_EPS,
+  RIGHT_ANGLE_SWEEP_EPS,
+} from "./eval/angleMath";
 
 export function evaluateAngleExpressionDegrees(scene: SceneModel, exprRaw: string): AngleExpressionEvalResult {
   return evaluateAngleExpressionDegreesInScenePublic(scene, exprRaw, {

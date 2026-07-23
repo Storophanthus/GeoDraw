@@ -1,5 +1,6 @@
-import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneModel } from "../../scene/points";
-import type { ActiveTool, GeoState, SelectedObject } from "./storeTypes";
+import type { AngleStyle, CircleStyle, LineStyle, PointStyle, PolygonStyle, SceneModel, SceneTextLabelStyle } from "../../scene/points";
+import type { SceneRichTextStyle } from "../../scene/points";
+import type { ActiveTool, GeoState, ObjectLabelDefaults, SelectedObject } from "./storeTypes";
 import type { CanvasColorTheme, ColorProfileId } from "../colorProfiles";
 
 export type SetStateOptions = {
@@ -21,17 +22,24 @@ export type HistorySnapshot = {
   nextSegmentId: number;
   nextLineId: number;
   nextCircleId: number;
+  nextEllipseId?: number;
   nextPolygonId: number;
   nextAngleId: number;
   nextNumberId: number;
   nextVectorId?: number;
   nextTextLabelId?: number;
+  nextRichTextId?: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
+  ellipseDefaults?: CircleStyle;
   polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
+  objectLabelDefaults: ObjectLabelDefaults;
+  labelToolDefaults: SceneTextLabelStyle;
+  textboxToolDefaults: SceneTextLabelStyle;
+  richTextToolDefaults?: SceneRichTextStyle;
   angleFixedTool: GeoState["angleFixedTool"];
   circleFixedTool: GeoState["circleFixedTool"];
   transformTool?: GeoState["transformTool"];
@@ -68,17 +76,24 @@ export function takeHistorySnapshot(prev: GeoState): HistorySnapshot {
     nextSegmentId: prev.nextSegmentId,
     nextLineId: prev.nextLineId,
     nextCircleId: prev.nextCircleId,
+    nextEllipseId: prev.nextEllipseId,
     nextPolygonId: prev.nextPolygonId,
     nextAngleId: prev.nextAngleId,
     nextNumberId: prev.nextNumberId,
     nextVectorId: prev.nextVectorId,
     nextTextLabelId: prev.nextTextLabelId,
+    nextRichTextId: prev.nextRichTextId,
     pointDefaults: prev.pointDefaults,
     segmentDefaults: prev.segmentDefaults,
     lineDefaults: prev.lineDefaults,
     circleDefaults: prev.circleDefaults,
+    ellipseDefaults: prev.ellipseDefaults,
     polygonDefaults: prev.polygonDefaults,
     angleDefaults: prev.angleDefaults,
+    objectLabelDefaults: prev.objectLabelDefaults,
+    labelToolDefaults: prev.labelToolDefaults,
+    textboxToolDefaults: prev.textboxToolDefaults,
+    richTextToolDefaults: prev.richTextToolDefaults,
     angleFixedTool: prev.angleFixedTool,
     circleFixedTool: prev.circleFixedTool,
     transformTool: prev.transformTool,
@@ -100,17 +115,24 @@ export function hasHistoryDiff(prev: GeoState, next: GeoState): boolean {
     prev.nextSegmentId !== next.nextSegmentId ||
     prev.nextLineId !== next.nextLineId ||
     prev.nextCircleId !== next.nextCircleId ||
+    prev.nextEllipseId !== next.nextEllipseId ||
     prev.nextPolygonId !== next.nextPolygonId ||
     prev.nextAngleId !== next.nextAngleId ||
     prev.nextNumberId !== next.nextNumberId ||
     prev.nextVectorId !== next.nextVectorId ||
     prev.nextTextLabelId !== next.nextTextLabelId ||
+    prev.nextRichTextId !== next.nextRichTextId ||
     prev.pointDefaults !== next.pointDefaults ||
     prev.segmentDefaults !== next.segmentDefaults ||
     prev.lineDefaults !== next.lineDefaults ||
     prev.circleDefaults !== next.circleDefaults ||
+    prev.ellipseDefaults !== next.ellipseDefaults ||
     prev.polygonDefaults !== next.polygonDefaults ||
-    prev.angleDefaults !== next.angleDefaults
+    prev.angleDefaults !== next.angleDefaults ||
+    prev.objectLabelDefaults !== next.objectLabelDefaults ||
+    prev.labelToolDefaults !== next.labelToolDefaults ||
+    prev.textboxToolDefaults !== next.textboxToolDefaults
+    || prev.richTextToolDefaults !== next.richTextToolDefaults
     || prev.exportClipWorld !== next.exportClipWorld
   );
 }

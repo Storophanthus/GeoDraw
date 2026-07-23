@@ -35,7 +35,7 @@ export function appendRenderedSetupAndPoints({
   pointDefs,
 }: SetupAndPointsRendererArgs): void {
   const out = ctx.out;
-  const { scale, hasGlowLabels, emitTkzSetup } = ctx.options;
+  const { scale, hasGlowLabels, emitTkzSetup, drawLayerBackend } = ctx.options;
   const caps = ctx.capabilities;
 
   out.push(`\\begin{tikzpicture}[scale=${caps.fmt(scale)},line cap=round,line join=round,>=triangle 45]`);
@@ -45,9 +45,33 @@ export function appendRenderedSetupAndPoints({
       "\\newcommand{\\gdLabelGlow}[1]{\\begingroup\\ifcsname contour\\endcsname\\contourlength{0.42pt}\\ifcsname thepagecolor\\endcsname\\contour{\\thepagecolor}{#1}\\else\\contour{white}{#1}\\fi\\else#1\\fi\\endgroup}"
     );
   }
+  if (drawLayerBackend === "plain") {
+    if (clipRect) {
+      const clipPath = `(${caps.fmt(clipRect.xmin)},${caps.fmt(clipRect.ymin)}) rectangle (${caps.fmt(clipRect.xmax)},${caps.fmt(clipRect.ymax)})`;
+      out.push(`\\path[use as bounding box] ${clipPath};`);
+      out.push(`\\clip ${clipPath};`);
+    } else if (clipPolygon && clipPolygon.points.length >= 3) {
+      const xs = clipPolygon.points.map((point) => point.x);
+      const ys = clipPolygon.points.map((point) => point.y);
+      const boundsPath = `(${caps.fmt(Math.min(...xs))},${caps.fmt(Math.min(...ys))}) rectangle (${caps.fmt(Math.max(...xs))},${caps.fmt(Math.max(...ys))})`;
+      const polygonPath = clipPolygon.points
+        .map((point) => `(${caps.fmt(point.x)},${caps.fmt(point.y)})`)
+        .join(" -- ");
+      out.push(`\\path[use as bounding box] ${boundsPath};`);
+      out.push(`\\clip ${polygonPath} -- cycle;`);
+    } else if (setupViewport) {
+      const xmin = setupViewport.xmin - setupViewport.space;
+      const xmax = setupViewport.xmax + setupViewport.space;
+      const ymin = setupViewport.ymin - setupViewport.space;
+      const ymax = setupViewport.ymax + setupViewport.space;
+      const viewportPath = `(${caps.fmt(xmin)},${caps.fmt(ymin)}) rectangle (${caps.fmt(xmax)},${caps.fmt(ymax)})`;
+      out.push(`\\path[use as bounding box] ${viewportPath};`);
+      out.push(`\\clip ${viewportPath};`);
+    }
+  }
   // When explicit export clip rectangle is present, avoid tkz viewport clip to
   // prevent extra outer whitespace from a larger bounding box.
-  if (emitTkzSetup && setupViewport && !clipRect && !clipPolygon) {
+  if (drawLayerBackend === "tkz" && emitTkzSetup && setupViewport && !clipRect && !clipPolygon) {
     caps.assertTkzMacro("tkzInit");
     caps.assertTkzMacro("tkzClip");
     out.push(
@@ -56,15 +80,27 @@ export function appendRenderedSetupAndPoints({
       )},ymax=${caps.fmt(setupViewport.ymax)}]`
     );
     out.push(`\\tkzClip[space=${caps.fmt(setupViewport.space)}]`);
+  } else if (drawLayerBackend === "plain" && setupViewport && !clipRect && !clipPolygon) {
+    // The plain backend forces emitTkzSetup off (\tkzInit/\tkzClip are
+    // tkz-euclide macros), which would otherwise drop viewport clipping
+    // entirely and export the whole drawing. Emit the pure-TikZ equivalent so
+    // "Export what I see now" keeps working here. \tkzClip[space=n] grows the
+    // region by n on every side, so match that.
+    const space = setupViewport.space;
+    out.push(
+      `\\clip (${caps.fmt(setupViewport.xmin - space)},${caps.fmt(setupViewport.ymin - space)}) rectangle (${caps.fmt(
+        setupViewport.xmax + space
+      )},${caps.fmt(setupViewport.ymax + space)});`
+    );
   }
-  if (emitTkzSetup && setupLine) {
+  if (drawLayerBackend === "tkz" && emitTkzSetup && setupLine) {
     caps.assertTkzMacro("tkzSetUpLine");
     out.push(`\\tkzSetUpLine[add=${caps.fmt(setupLine.addLeft)} and ${caps.fmt(setupLine.addRight)}]`);
   }
-  if (clipRect) {
+  if (drawLayerBackend !== "plain" && clipRect) {
     out.push(`\\clip (${caps.fmt(clipRect.xmin)},${caps.fmt(clipRect.ymin)}) rectangle (${caps.fmt(clipRect.xmax)},${caps.fmt(clipRect.ymax)});`);
   }
-  if (clipPolygon && clipPolygon.points.length >= 3) {
+  if (drawLayerBackend !== "plain" && clipPolygon && clipPolygon.points.length >= 3) {
     const path = clipPolygon.points.map((p) => `(${caps.fmt(p.x)},${caps.fmt(p.y)})`).join(" -- ");
     out.push(`\\clip ${path} -- cycle;`);
   }
@@ -76,12 +112,22 @@ export function appendRenderedSetupAndPoints({
 
   ctx.pushSectionHeader("% Points");
   for (const cmd of pointsDefs) {
-    caps.assertTkzMacro("tkzDefPoints");
     const items = cmd.items.map((it) => `${caps.fmt(it.x)}/${caps.fmt(it.y)}/${it.name}`).join(", ");
-    out.push(`\\tkzDefPoints{${items}}`);
+    if (drawLayerBackend === "plain") {
+      for (const item of cmd.items) {
+        out.push(`\\coordinate (${item.name}) at (${caps.fmt(item.x)},${caps.fmt(item.y)});`);
+      }
+    } else {
+      caps.assertTkzMacro("tkzDefPoints");
+      out.push(`\\tkzDefPoints{${items}}`);
+    }
   }
   for (const cmd of pointDefs) {
-    caps.assertTkzMacro("tkzDefPoint");
-    out.push(`\\tkzDefPoint(${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${cmd.name}}`);
+    if (drawLayerBackend === "plain") {
+      out.push(`\\coordinate (${cmd.name}) at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)});`);
+    } else {
+      caps.assertTkzMacro("tkzDefPoint");
+      out.push(`\\tkzDefPoint(${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${cmd.name}}`);
+    }
   }
 }

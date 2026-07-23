@@ -1,4 +1,4 @@
-import { type PointStyle, type SceneModel } from "../../scene/points";
+import { resolveTextLabelRenderMode, type PointStyle, type SceneModel, type SceneRichTextStyle, type SceneTextLabelStyle } from "../../scene/points";
 
 export function pointStyleEqual(a: PointStyle, b: PointStyle): boolean {
     return (
@@ -80,9 +80,34 @@ export function angleStyleEqual(a: SceneModel["angles"][number]["style"], b: Sce
         a.labelText === b.labelText &&
         a.showLabel === b.showLabel &&
         a.showValue === b.showValue &&
+        Boolean(a.labelGlow) === Boolean(b.labelGlow) &&
         Boolean(a.promoteToSolid) === Boolean(b.promoteToSolid) &&
         JSON.stringify(a.angleMarks ?? null) === JSON.stringify(b.angleMarks ?? null) &&
         JSON.stringify(a.arcArrowMark ?? null) === JSON.stringify(b.arcArrowMark ?? null) &&
         JSON.stringify(a.arcArrowMarks ?? null) === JSON.stringify(b.arcArrowMarks ?? null)
+    );
+}
+
+export function textLabelStyleEqual(a: SceneTextLabelStyle, b: SceneTextLabelStyle): boolean {
+    return (
+        a.textColor === b.textColor &&
+        a.textSize === b.textSize &&
+        resolveTextLabelRenderMode(a) === resolveTextLabelRenderMode(b) &&
+        (a.textAlign ?? null) === (b.textAlign ?? null) &&
+        Boolean(a.useTex) === Boolean(b.useTex) &&
+        (a.boxWidthPx ?? null) === (b.boxWidthPx ?? null) &&
+        (a.boxHeightPx ?? null) === (b.boxHeightPx ?? null) &&
+        (a.rotationDeg ?? 0) === (b.rotationDeg ?? 0) &&
+        Boolean(a.labelGlow) === Boolean(b.labelGlow)
+    );
+}
+
+export function richTextStyleEqual(a: SceneRichTextStyle, b: SceneRichTextStyle): boolean {
+    return (
+        a.textColor === b.textColor &&
+        a.textSize === b.textSize &&
+        a.textAlign === b.textAlign &&
+        (a.rotationDeg ?? 0) === (b.rotationDeg ?? 0) &&
+        Boolean(a.labelGlow) === Boolean(b.labelGlow)
     );
 }

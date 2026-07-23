@@ -65,8 +65,21 @@ export function appendRenderedPointConstruction(
   if (cmd.kind === "DefTriangleCenterPoint") {
     caps.assertTkzMacro("tkzDefTriangleCenter");
     caps.assertTkzMacro("tkzGetPoint");
-    const mode = cmd.centerKind === "incenter" ? "in" : cmd.centerKind === "centroid" ? "centroid" : "ortho";
+    const mode =
+      cmd.centerKind === "incenter"
+        ? "in"
+        : cmd.centerKind === "centroid"
+          ? "centroid"
+          : cmd.centerKind === "circumcenter"
+            ? "circum"
+            : "ortho";
     out.push(`\\tkzDefTriangleCenter[${mode}](${cmd.a},${cmd.b},${cmd.c}) \\tkzGetPoint{${cmd.name}}`);
+    return true;
+  }
+  if (cmd.kind === "DefIncircle") {
+    caps.assertTkzMacro("tkzDefCircle");
+    caps.assertTkzMacro("tkzGetPoints");
+    out.push(`\\tkzDefCircle[in](${cmd.a},${cmd.b},${cmd.c}) \\tkzGetPoints{${cmd.centerName}}{${cmd.touchName}}`);
     return true;
   }
   if (cmd.kind === "DefCircleCircumCenter") {

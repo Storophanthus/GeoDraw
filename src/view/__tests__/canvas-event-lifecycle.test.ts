@@ -31,6 +31,7 @@ class FakeCanvas {
 
 const fakeCanvas = new FakeCanvas();
 let doubleClicks = 0;
+let contextMenus = 0;
 
 const unbind = bindCanvasEventLifecycle(fakeCanvas as unknown as HTMLCanvasElement, {
   onDown() {},
@@ -39,15 +40,22 @@ const unbind = bindCanvasEventLifecycle(fakeCanvas as unknown as HTMLCanvasEleme
   onDoubleClick() {
     doubleClicks += 1;
   },
+  onContextMenu() {
+    contextMenus += 1;
+  },
   onLeave() {},
   onWheel() {},
 });
 
 fakeCanvas.emit("dblclick", {} as Event);
 assert(doubleClicks === 1, "dblclick should be bound to lifecycle handlers.");
+fakeCanvas.emit("contextmenu", {} as Event);
+assert(contextMenus === 1, "contextmenu should be bound to lifecycle handlers.");
 
 unbind();
 fakeCanvas.emit("dblclick", {} as Event);
 assert(doubleClicks === 1, "unbind should remove the dblclick handler.");
+fakeCanvas.emit("contextmenu", {} as Event);
+assert(contextMenus === 1, "unbind should remove the contextmenu handler.");
 
 console.log("canvas-event-lifecycle: ok");

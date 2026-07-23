@@ -7,10 +7,15 @@ export async function compileTikzSnippet(name, tikzCode) {
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), "geodraw-tikz-"));
   const texPath = path.join(tmpDir, `${name}.tex`);
   const logPath = path.join(tmpDir, `${name}.log`);
+  const hasExplicitCanvasBounds = /\\path\s*\[[^\]]*\buse as bounding box\b[^\]]*\]/u.test(tikzCode);
+  const usesTkzEuclide = /\\tkz[A-Za-z@]+/u.test(tikzCode);
 
   const tex = [
-    "\\documentclass[tikz,border=2pt]{standalone}",
-    "\\usepackage{tkz-euclide}",
+    "\\PassOptionsToPackage{dvipsnames}{xcolor}",
+    `\\documentclass[tikz,border=${hasExplicitCanvasBounds ? "0pt" : "2pt"}]{standalone}`,
+    ...(usesTkzEuclide ? ["\\usepackage{tkz-euclide}"] : []),
+    "\\usepackage{xfp}",
+    "\\usepackage{contour}",
     "\\begin{document}",
     tikzCode,
     "\\end{document}",

@@ -1,7 +1,10 @@
 import {
+  getCircleWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
+  computeOrientedAngleRad,
   isRightAngle,
+  isRightAngleSweepRad,
   type LineLikeObjectRef,
   type SceneAngle,
   type SceneModel,
@@ -134,6 +137,11 @@ function expandedRefKeys(ref: LineLikeObjectRef): string[] {
   return keys;
 }
 
+function pushUniqueLineLikeRef(list: LineLikeObjectRef[], ref: LineLikeObjectRef): void {
+  if (list.some((item) => item.type === ref.type && item.id === ref.id)) return;
+  list.push(ref);
+}
+
 export function arePerpendicularByProvenance(a: LineLikeObjectRef, b: LineLikeObjectRef): boolean {
   const aKeys = expandedRefKeys(a);
   const bKeys = expandedRefKeys(b);
@@ -147,7 +155,13 @@ export function arePerpendicularByProvenance(a: LineLikeObjectRef, b: LineLikeOb
   return false;
 }
 
-function resolveRaySupport(scene: SceneModel, vertexId: string, otherId: string): LineLikeObjectRef | null {
+function resolveRaySupports(scene: SceneModel, vertexId: string, otherId: string): LineLikeObjectRef[] {
+  const supports: LineLikeObjectRef[] = [];
+  const pushIfContainsRay = (ref: LineLikeObjectRef): void => {
+    if (!isPointOnLineLike(scene, vertexId, ref)) return;
+    if (!isPointOnLineLike(scene, otherId, ref)) return;
+    pushUniqueLineLikeRef(supports, ref);
+  };
   const vertex = scene.points.find((point) => point.id === vertexId) as ScenePoint | undefined;
   if (vertex && (vertex.kind === "intersectionPoint" || vertex.kind === "lineLikeIntersectionPoint")) {
     const refs: LineLikeObjectRef[] = [];
@@ -156,31 +170,63 @@ function resolveRaySupport(scene: SceneModel, vertexId: string, otherId: string)
 
     // Optimization: Check isPointOnLineLike directly for candidates
     for (const ref of refs) {
-      if (isPointOnLineLike(scene, otherId, ref)) return ref;
+      if (isPointOnLineLike(scene, otherId, ref)) {
+        pushUniqueLineLikeRef(supports, ref);
+      }
     }
   }
 
   // Prefer explicit support defined by the selected angle ray (vertex, other).
   // This avoids picking an unrelated host line from pointOnLine/pointOnSegment.
   const entry = pairIndex.get(pairKey(vertexId, otherId));
-  if (entry?.lineId) return { type: "line", id: entry.lineId };
-  if (entry?.segmentId) return { type: "segment", id: entry.segmentId };
+  if (entry?.lineId) pushIfContainsRay({ type: "line", id: entry.lineId });
+  if (entry?.segmentId) pushIfContainsRay({ type: "segment", id: entry.segmentId });
 
   const other = scene.points.find((point) => point.id === otherId) as ScenePoint | undefined;
-  if (other?.kind === "pointOnLine") return { type: "line", id: other.lineId };
-  if (other?.kind === "pointOnSegment") return { type: "segment", id: other.segId };
+  if (other?.kind === "pointOnLine") pushIfContainsRay({ type: "line", id: other.lineId });
+  if (other?.kind === "pointOnSegment") pushIfContainsRay({ type: "segment", id: other.segId });
+  if (other?.kind === "circleLineIntersectionPoint") pushIfContainsRay({ type: "line", id: other.lineId });
+  if (other?.kind === "circleSegmentIntersectionPoint") pushIfContainsRay({ type: "segment", id: other.segId });
+  if (other?.kind === "lineLikeIntersectionPoint") {
+    pushIfContainsRay(other.objA);
+    pushIfContainsRay(other.objB);
+  }
+  if (other?.kind === "intersectionPoint") {
+    if (other.objA.type === "line" || other.objA.type === "segment") pushIfContainsRay(other.objA);
+    if (other.objB.type === "line" || other.objB.type === "segment") pushIfContainsRay(other.objB);
+  }
 
-  return null;
+  // Fallback: infer a support from any existing line/segment that contains
+  // both ray points. This covers midpoint/intersection rays that have no
+  // direct point-kind metadata.
+  for (const seg of scene.segments) {
+    pushIfContainsRay({ type: "segment", id: seg.id });
+  }
+  for (const line of scene.lines) {
+    pushIfContainsRay({ type: "line", id: line.id });
+  }
+
+  return supports;
 }
 
 export function isRightExactByProvenance(scene: SceneModel, aId: string, bId: string, cId: string): boolean {
   const isCenterPointForCircle = (pointId: string, circleId: string): boolean =>
     getCanonicalCircleCenterPointIds(scene, circleId).has(pointId);
+  const isPointOnCircleBoundary = (pointId: string, circleId: string): boolean => {
+    const point = scene.points.find((p) => p.id === pointId);
+    const circle = scene.circles.find((item) => item.id === circleId);
+    if (!point || !circle) return false;
+    const world = getPointWorldPos(point, scene);
+    const geom = getCircleWorldGeometry(circle, scene);
+    if (!world || !geom) return false;
+    return Math.abs(Math.hypot(world.x - geom.center.x, world.y - geom.center.y) - geom.radius) <= Math.max(1e-6, geom.radius * 1e-6);
+  };
 
   // Tangent-radius exact right at a tangency point: vertex is tangent's through-point.
   // Works for twoPoint/fixedRadius circles and threePoint circles when a circle-center point is used.
   for (const line of scene.lines) {
     if (line.kind !== "tangent" || line.throughId !== bId) continue;
+    if (!isPointOnCircleBoundary(bId, line.circleId)) continue;
     const aIsCenter = isCenterPointForCircle(aId, line.circleId);
     const cIsCenter = isCenterPointForCircle(cId, line.circleId);
     if (!aIsCenter && !cIsCenter) continue;
@@ -207,16 +253,21 @@ export function isRightExactByProvenance(scene: SceneModel, aId: string, bId: st
     }
   }
 
-  const left = resolveRaySupport(scene, bId, aId);
-  if (!left) return false;
-  const right = resolveRaySupport(scene, bId, cId);
-  if (!right) return false;
-  return arePerpendicularByProvenance(left, right) || arePerpendicularBySceneDefinition(scene, left, right);
+  const leftSupports = resolveRaySupports(scene, bId, aId);
+  if (leftSupports.length === 0) return false;
+  const rightSupports = resolveRaySupports(scene, bId, cId);
+  if (rightSupports.length === 0) return false;
+  for (const left of leftSupports) {
+    for (const right of rightSupports) {
+      if (arePerpendicularByProvenance(left, right) || arePerpendicularBySceneDefinition(scene, left, right)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 export function resolveAngleRightStatus(scene: SceneModel, angle: SceneAngle): AngleRightStatus {
-  if (angle.isRightExact === true) return "exact";
-  if (isRightExactByProvenance(scene, angle.aId, angle.bId, angle.cId)) return "exact";
   const aPoint = scene.points.find((p) => p.id === angle.aId);
   const bPoint = scene.points.find((p) => p.id === angle.bId);
   const cPoint = scene.points.find((p) => p.id === angle.cId);
@@ -225,6 +276,9 @@ export function resolveAngleRightStatus(scene: SceneModel, angle: SceneAngle): A
   const b = getPointWorldPos(bPoint, scene);
   const c = getPointWorldPos(cPoint, scene);
   if (!a || !b || !c) return "none";
+  const theta = computeOrientedAngleRad(a, b, c);
+  if (theta === null || !isRightAngleSweepRad(theta, APPROX_RIGHT_EPS)) return "none";
+  if (isRightExactByProvenance(scene, angle.aId, angle.bId, angle.cId)) return "exact";
   return isRightAngle(a, b, c, APPROX_RIGHT_EPS) ? "approx" : "none";
 }
 

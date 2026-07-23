@@ -122,8 +122,9 @@ Given two circles with centers distance `d`, radii `r1`, `r2`:
 - `d < |r1-r2|`: one circle inside another (no common tangents) -> fail closed
 - `|r1-r2| < d < r1+r2`: circles intersect -> outer tangents only
 - `d > r1+r2`: disjoint -> outer + inner tangents
-- near `d ~= r1+r2` or `d ~= |r1-r2|`: degenerate/near-degenerate -> treat as
-  unstable unless explicitly handled
+- near `d ~= r1+r2` or `d ~= |r1-r2|`: degenerate/near-degenerate -> treat
+  the tangent family that collapses at that threshold as unstable unless
+  explicitly handled
 
 Exporter policy must use a tolerance and classify these cases before generating
 tkz tangent constructions.
@@ -143,6 +144,9 @@ tkz tangent constructions.
 - Impossible tangent family (for current circle positions) -> fail only if
   visible/exported dependency requires it
 - Degenerate or near-degenerate tangent family -> fail closed (clear message)
+  unless a dedicated constructive path handles that family
+- Near external tangency does not degenerate the outer tangent family; valid
+  outer tangents should still export constructively and preserve branch mapping
 
 ## Explicitly Forbidden Shortcuts
 
@@ -188,4 +192,3 @@ If ellipse/conic tangent tools are added later:
 
 Do not reintroduce tangent identity bugs by embedding assignment policy inside
 new shape-specific solvers.
-

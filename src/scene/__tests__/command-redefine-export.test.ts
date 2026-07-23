@@ -36,6 +36,12 @@ mustOk(commandBarApi.applyObjectAssignment("polyX", { type: "CreatePolygonByPoin
 
 mustOk(commandBarApi.applyObjectAssignment("circX", { type: "CreateCircleCenterThrough", centerId: a, throughId: b }), "create circX");
 mustOk(commandBarApi.applyObjectAssignment("circX", { type: "CreateCircleCenterRadius", centerId: c, r: 2, rExpr: "2" }), "redefine circX");
+mustOk(
+  commandBarApi.applyObjectAssignment("circSymX", { type: "CreateCircleCenterRadius", centerId: a, r: 96 * Math.sqrt(5), rExpr: "96*sqrt(5)" }),
+  "create symbolic fixed-radius circle"
+);
+mustOk(commandBarApi.applyObjectAssignment("ellX", { type: "CreateEllipseFociPoint", focusAId: a, focusBId: b, throughId: c }), "create ellX");
+mustOk(commandBarApi.applyObjectAssignment("ellX", { type: "CreateEllipseFociPoint", focusAId: b, focusBId: c, throughId: d }), "redefine ellX");
 
 mustOk(commandBarApi.applyObjectAssignment("lineX", { type: "CreateLineByPoints", aId: a, bId: b }), "create lineX");
 mustOk(commandBarApi.applyObjectAssignment("lineX", { type: "CreateLineByPoints", aId: b, bId: d }), "redefine lineX");
@@ -63,6 +69,14 @@ mustOk(
   commandBarApi.applyObjectAssignment("refXO", { type: "CreatePointByReflection", pointId: b, axis: { type: "point", id: a } }),
   "create refXO"
 );
+mustOk(
+  commandBarApi.applyObjectAssignment("refPairX", { type: "CreatePointByReflection", pointId: c, axis: { type: "pointPair", aId: a, bId: d } }),
+  "create refPairX"
+);
+mustOk(
+  commandBarApi.applyObjectAssignment("projX", { type: "CreatePointByProjection", pointId: c, axisAId: a, axisBId: d }),
+  "create projX"
+);
 
 const tikz = exportTikz(getGeoStore().scene);
 
@@ -72,6 +86,9 @@ assert(!/\(X_A\)\s*--\s*\(X_B\)\s*--\s*\(X_C\)\s*--\s*cycle;/.test(tikz), "Found
 
 // Circle should export as fixed-radius from center X_C with radius 2
 assert(/\\tkzDefCircle\[R\]\(X_C,2\)/.test(tikz), "Expected redefined fixed-radius circle in export");
+assert(/\\pgfmathsetmacro\{\\gdDrawCircleRadius\}\{96\*sqrt\(5\)\}/.test(tikz), "Expected symbolic fixed-radius circle expression in export");
+assert(/\\tkzDefCircle\[R\]\(X_A,\\gdDrawCircleRadius\)/.test(tikz), "Expected fixed-radius circle to use symbolic radius macro");
+assert(/\\draw\[[^\]]*rotate around=\{[^}]+:\([^)]*\)\}[^\]]*\]\s*\([^)]*\) ellipse\[x radius=[^,]+, y radius=[^\]]+\];/.test(tikz), "Expected redefined ellipse to export as rotated TikZ ellipse path");
 
 // Redefined angle alias should export as sector
 assert(/\\tkzDrawSector/.test(tikz), "Expected redefined sector alias to emit \\\\tkzDrawSector");
@@ -84,5 +101,8 @@ assert(/\\tkzDefPointBy\[homothety=center X_A ratio 2\]\(X_D\)\s*\\tkzGetPoint\{
 assert(/\\tkzDefPointBy\[projection=onto X_B--X_D\]\(X_C\)\s*\\tkzGetPoint\{tkzRefProj_\d+\}/.test(tikz), "Expected reflection projection step in export");
 assert(/\\tkzDefPointBy\[homothety=center tkzRefProj_\d+ ratio -1\]\(X_C\)\s*\\tkzGetPoint\{refX\}/.test(tikz), "Expected reflection output point construction in export");
 assert(/\\tkzDefPointBy\[homothety=center X_A ratio -1\]\(X_B\)\s*\\tkzGetPoint\{refXO\}/.test(tikz), "Expected point-centered reflection to export as homothety ratio -1");
+assert(/\\tkzDefPointBy\[projection=onto X_A--X_D\]\(X_C\)\s*\\tkzGetPoint\{tkzRefProj_\d+\}/.test(tikz), "Expected point-pair reflection projection step in export");
+assert(/\\tkzDefPointBy\[homothety=center tkzRefProj_\d+ ratio -1\]\(X_C\)\s*\\tkzGetPoint\{refPairX\}/.test(tikz), "Expected point-pair reflection output point construction in export");
+assert(/\\tkzDefPointBy\[projection=onto X_A--X_D\]\(X_C\)\s*\\tkzGetPoint\{projX\}/.test(tikz), "Expected projection point construction in export");
 
 console.log("command-redefine-export tests: OK");

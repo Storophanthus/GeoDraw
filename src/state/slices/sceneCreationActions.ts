@@ -1,9 +1,11 @@
 import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
-import type { GeometryObjectRef, ReflectionObjectRef, SceneModel, SceneNumberDefinition, ScenePoint, ShowLabelMode } from "../../scene/points";
+import type { GeometryObjectRef, ReflectionObjectRef, SceneModel, SceneNumberDefinition, ScenePoint } from "../../scene/points";
 import { evaluateNumberExpression } from "../../scene/points";
 import {
   defaultCircleLabelPosWorld,
   defaultCircleLabelText,
+  defaultEllipseLabelPosWorld,
+  defaultEllipseLabelText,
 } from "../../scene/objectLabels";
 import type { Vec2 } from "../../geo/vec2";
 import type { SceneCreationStateLike } from "../../domain/intersectionReuse";
@@ -56,6 +58,7 @@ export function createSceneCreationActions(
   | "createCircle"
   | "createCircleThreePoint"
   | "createCircleFixedRadius"
+  | "createEllipseFociPoint"
   | "createPointOnLine"
   | "createPointOnSegment"
   | "createPointOnCircle"
@@ -63,6 +66,7 @@ export function createSceneCreationActions(
   | "createPointByTranslation"
   | "createPointByDilation"
   | "createPointByReflection"
+  | "createPointByProjection"
   | "createIntersectionPoint"
   | "createNumber"
 > {
@@ -86,13 +90,14 @@ export function createSceneCreationActions(
           return prev;
         }
         id = `c_${prev.nextCircleId}`;
+        const showLabel = prev.objectLabelDefaults.circle;
         const circleForLabel = {
           id,
           kind: "twoPoint" as const,
           centerId,
           throughId,
           visible: false,
-          showLabel: false,
+          showLabel,
           style: prev.circleDefaults,
         };
         return {
@@ -107,7 +112,8 @@ export function createSceneCreationActions(
                 centerId,
                 throughId,
                 visible: false,
-                showLabel: false,
+                showLabel,
+                labelGlow: prev.objectLabelDefaults.circleGlow ?? true,
                 labelText: defaultCircleLabelText(circleForLabel, prev.scene),
                 labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
@@ -128,13 +134,14 @@ export function createSceneCreationActions(
         const t = prev.scene.points.find((p) => p.id === throughId);
         if (!c || !t) return prev;
         id = `c_${prev.nextCircleId}`;
+        const showLabel = prev.objectLabelDefaults.circle;
         const circleForLabel = {
           id,
           kind: "twoPoint" as const,
           centerId,
           throughId,
           visible: true,
-          showLabel: false,
+          showLabel,
           style: prev.circleDefaults,
         };
         return {
@@ -149,7 +156,8 @@ export function createSceneCreationActions(
                 centerId,
                 throughId,
                 visible: true,
-                showLabel: false,
+                showLabel,
+                labelGlow: prev.objectLabelDefaults.circleGlow ?? true,
                 labelText: defaultCircleLabelText(circleForLabel, prev.scene),
                 labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
@@ -179,6 +187,7 @@ export function createSceneCreationActions(
         const area2 = (bw.x - aw.x) * (cw.y - aw.y) - (bw.y - aw.y) * (cw.x - aw.x);
         if (Math.abs(area2) <= 1e-9) return prev;
         id = `c_${prev.nextCircleId}`;
+        const showLabel = prev.objectLabelDefaults.circle;
         const circleForLabel = {
           id,
           kind: "threePoint" as const,
@@ -186,7 +195,7 @@ export function createSceneCreationActions(
           bId,
           cId,
           visible: true,
-          showLabel: false,
+          showLabel,
           style: prev.circleDefaults,
         };
         return {
@@ -202,7 +211,8 @@ export function createSceneCreationActions(
                 bId,
                 cId,
                 visible: true,
-                showLabel: false,
+                showLabel,
+                labelGlow: prev.objectLabelDefaults.circleGlow ?? true,
                 labelText: defaultCircleLabelText(circleForLabel, prev.scene),
                 labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
@@ -227,6 +237,7 @@ export function createSceneCreationActions(
         const evaluated = evaluateNumberExpression(prev.scene, expr);
         if (!evaluated.ok || !Number.isFinite(evaluated.value) || evaluated.value <= 0) return prev;
         id = `c_${prev.nextCircleId}`;
+        const showLabel = prev.objectLabelDefaults.circle;
         const circleForLabel = {
           id,
           kind: "fixedRadius" as const,
@@ -234,7 +245,7 @@ export function createSceneCreationActions(
           radius: evaluated.value,
           radiusExpr: expr,
           visible: true,
-          showLabel: false,
+          showLabel,
           style: prev.circleDefaults,
         };
         return {
@@ -250,7 +261,8 @@ export function createSceneCreationActions(
                 radius: evaluated.value,
                 radiusExpr: expr,
                 visible: true,
-                showLabel: false,
+                showLabel,
+                labelGlow: prev.objectLabelDefaults.circleGlow ?? true,
                 labelText: defaultCircleLabelText(circleForLabel, prev.scene),
                 labelPosWorld: defaultCircleLabelPosWorld(circleForLabel, prev.scene) ?? undefined,
                 style: { ...prev.circleDefaults },
@@ -260,6 +272,63 @@ export function createSceneCreationActions(
           selectedObject: { type: "circle", id },
           recentCreatedObject: { type: "circle", id },
           nextCircleId: prev.nextCircleId + 1,
+        };
+      });
+      return id;
+    },
+
+    createEllipseFociPoint(focusAId, focusBId, throughId) {
+      if (focusAId === focusBId) return null;
+      let id: string | null = null;
+      ctx.setState((prev) => {
+        const focusA = prev.scene.points.find((p) => p.id === focusAId);
+        const focusB = prev.scene.points.find((p) => p.id === focusBId);
+        const through = prev.scene.points.find((p) => p.id === throughId);
+        if (!focusA || !focusB || !through) return prev;
+        const aWorld = getPointWorldPos(focusA, prev.scene);
+        const bWorld = getPointWorldPos(focusB, prev.scene);
+        const throughWorld = getPointWorldPos(through, prev.scene);
+        if (!aWorld || !bWorld || !throughWorld) return prev;
+        const focusDistance = Math.hypot(bWorld.x - aWorld.x, bWorld.y - aWorld.y);
+        const semiMajor = (Math.hypot(throughWorld.x - aWorld.x, throughWorld.y - aWorld.y) + Math.hypot(throughWorld.x - bWorld.x, throughWorld.y - bWorld.y)) / 2;
+        if (!Number.isFinite(focusDistance) || focusDistance <= 1e-12) return prev;
+        if (!Number.isFinite(semiMajor) || semiMajor <= focusDistance / 2 + 1e-9) return prev;
+        id = `e_${prev.nextEllipseId}`;
+        const showLabel = prev.objectLabelDefaults.ellipse;
+        const ellipseForLabel = {
+          id,
+          kind: "fociPoint" as const,
+          focusAId,
+          focusBId,
+          throughId,
+          visible: true,
+          showLabel,
+          style: prev.ellipseDefaults,
+        };
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses: [
+              ...(prev.scene.ellipses ?? []),
+              {
+                id,
+                kind: "fociPoint",
+                focusAId,
+                focusBId,
+                throughId,
+                visible: true,
+                showLabel,
+                labelGlow: prev.objectLabelDefaults.ellipseGlow ?? true,
+                labelText: defaultEllipseLabelText(ellipseForLabel, prev.scene),
+                labelPosWorld: defaultEllipseLabelPosWorld(ellipseForLabel, prev.scene) ?? undefined,
+                style: { ...prev.ellipseDefaults },
+              },
+            ],
+          },
+          selectedObject: { type: "ellipse", id },
+          recentCreatedObject: { type: "ellipse", id },
+          nextEllipseId: prev.nextEllipseId + 1,
         };
       });
       return id;
@@ -285,7 +354,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 lineId,
@@ -325,7 +394,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 segId,
@@ -365,7 +434,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 circleId,
@@ -412,7 +481,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 centerId,
@@ -422,8 +491,8 @@ export function createSceneCreationActions(
                 direction,
                 radiusMode: "keep",
                 style: {
-                  ...prev.pointDefaults,
-                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                  ...base.style,
+                  labelOffsetPx: { ...base.style.labelOffsetPx },
                 },
               },
             ],
@@ -470,7 +539,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 pointId,
@@ -478,8 +547,8 @@ export function createSceneCreationActions(
                 fromId,
                 toId,
                 style: {
-                  ...prev.pointDefaults,
-                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                  ...point.style,
+                  labelOffsetPx: { ...point.style.labelOffsetPx },
                 },
               },
             ],
@@ -521,7 +590,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 pointId,
@@ -529,8 +598,8 @@ export function createSceneCreationActions(
                 factor: evaluated.value,
                 factorExpr: expr,
                 style: {
-                  ...prev.pointDefaults,
-                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                  ...point.style,
+                  labelOffsetPx: { ...point.style.labelOffsetPx },
                 },
               },
             ],
@@ -552,10 +621,23 @@ export function createSceneCreationActions(
           ? prev.scene.lines.some((line) => line.id === axis.id)
           : axis.type === "segment"
             ? prev.scene.segments.some((seg) => seg.id === axis.id)
-            : prev.scene.points.some((p) => p.id === axis.id);
+            : axis.type === "point"
+              ? prev.scene.points.some((p) => p.id === axis.id)
+              : axis.aId !== axis.bId &&
+                prev.scene.points.some((p) => p.id === axis.aId) &&
+                prev.scene.points.some((p) => p.id === axis.bId);
         if (!axisExists) return prev;
         const pointWorld = getPointWorldPos(point, prev.scene);
         if (!pointWorld) return prev;
+        if (axis.type === "pointPair") {
+          const axisA = prev.scene.points.find((item) => item.id === axis.aId);
+          const axisB = prev.scene.points.find((item) => item.id === axis.bId);
+          if (!axisA || !axisB) return prev;
+          const axisAWorld = getPointWorldPos(axisA, prev.scene);
+          const axisBWorld = getPointWorldPos(axisB, prev.scene);
+          if (!axisAWorld || !axisBWorld) return prev;
+          if (Math.hypot(axisBWorld.x - axisAWorld.x, axisBWorld.y - axisAWorld.y) <= 1e-12) return prev;
+        }
         const name = nextUnusedPointName(prev);
         const id = `p_${prev.nextPointId}`;
         createdId = id;
@@ -571,14 +653,63 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 pointId,
                 axis,
                 style: {
-                  ...prev.pointDefaults,
-                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                  ...point.style,
+                  labelOffsetPx: { ...point.style.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createPointByProjection(pointId, axisAId, axisBId) {
+      if (axisAId === axisBId) return null;
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const point = prev.scene.points.find((item) => item.id === pointId);
+        const axisA = prev.scene.points.find((item) => item.id === axisAId);
+        const axisB = prev.scene.points.find((item) => item.id === axisBId);
+        if (!point || !axisA || !axisB) return prev;
+        const pointWorld = getPointWorldPos(point, prev.scene);
+        const axisAWorld = getPointWorldPos(axisA, prev.scene);
+        const axisBWorld = getPointWorldPos(axisB, prev.scene);
+        if (!pointWorld || !axisAWorld || !axisBWorld) return prev;
+        if (Math.hypot(axisBWorld.x - axisAWorld.x, axisBWorld.y - axisAWorld.y) <= 1e-12) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "pointByProjection",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: prev.objectLabelDefaults.point,
+                locked: false,
+                auxiliary: false,
+                pointId,
+                axisAId,
+                axisBId,
+                style: {
+                  ...point.style,
+                  labelOffsetPx: { ...point.style.labelOffsetPx },
                 },
               },
             ],
@@ -642,7 +773,7 @@ export function createSceneCreationActions(
               name,
               captionTex: name,
               visible: true,
-              showLabel: "name" as ShowLabelMode,
+              showLabel: prev.objectLabelDefaults.point,
               locked: true,
               auxiliary: true,
               circleId: segmentCircle.circleId,
@@ -661,7 +792,7 @@ export function createSceneCreationActions(
               name,
               captionTex: name,
               visible: true,
-              showLabel: "name" as ShowLabelMode,
+              showLabel: prev.objectLabelDefaults.point,
               locked: true,
               auxiliary: true,
               circleAId: circleCircle.circleAId,
@@ -680,7 +811,7 @@ export function createSceneCreationActions(
               name,
               captionTex: name,
               visible: true,
-              showLabel: "name" as ShowLabelMode,
+              showLabel: prev.objectLabelDefaults.point,
               locked: true,
               auxiliary: true,
               objA: lineLikeLike.objA,
@@ -704,7 +835,7 @@ export function createSceneCreationActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: true,
                 auxiliary: true,
                 objA,

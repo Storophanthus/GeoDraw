@@ -2,6 +2,7 @@ import type { ScenePoint } from "../scene/points";
 import { isPointDraggable } from "../scene/points";
 import type { ActiveTool, HoveredHit, PendingSelection } from "../state/geoStore";
 import { isValidTarget, toolAllowsEmptyPointCreation } from "../tools/toolClick";
+import { exportClipHandleCursor, type ExportClipHandle } from "./exportClipHandles";
 
 export type PointerMode =
   | "idle"
@@ -12,25 +13,31 @@ export type PointerMode =
   | "drag-angle-label"
   | "drag-object-label"
   | "drag-text-label"
+  | "drag-clip-handle"
   | "tool-click";
 
 type MovePointerDownDecision = {
   mode: PointerMode;
   pointId: string | null;
-  dragObjectType: "segment" | "line" | "circle" | "polygon" | null;
+  clipHandle: ExportClipHandle | null;
+  dragObjectType: "segment" | "line" | "circle" | "ellipse" | "polygon" | null;
   selectedObject:
     | { type: "point"; id: string }
     | { type: "segment"; id: string }
     | { type: "line"; id: string }
     | { type: "circle"; id: string }
+    | { type: "ellipse"; id: string }
     | { type: "polygon"; id: string }
     | { type: "angle"; id: string }
     | { type: "textLabel"; id: string }
+    | { type: "richText"; id: string }
     | null;
 };
 
 type MovePointerDownInput = {
+  hitClipHandle?: ExportClipHandle | null;
   hitTextLabelId?: string | null;
+  hitRichTextNodeId?: string | null;
   hitLabelId: string | null;
   hitAngleLabelId: string | null;
   hitPointId: string | null;
@@ -38,11 +45,13 @@ type MovePointerDownInput = {
   hitPolygonId: string | null;
   hitLineId: string | null;
   hitCircleId: string | null;
+  hitEllipseId: string | null;
   hitAngleId: string | null;
   hitObjectLabel?:
     | { type: "segment"; id: string }
     | { type: "line"; id: string }
     | { type: "circle"; id: string }
+    | { type: "ellipse"; id: string }
     | { type: "polygon"; id: string }
     | null;
   scenePoints: ScenePoint[];
@@ -63,7 +72,9 @@ type MovePointerDownInput = {
 
 export function decideMovePointerDown(input: MovePointerDownInput): MovePointerDownDecision {
   const {
+    hitClipHandle = null,
     hitTextLabelId,
+    hitRichTextNodeId,
     hitLabelId,
     hitAngleLabelId,
     hitPointId,
@@ -71,6 +82,7 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     hitPolygonId,
     hitLineId,
     hitCircleId,
+    hitEllipseId,
     hitAngleId,
     hitObjectLabel = null,
     scenePoints,
@@ -79,12 +91,36 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
   } = input;
   void sceneSegments;
 
+  // Clip handles are drawn on top of everything and only exist while a crop area
+  // does, so they win the hit test. They are small squares, not the whole border,
+  // which keeps the geometry underneath the crop reachable.
+  if (hitClipHandle) {
+    return {
+      mode: "drag-clip-handle",
+      pointId: null,
+      clipHandle: hitClipHandle,
+      dragObjectType: null,
+      selectedObject: null,
+    };
+  }
+
   if (hitTextLabelId) {
     return {
       mode: "drag-text-label",
       pointId: hitTextLabelId,
+      clipHandle: null,
       dragObjectType: null,
       selectedObject: { type: "textLabel", id: hitTextLabelId },
+    };
+  }
+
+  if (hitRichTextNodeId) {
+    return {
+      mode: "drag-text-label",
+      pointId: hitRichTextNodeId,
+      clipHandle: null,
+      dragObjectType: null,
+      selectedObject: { type: "richText", id: hitRichTextNodeId },
     };
   }
 
@@ -92,6 +128,7 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     return {
       mode: "drag-label",
       pointId: hitLabelId,
+      clipHandle: null,
       dragObjectType: null,
       selectedObject: { type: "point", id: hitLabelId },
     };
@@ -101,6 +138,7 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     return {
       mode: "drag-angle-label",
       pointId: hitAngleLabelId,
+      clipHandle: null,
       dragObjectType: null,
       selectedObject: { type: "angle", id: hitAngleLabelId },
     };
@@ -110,6 +148,7 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     return {
       mode: "drag-object-label",
       pointId: hitObjectLabel.id,
+      clipHandle: null,
       dragObjectType: hitObjectLabel.type,
       selectedObject: { type: hitObjectLabel.type, id: hitObjectLabel.id },
     };
@@ -120,6 +159,7 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
     return {
       mode: hitPoint && isPointDraggable(hitPoint) ? "drag-point" : "idle",
       pointId: hitPoint && isPointDraggable(hitPoint) ? hitPointId : null,
+      clipHandle: null,
       dragObjectType: null,
       selectedObject: { type: "point", id: hitPointId },
     };
@@ -127,36 +167,41 @@ export function decideMovePointerDown(input: MovePointerDownInput): MovePointerD
 
   if (hitSegmentId) {
     if (hitAngleId && isSectorAngleHit(hitAngleId, sceneAngles)) {
-      return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "segment", id: hitSegmentId } };
+      return { mode: "idle", pointId: null, clipHandle: null, dragObjectType: null, selectedObject: { type: "segment", id: hitSegmentId } };
     }
   }
 
   if (hitAngleId) {
-    return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "angle", id: hitAngleId } };
+    return { mode: "idle", pointId: null, clipHandle: null, dragObjectType: null, selectedObject: { type: "angle", id: hitAngleId } };
   }
 
   if (hitSegmentId) {
-    return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "segment", id: hitSegmentId } };
+    return { mode: "idle", pointId: null, clipHandle: null, dragObjectType: null, selectedObject: { type: "segment", id: hitSegmentId } };
   }
 
   if (hitLineId) {
-    return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "line", id: hitLineId } };
+    return { mode: "idle", pointId: null, clipHandle: null, dragObjectType: null, selectedObject: { type: "line", id: hitLineId } };
   }
 
   if (hitCircleId) {
-    return { mode: "idle", pointId: null, dragObjectType: null, selectedObject: { type: "circle", id: hitCircleId } };
+    return { mode: "idle", pointId: null, clipHandle: null, dragObjectType: null, selectedObject: { type: "circle", id: hitCircleId } };
+  }
+
+  if (hitEllipseId) {
+    return { mode: "idle", pointId: null, clipHandle: null, dragObjectType: null, selectedObject: { type: "ellipse", id: hitEllipseId } };
   }
 
   if (hitPolygonId) {
     return {
       mode: "drag-polygon",
       pointId: hitPolygonId,
+      clipHandle: null,
       dragObjectType: "polygon",
       selectedObject: { type: "polygon", id: hitPolygonId },
     };
   }
 
-  return { mode: "pan", pointId: null, dragObjectType: null, selectedObject: null };
+  return { mode: "pan", pointId: null, clipHandle: null, dragObjectType: null, selectedObject: null };
 }
 
 function isSectorAngleHit(
@@ -171,9 +216,13 @@ export function computeCanvasCursor(
   activeTool: ActiveTool,
   mode: PointerMode,
   hoveredHit: HoveredHit,
-  pendingSelection: PendingSelection
+  pendingSelection: PendingSelection,
+  hoveredClipHandle: ExportClipHandle | null = null
 ): string {
   if (activeTool === "move") {
+    if (mode === "drag-clip-handle" || (mode !== "pan" && hoveredClipHandle)) {
+      return hoveredClipHandle ? exportClipHandleCursor(hoveredClipHandle) : "grabbing";
+    }
     if (
       mode === "pan"
       || mode === "drag-point"
@@ -185,13 +234,13 @@ export function computeCanvasCursor(
     ) {
       return "grabbing";
     }
-    if (hoveredHit?.type === "point" || hoveredHit?.type === "angle" || hoveredHit?.type === "polygon") {
+    if (hoveredHit?.type === "point" || hoveredHit?.type === "angle" || hoveredHit?.type === "ellipse" || hoveredHit?.type === "polygon") {
       return "pointer";
     }
     return "grab";
   }
 
-  if (activeTool === "label") {
+  if (activeTool === "label" || activeTool === "textbox") {
     if (mode === "drag-label" || mode === "drag-angle-label" || mode === "drag-object-label" || mode === "drag-text-label") {
       return "grabbing";
     }

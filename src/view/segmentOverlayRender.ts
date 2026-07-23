@@ -116,6 +116,11 @@ export function drawSegmentMarkOverlay(
           ctx.arc(cx + ux * gap * 0.55, cy + uy * gap * 0.55, Math.max(1.2, size * 0.55), 0, Math.PI * 2);
           ctx.stroke();
           break;
+        case "dot":
+          ctx.beginPath();
+          ctx.arc(cx, cy, Math.max(1.2, size * 0.58), 0, Math.PI * 2);
+          ctx.fill();
+          break;
         case "z":
           ctx.beginPath();
           ctx.moveTo(cx - ux * gap - nx * size * 0.8, cy - uy * gap - ny * size * 0.8);

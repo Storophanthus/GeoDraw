@@ -9,16 +9,20 @@ import type {
   PointStyle,
   PolygonStyle,
   SceneCircle,
+  SceneEllipse,
   SceneAngle,
   SceneLine,
   SceneModel,
   SceneNumber,
   ScenePoint,
   ScenePolygon,
+  SceneRichTextNode,
   SceneSegment,
+  SceneTextLabel,
   ShowLabelMode,
 } from "../src/scene/points.ts";
 import { getPointWorldPos } from "../src/scene/points.ts";
+import { parseRichTextSourceToDocument } from "../src/richtext/document.ts";
 import { compileTikzSnippet } from "./compile-tex.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -63,6 +67,22 @@ const defaultPolygonStyle: PolygonStyle = {
   fillOpacity: 0.2,
 };
 
+const defaultTextLabelStyle: SceneTextLabel["style"] = {
+  textColor: "#111111",
+  textSize: 12,
+  useTex: true,
+  textMode: "tex",
+  boxWidthPx: 220,
+  rotationDeg: 0,
+};
+
+const defaultRichTextStyle: SceneRichTextNode["style"] = {
+  textColor: "#111111",
+  textSize: 12,
+  textAlign: "left",
+  rotationDeg: 0,
+};
+
 async function main(): Promise<void> {
   const files = (await readdir(fixtureDir))
     .filter((name) => name.endsWith(".json"))
@@ -78,10 +98,11 @@ async function main(): Promise<void> {
     const parsed = JSON.parse(rawText);
     const rawScene = parsed.scene ?? parsed;
     const scene = hydrateScene(rawScene);
+    const fixtureExportOptions = parsed.exportOptions as Record<string, unknown> | undefined;
     let tikz = "";
     let exportError: Error | null = null;
     try {
-      tikz = exportTikz(scene);
+      tikz = fixtureExportOptions ? exportTikzWithOptions(scene, fixtureExportOptions) : exportTikz(scene);
     } catch (error) {
       exportError = error instanceof Error ? error : new Error(String(error));
     }
@@ -95,8 +116,36 @@ async function main(): Promise<void> {
   }
 
   assertTkzSetupToggleRegression();
+  await assertEfficientCoordinateRoundingCompileRegression();
 
   console.log(`All ${files.length} export fixtures compiled successfully.`);
+}
+
+async function assertEfficientCoordinateRoundingCompileRegression(): Promise<void> {
+  const standard = String.raw`\begin{tikzpicture}
+\tkzDefPoints{3/1/A, 6.061083984375/4.95205078125/Ba, 5.514599609375/0.92724609375/C}
+\tkzDefPoint(4.32023676029465,3.13891853466853){O_1}
+\tkzDefPoint(6.83066157486428,3.06628541608936){O_2}
+\tkzDefCircle[circum](A,Ba,C) \tkzGetPoint{tkzCircum_1}
+\tkzInterLC[common=A](A,O_1)(tkzCircum_1,A) \tkzGetPoints{B}{A}
+\tkzDefCircle[circum](B,O_1,C) \tkzGetPoint{tkzCircum_2}
+\tkzInterLC[near](A,O_2)(tkzCircum_2,B) \tkzGetPoints{Other}{N}
+\end{tikzpicture}`;
+  const efficient = makeEfficientTikz(standard);
+  if (!efficient.includes("6.061083984375/4.95205078125/Ba") || !efficient.includes("(6.83066157486428,3.06628541608936)")) {
+    throw new Error("Expected efficient TikZ to preserve full construction-coordinate precision.");
+  }
+  await compileTikzSnippet("efficient-coordinate-rounding-line-circle", efficient);
+
+  const nearTangent = String.raw`\begin{tikzpicture}
+\tkzDefPoints{0/0/O,1/0/X,-2/0.9996/A,2/0.9996/B}
+\tkzInterLC[near](A,B)(O,X) \tkzGetPoints{P}{Q}
+\end{tikzpicture}`;
+  const efficientNearTangent = makeEfficientTikz(nearTangent);
+  if (!efficientNearTangent.includes("0.9996")) {
+    throw new Error("Efficient TikZ must not round a near-tangent secant into tangency.");
+  }
+  await compileTikzSnippet("efficient-coordinate-rounding-near-tangent", efficientNearTangent);
 }
 
 function hydrateScene(raw: {
@@ -105,17 +154,23 @@ function hydrateScene(raw: {
   lines?: Array<Record<string, unknown>>;
   segments?: Array<Record<string, unknown>>;
   circles?: Array<Record<string, unknown>>;
+  ellipses?: Array<Record<string, unknown>>;
   polygons?: Array<Record<string, unknown>>;
   angles?: Array<Record<string, unknown>>;
+  textLabels?: Array<Record<string, unknown>>;
+  richTextNodes?: Array<Record<string, unknown>>;
 }): SceneModel {
   const points = (raw.points ?? []).map(hydratePoint);
   const numbers = (raw.numbers ?? []).map(hydrateNumber);
   const lines = (raw.lines ?? []).map(hydrateLine);
   const segments = (raw.segments ?? []).map(hydrateSegment);
   const circles = (raw.circles ?? []).map(hydrateCircle);
+  const ellipses = (raw.ellipses ?? []).map(hydrateEllipse);
   const polygons = (raw.polygons ?? []).map(hydratePolygon);
   const angles = (raw.angles ?? []).map(hydrateAngle);
-  return { points, numbers, lines, segments, circles, polygons, angles };
+  const textLabels = (raw.textLabels ?? []).map(hydrateTextLabel);
+  const richTextNodes = (raw.richTextNodes ?? []).map(hydrateRichTextNode);
+  return { points, numbers, lines, segments, circles, ellipses, polygons, angles, textLabels, richTextNodes };
 }
 
 function hydratePoint(raw: Record<string, unknown>): ScenePoint {
@@ -164,6 +219,23 @@ function hydratePoint(raw: Record<string, unknown>): ScenePoint {
   }
   if (kind === "circleCenter") {
     return { ...base, kind: "circleCenter", circleId: String(def.circleId) };
+  }
+  if (kind === "triangleCenter") {
+    return {
+      ...base,
+      kind: "triangleCenter",
+      centerKind:
+        String(def.centerKind) === "centroid"
+          ? "centroid"
+          : String(def.centerKind) === "circumcenter"
+            ? "circumcenter"
+            : String(def.centerKind) === "orthocenter"
+              ? "orthocenter"
+              : "incenter",
+      aId: String(def.aId),
+      bId: String(def.bId),
+      cId: String(def.cId),
+    };
   }
   if (kind === "midpointPoints") {
     return { ...base, kind: "midpointPoints", aId: String(def.aId), bId: String(def.bId) };
@@ -240,6 +312,7 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -254,6 +327,7 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -269,6 +343,7 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -283,6 +358,7 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as LineStyle) ?? defaultLineStyle,
     };
   }
@@ -295,6 +371,7 @@ function hydrateLine(raw: Record<string, unknown>): SceneLine {
     showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
     labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
     labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+    labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
     style: (raw.style as LineStyle) ?? defaultLineStyle,
   };
 }
@@ -308,6 +385,7 @@ function hydrateSegment(raw: Record<string, unknown>): SceneSegment {
     showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
     labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
     labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+    labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
     style: (raw.style as LineStyle) ?? defaultLineStyle,
   };
 }
@@ -325,6 +403,7 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as CircleStyle) ?? defaultCircleStyle,
     };
   }
@@ -339,6 +418,7 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
       showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
       labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
       labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+      labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
       style: (raw.style as CircleStyle) ?? defaultCircleStyle,
     };
   }
@@ -351,6 +431,23 @@ function hydrateCircle(raw: Record<string, unknown>): SceneCircle {
     showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
     labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
     labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+    labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
+    style: (raw.style as CircleStyle) ?? defaultCircleStyle,
+  };
+}
+
+function hydrateEllipse(raw: Record<string, unknown>): SceneEllipse {
+  return {
+    id: String(raw.id),
+    kind: "fociPoint",
+    focusAId: String(raw.focusAId),
+    focusBId: String(raw.focusBId),
+    throughId: String(raw.throughId),
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
+    labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
+    labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+    labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
     style: (raw.style as CircleStyle) ?? defaultCircleStyle,
   };
 }
@@ -397,6 +494,7 @@ function hydratePolygon(raw: Record<string, unknown>): ScenePolygon {
     showLabel: raw.showLabel === undefined ? false : Boolean(raw.showLabel),
     labelText: typeof raw.labelText === "string" ? raw.labelText : undefined,
     labelPosWorld: isVec2Like(raw.labelPosWorld) ? raw.labelPosWorld : undefined,
+    labelGlow: typeof raw.labelGlow === "boolean" ? raw.labelGlow : undefined,
     style: (raw.style as PolygonStyle) ?? defaultPolygonStyle,
   };
 }
@@ -413,6 +511,62 @@ function hydrateNumber(raw: Record<string, unknown>): SceneNumber {
     name: String(raw.name ?? raw.id),
     visible: raw.visible === undefined ? true : Boolean(raw.visible),
     definition: raw.definition as SceneNumber["definition"],
+  };
+}
+
+function hydrateTextLabel(raw: Record<string, unknown>): SceneTextLabel {
+  const style = (raw.style as SceneTextLabel["style"] | undefined) ?? defaultTextLabelStyle;
+  const positionWorld = isVec2Like(raw.positionWorld) ? raw.positionWorld : { x: 0, y: 0 };
+  return {
+    id: String(raw.id),
+    name: String(raw.name ?? raw.id),
+    text: String(raw.text ?? ""),
+    toolKind: raw.toolKind === "textbox" ? "textbox" : "label",
+    contentMode:
+      raw.contentMode === "number" ? "number" : raw.contentMode === "expression" ? "expression" : "static",
+    numberId: typeof raw.numberId === "string" ? raw.numberId : undefined,
+    expr: typeof raw.expr === "string" ? raw.expr : undefined,
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    positionWorld,
+    style: {
+      textColor: style.textColor,
+      textSize: style.textSize,
+      useTex: Boolean(style.useTex),
+      textMode: style.textMode,
+      textAlign: style.textAlign,
+      boxWidthPx: style.boxWidthPx,
+      rotationDeg: style.rotationDeg ?? 0,
+      labelGlow: Boolean(style.labelGlow),
+    },
+  };
+}
+
+function hydrateRichTextNode(raw: Record<string, unknown>): SceneRichTextNode {
+  const style = (raw.style as SceneRichTextNode["style"] | undefined) ?? defaultRichTextStyle;
+  const positionWorld = isVec2Like(raw.positionWorld) ? raw.positionWorld : { x: 0, y: 0 };
+  const boundsRaw = raw.boundsPx as { widthPx?: unknown; heightPx?: unknown } | undefined;
+  const boundsPx =
+    boundsRaw && Number.isFinite(boundsRaw.widthPx) && Number.isFinite(boundsRaw.heightPx)
+      ? { widthPx: Number(boundsRaw.widthPx), heightPx: Number(boundsRaw.heightPx) }
+      : undefined;
+  return {
+    id: String(raw.id),
+    type: "richText",
+    name: String(raw.name ?? raw.id),
+    visible: raw.visible === undefined ? true : Boolean(raw.visible),
+    positionWorld,
+    boundsPx,
+    document:
+      raw.document && typeof raw.document === "object"
+        ? (raw.document as SceneRichTextNode["document"])
+        : parseRichTextSourceToDocument(String(raw.source ?? "")),
+    style: {
+      textColor: style.textColor,
+      textSize: style.textSize,
+      textAlign: style.textAlign ?? "left",
+      rotationDeg: style.rotationDeg ?? 0,
+      labelGlow: Boolean(style.labelGlow),
+    },
   };
 }
 
@@ -434,6 +588,21 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("{$ABDC$}")) {
       throw new Error("Expected polygon object label to be exported.");
+    }
+  }
+
+  if (fileName === "label-glow-options.json") {
+    if (exportError) throw exportError;
+    for (const expected of [
+      "\\gdLabelGlow{$Obj$}",
+      "\\gdLabelGlow{$Ang$}",
+      "\\gdLabelGlow{$T$}",
+      "\\gdLabelGlow{Plain}",
+      "\\gdLabelGlow{Rich}",
+    ]) {
+      if (!tikz.includes(expected)) {
+        throw new Error(`Expected label glow fixture to include ${expected}`);
+      }
     }
   }
 
@@ -468,6 +637,274 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (!tikz.includes("\\tkzDrawLine")) {
       throw new Error("Expected tangent fixture to draw tangent line.");
+    }
+  }
+
+  if (fileName === "circle-circle-branch-order-bugs2.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterCC(?:\[[^\]]*\])?\([^)]*\)\([^)]*\)\s*\\tkzGetPoints\{tkzInterCC_\d+_other\}\{E\}/.test(tikz)) {
+      throw new Error("Expected bugs2 fixture to swap the first circle-circle intersection so E maps to tkz second point.");
+    }
+    if (!/\\tkzInterCC(?:\[[^\]]*\])?\([^)]*\)\([^)]*\)\s*\\tkzGetPoints\{F\}\{tkzInterCC_\d+_other\}/.test(tikz)) {
+      throw new Error("Expected bugs2 fixture to keep F on tkz first point without swapping.");
+    }
+    if (!tikz.includes("\\tkzInterLL(D,F)(A,E) \\tkzGetPoint{H}")) {
+      throw new Error("Expected bugs2 fixture to keep H constructed from the exported DF and AE segments.");
+    }
+  }
+
+  if (fileName === "line-circle-common-forward-ref-korea14.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("\\tkzInterLC[common=B](M,tkzPerp_1)(O,A) \\tkzGetPoints{Bp}{B}")) {
+      throw new Error("Regression: exporter emitted a forward common=B reference before B was defined.");
+    }
+    const definesBFirst =
+      /\\tkzInterLC\[near\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{B\}\{(?:Bp|tkzInterLC_\d+_other)\}/.test(tikz) &&
+      /\\tkzInterLC\[common=B\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{Bp\}\{B\}/.test(tikz);
+    const definesBpFirst =
+      /\\tkzInterLC\[near\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{(?:Bp|tkzInterLC_\d+_other)\}\{(?:Bp|tkzInterLC_\d+_other)\}/.test(tikz) &&
+      /\\tkzInterLC\[common=Bp\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{B\}\{Bp\}/.test(tikz);
+    if (!definesBFirst && !definesBpFirst) {
+      throw new Error("Expected korea14 fixture to export the sibling line-circle pair without any forward common reference.");
+    }
+  }
+
+  if (fileName === "circle-segment-finite-single-root-fail-closed.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzDefPointBy\[homothety=center C ratio 0\.5\]\(D\)\s+\\tkzGetPoint\{E\}/.test(tikz)) {
+      throw new Error("Expected dedicated finite single segment-circle root fixture to export via homothety.");
+    }
+    return;
+  }
+
+  if (fileName === "generic-circle-segment-finite-single-root-fail-closed.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzDefPointBy\[homothety=center C ratio 0\.5\]\(D\)\s+\\tkzGetPoint\{E\}/.test(tikz)) {
+      throw new Error("Expected generic finite single segment-circle root fixture to export via homothety.");
+    }
+    return;
+  }
+
+  if (fileName === "circle-line-exclude.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterLC\[common=C\]\((?:C,D|D,C)\)\(A,B\)\s+\\tkzGetPoints\{F\}\{C\}/.test(tikz)) {
+      throw new Error("Expected dedicated circle-line exclude fixture to export F using common=C.");
+    }
+  }
+
+  if (fileName === "baked-coordinates-construction.json") {
+    if (exportError) throw exportError;
+    // Baked mode emits every point as a literal \tkzDefPoint and never re-derives
+    // geometry in TeX, so none of the construction/intersection macros may appear.
+    for (const forbidden of [
+      "\\tkzInterLC",
+      "\\tkzInterLL",
+      "\\tkzInterCC",
+      "\\tkzDefTriangleCenter",
+      "\\tkzCircumCenter",
+      "\\tkzDefPointBy",
+      "\\tkzDefPointOnCircle",
+    ]) {
+      if (tikz.includes(forbidden)) {
+        throw new Error(`Baked-coordinate export must not emit ${forbidden}; all points should be literal \\tkzDefPoint.`);
+      }
+    }
+    for (const literal of [
+      /\\tkzDefPoint\([^)]*\)\{I\}/,
+      /\\tkzDefPoint\([^)]*\)\{X\}/,
+    ]) {
+      if (!literal.test(tikz)) {
+        throw new Error(`Baked-coordinate export expected a literal \\tkzDefPoint for ${literal}.`);
+      }
+    }
+    return;
+  }
+
+  if (fileName === "circle-line-coincidental-common-not-on-circle.json") {
+    if (exportError) throw exportError;
+    // E coincides with an intersection but is a free point (not on the circle by
+    // construction). tkz-euclide's common= matching is then unreliable under
+    // picture scaling, so the exporter must NOT use it as common= and must fall
+    // back to the near/swap line-circle export.
+    if (tikz.includes("[common=E]")) {
+      throw new Error("Regression: coincidental common point not on the circle by construction must not be used as tkz common=.");
+    }
+    if (!/\\tkzInterLC\[near\]\((?:G,H|H,G)\)\(O,P\)\s+\\tkzGetPoints(?:\{F\}\{tkzInterLC_\d+_other\}|\{tkzInterLC_\d+_other\}\{F\})/.test(tikz)) {
+      throw new Error("Expected coincidental-common fixture to fall back to near/swap line-circle export for F.");
+    }
+  }
+
+  if (fileName === "line-circle-derived-common-not-on-target-circle.json") {
+    if (exportError) throw exportError;
+    // I is intentionally constructed on omega, so using common=I for L is safe.
+    // The same I lies on gamma only by geometric coincidence/theorem, so using
+    // common=I for M can make tkz-euclide collapse M back onto I.
+    if (!/\\tkzInterLC\[common=I\]\(I,G\)\(tkzCircum_\d+,I\)\s+\\tkzGetPoints\{L\}\{I\}/.test(tikz)) {
+      throw new Error("Expected L to keep the safe common=I export on its source circle.");
+    }
+    if (/\\tkzInterLC\[common=I\]\(I,L\)\(tkzCircum_\d+,B\)\s+\\tkzGetPoints\{M\}\{I\}/.test(tikz)) {
+      throw new Error("Regression: M must not export with common=I when I is not constructed on the target circle.");
+    }
+    if (!/\\tkzInterLC\[near\]\(I,L\)\(tkzCircum_\d+,B\)\s+\\tkzGetPoints\{tkzInterLC_\d+_other\}\{M\}/.test(tikz)) {
+      throw new Error("Expected M to fall back to near/swap export instead of common=I.");
+    }
+  }
+
+  if (fileName === "generic-line-circle-exclude-common.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterLC\[common=A\]\((?:A,O|O,A)\)\(O,A\)\s+\\tkzGetPoints\{Ap\}\{A\}/.test(tikz)) {
+      throw new Error("Expected generic line-circle exclude fixture to export Ap using common=A.");
+    }
+  }
+
+  if (fileName === "generic-circle-segment-exclude-common-swapped.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterLC\[common=A\]\((?:A,B|B,A)\)\(O,A\)\s+\\tkzGetPoints\{Ap\}\{A\}/.test(tikz)) {
+      throw new Error("Expected generic swapped circle-segment exclude fixture to export Ap using common=A.");
+    }
+  }
+
+  if (fileName === "circle-circle-invalid-common-stale-point.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("[common=Q]")) {
+      throw new Error("Expected stale invalid exclude point to be rejected as circle-circle common.");
+    }
+    if (!/\\tkzInterCC(?:\[[^\]]*\])?\((?:O,A|A,O)\)\((?:K,B|B,K)\)\s+\\tkzGetPoints(?:\{P\}\{tkzInterCC_\d+_other\}|\{tkzInterCC_\d+_other\}\{P\})/.test(tikz)) {
+      throw new Error("Expected stale invalid circle-circle common fixture to fall back to ordinary InterCC export.");
+    }
+  }
+
+  if (fileName === "generic-circle-circle-exclude-common-swapped.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterCC\[common=A\]\((?:K,A|A,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints\{Ap\}\{A\}/.test(tikz)) {
+      throw new Error("Expected generic swapped circle-circle exclude fixture to export Ap using common=A.");
+    }
+  }
+
+  if (fileName === "generic-circle-circle-near-tangent.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterCC(?:\[[^\]]*\])?\((?:O,A|A,O)\)\((?:K,B|B,K)\)\s+\\tkzGetPoints(?:\{P\}\{tkzInterCC_\d+_other\}|\{tkzInterCC_\d+_other\}\{P\})/.test(tikz)) {
+      throw new Error("Expected near-tangent generic circle-circle fixture to export the first intersection.");
+    }
+    if (!/\\tkzInterCC\[common=P\]\((?:O,A|A,O)\)\((?:K,B|B,K)\)\s+\\tkzGetPoints\{Q\}\{P\}/.test(tikz)) {
+      throw new Error("Expected near-tangent generic circle-circle fixture to reuse P as common for Q.");
+    }
+  }
+
+  if (fileName === "generic-circle-circle-near-tangent-swapped.json") {
+    if (exportError) throw exportError;
+    if (!/\\tkzInterCC(?:\[[^\]]*\])?\((?:K,B|B,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints(?:\{P\}\{tkzInterCC_\d+_other\}|\{tkzInterCC_\d+_other\}\{P\})/.test(tikz)) {
+      throw new Error("Expected swapped near-tangent generic circle-circle fixture to export the first intersection with reversed circle order.");
+    }
+    if (!/\\tkzInterCC\[common=P\]\((?:K,B|B,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints\{Q\}\{P\}/.test(tikz)) {
+      throw new Error("Expected swapped near-tangent generic circle-circle fixture to reuse P as common for Q with reversed circle order.");
+    }
+  }
+
+  if (fileName === "line-circle-invalid-common-stale-point.json") {
+    if (exportError) throw exportError;
+    if (tikz.includes("[common=Q]")) {
+      throw new Error("Expected stale invalid exclude point to be rejected as line-circle common.");
+    }
+    if (!/\\tkzInterLC\[near\]\((?:A,O|O,A)\)\(O,A\)\s+\\tkzGetPoints(?:\{Ap\}\{tkzInterLC_\d+_other\}|\{tkzInterLC_\d+_other\}\{Ap\})/.test(tikz)) {
+      throw new Error("Expected stale invalid common fixture to fall back to near/swap line-circle export.");
+    }
+  }
+
+  if (fileName === "text-label-modes.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\fontsize{12.19pt}{14.628pt}\\selectfont")) {
+      throw new Error("Expected free text label export to keep size 12 near 12.19pt instead of scaling with the viewport.");
+    }
+    if (!tikz.includes("Plain text \\\\ $\\displaystyle x^2+y^2=1$ \\\\ tail")) {
+      throw new Error("Expected mixed textbox export to emit centered multi-line TikZ text with display math.");
+    }
+    if (!tikz.includes("text width=122.222222222222pt")) {
+      throw new Error("Expected mixed textbox export to preserve textbox wrap width in TikZ.");
+    }
+  }
+
+  if (fileName === "rich-text-node.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\node[anchor=north west")) {
+      throw new Error("Expected rich text fixture to export as a positioned node.");
+    }
+    if (!tikz.includes("A number $a$ is algebraic")) {
+      throw new Error("Expected rich text fixture to export paragraph text and inline math.");
+    }
+    if (!tikz.includes("$\\displaystyle {a}^{2}+1=0$")) {
+      throw new Error("Expected rich text fixture to export display math.");
+    }
+    const initMatch = /\\tkzInit\[xmin=([-0-9.]+),xmax=([-0-9.]+),ymin=([-0-9.]+),ymax=([-0-9.]+)\]/u.exec(tikz);
+    if (!initMatch) {
+      throw new Error("Expected rich text fixture to include a viewport.");
+    }
+    const [, xminRaw, xmaxRaw, yminRaw, ymaxRaw] = initMatch;
+    const xmin = Number(xminRaw);
+    const xmax = Number(xmaxRaw);
+    const ymin = Number(yminRaw);
+    const ymax = Number(ymaxRaw);
+    if (!(xmin < 42 && xmax > 47 && ymin < 10 && ymax > 11)) {
+      throw new Error(`Expected rich text bounds to contribute to export viewport, got ${initMatch[0]}`);
+    }
+  }
+
+  if (fileName === "color-basic-red-named.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("color=red")) {
+      throw new Error("Expected basic preset color fixture to export segment stroke as named red.");
+    }
+    if (tikz.includes("\\definecolor")) {
+      throw new Error("Expected basic preset color fixture to avoid definecolor in standard export.");
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (efficient.includes("\\definecolor")) {
+      throw new Error("Expected basic preset color fixture to avoid definecolor in efficient export.");
+    }
+  }
+
+  if (fileName === "color-xcolor-teal-named.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("color=teal")) {
+      throw new Error("Expected xcolor preset color fixture to export segment stroke as named teal.");
+    }
+    if (tikz.includes("\\definecolor")) {
+      throw new Error("Expected xcolor preset color fixture to avoid definecolor in standard export.");
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (efficient.includes("\\definecolor")) {
+      throw new Error("Expected xcolor preset color fixture to avoid definecolor in efficient export.");
+    }
+  }
+
+  if (fileName === "color-dvips-navyblue-named.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("color=NavyBlue")) {
+      throw new Error("Expected dvipsnames preset color fixture to export segment stroke as named NavyBlue.");
+    }
+    if (tikz.includes("\\definecolor")) {
+      throw new Error("Expected dvipsnames preset color fixture to avoid definecolor in standard export.");
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (efficient.includes("\\definecolor")) {
+      throw new Error("Expected dvipsnames preset color fixture to avoid definecolor in efficient export.");
+    }
+  }
+
+  if (fileName === "color-custom-definecolor.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\definecolor{gdC_123456}{RGB}{18,52,86}")) {
+      throw new Error("Expected custom color fixture to keep definecolor in standard export.");
+    }
+    if (!tikz.includes("color=gdC_123456")) {
+      throw new Error("Expected custom color fixture to use the defined gdC_123456 color in standard export.");
+    }
+    const efficient = makeEfficientTikz(tikz);
+    if (!efficient.includes("\\definecolor{c0}{RGB}{18,52,86}")) {
+      throw new Error("Expected custom color fixture to keep a custom definecolor in efficient export.");
+    }
+    if (!efficient.includes("color=c0")) {
+      throw new Error("Expected custom color fixture to use the simplified c0 color in efficient export.");
     }
   }
 
@@ -544,6 +981,19 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     if (tikz.includes("\\tkzDefIntSimilitudeCenter")) {
       throw new Error("Impossible inner tangents in exact internal tangency should be skipped, not exported.");
+    }
+  }
+
+  if (fileName === "tangent-circle-circle-near-external-outer.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefExtSimilitudeCenter")) {
+      throw new Error("Near-external outer tangent fixture should keep the valid outer tangent constructive export.");
+    }
+    if (tikz.includes("\\tkzDefIntSimilitudeCenter")) {
+      throw new Error("Near-external inner tangent is currently undefined and should not be exported.");
+    }
+    if (!tikz.includes("\\tkzDrawLine")) {
+      throw new Error("Near-external outer tangent fixture should draw the valid tangent line.");
     }
   }
 
@@ -738,6 +1188,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "regression-line-coverage-j-o.json") {
+    if (exportError) throw exportError;
     if (!/\\tkzInterLL\(F,G\)\(E,D\)\s+\\tkzGetPoint\{J\}/.test(tikz)) {
       throw new Error("Regression: expected J to be defined from InterLL(F,G)(E,D).");
     }
@@ -935,9 +1386,9 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "angle-right-german.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-arc-dot angle to emit \\tkzMarkRightAngles.");
-    if (!tikz.includes("german")) throw new Error("Expected right-arc-dot angle to include german option.");
-    if (!tikz.includes("dotsize=")) throw new Error("Expected right-arc-dot angle to include dotsize option.");
+    if (!tikz.includes("\\tkzMarkRightAngles")) throw new Error("Expected right-german angle to emit \\tkzMarkRightAngles.");
+    if (!tikz.includes("german")) throw new Error("Expected right-german angle to include german option.");
+    if (!tikz.includes("dotsize=")) throw new Error("Expected right-german angle to include dotsize option.");
   }
 
   if (fileName === "sector-basic.json") {
@@ -951,13 +1402,10 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "undefined-circle-line-points.json") {
-    if (!exportError) {
-      throw new Error("Visible undefined circle-line points should fail closed in exporter.");
+    if (exportError) throw exportError;
+    if (/(^|[^A-Za-z])E([^A-Za-z]|$)/.test(tikz) || /(^|[^A-Za-z])F([^A-Za-z]|$)/.test(tikz)) {
+      throw new Error("Undefined visible points should be skipped from point/label export.");
     }
-    if (!exportError.message.includes("Cannot export visible undefined point")) {
-      throw new Error("Expected explicit visible undefined point exporter error.");
-    }
-    return;
   }
 
   if (fileName === "segment-mark-basic.json") {
@@ -1017,6 +1465,19 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
       if (!markLines.some((line) => line.includes("pos=0.4"))) {
         throw new Error("Expected segment multi-mark fixture to include pos=0.4.");
       }
+    }
+  }
+
+  if (fileName === "segment-mark-dot-multi.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\foreach \\gdPos in {")) {
+      throw new Error("Expected segment dot multi-mark fixture to emit foreach compact segment mark output.");
+    }
+    if (!tikz.includes("mark=*")) {
+      throw new Error("Expected segment dot multi-mark fixture to map dot mark to TikZ mark=*.");
+    }
+    if (!tikz.includes("{0.2,0.35,0.5}")) {
+      throw new Error("Expected segment dot multi-mark fixture to include positions 0.2,0.35,0.5.");
     }
   }
 
@@ -1128,9 +1589,6 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("mark=at position")) {
       throw new Error("Expected segment mid-arrow fixture to emit mark=at position.");
     }
-    if (!tikz.includes("\\arrowreversed")) {
-      throw new Error("Expected segment mid-arrow fixture to include reversed arrow command.");
-    }
     const markCount = (tikz.match(/mark=at position/g) ?? []).length;
     if (markCount < 2) {
       throw new Error("Expected segment bidirectional mid-arrow to emit separated mark positions.");
@@ -1151,7 +1609,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     const worldA = pointA ? getPointWorldPos(pointA, scene) : null;
     const worldB = pointB ? getPointWorldPos(pointB, scene) : null;
     const pathLengthWorld = worldA && worldB ? Math.hypot(worldB.x - worldA.x, worldB.y - worldA.y) : 0;
-    const pxPerWorld = extractEffectiveDrawScale(tikz) * 37.8;
+    const pxPerWorld = 80;
     const gapPx = (right.position - left.position) * pathLengthWorld * pxPerWorld;
     if (!Number.isFinite(gapPx) || gapPx < 3) {
       throw new Error("Expected segment <-> mid-arrow marks to be separated enough to be visually distinct.");
@@ -1169,7 +1627,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     const first = marks[0];
     if (first.cmd !== "arrowreversed") {
-      throw new Error("Expected near-edge mid <- arrow to emit arrowreversed command.");
+      throw new Error("Expected near-edge mid <- arrow to emit reversed arrow glyph.");
     }
     if (Math.abs(first.position - 0.02) > 0.005) {
       throw new Error(`Expected near-edge mid arrow position ~0.02, got ${first.position}.`);
@@ -1217,14 +1675,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
         ? segment.style.segmentArrowMarks[0]?.pairGapPx
         : segment?.style.segmentArrowMark?.pairGapPx) ?? 30;
     const pairGapPx = Number.isFinite(explicitPairGap) ? Number(explicitPairGap) : 30;
-    const pictureScaleMatch = tikz.match(/\\begin\{tikzpicture\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-    const scopeScaleMatch = tikz.match(/\\begin\{scope\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-    const tikzScale = pictureScaleMatch
-      ? Number(pictureScaleMatch[1])
-      : scopeScaleMatch
-        ? Number(scopeScaleMatch[1])
-        : 1;
-    const pxPerWorld = Number.isFinite(tikzScale) && tikzScale > 0 ? tikzScale * 37.8 : 80;
+    const pxPerWorld = 80;
     const expectedGap = (2 * pairGapPx) / (pathLengthWorld * pxPerWorld); // 2*pairGapPx / (pathLengthWorld * export px density)
     if (Math.abs(measuredGap - expectedGap) > 0.005) {
       throw new Error(`Expected explicit pairGapPx spacing ${expectedGap}, got ${measuredGap}.`);
@@ -1247,15 +1698,6 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "segment-mark-arrow-mid-inward.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\arrow[")) {
-      throw new Error("Expected inward mid-arrow fixture to include forward arrow command.");
-    }
-    if (!tikz.includes("\\arrowreversed[")) {
-      throw new Error("Expected inward mid-arrow fixture to include reversed arrow command.");
-    }
-    if (!tikz.includes("{Latex[")) {
-      throw new Error("Expected inward mid-arrow fixture to emit Latex tip style.");
-    }
     const marks = extractMarkCommands(tikz);
     if (marks.length < 2) {
       throw new Error("Expected inward mid-arrow fixture to emit parseable mark commands.");
@@ -1272,7 +1714,7 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     const worldA = pointA ? getPointWorldPos(pointA, scene) : null;
     const worldB = pointB ? getPointWorldPos(pointB, scene) : null;
     const pathLengthWorld = worldA && worldB ? Math.hypot(worldB.x - worldA.x, worldB.y - worldA.y) : 0;
-    const pxPerWorld = extractEffectiveDrawScale(tikz) * 37.8;
+    const pxPerWorld = 80;
     const gapPx = (right.position - left.position) * pathLengthWorld * pxPerWorld;
     if (!Number.isFinite(gapPx) || gapPx < 3) {
       throw new Error("Expected segment >-< mid-arrow marks to be separated enough to be visually distinct.");
@@ -1287,8 +1729,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("postaction=decorate")) {
       throw new Error("Expected circle arrow fixture to emit decoration-based arrow overlay.");
     }
-    if (!tikz.includes("{Latex[")) {
-      throw new Error("Expected circle arrow fixture to emit Latex arrow tip.");
+    if (!tikz.includes("\\draw[color=")) {
+      throw new Error("Expected circle arrow fixture to emit canvas-parity stroked arrow glyph.");
     }
   }
 
@@ -1312,6 +1754,22 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
   }
 
+  if (fileName === "circle-arrow-dot-multi.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("postaction=decorate")) {
+      throw new Error("Expected circle dot-arrow fixture to emit decoration-based overlay.");
+    }
+    if (!tikz.includes("\\fill[") || !tikz.includes("circle[radius=")) {
+      throw new Error("Expected circle dot-arrow fixture to emit filled dot marker commands.");
+    }
+    if (!tikz.includes("\\draw[") || !tikz.includes("circle[radius=")) {
+      throw new Error("Expected circle dot-arrow fixture to emit open-dot marker commands.");
+    }
+    if (tikz.includes("\\arrow[")) {
+      throw new Error("Expected circle dot-arrow fixture to avoid arrowhead commands.");
+    }
+  }
+
   if (fileName === "sector-arrow-basic.json") {
     if (exportError) throw exportError;
     if (!tikz.includes("\\tkzDrawSector")) {
@@ -1323,8 +1781,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!hasArcOverlay) {
       throw new Error("Expected sector arrow fixture to emit arc path overlay.");
     }
-    if (!tikz.includes("{Triangle[")) {
-      throw new Error("Expected sector arrow fixture to emit Triangle arrow tip.");
+    if (!tikz.includes("\\fill[color=")) {
+      throw new Error("Expected sector arrow fixture to emit canvas-parity filled arrow glyph.");
     }
   }
 
@@ -1340,12 +1798,24 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     fileName === "circle-arrow-mid-position-parity.json" ||
     fileName === "sector-arrow-basic.json"
   ) {
-    const hasMarkingArrowLib =
-      tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta}") ||
-      tikz.includes("\\usetikzlibrary{decorations.markings,arrows.meta,bending}");
-    const hasConstructiveArrowLib = tikz.includes("\\usetikzlibrary{arrows.meta,bending}");
-    if (!hasMarkingArrowLib && !hasConstructiveArrowLib) {
+    const hasMarkingArrowLibLine = tikz
+      .split("\n")
+      .some((line) => /\\usetikzlibrary\{[^}]*decorations\.markings[^}]*\}/.test(line));
+    const hasConstructiveArrowLib =
+      tikz
+        .split("\n")
+        .some(
+          (line) => /\\usetikzlibrary\{[^}]*arrows\.meta[^}]*\}/.test(line) && /\\usetikzlibrary\{[^}]*bending[^}]*\}/.test(line)
+        );
+    if (!hasMarkingArrowLibLine && !hasConstructiveArrowLib) {
       throw new Error("Expected arrow fixtures to emit an arrows.meta (+ optional markings/bending) library line.");
+    }
+  }
+
+  if (fileName === "circle-arrow-dot-multi.json") {
+    const hasDecorationsMarkings = /\\usetikzlibrary\{[^}]*\bdecorations\.markings\b[^}]*\}/.test(tikz);
+    if (!hasDecorationsMarkings) {
+      throw new Error("Expected circle dot-arrow fixture to include decorations.markings library.");
     }
   }
 
@@ -1353,6 +1823,16 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (exportError) throw exportError;
     if (!tikz.includes("\\tkzDefCircle[R](O,3.5)")) {
       throw new Error("Expected fixed-radius circle fixture to emit \\tkzDefCircle[R](O,3.5).");
+    }
+  }
+
+  if (fileName === "circle-incircle-symbolic.json") {
+    if (exportError) throw exportError;
+    if (!tikz.includes("\\tkzDefCircle[in](A,B,C) \\tkzGetPoints{D}{")) {
+      throw new Error("Expected incircle fixture to emit symbolic \\tkzDefCircle[in](A,B,C) construction.");
+    }
+    if (tikz.includes("\\tkzDefCircle[R](D,")) {
+      throw new Error("Expected incircle fixture to avoid numeric fixed-radius circle construction.");
     }
   }
 
@@ -1367,20 +1847,24 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "export-no-patterns.json") {
     if (exportError) throw exportError;
-    if (tikz.includes("\\usetikzlibrary{patterns}")) {
+    const hasPatternsLine = /\\usetikzlibrary\{[^}]*\bpatterns\b[^}]*\}/.test(tikz);
+    if (hasPatternsLine) {
       throw new Error("Expected no-patterns fixture to omit patterns library line.");
     }
-    if (tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
-      throw new Error("Expected no-patterns fixture to omit patterns.meta library line.");
+    const hasPatternsMeta = /\\usetikzlibrary\{[^}]*\bpatterns\.meta\b[^}]*\}/.test(tikz);
+    if (hasPatternsMeta) {
+      throw new Error("Expected no-patterns fixture to omit patterns.meta library.");
     }
   }
 
   if (fileName === "export-with-patterns.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\usetikzlibrary{patterns}")) {
+    const hasPatternsLine = /\\usetikzlibrary\{[^}]*\bpatterns\b[^}]*\}/.test(tikz);
+    if (!hasPatternsLine) {
       throw new Error("Expected patterns fixture to emit \\usetikzlibrary{patterns}.");
     }
-    if (tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
+    const hasPatternsMeta = /\\usetikzlibrary\{[^}]*\bpatterns\.meta\b[^}]*\}/.test(tikz);
+    if (hasPatternsMeta) {
       throw new Error("Expected classic patterns fixture to avoid patterns.meta.");
     }
     if (!tikz.includes("pattern=north east lines")) {
@@ -1390,7 +1874,10 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "export-with-patterns-meta.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\usetikzlibrary{patterns,patterns.meta}")) {
+    const hasPatternsAndMeta =
+      /\\usetikzlibrary\{[^}]*\bpatterns\b[^}]*\}/.test(tikz) &&
+      /\\usetikzlibrary\{[^}]*\bpatterns\.meta\b[^}]*\}/.test(tikz);
+    if (!hasPatternsAndMeta) {
       throw new Error("Expected patterns-meta fixture to emit \\usetikzlibrary{patterns,patterns.meta}.");
     }
     if (!tikz.includes("pattern={Lines[angle=45,distance=4pt]}")) {
@@ -1400,7 +1887,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "sector-pattern-fill.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("\\usetikzlibrary{patterns}")) {
+    const hasPatternsLine = /\\usetikzlibrary\{[^}]*\bpatterns\b[^}]*\}/.test(tikz);
+    if (!hasPatternsLine) {
       throw new Error("Expected sector pattern fixture to emit \\usetikzlibrary{patterns}.");
     }
     if (!tikz.includes("pattern=north east lines")) {
@@ -1422,21 +1910,18 @@ function extractMarkCommands(tikz: string): Array<{ position: number; cmd: "arro
     const cmd = match[2] === "arrowreversed" ? "arrowreversed" : "arrow";
     if (Number.isFinite(position)) marks.push({ position, cmd });
   }
+  const glyphRegex = /mark=at position\s+([0-9]*\.?[0-9]+)\s+with\s+\{(\\(?:fill|draw)\[[^}]+?;\s*)\}/g;
+  for (const match of tikz.matchAll(glyphRegex)) {
+    const position = Number(match[1]);
+    const coordMatches = [...match[2].matchAll(/\(([-+]?\d*\.?\d+)pt,/g)];
+    const directionalCoord = coordMatches
+      .map((coordMatch) => Number(coordMatch[1]))
+      .find((value) => Number.isFinite(value) && Math.abs(value) > 1e-6);
+    if (!Number.isFinite(position) || directionalCoord === undefined) continue;
+    marks.push({ position, cmd: directionalCoord < 0 ? "arrow" : "arrowreversed" });
+  }
+  marks.sort((a, b) => a.position - b.position);
   return marks;
-}
-
-function extractEffectiveDrawScale(tikz: string): number {
-  const pictureScaleMatch = tikz.match(/\\begin\{tikzpicture\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-  if (pictureScaleMatch) {
-    const value = Number(pictureScaleMatch[1]);
-    if (Number.isFinite(value) && value > 0) return value;
-  }
-  const scopeScaleMatch = tikz.match(/\\begin\{scope\}\[scale=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-  if (scopeScaleMatch) {
-    const value = Number(scopeScaleMatch[1]);
-    if (Number.isFinite(value) && value > 0) return value;
-  }
-  return 1;
 }
 
 function parseDrawLines(

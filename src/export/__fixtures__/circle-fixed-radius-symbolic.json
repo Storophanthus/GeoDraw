@@ -1,0 +1,25 @@
+{
+  "points": [
+    {
+      "id": "p1",
+      "name": "O",
+      "definition": { "kind": "free", "x": 0, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "lines": [],
+  "segments": [],
+  "circles": [
+    {
+      "id": "c1",
+      "kind": "fixedRadius",
+      "centerId": "p1",
+      "radius": 214.6625258399798,
+      "radiusExpr": "96*sqrt(5)",
+      "visible": true
+    }
+  ],
+  "angles": [],
+  "numbers": []
+}

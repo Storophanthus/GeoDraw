@@ -1,0 +1,17 @@
+{
+  "points": [
+    { "id": "p1", "kind": "free", "name": "O", "x": 0, "y": 0 },
+    { "id": "p2", "kind": "free", "name": "P", "x": 2, "y": 0 },
+    { "id": "p3", "kind": "free", "name": "G", "x": -5, "y": 0 },
+    { "id": "p4", "kind": "free", "name": "H", "x": 5, "y": 0 },
+    { "id": "p5", "kind": "free", "name": "E", "x": 2, "y": 0 },
+    { "id": "p6", "kind": "circleLineIntersectionPoint", "name": "F", "circleId": "c1", "lineId": "l1", "branchIndex": 0, "excludePointId": "p5" }
+  ],
+  "lines": [
+    { "id": "l1", "aId": "p3", "bId": "p4", "visible": true }
+  ],
+  "segments": [],
+  "circles": [
+    { "id": "c1", "centerId": "p1", "throughId": "p2", "visible": true }
+  ]
+}

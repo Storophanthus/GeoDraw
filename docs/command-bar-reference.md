@@ -10,9 +10,16 @@
   - `asin(1)`
   - `sind(30)`
   - `atan2d(4,3)`
+  - `Perimeter(A,B,C)`
+  - `Inradius(A,B,C)`
+  - `Circumradius(A,B,C)`
+  - `Perimeter(c_1)`
 - Supported constants:
   - `pi`, `Pi`, `PI`, `e`, `tau`, `ans`
 - Supported functions:
+  - `Distance`
+  - `Area`, `Perimeter`
+  - `Inradius`, `Circumradius`
   - `sin`, `cos`, `tan`
   - `Sin`, `Cos`, `Tan`
   - `sind`, `cosd`, `tand`
@@ -29,25 +36,34 @@ Notes:
 - `atan2(y,x)` uses the standard `(y, x)` argument order.
 - `atan2d(y,x)` uses the same `(y, x)` argument order and returns degrees.
 - `ans` is the last numeric expression result.
+- Geometry scalar functions are case-sensitive (`Distance`, `Area`, `Perimeter`, `Inradius`, `Circumradius`).
+- `Perimeter(x)` with 1 argument accepts a circle/polygon alias; `Perimeter(A,B,C)` returns triangle perimeter.
+- `Area(x)` expects 1 circle/polygon argument.
 
 ## Constructors
 - `Point(x,y)`
 - `Midpoint(A,B)`
 - `Midpoint(s)` where `s` is a named segment alias (from assignment)
 - `Incenter(A,B,C)`
+- `Incircle(A,B,C)`
 - `Orthocenter(A,B,C)` (alias: `Ortho(A,B,C)`)
 - `Centroid(A,B,C)`
+- `Circumcenter(A,B,C)`
 - `Translate(P,A,B)`
 - `Rotate(P,O,expr[,CW|CCW])`
 - `Dilate(P,O,k)`
 - `Reflect(P,l|s|O)` where `l/s` are named line/segment aliases, `O` is a point
+- `Reflect(P,A,B)`, `Reflect(P,Line(A,B))`, or `Reflect(P,Segment(A,B))` reflects across the line through `A` and `B`
+- `Orthoproject(X,A,B)` projects point `X` onto the line through `A` and `B`
 - `Line(x1,y1,x2,y2)`
 - `Line(A,B)`
 - `Perpendicular(P,l)` where `l` is a named line/segment alias
+- `PerpBisector(A,B)` (alias: `PerpendicularBisector(A,B)`)
 - `Parallel(P,l)` where `l` is a named line/segment alias
 - `Tangent(P,c)` where `c` is a named circle alias
 - `AngleBisector(A,B,C)`
-- `Angle(A,B,C)`
+- `Angle(A,B,C)` returns the angle measure in degrees
+- `MarkedAngle(A,B,C)` creates an angle object
 - `AngleFixed(V,A,expr[,CW|CCW])`
 - `Sector(O,A,B)`
 - `Segment(A,B)`
@@ -57,6 +73,8 @@ Notes:
 - `Circle3P(A,B,C)` (alias: `CircleThreePoint(A,B,C)`)
 - `Circle(O,A)`
 - `Circle(O,r)`
+- `Circle(O,96*sqrt(5))`
+- `Ellipse(F1,F2,P)` the ellipse with foci `F1`, `F2` passing through `P`
 - `Distance(...)` (returns number, creates nothing)
   - common forms: `Distance(A,B)`, `Distance(A,l)`, `Distance(l,A)`, `Distance(A,s)`, `Distance(s,A)`
 
@@ -68,24 +86,32 @@ Notes:
   - `P = Point(1,2)`
   - `M = Midpoint(A,B)`
   - `I = Incenter(A,B,C)`
+  - `ic = Incircle(A,B,C)`
   - `H = Orthocenter(A,B,C)`
   - `G = Centroid(A,B,C)`
+  - `O = Circumcenter(A,B,C)`
   - `T = Translate(A,B,C)`
   - `R = Rotate(A,O,30,CW)`
   - `D = Dilate(A,O,2)`
   - `Q = Reflect(A,l)`
+  - `Q2 = Reflect(A,Segment(B,C))`
+  - `H = Orthoproject(X,A,B)`
   - `l = Line(A,B)`
   - `p = Perpendicular(A,l)`
+  - `pb = PerpBisector(A,B)`
   - `q = Parallel(B,l)`
   - `b = AngleBisector(A,B,C)`
-  - `ang = Angle(A,B,C)`
+  - `t = Angle(A,B,C)`
+  - `ang = MarkedAngle(A,B,C)`
   - `af = AngleFixed(B,A,30,CW)`
   - `sec = Sector(O,A,B)`
   - `s = Segment(A,B)`
   - `poly = Polygon(A,B,C,D)`
   - `rp = RegularPolygon(A,B,6)`
   - `c3 = Circle3P(A,B,C)`
+  - `cRad = Circle(O,96*sqrt(5))`
   - `c = Circle(O,r_1)` (`r_1` can come from "Store Radius")
+  - `el = Ellipse(F1,F2,P)`
 
 Redefine behavior (current):
 - `name = <numeric expr>`:

@@ -17,56 +17,70 @@ export function drawLines(
   ctx.save();
 
   for (const line of scene.lines) {
-    if (!line.visible) continue;
-    const anchors = getLineWorldAnchors(line, scene);
-    const a = anchors?.a ?? null;
-    const b = anchors?.b ?? null;
-    if (!a || !b) continue;
+    drawLineObject(ctx, scene, line.id, camera, vp, selectedObject, recentCreatedObject, copySource);
+  }
 
-    const d = sub(b, a);
-    const len = Math.hypot(d.x, d.y);
-    if (len < 1e-9) continue;
+  ctx.restore();
+}
 
-    const sa = camMath.worldToScreen(a, camera, vp);
-    const sb = camMath.worldToScreen(b, camera, vp);
-    const clipped = clipInfiniteLineToViewport(sa, sb, vp.widthPx, vp.heightPx);
-    if (!clipped) continue;
-    const [p1, p2] = clipped;
+export function drawLineObject(
+  ctx: CanvasRenderingContext2D,
+  scene: SceneModel,
+  lineId: string,
+  camera: Camera,
+  vp: Viewport,
+  selectedObject: DrawableObjectSelection,
+  recentCreatedObject: DrawableObjectSelection,
+  copySource: DrawableObjectSelection
+): void {
+  const line = scene.lines.find((item) => item.id === lineId);
+  if (!line || !line.visible) return;
+  const anchors = getLineWorldAnchors(line, scene);
+  const a = anchors?.a ?? null;
+  const b = anchors?.b ?? null;
+  if (!a || !b) return;
 
-    applyStrokeDash(ctx, line.style.dash, line.style.strokeWidth);
-    ctx.strokeStyle = line.style.strokeColor;
-    ctx.globalAlpha = line.style.opacity;
-    ctx.lineWidth = line.style.strokeWidth;
+  const d = sub(b, a);
+  const len = Math.hypot(d.x, d.y);
+  if (len < 1e-9) return;
+
+  const sa = camMath.worldToScreen(a, camera, vp);
+  const sb = camMath.worldToScreen(b, camera, vp);
+  const clipped = clipInfiniteLineToViewport(sa, sb, vp.widthPx, vp.heightPx);
+  if (!clipped) return;
+  const [p1, p2] = clipped;
+
+  applyStrokeDash(ctx, line.style.dash, line.style.strokeWidth);
+  ctx.strokeStyle = line.style.strokeColor;
+  ctx.globalAlpha = line.style.opacity;
+  ctx.lineWidth = line.style.strokeWidth;
+  ctx.beginPath();
+  ctx.moveTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.stroke();
+
+  if (selectedObject?.type === "line" && selectedObject.id === line.id) {
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+    const isNew = recentCreatedObject?.type === "line" && recentCreatedObject.id === line.id;
+    ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
+    ctx.lineWidth = line.style.strokeWidth + (isNew ? 1.5 : 1.6);
     ctx.beginPath();
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
     ctx.stroke();
-
-    if (selectedObject?.type === "line" && selectedObject.id === line.id) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      const isNew = recentCreatedObject?.type === "line" && recentCreatedObject.id === line.id;
-      ctx.strokeStyle = isNew ? "rgba(20,184,166,0.72)" : "rgba(245,158,11,0.62)";
-      ctx.lineWidth = line.style.strokeWidth + (isNew ? 1.5 : 1.6);
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-
-    if (copySource?.type === "line" && copySource.id === line.id) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      ctx.strokeStyle = "#2563eb";
-      ctx.lineWidth = line.style.strokeWidth + 3;
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
   }
 
-  ctx.restore();
+  if (copySource?.type === "line" && copySource.id === line.id) {
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = line.style.strokeWidth + 3;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+  }
 }
 
 function clipInfiniteLineToViewport(a: Vec2, b: Vec2, width: number, height: number): [Vec2, Vec2] | null {

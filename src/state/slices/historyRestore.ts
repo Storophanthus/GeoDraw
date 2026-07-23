@@ -5,8 +5,12 @@ import type { HistorySnapshot } from "./historySlice";
 import {
   DEFAULT_COLOR_PROFILE_ID,
 } from "../colorProfiles";
+import { createSceneSliceState } from "./sceneSlice";
+import { createUiSliceState } from "./uiSlice";
 
 export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySnapshot): GeoState {
+  const fallbackSceneState = createSceneSliceState();
+  const fallbackUiState = createUiSliceState();
   const normalizedScene = normalizeSceneIntegrity(snapshot.scene);
   const sceneWithBranches = {
     ...normalizedScene,
@@ -45,6 +49,17 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
         },
       };
     }),
+    ellipses: (normalizedScene.ellipses ?? []).map((ellipse) => {
+      if (ellipse.style.arrowMarks?.length) return ellipse;
+      if (!ellipse.style.arrowMark) return ellipse;
+      return {
+        ...ellipse,
+        style: {
+          ...ellipse.style,
+          arrowMarks: migrateArrowMark(ellipse.style.arrowMark),
+        },
+      };
+    }),
     angles: normalizedScene.angles.map((a) => {
       const needsArrowMigration = !a.style.arcArrowMarks?.length && Boolean(a.style.arcArrowMark);
       const needsMarkMigration = !a.style.angleMarks?.length && a.style.markStyle === "arc";
@@ -77,43 +92,67 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     const n = Number(match[1]);
     if (Number.isFinite(n) && n >= inferredNextTextLabelId) inferredNextTextLabelId = n + 1;
   }
+  let inferredNextRichTextId = 1;
+  for (const node of sceneWithBranches.richTextNodes ?? []) {
+    const match = /^rt_(\d+)$/.exec(node.id);
+    if (!match) continue;
+    const n = Number(match[1]);
+    if (Number.isFinite(n) && n >= inferredNextRichTextId) inferredNextRichTextId = n + 1;
+  }
+  let inferredNextEllipseId = 1;
+  for (const ellipse of sceneWithBranches.ellipses ?? []) {
+    const match = /^e_(\d+)$/.exec(ellipse.id);
+    if (!match) continue;
+    const n = Number(match[1]);
+    if (Number.isFinite(n) && n >= inferredNextEllipseId) inferredNextEllipseId = n + 1;
+  }
   return {
     ...prev,
     colorProfileId: snapshot.colorProfileId ?? DEFAULT_COLOR_PROFILE_ID,
-    canvasThemeOverrides: snapshot.canvasThemeOverrides ?? prev.canvasThemeOverrides,
+    canvasThemeOverrides: snapshot.canvasThemeOverrides ?? fallbackUiState.canvasThemeOverrides,
     // UI preferences are app-level and intentionally not restored from scene snapshots/files.
     uiColorProfileId: prev.uiColorProfileId,
     uiCssOverrides: prev.uiCssOverrides,
-    gridEnabled: snapshot.gridEnabled ?? true,
-    axesEnabled: snapshot.axesEnabled ?? true,
-    gridSnapEnabled: snapshot.gridSnapEnabled ?? true,
-    activeTool: snapshot.activeTool,
+    gridEnabled: snapshot.gridEnabled ?? fallbackUiState.gridEnabled,
+    axesEnabled: snapshot.axesEnabled ?? fallbackUiState.axesEnabled,
+    gridSnapEnabled: snapshot.gridSnapEnabled ?? fallbackUiState.gridSnapEnabled,
+    activeTool: snapshot.activeTool ?? fallbackUiState.activeTool,
+    propertiesPanelIntent: snapshot.selectedObject || snapshot.activeTool === "move" ? "object" : "toolDefault",
     scene: sceneWithBranches,
     selectedObject: snapshot.selectedObject,
     recentCreatedObject: snapshot.recentCreatedObject,
+    textEditRequest: null,
+    textClipboard: prev.textClipboard,
     pendingSelection: null,
     hoveredHit: null,
     cursorWorld: null,
-    nextPointId: snapshot.nextPointId,
-    nextSegmentId: snapshot.nextSegmentId,
-    nextLineId: snapshot.nextLineId,
-    nextCircleId: snapshot.nextCircleId,
-    nextPolygonId: snapshot.nextPolygonId ?? prev.nextPolygonId,
-    nextAngleId: snapshot.nextAngleId,
-    nextNumberId: snapshot.nextNumberId,
-    nextVectorId: snapshot.nextVectorId ?? prev.nextVectorId,
-    nextTextLabelId: snapshot.nextTextLabelId ?? Math.max(prev.nextTextLabelId, inferredNextTextLabelId),
-    pointDefaults: snapshot.pointDefaults ?? prev.pointDefaults,
-    segmentDefaults: snapshot.segmentDefaults ?? prev.segmentDefaults,
-    lineDefaults: snapshot.lineDefaults ?? prev.lineDefaults,
-    circleDefaults: snapshot.circleDefaults ?? prev.circleDefaults,
-    polygonDefaults: snapshot.polygonDefaults ?? prev.polygonDefaults,
-    angleDefaults: snapshot.angleDefaults ?? prev.angleDefaults,
-    angleFixedTool: snapshot.angleFixedTool ?? prev.angleFixedTool,
-    circleFixedTool: snapshot.circleFixedTool ?? prev.circleFixedTool,
-    transformTool: snapshot.transformTool ?? prev.transformTool,
+    nextPointId: snapshot.nextPointId ?? fallbackSceneState.nextPointId,
+    nextSegmentId: snapshot.nextSegmentId ?? fallbackSceneState.nextSegmentId,
+    nextLineId: snapshot.nextLineId ?? fallbackSceneState.nextLineId,
+    nextCircleId: snapshot.nextCircleId ?? fallbackSceneState.nextCircleId,
+    nextEllipseId: snapshot.nextEllipseId ?? Math.max(fallbackSceneState.nextEllipseId, inferredNextEllipseId),
+    nextPolygonId: snapshot.nextPolygonId ?? fallbackSceneState.nextPolygonId,
+    nextAngleId: snapshot.nextAngleId ?? fallbackSceneState.nextAngleId,
+    nextNumberId: snapshot.nextNumberId ?? fallbackSceneState.nextNumberId,
+    nextVectorId: snapshot.nextVectorId ?? fallbackSceneState.nextVectorId,
+    nextTextLabelId: snapshot.nextTextLabelId ?? Math.max(fallbackSceneState.nextTextLabelId, inferredNextTextLabelId),
+    nextRichTextId: snapshot.nextRichTextId ?? Math.max(fallbackSceneState.nextRichTextId, inferredNextRichTextId),
+    pointDefaults: snapshot.pointDefaults ?? fallbackSceneState.pointDefaults,
+    segmentDefaults: snapshot.segmentDefaults ?? fallbackSceneState.segmentDefaults,
+    lineDefaults: snapshot.lineDefaults ?? fallbackSceneState.lineDefaults,
+    circleDefaults: snapshot.circleDefaults ?? fallbackSceneState.circleDefaults,
+    ellipseDefaults: snapshot.ellipseDefaults ?? fallbackSceneState.ellipseDefaults,
+    polygonDefaults: snapshot.polygonDefaults ?? fallbackSceneState.polygonDefaults,
+    angleDefaults: snapshot.angleDefaults ?? fallbackSceneState.angleDefaults,
+    objectLabelDefaults: snapshot.objectLabelDefaults ?? fallbackSceneState.objectLabelDefaults,
+    labelToolDefaults: snapshot.labelToolDefaults ?? fallbackSceneState.labelToolDefaults,
+    textboxToolDefaults: snapshot.textboxToolDefaults ?? fallbackSceneState.textboxToolDefaults,
+    richTextToolDefaults: snapshot.richTextToolDefaults ?? fallbackSceneState.richTextToolDefaults,
+    angleFixedTool: snapshot.angleFixedTool ?? fallbackUiState.angleFixedTool,
+    circleFixedTool: snapshot.circleFixedTool ?? fallbackUiState.circleFixedTool,
+    transformTool: snapshot.transformTool ?? fallbackUiState.transformTool,
     exportClipWorld: snapshot.exportClipWorld ?? null,
-    copyStyle: snapshot.copyStyle,
+    copyStyle: snapshot.copyStyle ?? fallbackUiState.copyStyle,
   };
 }
 

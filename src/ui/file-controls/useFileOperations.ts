@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { open as tauriOpen, save as tauriSave } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { useGeoStore, getGeoStore } from "../../state/geoStore";
-import { takeHistorySnapshot, type HistorySnapshot } from "../../state/slices/historySlice";
+import { useGeoStore } from "../../state/geoStore";
+import type { HistorySnapshot } from "../../state/slices/historySlice";
+import type { DocumentFilePatch, DocumentFileState } from "../useDocumentTabs";
 
 export type PickerWindow = Window & {
     showSaveFilePicker?: (options?: {
@@ -31,20 +32,22 @@ export function isValidSnapshot(data: unknown): data is HistorySnapshot {
     return true;
 }
 
-export function useFileOperations() {
-    const loadSnapshot = useGeoStore((state) => state.loadSnapshot);
+export type UseFileOperationsOptions = {
+    activeFile: DocumentFileState;
+    updateActiveDocumentFile: (patch: DocumentFilePatch) => void;
+    openSnapshotAsDocument: (snapshot: HistorySnapshot, file?: DocumentFilePatch) => void;
+    buildActiveSnapshotJson: () => string;
+};
+
+export function useFileOperations({
+    activeFile,
+    updateActiveDocumentFile,
+    openSnapshotAsDocument,
+    buildActiveSnapshotJson,
+}: UseFileOperationsOptions) {
     const fitViewToScene = useGeoStore((state) => state.fitViewToScene);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const fileHandleRef = useRef<FileSystemFileHandle | null>(null);
-    const tauriPathRef = useRef<string | null>(null);
-
-    const [savedName, setSavedName] = useState<string | null>(null);
-
-    const buildSnapshotJson = (): string => {
-        const state = getGeoStore();
-        return JSON.stringify(takeHistorySnapshot(state), null, 2);
-    };
 
     const defaultFileName = () => `geodraw-${new Date().toISOString().slice(0, 10)}.geodraw`;
 
@@ -64,8 +67,7 @@ export function useFileOperations() {
         const writable = await handle.createWritable();
         await writable.write(json);
         await writable.close();
-        fileHandleRef.current = handle;
-        setSavedName(handle.name);
+        updateActiveDocumentFile({ fileHandle: handle, savedName: handle.name, tauriPath: null });
     };
 
     const isTauri = (): boolean => typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as object);
@@ -96,29 +98,36 @@ export function useFileOperations() {
         requestAnimationFrame(() => requestAnimationFrame(run));
     };
 
-    const parseAndLoadText = (text: string, fileName?: string) => {
+    const parseSnapshotText = (text: string): HistorySnapshot => {
         const parsed = JSON.parse(text) as HistorySnapshot;
         if (!isValidSnapshot(parsed)) {
             throw new Error("Invalid GeoDraw file structure");
         }
-        loadSnapshot(parsed);
-        if (fileName) setSavedName(fileName);
+        return parsed;
+    };
+
+    const openSnapshotText = (text: string, file: DocumentFilePatch) => {
+        const snapshot = parseSnapshotText(text);
+        openSnapshotAsDocument(snapshot, file);
         scheduleFitView();
     };
 
     const handleSaveAs = async () => {
-        const json = buildSnapshotJson();
+        const json = buildActiveSnapshotJson();
         if (isTauri()) {
             try {
                 const path = await tauriSave({
-                    defaultPath: savedName ?? defaultFileName(),
+                    defaultPath: activeFile.savedName ?? defaultFileName(),
                     filters: [{ name: "GeoDraw File", extensions: ["geodraw", "json"] }],
                 });
                 if (!path) return;
                 const normalizedPath = normalizeTauriPath(path);
                 await writeTextFile(normalizedPath, json);
-                tauriPathRef.current = normalizedPath;
-                setSavedName(baseName(normalizedPath));
+                updateActiveDocumentFile({
+                    fileHandle: null,
+                    savedName: baseName(normalizedPath),
+                    tauriPath: normalizedPath,
+                });
                 return;
             } catch (err) {
                 console.error("Failed to save file:", err);
@@ -129,12 +138,14 @@ export function useFileOperations() {
 
         const picker = (window as PickerWindow).showSaveFilePicker;
         if (!picker) {
-            downloadFallback(json, savedName ?? defaultFileName());
+            const fileName = activeFile.savedName ?? defaultFileName();
+            downloadFallback(json, fileName);
+            updateActiveDocumentFile({ fileHandle: null, savedName: fileName, tauriPath: null });
             return;
         }
         try {
             const handle = await picker({
-                suggestedName: savedName ?? defaultFileName(),
+                suggestedName: activeFile.savedName ?? defaultFileName(),
                 types: [
                     {
                         description: "GeoDraw File",
@@ -149,9 +160,9 @@ export function useFileOperations() {
     };
 
     const handleSave = async () => {
-        const json = buildSnapshotJson();
+        const json = buildActiveSnapshotJson();
         if (isTauri()) {
-            const path = tauriPathRef.current;
+            const path = activeFile.tauriPath;
             if (path) {
                 try {
                     await writeTextFile(path, json);
@@ -164,7 +175,7 @@ export function useFileOperations() {
             return;
         }
 
-        const handle = fileHandleRef.current;
+        const handle = activeFile.fileHandle;
         if (handle) {
             try {
                 await saveToHandle(handle, json);
@@ -186,9 +197,11 @@ export function useFileOperations() {
                 if (!path || Array.isArray(path)) return;
                 const normalizedPath = normalizeTauriPath(path);
                 const text = await readTextFile(normalizedPath);
-                parseAndLoadText(text, baseName(normalizedPath));
-                tauriPathRef.current = normalizedPath;
-                fileHandleRef.current = null;
+                openSnapshotText(text, {
+                    fileHandle: null,
+                    savedName: baseName(normalizedPath),
+                    tauriPath: normalizedPath,
+                });
                 return;
             } catch (err) {
                 if (err) {
@@ -217,8 +230,7 @@ export function useFileOperations() {
             if (!handle) return;
             const file = await handle.getFile();
             const text = await file.text();
-            parseAndLoadText(text, file.name);
-            fileHandleRef.current = handle;
+            openSnapshotText(text, { fileHandle: handle, savedName: file.name, tauriPath: null });
         } catch (err) {
             if (err) {
                 console.error("Failed to open file:", err);
@@ -233,8 +245,7 @@ export function useFileOperations() {
         reader.onload = (ev) => {
             try {
                 const text = ev.target?.result as string;
-                parseAndLoadText(text, file.name);
-                fileHandleRef.current = null;
+                openSnapshotText(text, { fileHandle: null, savedName: file.name, tauriPath: null });
             } catch (err) {
                 console.error("Failed to load file:", err);
                 alert("Failed to load file. It might be corrupted or invalid.");

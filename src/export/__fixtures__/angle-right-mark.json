@@ -1,15 +1,17 @@
 {
   "version": 1,
   "points": [
-    { "id": "p_1", "name": "A", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 0, "y": 0 } },
+    { "id": "p_1", "name": "A", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 3, "y": 0 } },
     { "id": "p_2", "name": "B", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 2, "y": 0 } },
     { "id": "p_3", "name": "C", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 2, "y": 2 } },
     { "id": "p_4", "name": "D", "visible": true, "showLabel": "name", "definition": { "kind": "free", "x": 3, "y": 1 } }
   ],
   "lines": [
-    { "id": "l_1", "kind": "twoPoint", "aId": "p_2", "bId": "p_4", "visible": true }
+    { "id": "l_1", "kind": "perpendicular", "throughId": "p_2", "base": { "type": "segment", "id": "s_1" }, "visible": true }
   ],
-  "segments": [],
+  "segments": [
+    { "id": "s_1", "aId": "p_1", "bId": "p_2", "visible": true }
+  ],
   "circles": [],
   "angles": [
     {

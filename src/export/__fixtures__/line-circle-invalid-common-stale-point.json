@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "p1", "kind": "free", "name": "O", "captionTex": "O", "visible": true, "showLabel": "name", "position": { "x": 0, "y": 0 } },
+    { "id": "p2", "kind": "free", "name": "A", "captionTex": "A", "visible": true, "showLabel": "name", "position": { "x": 0, "y": 5 } },
+    { "id": "p3", "kind": "free", "name": "Q", "captionTex": "Q", "visible": true, "showLabel": "name", "position": { "x": 3, "y": 3 } },
+    {
+      "id": "p4",
+      "kind": "circleLineIntersectionPoint",
+      "name": "Ap",
+      "captionTex": "A^{\\prime}",
+      "visible": true,
+      "showLabel": "caption",
+      "circleId": "c1",
+      "lineId": "l1",
+      "branchIndex": 1,
+      "excludePointId": "p3"
+    }
+  ],
+  "segments": [],
+  "lines": [
+    { "id": "l1", "kind": "twoPoint", "aId": "p2", "bId": "p1", "visible": true, "showLabel": false }
+  ],
+  "circles": [
+    { "id": "c1", "kind": "twoPoint", "centerId": "p1", "throughId": "p2", "visible": true }
+  ],
+  "angles": [],
+  "numbers": []
+}

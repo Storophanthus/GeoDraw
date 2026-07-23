@@ -1,5 +1,6 @@
 import { getGeoStore } from "../../state/geoStore";
 import { takeHistorySnapshot } from "../../state/slices/historySlice";
+import { createSceneSliceState } from "../../state/slices/sceneSlice";
 
 function fail(message: string): never {
   throw new Error(message);
@@ -41,6 +42,28 @@ assert(
 assert(
   after.uiCssOverrides["--gd-ui-text"] === beforeOverrides["--gd-ui-text"],
   "loading snapshot should preserve in-app uiCssOverrides (text)"
+);
+
+store.setPointDefaults({ sizePx: 29 });
+store.applyAppPreferences({ canvasThemeOverrides: { backgroundColor: "#badbad" } });
+
+const legacyConstructionSnapshot = {
+  ...takeHistorySnapshot(getGeoStore()),
+} as Partial<ReturnType<typeof takeHistorySnapshot>>;
+delete legacyConstructionSnapshot.canvasThemeOverrides;
+delete legacyConstructionSnapshot.pointDefaults;
+
+store.loadSnapshot(legacyConstructionSnapshot as ReturnType<typeof takeHistorySnapshot>);
+
+const fallbackScene = createSceneSliceState();
+const afterLegacyConstruction = getGeoStore();
+assert(
+  afterLegacyConstruction.canvasThemeOverrides.backgroundColor === undefined,
+  "legacy snapshots should not inherit canvas theme overrides from the previously active document"
+);
+assert(
+  afterLegacyConstruction.pointDefaults.sizePx === fallbackScene.pointDefaults.sizePx,
+  "legacy snapshots should not inherit point defaults from the previously active document"
 );
 
 console.log("ui-theme-file-isolation tests: OK");

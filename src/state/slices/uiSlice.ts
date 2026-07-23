@@ -1,5 +1,13 @@
 import type { Camera } from "../../view/camera";
-import type { ActiveTool, AngleFixedDirection, SelectedObject, TransformToolMode } from "./storeTypes";
+import type {
+  ActiveTool,
+  AngleFixedDirection,
+  PropertiesPanelIntent,
+  SelectedObject,
+  TextClipboardState,
+  TextEditRequest,
+  TransformToolMode,
+} from "./storeTypes";
 import { DEFAULT_COLOR_PROFILE_ID, DEFAULT_UI_COLOR_PROFILE_ID } from "../colorProfiles";
 
 export type UiSliceState = {
@@ -12,6 +20,10 @@ export type UiSliceState = {
   axesEnabled: boolean;
   gridSnapEnabled: boolean;
   activeTool: ActiveTool;
+  toolActivationVersion: number;
+  propertiesPanelIntent: PropertiesPanelIntent;
+  textEditRequest: TextEditRequest;
+  textClipboard: TextClipboardState;
   angleFixedTool: {
     angleExpr: string;
     direction: AngleFixedDirection;
@@ -39,7 +51,10 @@ export type UiSliceState = {
     polygonStyle: import("../../scene/points").PolygonStyle | null;
     angleStyle: Partial<import("../../scene/points").AngleStyle> | null;
     textLabelStyle: import("../../scene/points").SceneTextLabelStyle | null;
-    showLabel: import("../../scene/points").ShowLabelMode | null;
+    richTextStyle: import("../../text-editor/richTextModel").RichTextStyle | null;
+    pointShowLabel: import("../../scene/points").ShowLabelMode | null;
+    objectShowLabel: boolean | null;
+    objectLabelGlow: boolean | null;
   };
 };
 
@@ -55,6 +70,10 @@ export function createUiSliceState(): UiSliceState {
     axesEnabled: true,
     gridSnapEnabled: true,
     activeTool: "move",
+    toolActivationVersion: 0,
+    propertiesPanelIntent: "object",
+    textEditRequest: null,
+    textClipboard: null,
     angleFixedTool: {
       angleExpr: "30",
       direction: "CCW",
@@ -82,7 +101,10 @@ export function createUiSliceState(): UiSliceState {
       polygonStyle: null,
       angleStyle: null,
       textLabelStyle: null,
-      showLabel: null,
+      richTextStyle: null,
+      pointShowLabel: null,
+      objectShowLabel: null,
+      objectLabelGlow: null,
     },
   };
 }

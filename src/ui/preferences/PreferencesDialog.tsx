@@ -27,6 +27,9 @@ export function PreferencesDialog({ open, onClose }: PreferencesDialogProps) {
         const onMouseDown = (event: MouseEvent) => {
             const target = event.target as Node | null;
             if (!target) return;
+            if (target instanceof Element && target.closest(".colorFieldPopover")) {
+                return;
+            }
             if (preferencesDialogRef.current && !preferencesDialogRef.current.contains(target)) {
                 onClose();
             }

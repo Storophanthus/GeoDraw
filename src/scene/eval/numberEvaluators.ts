@@ -38,6 +38,10 @@ export function evalNumberByIdWithCtxInScene(
           const seg = currentCtx.segmentById.get(segmentId);
           return seg ? { aId: seg.aId, bId: seg.bId } : null;
         },
+        getPolygonPointIdsById: (polygonId) => {
+          const polygon = currentScene.polygons.find((item) => item.id === polygonId);
+          return polygon ? [...polygon.pointIds] : null;
+        },
         getCircleRadiusById: (circleId) => {
           const geom = ops.getCircleWorldGeometryById(circleId, currentScene, currentCtx);
           return geom ? geom.radius : null;

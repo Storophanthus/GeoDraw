@@ -70,7 +70,8 @@ export function drawInteractionHighlights(
       pendingSelection.tool === "translate" ||
       pendingSelection.tool === "rotate" ||
       pendingSelection.tool === "dilate" ||
-      pendingSelection.tool === "reflect"
+      pendingSelection.tool === "reflect" ||
+      pendingSelection.tool === "invert"
     ) {
       const sourceHit: { type: "point" | "segment" | "line2p" | "circle" | "polygon" | "angle"; id: string } =
         pendingSelection.source.type === "point"

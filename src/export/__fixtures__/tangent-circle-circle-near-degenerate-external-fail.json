@@ -7,7 +7,7 @@
       { "id": "p4", "kind": "free", "name": "A2", "captionTex": "A2", "visible": true, "showLabel": "name", "position": { "x": 9.000002, "y": 0 } }
     ],
     "lines": [
-      { "id": "l1", "kind": "circleCircleTangent", "circleAId": "c1", "circleBId": "c2", "family": "outer", "branchIndex": 0, "visible": true }
+      { "id": "l1", "kind": "circleCircleTangent", "circleAId": "c1", "circleBId": "c2", "family": "inner", "branchIndex": 0, "visible": true }
     ],
     "segments": [],
     "circles": [

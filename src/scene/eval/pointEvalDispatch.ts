@@ -9,6 +9,7 @@ import type {
   MidpointFromPoints,
   MidpointFromSegment,
   PointByDilation,
+  PointByProjection,
   PointByReflection,
   PointByRotation,
   PointByTranslation,
@@ -33,6 +34,7 @@ import {
 import {
   evalCircleCenterPointPoint,
   evalPointByDilationPoint,
+  evalPointByProjectionPoint,
   evalPointByReflectionPoint,
   evalMidpointPointsPoint,
   evalMidpointSegmentPoint,
@@ -109,6 +111,7 @@ export function evalPointUnchecked(
   if (point.kind === "pointByTranslation") return evalPointByTranslation(point, scene, ctx, ops);
   if (point.kind === "pointByDilation") return evalPointByDilation(point, scene, ctx, ops);
   if (point.kind === "pointByReflection") return evalPointByReflection(point, scene, ctx, ops);
+  if (point.kind === "pointByProjection") return evalPointByProjection(point, scene, ctx, ops);
   if (point.kind === "circleCenter") return evalCircleCenterPoint(point, scene, ctx, ops);
   if (point.kind === "triangleCenter") return evalTriangleCenterPoint(point, scene, ctx, ops);
   if (point.kind === "circleLineIntersectionPoint") return evalCircleLineIntersection(point, scene, ctx, ops);
@@ -212,6 +215,17 @@ function evalPointByReflection(
   return evalPointByReflectionPoint(point, scene, ctx, {
     getPointWorldById: ops.getPointWorldById,
     resolveLineAnchorsById: ops.resolveLineAnchorsById,
+  });
+}
+
+function evalPointByProjection(
+  point: PointByProjection,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalPointByProjectionPoint(point, scene, ctx, {
+    getPointWorldById: ops.getPointWorldById,
   });
 }
 

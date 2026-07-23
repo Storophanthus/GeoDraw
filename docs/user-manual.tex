@@ -81,6 +81,7 @@ The window is divided into:
   \item \textbf{Open}: load \texttt{.geodraw} or \texttt{.json} snapshot.
   \item \textbf{Save}: overwrite current file if already opened/saved once.
   \item \textbf{Save As}: choose new name/location.
+  \item You can also drag and drop a \texttt{.geodraw}/\texttt{.json} file onto the canvas to open it.
 \end{itemize}
 
 \subsection{Supported file types}
@@ -103,6 +104,7 @@ The window is divided into:
   \item \texttt{Ctrl/Cmd + Shift + Z} or \texttt{Ctrl/Cmd + Y}: Redo
   \item \texttt{Shift + F}: Fit View
   \item \texttt{Delete}/\texttt{Backspace}: delete selected object
+  \item \texttt{Shift + ArrowUp}/\texttt{Shift + ArrowDown} (Object Browser): extend linked selection to previous/next object of the same type
   \item \texttt{Esc}: cancel Copy Style mode / clear pending selections
 \end{itemize}
 
@@ -116,14 +118,16 @@ Use \textbf{Fit View} \gdicon{screenshots/icons/fit-view.png} from the top actio
 \gdshot{screenshots/fit-view.png}{0.9\linewidth}{Fit View action and resulting re-centered camera.}
 
 \section{Tool Palette}
+\label{sec:tool-palette}
 Long-press or right-click a group button to open its flyout tools.
 
 \subsection{Move Group}
 \begin{itemize}[leftmargin=1.5em]
   \item \gdicon{screenshots/tools/move.png} \textbf{Move / Select} (\texttt{V}): select and manipulate objects.
-  \item \gdicon{screenshots/tools/export_clip_rect.png} \textbf{Export Clip Rectangle}: create rectangular clip for export.
-  \item \gdicon{screenshots/tools/export_clip.png} \textbf{Export Clip Polygon}: create polygon clip for export (close by clicking near the first vertex).
+  \item \gdicon{screenshots/tools/export_clip_rect.png} \textbf{Crop Area -- Box}: create a rectangular crop area for export.
+  \item \gdicon{screenshots/tools/export_clip.png} \textbf{Crop Area -- Freeform}: create a polygon crop area for export (close by clicking near the first vertex).
 \end{itemize}
+These two tools are also reachable directly from the \textbf{Crop area} block in the Export Tab section below -- that panel is the main way to start a crop, since it walks you through the whole process without needing to hunt for the tool in the palette.
 
 \subsection{Points Group}
 \begin{itemize}[leftmargin=1.5em]
@@ -137,7 +141,9 @@ Long-press or right-click a group button to open its flyout tools.
   \item \gdicon{screenshots/tools/rotate.png} \textbf{Rotate}: rotate object around selected center.
   \item \gdicon{screenshots/tools/reflect.png} \textbf{Reflect}: reflect object across line/segment/point.
   \item \gdicon{screenshots/tools/dilate.png} \textbf{Dilate}: scale object from selected center.
+  \item \textbf{Invert}: invert a source line/circle with respect to a selected inversion circle.
 \end{itemize}
+All transform tools preserve source styling on the transformed image (stroke/fill/marks/arrows/labels).
 
 \subsection{Lines Group}
 \begin{itemize}[leftmargin=1.5em]
@@ -182,13 +188,25 @@ Long-press or right-click a group button to open its flyout tools.
 
 \subsection{Object Browser}
 \begin{itemize}[leftmargin=1.5em]
-  \item Tabs: All, Points, Lines, Circles, Angles, Numbers.
+  \item Tabs: All, Points, Lines, Shapes, Angles, Labels, Numbers.
+  \item Auto-follow: selected object switches to its tab automatically.
+  \item Pin button (lock icon): freeze current tab and disable auto-follow until unpinned.
   \item Click row to select object.
+  \item Link button (chain icon): link/unlink object for batch style/delete operations.
+  \item Linking is type-restricted: linked objects must be the same type (point with point, line with line, etc.).
+  \item \texttt{Shift + ArrowUp}/\texttt{Shift + ArrowDown}: add previous/next same-type row to linked selection.
   \item Use the row checkbox (right side) to toggle object visibility.
 \end{itemize}
 
 \section{Properties Panel}
 When an object is selected, the panel shows editable properties.
+
+\subsection{Linked object editing}
+\begin{itemize}[leftmargin=1.5em]
+  \item Link multiple same-type objects from Object Browser.
+  \item For linked objects, style/field edits in the Properties panel apply to all linked objects of that type.
+  \item The delete action becomes \textbf{Delete All} and removes the linked selection.
+\end{itemize}
 
 \subsection{Point properties}
 \begin{itemize}[leftmargin=1.5em]
@@ -201,6 +219,8 @@ When an object is selected, the panel shows editable properties.
 \begin{itemize}[leftmargin=1.5em]
   \item Stroke color, width, dash, opacity.
   \item Segment marks (\texttt{|}, \texttt{||}, \texttt{|||}, etc.) and arrow marks (end/mid).
+  \item \textbf{Convert to Segment} (line only): hide source \texttt{Line(A,B)} and create \texttt{Segment(A,B)} with matching style/label fields.
+  \item If multiple lines are linked, conversion applies to all linked convertible lines.
 \end{itemize}
 
 \subsection{Arrow controls}
@@ -242,7 +262,7 @@ Marking tools \gdicon{screenshots/icons/marking-controls.png} support both segme
 \gdshot{screenshots/mark-controls.png}{0.78\linewidth}{Segment and angle marking controls in the properties panel.}
 
 \subsection{Tool info panels}
-Special tools (Fixed Angle, Fixed Radius Circle, Export Clip, Copy Style) show context-specific instructions and inputs.
+Special tools (Fixed Angle, Fixed Radius Circle, Crop Area, Copy Style) show context-specific instructions and inputs.
 
 \section{Command Bar}
 Command Bar supports expression evaluation, object creation commands, and assignments.
@@ -263,11 +283,11 @@ Command Bar supports expression evaluation, object creation commands, and assign
 
 \subsection{Supported construction commands}
 \begin{itemize}[leftmargin=1.5em]
-  \item \textbf{Point/transform}: \texttt{Point(x,y)}, \texttt{Midpoint(A,B)}, \texttt{Midpoint(s)}, \texttt{Incenter(A,B,C)}, \texttt{Orthocenter(A,B,C)} (\texttt{Ortho}), \texttt{Centroid(A,B,C)}, \texttt{Translate(P,A,B)}, \texttt{Rotate(P,O,expr[,CW|CCW])}, \texttt{Dilate(P,O,k)}, \texttt{Reflect(P,l|s|O)}.
+  \item \textbf{Point/transform}: \texttt{Point(x,y)}, \texttt{Midpoint(A,B)}, \texttt{Midpoint(s)}, \texttt{Incenter(A,B,C)}, \texttt{Orthocenter(A,B,C)} (\texttt{Ortho}), \texttt{Centroid(A,B,C)}, \texttt{Circumcenter(A,B,C)}, \texttt{Translate(P,A,B)}, \texttt{Rotate(P,O,expr[,CW|CCW])}, \texttt{Dilate(P,O,k)}, \texttt{Reflect(P,l|s|O)}.
   \item \textbf{Line/segment}: \texttt{Line(A,B)}, \texttt{Line(x1,y1,x2,y2)}, \texttt{Perpendicular(P,l)}, \texttt{Parallel(P,l)}, \texttt{Tangent(P,c)}, \texttt{AngleBisector(A,B,C)}, \texttt{Segment(A,B)}.
-  \item \textbf{Angle/polygon}: \texttt{Angle(A,B,C)}, \texttt{AngleFixed(V,A,expr[,CW|CCW])}, \texttt{Sector(O,A,B)}, \texttt{Polygon(A,B,C,...)}, \texttt{RegularPolygon(A,B,n[,CW|CCW])}.
+  \item \textbf{Angle/polygon}: \texttt{Angle(A,B,C)} for degree value, \texttt{MarkedAngle(A,B,C)} for an angle object, \texttt{AngleFixed(V,A,expr[,CW|CCW])}, \texttt{Sector(O,A,B)}, \texttt{Polygon(A,B,C,...)}, \texttt{RegularPolygon(A,B,n[,CW|CCW])}.
   \item \textbf{Circle}: \texttt{Circle(x,y,r)}, \texttt{Circle(O,A)}, \texttt{Circle(O,r)}, \texttt{Circle3P(A,B,C)} (alias: \texttt{CircleThreePoint(A,B,C)}).
-  \item \textbf{Numeric query}: \texttt{Distance(...)} returns a scalar value (no object created).
+  \item \textbf{Numeric query}: \texttt{Distance(...)}, \texttt{Area(...)}, \texttt{Perimeter(...)}, \texttt{Inradius(A,B,C)}, \texttt{Circumradius(A,B,C)} return scalar values (no object created).
 \end{itemize}
 
 \subsection{Assignments}
@@ -287,10 +307,26 @@ Assignment is selective and fail-closed:
 \end{itemize}
 
 \section{Export Tab}
+\subsection{Crop area}
+The \textbf{Crop area} block is the main way to export only part of the figure. When no crop area exists yet, it shows two buttons:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Box}: draw a rectangular crop area (two opposite corners).
+  \item \textbf{Freeform}: draw a polygon crop area (click each corner, then click near the first vertex to close it).
+\end{itemize}
+Clicking either button arms the matching tool and shows an inline step hint (``Now click...'') in the panel so you don't need to leave the Export tab to see what to do next. Once an area is drawn, \textbf{Export only the box/shape I drew} is checked automatically, and the block switches to three pills:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Done}: stop drawing and return to the Move tool.
+  \item \textbf{Redraw}: re-arm the same tool to draw the area again.
+  \item \textbf{Clear}: remove the crop area and go back to exporting the whole figure.
+\end{itemize}
+While an area exists, drag its square handles on the canvas to adjust it, or uncheck \textbf{Export only the box/shape I drew} to temporarily export the full figure without discarding the area you drew.
+
+The same Box and Freeform crops can also be started from the \textbf{Crop Area -- Box} / \textbf{Crop Area -- Freeform} tools in the Move group of the Tool Palette (Section~\ref{sec:tool-palette}); using the panel is recommended since it keeps the step hints and Done/Redraw/Clear controls in one place.
+
 \subsection{TikZ export options}
 \begin{itemize}[leftmargin=1.5em]
   \item \textbf{Use Current View}: export based on current camera viewport.
-  \item \textbf{Use Export Clip selection}: apply clip polygon from Export Clip tool.
+  \item \textbf{Export only the box/shape I drew}: apply the crop area from the Crop area block above.
   \item \textbf{Match canvas size conversion}
   \item \textbf{Label glow}
   \item Scale controls:
@@ -310,6 +346,7 @@ Press \textbf{Preview} \gdicon{screenshots/icons/pdf-preview.png} in Export to o
   \item \textbf{Optional Preamble} section for custom preamble lines (for example \texttt{\textbackslash pagecolor\{...\}}).
   \item Find/replace tools with case-match option.
   \item \textbf{Update PDF} recompiles, and \textbf{Copy Edited TikZ} copies the edited code.
+  \item Right-click inside PDF preview to save snapshot as \textbf{PDF}, \textbf{SVG}, or \textbf{PNG}.
   \item Compiler log panel is available for diagnostics when compilation fails.
 \end{itemize}
 \gdshot{screenshots/tikz-preview-window.png}{0.95\linewidth}{TikZ Preview window with PDF pane, code editor, and compiler log.}
@@ -342,8 +379,8 @@ Press \textbf{Preview} \gdicon{screenshots/icons/pdf-preview.png} in Export to o
 \subsection{I cannot select a tool variant}
 Long-press or right-click the group button to open its flyout.
 
-\subsection{Clip export does not apply}
-Ensure you closed the clip polygon (click near first point), then enable \textbf{Use Export Clip selection} in Export tab.
+\subsection{Crop export does not apply}
+If you used the Freeform crop, ensure you closed the polygon (click near the first point). Then check that \textbf{Export only the box/shape I drew} is enabled in the Crop area block of the Export tab -- drawing an area normally enables it automatically, but it can be unchecked afterward.
 
 \subsection{Command reports unknown/ambiguous point}
 \begin{itemize}[leftmargin=1.5em]
@@ -400,11 +437,11 @@ Use this template to insert screenshots consistently.
 % \caption{Command entry and status feedback.}
 % \end{figure}
 
-\subsection*{A.6 Export Panel + Clip}
+\subsection*{A.6 Export Panel + Crop Area}
 % \begin{figure}[h]
 % \centering
 % \includegraphics[width=\linewidth]{screenshots/export-panel.png}
-% \caption{Export options and clip selection workflow.}
+% \caption{Export options and Crop area workflow.}
 % \end{figure}
 
 \subsection*{A.7 TikZ Output}

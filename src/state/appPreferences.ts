@@ -13,8 +13,13 @@ type ConstructionPreferencesState = Pick<
   | "segmentDefaults"
   | "lineDefaults"
   | "circleDefaults"
+  | "ellipseDefaults"
   | "polygonDefaults"
   | "angleDefaults"
+  | "objectLabelDefaults"
+  | "labelToolDefaults"
+  | "textboxToolDefaults"
+  | "richTextToolDefaults"
   | "angleFixedTool"
   | "circleFixedTool"
   | "regularPolygonTool"
@@ -74,11 +79,29 @@ function normalizeUiOverrides(raw: unknown): UiPreferencesState["uiCssOverrides"
 }
 
 function isUiProfileId(value: unknown): value is UiPreferencesState["uiColorProfileId"] {
-  return value === "vanilla" || value === "grayscale" || value === "beige" || value === "dark";
+  return (
+    value === "vanilla" ||
+    value === "grayscale" ||
+    value === "beige" ||
+    value === "dark" ||
+    value === "image" ||
+    value === "image_palette"
+  );
+}
+
+function normalizeUiProfileId(raw: UiPreferencesState["uiColorProfileId"]): UiPreferencesState["uiColorProfileId"] {
+  return raw === "image" ? "image_palette" : raw;
 }
 
 function isColorProfileId(value: unknown): value is ConstructionPreferencesState["colorProfileId"] {
-  return value === "classic" || value === "grayscale_white_dot" || value === "beige_light" || value === "dark_mode";
+  return (
+    value === "classic" ||
+    value === "grayscale_white_dot" ||
+    value === "beige_light" ||
+    value === "dark_mode" ||
+    value === "image_palette" ||
+    value === "image_palette_vanilla_thin"
+  );
 }
 
 function normalizeCanvasThemeOverrides(raw: unknown): ConstructionPreferencesState["canvasThemeOverrides"] {
@@ -103,6 +126,38 @@ function normalizeCanvasThemeOverrides(raw: unknown): ConstructionPreferencesSta
   return out;
 }
 
+function normalizeObjectLabelDefaults(raw: unknown): ConstructionPreferencesState["objectLabelDefaults"] {
+  if (!isRecord(raw)) {
+    return {
+      point: "name",
+      segment: false,
+      line: false,
+      circle: false,
+      ellipse: false,
+      polygon: false,
+      segmentGlow: true,
+      lineGlow: true,
+      circleGlow: true,
+      ellipseGlow: true,
+      polygonGlow: true,
+    };
+  }
+  const point = raw.point === "none" || raw.point === "caption" ? raw.point : "name";
+  return {
+    point,
+    segment: typeof raw.segment === "boolean" ? raw.segment : false,
+    line: typeof raw.line === "boolean" ? raw.line : false,
+    circle: typeof raw.circle === "boolean" ? raw.circle : false,
+    ellipse: typeof raw.ellipse === "boolean" ? raw.ellipse : false,
+    polygon: typeof raw.polygon === "boolean" ? raw.polygon : false,
+    segmentGlow: typeof raw.segmentGlow === "boolean" ? raw.segmentGlow : true,
+    lineGlow: typeof raw.lineGlow === "boolean" ? raw.lineGlow : true,
+    circleGlow: typeof raw.circleGlow === "boolean" ? raw.circleGlow : true,
+    ellipseGlow: typeof raw.ellipseGlow === "boolean" ? raw.ellipseGlow : true,
+    polygonGlow: typeof raw.polygonGlow === "boolean" ? raw.polygonGlow : true,
+  };
+}
+
 export function captureUiPreferences(state: UiPreferencesState): UiPreferencesState {
   return {
     uiColorProfileId: state.uiColorProfileId,
@@ -121,8 +176,13 @@ export function captureConstructionPreferences(state: ConstructionPreferencesSta
     segmentDefaults: state.segmentDefaults,
     lineDefaults: state.lineDefaults,
     circleDefaults: state.circleDefaults,
+    ellipseDefaults: state.ellipseDefaults,
     polygonDefaults: state.polygonDefaults,
     angleDefaults: state.angleDefaults,
+    objectLabelDefaults: state.objectLabelDefaults,
+    labelToolDefaults: state.labelToolDefaults,
+    textboxToolDefaults: state.textboxToolDefaults,
+    richTextToolDefaults: state.richTextToolDefaults,
     angleFixedTool: state.angleFixedTool,
     circleFixedTool: state.circleFixedTool,
     regularPolygonTool: state.regularPolygonTool,
@@ -140,7 +200,7 @@ export function loadStoredUiPreferences(): UiPreferencesState | null {
   if (!envelope || !isRecord(envelope.value)) return null;
   if (!isUiProfileId(envelope.value.uiColorProfileId)) return null;
   return {
-    uiColorProfileId: envelope.value.uiColorProfileId,
+    uiColorProfileId: normalizeUiProfileId(envelope.value.uiColorProfileId),
     uiCssOverrides: normalizeUiOverrides(envelope.value.uiCssOverrides),
   };
 }
@@ -159,8 +219,12 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
     !isRecord(value.segmentDefaults) ||
     !isRecord(value.lineDefaults) ||
     !isRecord(value.circleDefaults) ||
+    (value.ellipseDefaults !== undefined && !isRecord(value.ellipseDefaults)) ||
     !isRecord(value.polygonDefaults) ||
     !isRecord(value.angleDefaults) ||
+    (value.labelToolDefaults !== undefined && !isRecord(value.labelToolDefaults)) ||
+    (value.textboxToolDefaults !== undefined && !isRecord(value.textboxToolDefaults)) ||
+    (value.richTextToolDefaults !== undefined && !isRecord(value.richTextToolDefaults)) ||
     !isRecord(value.angleFixedTool) ||
     !isRecord(value.circleFixedTool) ||
     !isRecord(value.regularPolygonTool) ||
@@ -187,14 +251,88 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
     segmentDefaults: value.segmentDefaults as ConstructionPreferencesState["segmentDefaults"],
     lineDefaults: value.lineDefaults as ConstructionPreferencesState["lineDefaults"],
     circleDefaults: value.circleDefaults as ConstructionPreferencesState["circleDefaults"],
+    ellipseDefaults: (value.ellipseDefaults ?? value.circleDefaults) as ConstructionPreferencesState["ellipseDefaults"],
     polygonDefaults: value.polygonDefaults as ConstructionPreferencesState["polygonDefaults"],
     angleDefaults: value.angleDefaults as ConstructionPreferencesState["angleDefaults"],
+    objectLabelDefaults: normalizeObjectLabelDefaults(value.objectLabelDefaults),
+    labelToolDefaults: value.labelToolDefaults as ConstructionPreferencesState["labelToolDefaults"],
+    textboxToolDefaults: value.textboxToolDefaults as ConstructionPreferencesState["textboxToolDefaults"],
+    richTextToolDefaults: value.richTextToolDefaults as ConstructionPreferencesState["richTextToolDefaults"],
     angleFixedTool: value.angleFixedTool as ConstructionPreferencesState["angleFixedTool"],
     circleFixedTool: value.circleFixedTool as ConstructionPreferencesState["circleFixedTool"],
     regularPolygonTool: value.regularPolygonTool as ConstructionPreferencesState["regularPolygonTool"],
     transformTool: value.transformTool as ConstructionPreferencesState["transformTool"],
     dependencyGlowEnabled: value.dependencyGlowEnabled,
   };
+}
+
+export type ExportEmitTkzSetupMode = "auto" | "on" | "off";
+export type ExportTikzMode = "visualExact" | "reconstructible";
+
+export type ExportPreferencesState = {
+  useCurrentView: boolean;
+  compactCode: boolean;
+  emitTkzSetup: ExportEmitTkzSetupMode;
+  labelGlow: boolean;
+  tikzExportMode: ExportTikzMode;
+  globalScale: string;
+  pointScale: string;
+  lineScale: string;
+  labelScale: string;
+};
+
+const EXPORT_PREFERENCES_KEY = "geodraw.export-preferences.v1";
+
+export const DEFAULT_EXPORT_PREFERENCES: ExportPreferencesState = {
+  useCurrentView: true,
+  compactCode: true,
+  emitTkzSetup: "auto",
+  labelGlow: true,
+  tikzExportMode: "visualExact",
+  globalScale: "1",
+  pointScale: "1",
+  lineScale: "1",
+  labelScale: "1",
+};
+
+function normalizeBoolean(raw: unknown, fallback: boolean): boolean {
+  return typeof raw === "boolean" ? raw : fallback;
+}
+
+function normalizeEmitTkzSetup(raw: unknown): ExportEmitTkzSetupMode {
+  return raw === "on" || raw === "off" ? raw : "auto";
+}
+
+function normalizeTikzExportMode(raw: unknown): ExportTikzMode {
+  return raw === "reconstructible" ? "reconstructible" : "visualExact";
+}
+
+function normalizeScaleString(raw: unknown, fallback: string): string {
+  if (typeof raw !== "string") return fallback;
+  const value = Number.parseFloat(raw);
+  if (!Number.isFinite(value) || value < 0.05 || value > 10) return fallback;
+  return raw;
+}
+
+// Unlike UI/construction prefs, a bad field falls back to its own default instead of invalidating the whole envelope.
+export function loadStoredExportPreferences(): ExportPreferencesState {
+  const envelope = readStoredEnvelope<unknown>(EXPORT_PREFERENCES_KEY);
+  const raw = envelope && isRecord(envelope.value) ? envelope.value : {};
+  return {
+    useCurrentView: normalizeBoolean(raw.useCurrentView, DEFAULT_EXPORT_PREFERENCES.useCurrentView),
+    compactCode: normalizeBoolean(raw.compactCode, DEFAULT_EXPORT_PREFERENCES.compactCode),
+    emitTkzSetup: normalizeEmitTkzSetup(raw.emitTkzSetup),
+    labelGlow: normalizeBoolean(raw.labelGlow, DEFAULT_EXPORT_PREFERENCES.labelGlow),
+    tikzExportMode: normalizeTikzExportMode(raw.tikzExportMode),
+    globalScale: normalizeScaleString(raw.globalScale, DEFAULT_EXPORT_PREFERENCES.globalScale),
+    pointScale: normalizeScaleString(raw.pointScale, DEFAULT_EXPORT_PREFERENCES.pointScale),
+    lineScale: normalizeScaleString(raw.lineScale, DEFAULT_EXPORT_PREFERENCES.lineScale),
+    labelScale: normalizeScaleString(raw.labelScale, DEFAULT_EXPORT_PREFERENCES.labelScale),
+  };
+}
+
+export function saveStoredExportPreferences(state: ExportPreferencesState): boolean {
+  return writeStoredEnvelope(EXPORT_PREFERENCES_KEY, state);
 }
 
 export function hasStoredConstructionPreferences(): boolean {
@@ -209,4 +347,48 @@ export function clearStoredConstructionPreferences(): boolean {
   } catch {
     return false;
   }
+}
+
+export type OnboardingFlags = {
+  emptyCanvasHintDismissed: boolean;
+};
+
+const ONBOARDING_KEY = "geodraw.onboarding.v1";
+
+export const DEFAULT_ONBOARDING_FLAGS: OnboardingFlags = {
+  emptyCanvasHintDismissed: false,
+};
+
+export function loadStoredOnboardingFlags(): OnboardingFlags {
+  const envelope = readStoredEnvelope<unknown>(ONBOARDING_KEY);
+  const raw = envelope && isRecord(envelope.value) ? envelope.value : {};
+  return {
+    emptyCanvasHintDismissed: normalizeBoolean(raw.emptyCanvasHintDismissed, DEFAULT_ONBOARDING_FLAGS.emptyCanvasHintDismissed),
+  };
+}
+
+export function saveStoredOnboardingFlags(flags: OnboardingFlags): boolean {
+  return writeStoredEnvelope(ONBOARDING_KEY, flags);
+}
+
+const RECENT_COLORS_KEY = "geodraw.recent-colors.v1";
+export const MAX_RECENT_COLORS = 10;
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/;
+
+export function loadStoredRecentColors(): string[] {
+  const envelope = readStoredEnvelope<unknown>(RECENT_COLORS_KEY);
+  const raw = Array.isArray(envelope?.value) ? envelope.value : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string" || !HEX_COLOR_RE.test(entry) || seen.has(entry)) continue;
+    seen.add(entry);
+    out.push(entry);
+    if (out.length >= MAX_RECENT_COLORS) break;
+  }
+  return out;
+}
+
+export function saveStoredRecentColors(colors: string[]): boolean {
+  return writeStoredEnvelope(RECENT_COLORS_KEY, colors.slice(0, MAX_RECENT_COLORS));
 }

@@ -8,6 +8,7 @@ export function evalNumberDefinitionInScene(
   runtime: {
     getPointWorldById: (id: string) => { x: number; y: number } | null;
     getSegmentById: (id: string) => { aId: string; bId: string } | null;
+    getPolygonPointIdsById: (id: string) => string[] | null;
     getCircleRadiusById: (id: string) => number | null;
     getAngleById: (id: string) => { aId: string; bId: string; cId: string } | null;
     evaluateNumberExpression: (expr: string, excludeNumberId?: string) => number | null;
@@ -20,6 +21,7 @@ export function evalNumberDefinitionInScene(
     {
       getPointWorldById: runtime.getPointWorldById,
       getSegmentById: runtime.getSegmentById,
+      getPolygonPointIdsById: runtime.getPolygonPointIdsById,
       getCircleRadiusById: runtime.getCircleRadiusById,
       getAngleById: runtime.getAngleById,
       evaluateNumberExpression: runtime.evaluateNumberExpression,
@@ -30,4 +32,3 @@ export function evalNumberDefinitionInScene(
     selfNumberId
   );
 }
-

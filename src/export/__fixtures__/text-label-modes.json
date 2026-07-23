@@ -1,0 +1,46 @@
+{
+  "scene": {
+    "points": [],
+    "numbers": [],
+    "lines": [],
+    "segments": [],
+    "circles": [],
+    "polygons": [],
+    "angles": [],
+    "textLabels": [
+      {
+        "id": "txt_1",
+        "name": "T1",
+        "text": "alpha",
+        "toolKind": "label",
+        "contentMode": "static",
+        "visible": true,
+        "positionWorld": { "x": 0, "y": 0 },
+        "style": {
+          "textColor": "#111111",
+          "textSize": 12,
+          "useTex": true,
+          "textMode": "tex",
+          "rotationDeg": 0
+        }
+      },
+      {
+        "id": "txt_2",
+        "name": "T2",
+        "text": "Plain text\n\\[x^2+y^2=1\\]\ntail",
+        "toolKind": "textbox",
+        "contentMode": "static",
+        "visible": true,
+        "positionWorld": { "x": 2, "y": 1 },
+        "style": {
+          "textColor": "#111111",
+          "textSize": 12,
+          "useTex": false,
+          "textMode": "mixed",
+          "boxWidthPx": 220,
+          "rotationDeg": 0
+        }
+      }
+    ]
+  }
+}

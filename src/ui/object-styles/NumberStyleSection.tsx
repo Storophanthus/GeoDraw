@@ -1,11 +1,13 @@
 import { formatRoundedDisplay } from "../displayFormat";
 import type { SceneModel } from "../../scene/points";
+import { StyleControlGroup } from "../StyleControlGroup";
 
 type NumberStyleSectionProps = {
     selectedNumber: SceneModel["numbers"][number];
     selectedNumberValue: number | null;
     updateSelectedNumberDefinition: (def: SceneModel["numbers"][number]["definition"]) => void;
     deleteSelectedObject: () => void;
+    deleteLabel?: string;
 };
 
 export function NumberStyleSection({
@@ -13,6 +15,7 @@ export function NumberStyleSection({
     selectedNumberValue,
     updateSelectedNumberDefinition,
     deleteSelectedObject,
+    deleteLabel = "Delete",
 }: NumberStyleSectionProps) {
     return (
         <div className="toolInfo">
@@ -41,7 +44,7 @@ export function NumberStyleSection({
                     });
                 };
                 return (
-                    <>
+                    <StyleControlGroup title="Slider">
                         <div className="controlRow">
                             <label className="controlLabel">Slider Type</label>
                             <select
@@ -53,7 +56,7 @@ export function NumberStyleSection({
                                 <option value="degree">Degree</option>
                             </select>
                         </div>
-                        <div className="controlRow numberSliderValueRow">
+                        <div className="numberSliderValueRow">
                             <label className="controlLabel">Value</label>
                             <div className="numberSliderValueControls">
                                 <input
@@ -74,23 +77,27 @@ export function NumberStyleSection({
                                 />
                             </div>
                         </div>
-                        <div className="controlRow controlRowWithNumeric">
-                            <label className="controlLabel">Min</label>
-                            <input
-                                className="scaleInputCompact"
-                                type="number"
-                                step="any"
-                                value={def.min}
-                                onChange={(e) => updateSlider({ min: Number(e.target.value) })}
-                            />
-                            <label className="controlLabel">Max</label>
-                            <input
-                                className="scaleInputCompact"
-                                type="number"
-                                step="any"
-                                value={def.max}
-                                onChange={(e) => updateSlider({ max: Number(e.target.value) })}
-                            />
+                        <div className="numberSliderBoundsRow">
+                            <label className="numberSliderBoundField">
+                                <span>Min</span>
+                                <input
+                                    className="scaleInputCompact"
+                                    type="number"
+                                    step="any"
+                                    value={def.min}
+                                    onChange={(e) => updateSlider({ min: Number(e.target.value) })}
+                                />
+                            </label>
+                            <label className="numberSliderBoundField">
+                                <span>Max</span>
+                                <input
+                                    className="scaleInputCompact"
+                                    type="number"
+                                    step="any"
+                                    value={def.max}
+                                    onChange={(e) => updateSlider({ max: Number(e.target.value) })}
+                                />
+                            </label>
                         </div>
                         <div className="controlRow">
                             <label className="controlLabel">Step</label>
@@ -103,11 +110,11 @@ export function NumberStyleSection({
                                 onChange={(e) => updateSlider({ step: Number(e.target.value) })}
                             />
                         </div>
-                    </>
+                    </StyleControlGroup>
                 );
             })()}
             <button className="deleteButton" onClick={deleteSelectedObject}>
-                Delete
+                {deleteLabel}
             </button>
         </div>
     );

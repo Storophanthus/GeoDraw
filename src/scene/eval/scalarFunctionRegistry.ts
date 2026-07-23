@@ -2,9 +2,19 @@ import type { MathNode } from "mathjs";
 import type { NumberExpressionEvalResult } from "./numericExpression";
 import { evaluateScalarDistanceArgs, type ScalarDistanceArg } from "./scalarDistance";
 import type { ScalarMeasureFunctionName } from "./scalarObjectMeasure";
+import { computeOrientedAngleRad } from "./angleMath";
+import {
+  evalTriangleCircumradius,
+  evalTriangleInradius,
+  evalTrianglePerimeter,
+} from "./pointGeometryEval";
+
+type ScalarPointArg = { x: number; y: number };
+type TriangleMetricName = "Perimeter" | "Inradius" | "Circumradius";
 
 export type ScalarFunctionRuntimeAdapters = {
   resolveDistanceArg?: (argExprRaw: string) => { ok: true; value: ScalarDistanceArg } | { ok: false; error: string };
+  resolvePointArg?: (argExprRaw: string) => { ok: true; value: ScalarPointArg } | { ok: false; error: string };
   evaluateMeasureArg?: (fnName: ScalarMeasureFunctionName, argExprRaw: string) => NumberExpressionEvalResult;
 };
 
@@ -30,6 +40,52 @@ function variadicNumericFn(minArgs: number, evalFn: (values: number[]) => number
 
 function rawFn(evalFn: (args: MathNode[], adapters: ScalarFunctionRuntimeAdapters) => NumberExpressionEvalResult): ScalarFunctionSpec {
   return { mode: "raw", eval: evalFn };
+}
+
+function evaluateTriangleMetricByPoints(
+  fnName: TriangleMetricName,
+  args: MathNode[],
+  adapters: ScalarFunctionRuntimeAdapters
+): NumberExpressionEvalResult {
+  if (!adapters.resolvePointArg) return { ok: false, error: `${fnName}(...) is not supported in this context` };
+  if (args.length !== 3) return { ok: false, error: `${fnName}(...) expects 3 point arguments` };
+  const a = adapters.resolvePointArg(args[0].toString());
+  if (!a.ok) return a;
+  const b = adapters.resolvePointArg(args[1].toString());
+  if (!b.ok) return b;
+  const c = adapters.resolvePointArg(args[2].toString());
+  if (!c.ok) return c;
+
+  if (fnName === "Perimeter") {
+    const value = evalTrianglePerimeter(a.value, b.value, c.value);
+    if (value === null) return { ok: false, error: "Perimeter(...) arguments are invalid" };
+    return { ok: true, value };
+  }
+  if (fnName === "Inradius") {
+    const value = evalTriangleInradius(a.value, b.value, c.value);
+    if (value === null) return { ok: false, error: "Inradius(...) is undefined for collinear points" };
+    return { ok: true, value };
+  }
+  const value = evalTriangleCircumradius(a.value, b.value, c.value);
+  if (value === null) return { ok: false, error: "Circumradius(...) is undefined for collinear points" };
+  return { ok: true, value };
+}
+
+function evaluateAngleByPoints(
+  args: MathNode[],
+  adapters: ScalarFunctionRuntimeAdapters
+): NumberExpressionEvalResult {
+  if (!adapters.resolvePointArg) return { ok: false, error: "Angle(...) is not supported in this context" };
+  if (args.length !== 3) return { ok: false, error: "Angle(...) expects 3 point arguments" };
+  const a = adapters.resolvePointArg(args[0].toString());
+  if (!a.ok) return a;
+  const b = adapters.resolvePointArg(args[1].toString());
+  if (!b.ok) return b;
+  const c = adapters.resolvePointArg(args[2].toString());
+  if (!c.ok) return c;
+  const theta = computeOrientedAngleRad(a.value, b.value, c.value);
+  if (theta === null) return { ok: false, error: "Angle(...) is undefined for coincident points" };
+  return { ok: true, value: (theta * 180) / Math.PI };
 }
 
 const DEG_TO_RAD = Math.PI / 180;
@@ -81,11 +137,23 @@ const FUNCTION_REGISTRY = new Map<string, ScalarFunctionSpec>([
   [
     "Perimeter",
     rawFn((args, adapters) => {
-      if (!adapters.evaluateMeasureArg) return { ok: false, error: "Perimeter(...) is not supported in this context" };
-      if (args.length !== 1) return { ok: false, error: "Perimeter(...) expects 1 argument" };
-      return adapters.evaluateMeasureArg("Perimeter", args[0].toString());
+      if (args.length === 1) {
+        if (!adapters.evaluateMeasureArg) return { ok: false, error: "Perimeter(...) is not supported in this context" };
+        return adapters.evaluateMeasureArg("Perimeter", args[0].toString());
+      }
+      return evaluateTriangleMetricByPoints("Perimeter", args, adapters);
     }),
   ],
+  [
+    "Inradius",
+    rawFn((args, adapters) => evaluateTriangleMetricByPoints("Inradius", args, adapters)),
+  ],
+  [
+    "Circumradius",
+    rawFn((args, adapters) => evaluateTriangleMetricByPoints("Circumradius", args, adapters)),
+  ],
+  ["Angle", rawFn((args, adapters) => evaluateAngleByPoints(args, adapters))],
+  ["angle", rawFn((args, adapters) => evaluateAngleByPoints(args, adapters))],
   ["sin", SHARED_NUMERIC_SPECS.sin],
   ["Sin", SHARED_NUMERIC_SPECS.sin],
   ["cos", SHARED_NUMERIC_SPECS.cos],

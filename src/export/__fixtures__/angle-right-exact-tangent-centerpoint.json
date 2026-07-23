@@ -14,6 +14,6 @@
     { "id": "c_1", "kind": "twoPoint", "centerId": "p_1", "throughId": "p_2", "visible": true }
   ],
   "angles": [
-    { "id": "a_1", "kind": "angle", "aId": "p_1", "bId": "p_2", "cId": "p_3", "visible": true }
+    { "id": "a_1", "kind": "angle", "aId": "p_3", "bId": "p_2", "cId": "p_1", "visible": true }
   ]
 }

@@ -10,16 +10,28 @@ const RIGHT_MIN = 300;
 const RIGHT_MAX = 560;
 const COLLAPSED_W = 40;
 
-export function useAppShellController(): WorkspaceShellProps {
+type AppShellControllerProps = Omit<
+  WorkspaceShellProps,
+  | "documents"
+  | "activeDocumentId"
+  | "activeDocumentFile"
+  | "onCreateDocument"
+  | "onSelectDocument"
+  | "onCloseDocument"
+  | "onRenameDocument"
+  | "onUpdateActiveDocumentFile"
+  | "onOpenSnapshotAsDocument"
+  | "onBuildActiveSnapshotJson"
+>;
+
+export function useAppShellController(): AppShellControllerProps {
   const activeTool = useGeoStore((store) => store.activeTool);
   const selectedObject = useGeoStore((store) => store.selectedObject);
-  const textLabels = useGeoStore((store) => store.scene.textLabels ?? []);
   const setActiveTool = useGeoStore((store) => store.setActiveTool);
   const deleteSelectedObject = useGeoStore((store) => store.deleteSelectedObject);
   const clearCopyStyle = useGeoStore((store) => store.clearCopyStyle);
-  const createTextLabel = useGeoStore((store) => store.createTextLabel);
-  const updateSelectedTextLabelFields = useGeoStore((store) => store.updateSelectedTextLabelFields);
-  const updateSelectedTextLabelStyle = useGeoStore((store) => store.updateSelectedTextLabelStyle);
+  const copyTextObjectToClipboard = useGeoStore((store) => store.copyTextObjectToClipboard);
+  const pasteTextClipboard = useGeoStore((store) => store.pasteTextClipboard);
   const undo = useGeoStore((store) => store.undo);
   const redo = useGeoStore((store) => store.redo);
   const canUndo = useGeoStore((store) => store.canUndo);
@@ -42,24 +54,15 @@ export function useAppShellController(): WorkspaceShellProps {
   useGlobalCanvasHotkeys({
     activeTool,
     selectedObject,
-    textLabels,
+    onSelectTool: setActiveTool,
     onSetMoveTool: () => setActiveTool("move"),
     onClearCopyStyle: clearCopyStyle,
     onDeleteSelectedObject: deleteSelectedObject,
     onUndo: undo,
     onRedo: redo,
     onFitView: doFitView,
-    onPasteTextLabel: (payload, world) => {
-      createTextLabel(world);
-      updateSelectedTextLabelFields({
-        text: payload.text,
-        contentMode: payload.contentMode ?? "static",
-        numberId: payload.numberId,
-        expr: payload.expr,
-        visible: payload.visible,
-      });
-      updateSelectedTextLabelStyle({ ...payload.style });
-    },
+    onCopyTextObjectToClipboard: copyTextObjectToClipboard,
+    onPasteTextClipboard: () => pasteTextClipboard(),
   });
 
   const { startResize } = useSidebarResize({

@@ -8,11 +8,14 @@ import type {
   LineStyle,
   PointStyle,
   PolygonStyle,
+  SceneGeometryLayerRef,
   SceneModel,
   SceneNumberDefinition,
   ScenePoint,
+  SceneRichTextStyle,
   SceneTextLabelStyle,
   ShowLabelMode,
+  TextLabelToolKind,
   TriangleCenterKind,
 } from "../../scene/points";
 import type { Camera, Viewport } from "../../view/camera";
@@ -31,14 +34,17 @@ export type ActiveTool =
   | "rotate"
   | "reflect"
   | "dilate"
+  | "invert"
   | "copyStyle"
   | "label"
+  | "textbox"
   | "midpoint"
   | "segment"
   | "line2p"
   | "circle_cp"
   | "circle_3p"
   | "circle_fixed"
+  | "ellipse_foci_point"
   | "polygon"
   | "regular_polygon"
   | "sector"
@@ -56,22 +62,62 @@ export type SelectedObject =
   | { type: "segment"; id: string }
   | { type: "line"; id: string }
   | { type: "circle"; id: string }
+  | { type: "ellipse"; id: string }
   | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
   | { type: "textLabel"; id: string }
+  | { type: "richText"; id: string }
   | { type: "number"; id: string }
   | null;
+
+export type TextEditTarget = {
+  type: "textLabel" | "richText";
+  id: string;
+};
+
+export type TextEditRequest = (TextEditTarget & { requestId: number }) | null;
+
+export type TextClipboardObjectTarget = {
+  type: "textLabel" | "richText";
+  id: string;
+};
+
+export type TextClipboardPayload =
+  | {
+      type: "textLabel";
+      text: string;
+      toolKind?: TextLabelToolKind;
+      contentMode?: "static" | "number" | "expression";
+      numberId?: string;
+      expr?: string;
+      visible: boolean;
+      style: SceneTextLabelStyle;
+    }
+  | {
+      type: "richText";
+      visible: boolean;
+      document: NonNullable<SceneModel["richTextNodes"]>[number]["document"];
+      style: SceneRichTextStyle;
+      boundsPx?: NonNullable<SceneModel["richTextNodes"]>[number]["boundsPx"];
+    };
+
+export type TextClipboardState = {
+  payload: TextClipboardPayload;
+  origin: Vec2;
+  pasteCount: number;
+} | null;
 
 export type HoveredHit =
   | { type: "point"; id: string }
   | { type: "segment"; id: string }
   | { type: "line2p"; id: string }
   | { type: "circle"; id: string }
+  | { type: "ellipse"; id: string }
   | { type: "polygon"; id: string }
   | { type: "angle"; id: string }
   | null;
 
-export type TransformToolMode = "translate" | "rotate" | "dilate" | "reflect";
+export type TransformToolMode = "translate" | "rotate" | "dilate" | "reflect" | "invert";
 
 export type TransformableObjectRef = {
   type: "point" | "segment" | "line" | "circle" | "polygon" | "angle";
@@ -136,6 +182,11 @@ export type PendingSelection =
     source: TransformableObjectRef;
   }
   | {
+    tool: "invert";
+    step: 2;
+    source: TransformableObjectRef;
+  }
+  | {
     tool: "polygon";
     step: 2;
     points: Array<{ type: "point"; id: string }>;
@@ -152,6 +203,17 @@ export type PendingSelection =
   }
   | {
     tool: "circle_3p";
+    step: 3;
+    first: { type: "point"; id: string };
+    second: { type: "point"; id: string };
+  }
+  | {
+    tool: "ellipse_foci_point";
+    step: 2;
+    first: { type: "point"; id: string };
+  }
+  | {
+    tool: "ellipse_foci_point";
     step: 3;
     first: { type: "point"; id: string };
     second: { type: "point"; id: string };
@@ -212,6 +274,22 @@ export type ExportClipWorld =
 
 export type AngleFixedDirection = "CCW" | "CW";
 
+export type ObjectLabelDefaults = {
+  point: ShowLabelMode;
+  segment: boolean;
+  line: boolean;
+  circle: boolean;
+  ellipse: boolean;
+  polygon: boolean;
+  segmentGlow?: boolean;
+  lineGlow?: boolean;
+  circleGlow?: boolean;
+  ellipseGlow?: boolean;
+  polygonGlow?: boolean;
+};
+
+export type PropertiesPanelIntent = "object" | "toolDefault";
+
 export type GeoState = {
   camera: Camera;
   colorProfileId: ColorProfileId;
@@ -222,9 +300,13 @@ export type GeoState = {
   axesEnabled: boolean;
   gridSnapEnabled: boolean;
   activeTool: ActiveTool;
+  toolActivationVersion: number;
+  propertiesPanelIntent: PropertiesPanelIntent;
   scene: SceneModel;
   selectedObject: SelectedObject;
   recentCreatedObject: SelectedObject;
+  textEditRequest: TextEditRequest;
+  textClipboard: TextClipboardState;
   hoveredHit: HoveredHit;
   cursorWorld: Vec2 | null;
   pendingSelection: PendingSelection;
@@ -232,17 +314,24 @@ export type GeoState = {
   nextSegmentId: number;
   nextLineId: number;
   nextCircleId: number;
+  nextEllipseId: number;
   nextPolygonId: number;
   nextAngleId: number;
   nextNumberId: number;
   nextVectorId: number;
   nextTextLabelId: number;
+  nextRichTextId: number;
   pointDefaults: PointStyle;
   segmentDefaults: LineStyle;
   lineDefaults: LineStyle;
   circleDefaults: CircleStyle;
+  ellipseDefaults: CircleStyle;
   polygonDefaults: PolygonStyle;
   angleDefaults: AngleStyle;
+  objectLabelDefaults: ObjectLabelDefaults;
+  labelToolDefaults: SceneTextLabelStyle;
+  textboxToolDefaults: SceneTextLabelStyle;
+  richTextToolDefaults: SceneRichTextStyle;
   angleFixedTool: {
     angleExpr: string;
     direction: AngleFixedDirection;
@@ -270,7 +359,10 @@ export type GeoState = {
     polygonStyle: PolygonStyle | null;
     angleStyle: Partial<AngleStyle> | null;
     textLabelStyle: SceneTextLabelStyle | null;
-    showLabel: ShowLabelMode | null;
+    richTextStyle: SceneRichTextStyle | null;
+    pointShowLabel: ShowLabelMode | null;
+    objectShowLabel: boolean | null;
+    objectLabelGlow: boolean | null;
   };
   canUndo: boolean;
   canRedo: boolean;
@@ -289,8 +381,13 @@ export type AppPreferencesState = Pick<
   | "segmentDefaults"
   | "lineDefaults"
   | "circleDefaults"
+  | "ellipseDefaults"
   | "polygonDefaults"
   | "angleDefaults"
+  | "objectLabelDefaults"
+  | "labelToolDefaults"
+  | "textboxToolDefaults"
+  | "richTextToolDefaults"
   | "angleFixedTool"
   | "circleFixedTool"
   | "regularPolygonTool"
@@ -333,6 +430,7 @@ export type GeoActions = {
   createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
   createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
+  createEllipseFociPoint: (focusAId: string, focusBId: string, throughId: string) => string | null;
   createPolygon: (pointIds: string[]) => string | null;
   createRegularPolygon: (aId: string, bId: string, sides: number, direction: AngleFixedDirection) => string | null;
   createPointOnLine: (lineId: string, s: number) => string | null;
@@ -348,27 +446,43 @@ export type GeoActions = {
   createPointByTranslation: (pointId: string, fromId: string, toId: string) => string | null;
   createPointByDilation: (pointId: string, centerId: string, factorExpr: string) => string | null;
   createPointByReflection: (pointId: string, axis: ReflectionObjectRef) => string | null;
+  createPointByProjection: (pointId: string, axisAId: string, axisBId: string) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   createTriangleCenterPoint: (centerKind: TriangleCenterKind, aId: string, bId: string, cId: string) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createNumber: (definition: SceneNumberDefinition, preferredName?: string) => string | null;
-  createTextLabel: (world: Vec2) => string;
+  createTextLabel: (world: Vec2, preset?: TextLabelToolKind) => string;
+  createRichTextNode: (world: Vec2) => string;
+  duplicateTextLabel: (id: string, offsetWorld?: Vec2) => string | null;
+  duplicateRichTextNode: (id: string, offsetWorld?: Vec2) => string | null;
+  copyTextObjectToClipboard: (target: TextClipboardObjectTarget) => boolean;
+  pasteTextClipboard: (world?: Vec2, offsetWorld?: Vec2) => string | null;
+  migrateTextLabelToRichTextNode: (id: string) => string | null;
+  requestTextEdit: (target: TextEditTarget) => void;
+  clearTextEditRequest: (requestId: number) => void;
 
   movePointTo: (id: string, world: Vec2) => void;
   movePolygonByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   movePointLabelBy: (id: string, deltaPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
-  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon" | "angle"; id: string }, world: Vec2) => void;
+  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }, world: Vec2) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
   moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
-  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
+  moveRichTextNodeTo: (id: string, world: Vec2) => void;
+  moveRichTextNodeByWorldDelta: (id: string, deltaWorld: Vec2) => void;
+  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }) => void;
 
   setPointDefaults: (next: Partial<PointStyle>) => void;
   setSegmentDefaults: (next: Partial<LineStyle>) => void;
   setLineDefaults: (next: Partial<LineStyle>) => void;
   setCircleDefaults: (next: Partial<CircleStyle>) => void;
+  setEllipseDefaults: (next: Partial<CircleStyle>) => void;
   setPolygonDefaults: (next: Partial<PolygonStyle>) => void;
   setAngleDefaults: (next: Partial<AngleStyle>) => void;
+  setObjectLabelDefaults: (next: Partial<ObjectLabelDefaults>) => void;
+  setLabelToolDefaults: (next: Partial<SceneTextLabelStyle>) => void;
+  setTextboxToolDefaults: (next: Partial<SceneTextLabelStyle>) => void;
+  setRichTextToolDefaults: (next: Partial<SceneRichTextStyle>) => void;
   setAngleFixedTool: (next: Partial<GeoState["angleFixedTool"]>) => void;
   setCircleFixedTool: (next: Partial<GeoState["circleFixedTool"]>) => void;
   setRegularPolygonTool: (next: Partial<GeoState["regularPolygonTool"]>) => void;
@@ -388,41 +502,113 @@ export type GeoActions = {
   updateSelectedPointFields: (
     next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>
   ) => void;
+  updatePointStyleByIds: (ids: string[], next: Partial<PointStyle>) => void;
+  updatePointFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<ScenePoint, "captionTex" | "visible" | "showLabel" | "locked" | "auxiliary">>
+  ) => void;
   updateSelectedSegmentStyle: (next: Partial<LineStyle>) => void;
+  updateSegmentStyleByIds: (ids: string[], next: Partial<LineStyle>) => void;
   updateSelectedLineStyle: (next: Partial<LineStyle>) => void;
+  updateLineStyleByIds: (ids: string[], next: Partial<LineStyle>) => void;
   updateSelectedCircleStyle: (next: Partial<CircleStyle>) => void;
+  updateCircleStyleByIds: (ids: string[], next: Partial<CircleStyle>) => void;
+  updateSelectedEllipseStyle: (next: Partial<CircleStyle>) => void;
+  updateEllipseStyleByIds: (ids: string[], next: Partial<CircleStyle>) => void;
   updateSelectedPolygonStyle: (next: Partial<PolygonStyle>) => void;
+  updatePolygonStyleByIds: (ids: string[], next: Partial<PolygonStyle>) => void;
   updateSelectedAngleStyle: (next: Partial<AngleStyle>) => void;
+  updateAngleStyleByIds: (ids: string[], next: Partial<AngleStyle>) => void;
   updateSelectedSegmentFields: (
-    next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
+  ) => void;
+  updateSegmentFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<SceneModel["segments"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   updateSelectedLineFields: (
-    next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
+  ) => void;
+  convertSelectedLineToSegment: () => string | null;
+  convertLinesToSegmentsByIds: (ids: string[]) => string[];
+  updateLineFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<SceneModel["lines"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   updateSelectedCircleFields: (
-    next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
+  ) => void;
+  updateCircleFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<SceneModel["circles"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
+  ) => void;
+  updateSelectedEllipseFields: (
+    next: Partial<Pick<NonNullable<SceneModel["ellipses"]>[number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
+  ) => void;
+  updateEllipseFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<NonNullable<SceneModel["ellipses"]>[number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   updateSelectedPolygonFields: (
-    next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld">>
+    next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
+  ) => void;
+  updatePolygonFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<SceneModel["polygons"][number], "visible" | "showLabel" | "labelText" | "labelPosWorld" | "labelGlow">>
   ) => void;
   setSelectedPolygonOwnedSegmentsVisible: (visible: boolean) => void;
   updateSelectedAngleFields: (next: Partial<Pick<SceneModel["angles"][number], "visible">>) => void;
+  updateAngleFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<SceneModel["angles"][number], "visible">>
+  ) => void;
   updateSelectedNumberDefinition: (next: SceneNumberDefinition) => void;
+  updateNumberDefinitionById: (id: string, next: SceneNumberDefinition) => void;
   updateSelectedTextLabelFields: (
     next: Partial<
-      Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld" | "contentMode" | "numberId" | "expr">
+      Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld" | "contentMode" | "numberId" | "expr" | "toolKind">
+    >
+  ) => void;
+  updateTextLabelFieldsByIds: (
+    ids: string[],
+    next: Partial<
+      Pick<NonNullable<SceneModel["textLabels"]>[number], "visible" | "text" | "name" | "positionWorld" | "contentMode" | "numberId" | "expr" | "toolKind">
     >
   ) => void;
   updateSelectedTextLabelStyle: (next: Partial<SceneTextLabelStyle>) => void;
+  updateTextLabelStyleByIds: (ids: string[], next: Partial<SceneTextLabelStyle>) => void;
+  updateSelectedRichTextFields: (
+    next: Partial<Pick<NonNullable<SceneModel["richTextNodes"]>[number], "visible" | "name" | "positionWorld" | "boundsPx">>
+  ) => void;
+  updateRichTextFieldsByIds: (
+    ids: string[],
+    next: Partial<Pick<NonNullable<SceneModel["richTextNodes"]>[number], "visible" | "name" | "positionWorld" | "boundsPx">>
+  ) => void;
+  updateSelectedRichTextStyle: (next: Partial<SceneRichTextStyle>) => void;
+  updateRichTextStyleByIds: (ids: string[], next: Partial<SceneRichTextStyle>) => void;
+  updateSelectedRichTextDocument: (document: NonNullable<SceneModel["richTextNodes"]>[number]["document"]) => void;
+  updateRichTextDocumentByIds: (ids: string[], document: NonNullable<SceneModel["richTextNodes"]>[number]["document"]) => void;
   setObjectVisibility: (
     obj: Exclude<SelectedObject, null>,
     visible: boolean
   ) => void;
+  setObjectsVisibility: (
+    objects: Array<Exclude<SelectedObject, null>>,
+    visible: boolean
+  ) => void;
+  reorderGeometryLayerInTab: (
+    dragged: SceneGeometryLayerRef,
+    target: SceneGeometryLayerRef,
+    tab: "lines" | "circles" | "angles",
+    placement: "before" | "after"
+  ) => void;
 
   renameSelectedPoint: (nextNameRaw: string) => RenameResult;
   deleteSelectedObject: () => void;
+  deleteObjects: (objects: Array<Exclude<SelectedObject, null>>) => void;
   setCopyStyleSource: (obj: Exclude<SelectedObject, null>) => void;
   applyCopyStyleTo: (obj: Exclude<SelectedObject, null>) => void;
+  applyCopyStyleToMany: (objects: Array<Exclude<SelectedObject, null>>) => void;
   clearCopyStyle: () => void;
   undo: () => void;
   redo: () => void;

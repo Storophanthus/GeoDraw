@@ -1,12 +1,23 @@
 import katex from "katex";
 import type { Vec2 } from "../geo/vec2";
-import { resolveTextLabelDisplayText, type SceneModel, type ScenePoint } from "../scene/points";
+import {
+  resolveTextLabelAlignment,
+  resolveTextLabelBoxWidthPx,
+  resolveTextLabelBoxHeightPx,
+  resolveTextLabelDisplayText,
+  resolveTextLabelRenderMode,
+  resolveTextLabelToolKind,
+  type SceneModel,
+  type ScenePoint,
+  type TextLabelRenderMode,
+} from "../scene/points";
 import {
   defaultObjectLabelPosWorld,
   defaultObjectLabelText,
   isFiniteLabelPosWorld,
   resolveObjectLabelText,
 } from "../scene/objectLabels";
+import { parseTextLabelRichText } from "../text/textLabelRichText";
 import type { Camera, Viewport } from "./camera";
 import { camera as camMath } from "./camera";
 
@@ -36,16 +47,22 @@ export type AngleLabelOverlay = {
   html: string;
   textSize: number;
   textColor: string;
+  labelGlow: boolean;
+  labelHaloColor: string;
+  labelHaloWidthPx: number;
 };
 
 export type ObjectLabelOverlay = {
-  type: "segment" | "line" | "circle" | "polygon";
+  type: "segment" | "line" | "circle" | "ellipse" | "polygon";
   id: string;
   x: number;
   y: number;
   html: string;
   textSize: number;
   textColor: string;
+  labelGlow: boolean;
+  labelHaloColor: string;
+  labelHaloWidthPx: number;
 };
 
 export type TextLabelOverlay = {
@@ -56,10 +73,18 @@ export type TextLabelOverlay = {
   textSize: number;
   textColor: string;
   rotationDeg: number;
+  renderMode: TextLabelRenderMode;
+  textAlign: "left" | "center" | "right";
+  boxWidthPx: number | null;
+  boxHeightPx: number | null;
+  labelGlow: boolean;
+  labelHaloColor: string;
+  labelHaloWidthPx: number;
 };
 
 // Keep free text-label size visually closer to exported TikZ font size.
-const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.8;
+export const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.8;
+export const LABEL_GLOW_WIDTH_PX = 3.5;
 
 function escapeHtml(value: string): string {
   return value
@@ -68,6 +93,79 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function renderMixedTextLabelHtml(source: string, liveOpenMath = false): string {
+  const segments = parseTextLabelRichText(source, { liveOpenMath });
+  if (segments.length === 0) return '<span class="gdTextLabelMixed"></span>';
+  const html = segments
+    .map((segment) => {
+      if (segment.kind === "text") {
+        return escapeHtml(segment.content).replace(/\n/g, "<br/>");
+      }
+      if (segment.kind === "inlineMath") {
+        const html = katex.renderToString(segment.content || "\\,", {
+          throwOnError: false,
+          displayMode: false,
+          strict: "ignore",
+        });
+        return `<span class="${segment.open ? "gdTextLabelInlineMath active" : "gdTextLabelInlineMath"}">${html}</span>`;
+      }
+      return `<span class="${segment.open ? "gdTextLabelDisplayMath active" : "gdTextLabelDisplayMath"}">${katex.renderToString(segment.content || "\\,", {
+        throwOnError: false,
+        displayMode: true,
+        strict: "ignore",
+      })}</span>`;
+    })
+    .join("");
+  return `<span class="gdTextLabelMixed">${html}</span>`;
+}
+
+export function renderEditableMixedTextLabelHtml(source: string, activeOffset?: number): string {
+  const segments = parseTextLabelRichText(source, { liveOpenMath: true });
+  if (segments.length === 0) return '<span class="gdTextLabelMixed editor"></span>';
+  const html = segments
+    .map((segment) => {
+      if (segment.kind === "text") {
+        return escapeHtml(segment.content).replace(/\n/g, "<br/>");
+      }
+      const raw = escapeHtml(source.slice(segment.sourceStart, segment.sourceEnd)).replace(/\n/g, "<br/>");
+      const isActive =
+        typeof activeOffset === "number" && activeOffset >= segment.activeStart && activeOffset <= segment.activeEnd;
+      if (isActive || segment.open) {
+        const className = segment.kind === "inlineMath" ? "gdTextLabelInlineMath" : "gdTextLabelDisplayMath";
+        return `<span class="${className} active">${raw}</span>`;
+      }
+      const rendered = katex.renderToString(segment.content || "\\,", {
+        throwOnError: false,
+        displayMode: segment.kind === "displayMath",
+        strict: "ignore",
+      });
+      if (segment.kind === "displayMath") {
+        return `<span class="gdEditableMathWrap display"><span class="gdEditableMathSource">${raw}</span><span class="gdEditableMathRender display">${rendered}</span></span>`;
+      }
+      return `<span class="gdEditableMathWrap"><span class="gdEditableMathSource">${raw}</span><span class="gdEditableMathRender">${rendered}</span></span>`;
+    })
+    .join("");
+  return `<span class="gdTextLabelMixed editor">${html}</span>`;
+}
+
+export function renderTextLabelHtml(
+  source: string,
+  renderMode: TextLabelRenderMode,
+  options: { liveOpenMath?: boolean } = {}
+): string {
+  if (renderMode === "tex") {
+    return katex.renderToString(source || "\\text{}", {
+      throwOnError: false,
+      displayMode: false,
+      strict: "ignore",
+    });
+  }
+  if (renderMode === "mixed") {
+    return renderMixedTextLabelHtml(source, options.liveOpenMath);
+  }
+  return `<span>${escapeHtml(source).replace(/\n/g, "<br/>")}</span>`;
 }
 
 export function getAngleTextRenderSize(rawTextSize: number): number {
@@ -95,7 +193,8 @@ function formatAngleDegreesValue(degRaw: number): string {
   if (Math.abs(deg - nearest5) <= 1e-3) {
     return String(nearest5);
   }
-  return deg.toFixed(2);
+  const rounded = deg.toFixed(2).replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0+$/u, "");
+  return rounded === "-0" ? "0" : rounded;
 }
 
 export function createPointLabelOverlays(
@@ -130,7 +229,8 @@ export function createPointLabelOverlays(
 export function createAngleLabelOverlays(
   resolvedAngles: ResolvedAngle[],
   camera: Camera,
-  vp: Viewport
+  vp: Viewport,
+  labelHaloColor: string
 ): AngleLabelOverlay[] {
   return resolvedAngles
     .filter(({ angle }) => angle.visible)
@@ -150,6 +250,9 @@ export function createAngleLabelOverlays(
         html,
         textSize: getAngleTextRenderSize(angle.style.textSize),
         textColor: angle.style.textColor,
+        labelGlow: Boolean(angle.style.labelGlow),
+        labelHaloColor,
+        labelHaloWidthPx: LABEL_GLOW_WIDTH_PX,
       };
     })
     .filter((item): item is AngleLabelOverlay => Boolean(item));
@@ -166,7 +269,9 @@ function buildObjectLabelOverlay(
   camera: Camera,
   vp: Viewport,
   textColor: string,
-  textSize: number
+  textSize: number,
+  labelGlow: boolean,
+  labelHaloColor: string
 ): ObjectLabelOverlay | null {
   if (!visible || !showLabel) return null;
   const fallbackText = defaultObjectLabelText({ type, id }, scene);
@@ -188,13 +293,17 @@ function buildObjectLabelOverlay(
     html,
     textSize,
     textColor,
+    labelGlow,
+    labelHaloColor,
+    labelHaloWidthPx: LABEL_GLOW_WIDTH_PX,
   };
 }
 
 export function createObjectLabelOverlays(
   scene: SceneModel,
   camera: Camera,
-  vp: Viewport
+  vp: Viewport,
+  labelHaloColor: string
 ): ObjectLabelOverlay[] {
   const overlays: ObjectLabelOverlay[] = [];
   for (const segment of scene.segments) {
@@ -209,7 +318,9 @@ export function createObjectLabelOverlays(
       camera,
       vp,
       segment.style.strokeColor,
-      16
+      16,
+      segment.labelGlow !== false,
+      labelHaloColor
     );
     if (overlay) overlays.push(overlay);
   }
@@ -225,7 +336,9 @@ export function createObjectLabelOverlays(
       camera,
       vp,
       line.style.strokeColor,
-      16
+      16,
+      line.labelGlow !== false,
+      labelHaloColor
     );
     if (overlay) overlays.push(overlay);
   }
@@ -241,7 +354,27 @@ export function createObjectLabelOverlays(
       camera,
       vp,
       circle.style.strokeColor,
-      16
+      16,
+      circle.labelGlow !== false,
+      labelHaloColor
+    );
+    if (overlay) overlays.push(overlay);
+  }
+  for (const ellipse of scene.ellipses ?? []) {
+    const overlay = buildObjectLabelOverlay(
+      "ellipse",
+      ellipse.id,
+      ellipse.visible,
+      ellipse.showLabel,
+      ellipse.labelText,
+      ellipse.labelPosWorld,
+      scene,
+      camera,
+      vp,
+      ellipse.style.strokeColor,
+      16,
+      ellipse.labelGlow !== false,
+      labelHaloColor
     );
     if (overlay) overlays.push(overlay);
   }
@@ -257,7 +390,9 @@ export function createObjectLabelOverlays(
       camera,
       vp,
       polygon.style.strokeColor,
-      16
+      16,
+      polygon.labelGlow !== false,
+      labelHaloColor
     );
     if (overlay) overlays.push(overlay);
   }
@@ -267,21 +402,18 @@ export function createObjectLabelOverlays(
 export function createTextLabelOverlays(
   scene: SceneModel,
   camera: Camera,
-  vp: Viewport
+  vp: Viewport,
+  labelHaloColor: string
 ): TextLabelOverlay[] {
   const overlays: TextLabelOverlay[] = [];
   const labels = scene.textLabels ?? [];
   for (const label of labels) {
     if (!label.visible) continue;
+    if (resolveTextLabelToolKind(label) !== "label") continue;
     const screen = camMath.worldToScreen(label.positionWorld, camera, vp);
     const displayText = resolveTextLabelDisplayText(label, scene);
-    const html = label.style.useTex
-      ? katex.renderToString(displayText || "\\text{}", {
-          throwOnError: false,
-          displayMode: false,
-          strict: "ignore",
-        })
-      : `<span>${escapeHtml(displayText).replace(/\n/g, "<br/>")}</span>`;
+    const renderMode = resolveTextLabelRenderMode(label.style);
+    const html = renderTextLabelHtml(displayText, renderMode);
     overlays.push({
       id: label.id,
       x: screen.x,
@@ -293,6 +425,13 @@ export function createTextLabelOverlays(
         typeof label.style.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
           ? label.style.rotationDeg
           : 0,
+      renderMode,
+      textAlign: resolveTextLabelAlignment(label.style),
+      boxWidthPx: resolveTextLabelBoxWidthPx(label.style),
+      boxHeightPx: resolveTextLabelBoxHeightPx(label.style),
+      labelGlow: Boolean(label.style.labelGlow),
+      labelHaloColor,
+      labelHaloWidthPx: LABEL_GLOW_WIDTH_PX,
     });
   }
   return overlays;

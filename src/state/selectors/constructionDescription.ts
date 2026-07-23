@@ -7,7 +7,7 @@ import {
 } from "../../scene/points";
 
 export function selectConstructionDescription(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "number" | "richText"; id: string } | null,
   scene: SceneModel
 ): string | null {
   const pointNameById = new Map(scene.points.map((p) => [p.id, p.name]));
@@ -15,6 +15,7 @@ export function selectConstructionDescription(
   const lineById = new Map(scene.lines.map((l) => [l.id, l]));
   const segmentById = new Map(scene.segments.map((s) => [s.id, s]));
   const circleById = new Map(scene.circles.map((c) => [c.id, c]));
+  const ellipseById = new Map((scene.ellipses ?? []).map((e) => [e.id, e]));
   const polygonById = new Map(scene.polygons.map((p) => [p.id, p]));
   const angleById = new Map(scene.angles.map((a) => [a.id, a]));
   const numberById = new Map(scene.numbers.map((n) => [n.id, n]));
@@ -27,6 +28,7 @@ export function selectConstructionDescription(
     lineById,
     segmentById,
     circleById,
+    ellipseById,
     polygonById,
     angleById,
     numberById
@@ -34,13 +36,14 @@ export function selectConstructionDescription(
 }
 
 function describeSelectedConstruction(
-  selectedObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null,
+  selectedObject: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "number" | "richText"; id: string } | null,
   scene: SceneModel,
   pointNameById: Map<string, string>,
   pointById: Map<string, ScenePoint>,
   lineById: Map<string, SceneModel["lines"][number]>,
   segmentById: Map<string, SceneModel["segments"][number]>,
   circleById: Map<string, SceneModel["circles"][number]>,
+  ellipseById: Map<string, NonNullable<SceneModel["ellipses"]>[number]>,
   polygonById: Map<string, SceneModel["polygons"][number]>,
   angleById: Map<string, SceneModel["angles"][number]>,
   numberById: Map<string, SceneModel["numbers"][number]>
@@ -158,6 +161,14 @@ function describeSelectedConstruction(
     }
     return describeCircleForConstruction(circle, pointNameById);
   }
+  if (selectedObject.type === "ellipse") {
+    const ellipse = ellipseById.get(selectedObject.id);
+    if (!ellipse) return `Ellipse ${selectedObject.id}`;
+    return `Ellipse with foci ${pointLabel(ellipse.focusAId, pointNameById)} and ${pointLabel(
+      ellipse.focusBId,
+      pointNameById
+    )}, through ${pointLabel(ellipse.throughId, pointNameById)}.`;
+  }
   if (selectedObject.type === "polygon") {
     const polygon = polygonById.get(selectedObject.id);
     if (!polygon) return `Polygon ${selectedObject.id}`;
@@ -203,7 +214,7 @@ function describeSelectedConstruction(
   if (selectedObject.type === "number") {
     const num = numberById.get(selectedObject.id);
     if (!num) return null;
-    return describeNumberConstruction(num, pointNameById, segmentById, circleById, angleById, numberById);
+    return describeNumberConstruction(num, pointNameById, segmentById, circleById, polygonById, angleById, numberById);
   }
   if (selectedObject.type === "textLabel") {
     const label = (scene.textLabels ?? []).find((item) => item.id === selectedObject.id);
@@ -221,6 +232,7 @@ function describeNumberConstruction(
   pointNameById: Map<string, string>,
   segmentById: Map<string, SceneModel["segments"][number]>,
   circleById: Map<string, SceneModel["circles"][number]>,
+  polygonById: Map<string, SceneModel["polygons"][number]>,
   angleById: Map<string, SceneModel["angles"][number]>,
   numberById: Map<string, SceneModel["numbers"][number]>
 ): string {
@@ -253,6 +265,16 @@ function describeNumberConstruction(
     const circle = circleById.get(def.circleId);
     if (!circle) return `Area of circle ${def.circleId}.`;
     return `Area of ${describeCircleRef(circle, pointNameById)}.`;
+  }
+  if (def.kind === "polygonPerimeter") {
+    const polygon = polygonById.get(def.polygonId);
+    if (!polygon) return `Perimeter of polygon ${def.polygonId}.`;
+    return `Perimeter of polygon ${polygon.pointIds.map((id) => pointLabel(id, pointNameById)).join("")}.`;
+  }
+  if (def.kind === "polygonArea") {
+    const polygon = polygonById.get(def.polygonId);
+    if (!polygon) return `Area of polygon ${def.polygonId}.`;
+    return `Area of polygon ${polygon.pointIds.map((id) => pointLabel(id, pointNameById)).join("")}.`;
   }
   if (def.kind === "angleDegrees") {
     const angle = angleById.get(def.angleId);
@@ -370,6 +392,12 @@ function describePointConstruction(
       circleById
     )}.`;
   }
+  if (point.kind === "pointByProjection") {
+    return `Orthogonal projection of ${pointLabel(point.pointId, pointNameById)} onto line ${pointLabel(
+      point.axisAId,
+      pointNameById
+    )}${pointLabel(point.axisBId, pointNameById)}.`;
+  }
   if (point.kind === "circleLineIntersectionPoint") {
     const circle = circleById.get(point.circleId);
     const line = lineById.get(point.lineId);
@@ -430,6 +458,7 @@ function describePointConstruction(
     const c = pointLabel(point.cId, pointNameById);
     if (point.centerKind === "incenter") return `Incenter of triangle ${a}${b}${c}.`;
     if (point.centerKind === "centroid") return `Centroid of triangle ${a}${b}${c}.`;
+    if (point.centerKind === "circumcenter") return `Circumcenter of triangle ${a}${b}${c}.`;
     return `Orthocenter of triangle ${a}${b}${c}.`;
   }
   if (point.kind === "lineLikeIntersectionPoint") {
@@ -458,6 +487,9 @@ function describeReflectionRef(
   circleById: Map<string, SceneModel["circles"][number]>
 ): string {
   if (ref.type === "point") return `point ${pointLabel(ref.id, pointNameById)}`;
+  if (ref.type === "pointPair") {
+    return `line ${pointLabel(ref.aId, pointNameById)}${pointLabel(ref.bId, pointNameById)}`;
+  }
   return describeObjectRef(ref, pointNameById, lineById, segmentById, circleById);
 }
 
@@ -534,6 +566,12 @@ type PointTransformMeta =
       kind: "reflection";
       basePointId: string;
       axis: ReflectionObjectRef;
+    }
+  | {
+      kind: "projection";
+      basePointId: string;
+      axisAId: string;
+      axisBId: string;
     };
 
 function getPointTransformMeta(pointId: string, pointById: Map<string, ScenePoint>): PointTransformMeta | null {
@@ -565,6 +603,14 @@ function getPointTransformMeta(pointId: string, pointById: Map<string, ScenePoin
       axis: point.axis,
     };
   }
+  if (point.kind === "pointByProjection") {
+    return {
+      kind: "projection",
+      basePointId: point.pointId,
+      axisAId: point.axisAId,
+      axisBId: point.axisBId,
+    };
+  }
   return null;
 }
 
@@ -572,7 +618,23 @@ function sameTransformEnvelope(a: PointTransformMeta, b: PointTransformMeta): bo
   if (a.kind !== b.kind) return false;
   if (a.kind === "translation" && b.kind === "translation") return a.fromId === b.fromId && a.toId === b.toId;
   if (a.kind === "dilation" && b.kind === "dilation") return a.centerId === b.centerId && a.factorText === b.factorText;
-  if (a.kind === "reflection" && b.kind === "reflection") return a.axis.type === b.axis.type && a.axis.id === b.axis.id;
+  if (a.kind === "reflection" && b.kind === "reflection") {
+    if (a.axis.type !== b.axis.type) return false;
+    if (a.axis.type === "pointPair" && b.axis.type === "pointPair") {
+      return (
+        (a.axis.aId === b.axis.aId && a.axis.bId === b.axis.bId) ||
+        (a.axis.aId === b.axis.bId && a.axis.bId === b.axis.aId)
+      );
+    }
+    if (a.axis.type === "pointPair" || b.axis.type === "pointPair") return false;
+    return a.axis.id === b.axis.id;
+  }
+  if (a.kind === "projection" && b.kind === "projection") {
+    return (
+      (a.axisAId === b.axisAId && a.axisBId === b.axisBId) ||
+      (a.axisAId === b.axisBId && a.axisBId === b.axisAId)
+    );
+  }
   return false;
 }
 
@@ -607,8 +669,14 @@ function describeTransformAction(
   if (meta.kind === "dilation") {
     return `dilated about ${pointLabel(meta.centerId, pointNameById)} with factor ${meta.factorText}`;
   }
+  if (meta.kind === "projection") {
+    return `projected onto line ${pointLabel(meta.axisAId, pointNameById)}${pointLabel(meta.axisBId, pointNameById)}`;
+  }
   if (meta.axis.type === "point") {
     return `reflected about point ${pointLabel(meta.axis.id, pointNameById)}`;
+  }
+  if (meta.axis.type === "pointPair") {
+    return `reflected over line ${pointLabel(meta.axis.aId, pointNameById)}${pointLabel(meta.axis.bId, pointNameById)}`;
   }
   return `reflected over ${describeLineLikeCompact(meta.axis, pointNameById, lineById, segmentById, circleById)}`;
 }

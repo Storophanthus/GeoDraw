@@ -1,11 +1,13 @@
 import type { Vec2 } from "../geo/vec2";
+import type { ExportClipHandle } from "./exportClipHandles";
 import type { PointerMode } from "./pointerInteraction";
 
 type PointerStateLike = {
   active: boolean;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
+  clipHandle?: ExportClipHandle | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "textLabel" | "richText" | null;
 };
 
 export type DragBufferAccess = {
@@ -28,11 +30,13 @@ type DragUpdateOps = {
   movePointLabelBy: (pointId: string, delta: Vec2) => void;
   moveAngleLabelTo: (angleId: string, world: Vec2) => void;
   moveObjectLabelTo: (
-    obj: { type: "segment" | "line" | "circle" | "polygon"; id: string },
+    obj: { type: "segment" | "line" | "circle" | "ellipse" | "polygon"; id: string },
     world: Vec2
   ) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
   moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
+  moveRichTextNodeByWorldDelta: (id: string, deltaWorld: Vec2) => void;
+  moveExportClipHandleTo: (handle: ExportClipHandle, world: Vec2) => void;
   screenToWorld: (screen: Vec2) => Vec2;
   screenDeltaToWorldDelta: (delta: Vec2) => Vec2;
 };
@@ -84,6 +88,7 @@ export function applyBufferedDragUpdate(
       st.objectType !== "segment"
       && st.objectType !== "line"
       && st.objectType !== "circle"
+      && st.objectType !== "ellipse"
       && st.objectType !== "polygon"
     ) {
       return;
@@ -98,8 +103,21 @@ export function applyBufferedDragUpdate(
   if (st.mode === "drag-text-label" && st.pointId) {
     const panDelta = buffers.getPanDelta();
     if (panDelta.x !== 0 || panDelta.y !== 0) {
-      ops.moveTextLabelByWorldDelta(st.pointId, ops.screenDeltaToWorldDelta(panDelta));
+      if (st.objectType === "richText") {
+        ops.moveRichTextNodeByWorldDelta(st.pointId, ops.screenDeltaToWorldDelta(panDelta));
+      } else {
+        ops.moveTextLabelByWorldDelta(st.pointId, ops.screenDeltaToWorldDelta(panDelta));
+      }
       buffers.setPanDelta({ x: 0, y: 0 });
+    }
+    return;
+  }
+
+  // Shares the point-drag screen buffer: the two modes are mutually exclusive.
+  if (st.mode === "drag-clip-handle" && st.clipHandle) {
+    const handleScreen = buffers.getPointScreen();
+    if (handleScreen) {
+      ops.moveExportClipHandleTo(st.clipHandle, ops.screenToWorld(handleScreen));
     }
     return;
   }
@@ -131,6 +149,11 @@ export function bufferDragForMode(
 
   if (st.mode === "drag-point" && st.pointId) {
     buffers.setPointId(st.pointId);
+    buffers.setPointScreen(screen);
+    return true;
+  }
+
+  if (st.mode === "drag-clip-handle" && st.clipHandle) {
     buffers.setPointScreen(screen);
     return true;
   }

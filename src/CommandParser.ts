@@ -9,6 +9,7 @@ import {
 } from "./scene/eval/scalarFunctionRegistry";
 import { evaluateScalarObjectMeasureArg } from "./scene/eval/scalarObjectMeasure";
 import { evaluateScalarExpressionWithRuntime } from "./scene/eval/scalarExpressionRuntime";
+import type { ReflectionObjectRef } from "./scene/points";
 
 const math = create(all, { number: "number", matrix: "Array", predictable: true });
 const MAX_INPUT_LENGTH = 300;
@@ -27,7 +28,7 @@ export type ParseContext = {
   circleWorldGeometryById?: Map<string, { center: { x: number; y: number }; radius: number }>;
   polygonPointIdsById?: Map<string, string[]>;
   scalarsByName: Map<string, number>;
-  objectAliases: Map<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }>;
+  objectAliases: Map<string, { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }>;
   objectNames: Set<string>;
   ans?: number;
 };
@@ -36,11 +37,14 @@ export type Command =
   | { type: "CreatePointXY"; x: number; y: number }
   | { type: "CreateMidpointByPoints"; aId: string; bId: string }
   | { type: "CreateMidpointBySegment"; segId: string }
-  | { type: "CreateTriangleCenterPoint"; centerKind: "incenter" | "orthocenter" | "centroid"; aId: string; bId: string; cId: string }
+  | { type: "CreateTriangleCenterPoint"; centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter"; aId: string; bId: string; cId: string }
+  | { type: "CreatePerpendicularBisector"; aId: string; bId: string }
+  | { type: "CreateIncircle"; aId: string; bId: string; cId: string }
   | { type: "CreatePointByTranslation"; pointId: string; fromId: string; toId: string }
   | { type: "CreatePointByRotation"; pointId: string; centerId: string; angleDeg: number; angleExpr: string; direction: "CCW" | "CW" }
   | { type: "CreatePointByDilation"; pointId: string; centerId: string; factorExpr: string }
-  | { type: "CreatePointByReflection"; pointId: string; axis: { type: "line" | "segment" | "point"; id: string } }
+  | { type: "CreatePointByReflection"; pointId: string; axis: ReflectionObjectRef }
+  | { type: "CreatePointByProjection"; pointId: string; axisAId: string; axisBId: string }
   | { type: "CreateLineXY"; x1: number; y1: number; x2: number; y2: number }
   | { type: "CreateLineByPoints"; aId: string; bId: string }
   | { type: "CreatePerpendicularLine"; throughId: string; base: { type: "line" | "segment"; id: string } }
@@ -56,6 +60,7 @@ export type Command =
   | { type: "CreateCircleThreePoint"; aId: string; bId: string; cId: string }
   | { type: "CreateCircleXYR"; x: number; y: number; r: number }
   | { type: "CreateCircleCenterRadius"; centerId: string; r: number; rExpr?: string }
+  | { type: "CreateEllipseFociPoint"; focusAId: string; focusBId: string; throughId: string }
   | { type: "CreateCircleCenterThrough"; centerId: string; throughId: string };
 
 export type ParseResult =
@@ -101,6 +106,15 @@ function buildParserScalarFunctionAdapters(ctx: ParseContext): ScalarFunctionRun
         return { ok: false, error: "Distance(...) arguments are invalid" };
       }
       return resolveDistanceArg(node, ctx);
+    },
+    resolvePointArg: (argExprRaw) => {
+      let node: MathNode;
+      try {
+        node = math.parse(argExprRaw);
+      } catch {
+        return { ok: false, error: "Point arguments are invalid" };
+      }
+      return resolvePointArg(node, ctx);
     },
     evaluateMeasureArg: (fnName, argExprRaw) => evaluateMeasureArg(fnName, argExprRaw, ctx),
   };
@@ -339,6 +353,38 @@ function resolveScalarIdentifier(label: string, ctx: ParseContext): { ok: true; 
   return { ok: true, value };
 }
 
+function resolvePointPairAxis(
+  aRaw: string,
+  bRaw: string,
+  ctx: ParseContext,
+  label: string
+): { ok: true; axis: Extract<ReflectionObjectRef, { type: "pointPair" }> } | { ok: false; message: string } {
+  const aLabel = asIdentifier(aRaw);
+  const bLabel = asIdentifier(bRaw);
+  if (!aLabel || !bLabel) return { ok: false, message: `${label}(A,B) expects point labels` };
+  const a = resolvePointIdentifier(aLabel, ctx);
+  if (!a.ok) return { ok: false, message: a.message };
+  const b = resolvePointIdentifier(bLabel, ctx);
+  if (!b.ok) return { ok: false, message: b.message };
+  if (a.id === b.id) return { ok: false, message: `${label} axis points must be distinct` };
+  return { ok: true, axis: { type: "pointPair", aId: a.id, bId: b.id } };
+}
+
+function parseInlinePointPairAxis(
+  raw: string,
+  ctx: ParseContext
+): { ok: true; axis: Extract<ReflectionObjectRef, { type: "pointPair" }> } | { ok: false; message: string } | null {
+  const commandMatch = raw.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
+  if (!commandMatch) return null;
+  const name = commandMatch[1];
+  if (name !== "Line" && name !== "Segment") {
+    return { ok: false, message: "Inline reflection target must be Line(A,B) or Segment(A,B)" };
+  }
+  const args = splitArgs(commandMatch[2]);
+  if (!args || args.length !== 2) return { ok: false, message: `${name}(A,B) expects 2 point labels` };
+  return resolvePointPairAxis(args[0], args[1], ctx, name);
+}
+
 function resolveDistanceArg(node: MathNode, ctx: ParseContext): { ok: true; value: DistanceArg } | { ok: false; error: string } {
   const unwrapped = unwrapParenthesisNode(node);
   const anyNode = unwrapped as unknown as { type?: string; name?: string };
@@ -362,6 +408,16 @@ function resolveDistanceArg(node: MathNode, ctx: ParseContext): { ok: true; valu
     return { ok: false, error: "Distance expects Point-Point or Point-Line/Segment arguments" };
   }
   return { ok: true, value: { kind: "point", x: pointOrScalar.value.x, y: pointOrScalar.value.y } };
+}
+
+function resolvePointArg(node: MathNode, ctx: ParseContext): { ok: true; value: { x: number; y: number } } | { ok: false; error: string } {
+  const unwrapped = unwrapParenthesisNode(node);
+  const pointOrScalar = evalPointExpressionNode(unwrapped, ctx);
+  if (!pointOrScalar.ok) return { ok: false, error: pointOrScalar.error };
+  if (pointOrScalar.value.kind !== "point") {
+    return { ok: false, error: "Expected point argument" };
+  }
+  return { ok: true, value: { x: pointOrScalar.value.x, y: pointOrScalar.value.y } };
 }
 
 function parseDistanceNumeric(args: string[], ctx: ParseContext): EvalResult {
@@ -466,7 +522,7 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return err("Midpoint expects Midpoint(A,B) or Midpoint(s)");
   }
 
-  if (name === "Incenter" || name === "Ortho" || name === "Orthocenter" || name === "Centroid") {
+  if (name === "Incenter" || name === "Ortho" || name === "Orthocenter" || name === "Centroid" || name === "Circumcenter") {
     if (args.length !== 3) return err(`${name}(A,B,C) expects 3 point labels`);
     const aLabel = asIdentifier(args[0]);
     const bLabel = asIdentifier(args[1]);
@@ -479,10 +535,34 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     const c = resolvePointIdentifier(cLabel, ctx);
     if (!c.ok) return err(c.message);
     const centerKind =
-      name === "Incenter" ? "incenter" : name === "Centroid" ? "centroid" : "orthocenter";
+      name === "Incenter"
+        ? "incenter"
+        : name === "Centroid"
+          ? "centroid"
+          : name === "Circumcenter"
+            ? "circumcenter"
+            : "orthocenter";
     return {
       kind: "cmd",
       cmd: { type: "CreateTriangleCenterPoint", centerKind, aId: a.id, bId: b.id, cId: c.id },
+    };
+  }
+
+  if (name === "Incircle") {
+    if (args.length !== 3) return err("Incircle(A,B,C) expects 3 point labels");
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    const cLabel = asIdentifier(args[2]);
+    if (!aLabel || !bLabel || !cLabel) return err("Incircle(A,B,C) expects point labels");
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const c = resolvePointIdentifier(cLabel, ctx);
+    if (!c.ok) return err(c.message);
+    return {
+      kind: "cmd",
+      cmd: { type: "CreateIncircle", aId: a.id, bId: b.id, cId: c.id },
     };
   }
 
@@ -528,17 +608,17 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     };
   }
 
-  if (name === "Dilate") {
-    if (args.length !== 3) return err("Dilate(P, O, k) expects 3 arguments");
+  if (name === "Dilate" || name === "Homothety") {
+    if (args.length !== 3) return err(`${name}(P, O, k) expects 3 arguments`);
     const pointLabel = asIdentifier(args[0]);
     const centerLabel = asIdentifier(args[1]);
-    if (!pointLabel || !centerLabel) return err("Dilate(P, O, k) expects point labels for first two arguments");
+    if (!pointLabel || !centerLabel) return err(`${name}(P, O, k) expects point labels for first two arguments`);
     const point = resolvePointIdentifier(pointLabel, ctx);
     if (!point.ok) return err(point.message);
     const center = resolvePointIdentifier(centerLabel, ctx);
     if (!center.ok) return err(center.message);
     const factorEval = evalScalarArg(args[2]);
-    if (!factorEval.ok) return err("Dilate factor must evaluate to a finite number");
+    if (!factorEval.ok) return err(`${name} factor must evaluate to a finite number`);
     return {
       kind: "cmd",
       cmd: { type: "CreatePointByDilation", pointId: point.id, centerId: center.id, factorExpr: args[2].trim() },
@@ -546,12 +626,26 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
   }
 
   if (name === "Reflect") {
-    if (args.length !== 2) return err("Reflect(P, l|O) expects 2 arguments");
+    if (args.length !== 2 && args.length !== 3) return err("Reflect(P, l|O|A,B) expects 2 or 3 arguments");
     const pointLabel = asIdentifier(args[0]);
-    const axisLabel = asIdentifier(args[1]);
-    if (!pointLabel || !axisLabel) return err("Reflect(P, l|O) expects point and line/segment/point target");
+    if (!pointLabel) return err("Reflect(P, l|O|A,B) expects a point as first argument");
     const point = resolvePointIdentifier(pointLabel, ctx);
     if (!point.ok) return err(point.message);
+
+    if (args.length === 3) {
+      const axis = resolvePointPairAxis(args[1], args[2], ctx, "Reflect");
+      if (!axis.ok) return err(axis.message);
+      return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: axis.axis } };
+    }
+
+    const inlineAxis = parseInlinePointPairAxis(args[1], ctx);
+    if (inlineAxis) {
+      if (!inlineAxis.ok) return err(inlineAxis.message);
+      return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: inlineAxis.axis } };
+    }
+
+    const axisLabel = asIdentifier(args[1]);
+    if (!axisLabel) return err("Reflect(P, l|O|A,B) expects point, line/segment alias, or Line(A,B)/Segment(A,B) target");
     const axisPoint = resolvePointIdentifier(axisLabel, ctx);
     if (axisPoint.ok) {
       return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: { type: "point", id: axisPoint.id } } };
@@ -560,6 +654,22 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     if (!axisAlias) return err(`Unknown reflection target: ${axisLabel}`);
     if (axisAlias.type !== "line" && axisAlias.type !== "segment") return err(`Not a line/segment: ${axisLabel}`);
     return { kind: "cmd", cmd: { type: "CreatePointByReflection", pointId: point.id, axis: { type: axisAlias.type, id: axisAlias.id } } };
+  }
+
+  if (name === "Orthoproject" || name === "OrthoProject" || name === "OrthogonalProjection") {
+    if (args.length !== 3) return err("Orthoproject(X,A,B) expects 3 point labels");
+    const pointLabel = asIdentifier(args[0]);
+    const axisALabel = asIdentifier(args[1]);
+    const axisBLabel = asIdentifier(args[2]);
+    if (!pointLabel || !axisALabel || !axisBLabel) return err("Orthoproject(X,A,B) expects point labels");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const axisA = resolvePointIdentifier(axisALabel, ctx);
+    if (!axisA.ok) return err(axisA.message);
+    const axisB = resolvePointIdentifier(axisBLabel, ctx);
+    if (!axisB.ok) return err(axisB.message);
+    if (axisA.id === axisB.id) return err("Orthoproject axis points must be distinct");
+    return { kind: "cmd", cmd: { type: "CreatePointByProjection", pointId: point.id, axisAId: axisA.id, axisBId: axisB.id } };
   }
 
   if (name === "Line") {
@@ -598,6 +708,18 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
       kind: "cmd",
       cmd: { type: "CreatePerpendicularLine", throughId: through.id, base: { type: baseAlias.type, id: baseAlias.id } },
     };
+  }
+
+  if (name === "PerpBisector" || name === "PerpendicularBisector") {
+    if (args.length !== 2) return err(`${name}(A,B) expects 2 point labels`);
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    if (!aLabel || !bLabel) return err(`${name}(A,B) expects point labels`);
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    return { kind: "cmd", cmd: { type: "CreatePerpendicularBisector", aId: a.id, bId: b.id } };
   }
 
   if (name === "Parallel") {
@@ -643,12 +765,13 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return { kind: "cmd", cmd: { type: "CreateAngleBisector", aId: a.id, bId: b.id, cId: c.id } };
   }
 
-  if (name === "Angle") {
-    if (args.length !== 3) return err("Angle(A,B,C) expects 3 point labels");
+  if (name === "Angle" || name === "MarkedAngle") {
+    const sig = name === "MarkedAngle" ? "MarkedAngle(A,B,C)" : "Angle(A,B,C)";
+    if (args.length !== 3) return err(`${sig} expects 3 point labels`);
     const aLabel = asIdentifier(args[0]);
     const bLabel = asIdentifier(args[1]);
     const cLabel = asIdentifier(args[2]);
-    if (!aLabel || !bLabel || !cLabel) return err("Angle(A,B,C) expects point labels");
+    if (!aLabel || !bLabel || !cLabel) return err(`${sig} expects point labels`);
     const a = resolvePointIdentifier(aLabel, ctx);
     if (!a.ok) return err(a.message);
     const b = resolvePointIdentifier(bLabel, ctx);
@@ -800,6 +923,22 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return { kind: "cmd", cmd: { type: "CreateCircleThreePoint", aId: a.id, bId: b.id, cId: c.id } };
   }
 
+  if (name === "Ellipse") {
+    if (args.length !== 3) return err("Ellipse(F1,F2,P) expects 3 point labels");
+    const aLabel = asIdentifier(args[0]);
+    const bLabel = asIdentifier(args[1]);
+    const pLabel = asIdentifier(args[2]);
+    if (!aLabel || !bLabel || !pLabel) return err("Ellipse(F1,F2,P) expects point labels");
+    const a = resolvePointIdentifier(aLabel, ctx);
+    if (!a.ok) return err(a.message);
+    const b = resolvePointIdentifier(bLabel, ctx);
+    if (!b.ok) return err(b.message);
+    const p = resolvePointIdentifier(pLabel, ctx);
+    if (!p.ok) return err(p.message);
+    if (a.id === b.id) return err("Ellipse foci must be distinct");
+    return { kind: "cmd", cmd: { type: "CreateEllipseFociPoint", focusAId: a.id, focusBId: b.id, throughId: p.id } };
+  }
+
   if (name === "Distance") {
     return parseDistanceResult(args, ctx);
   }
@@ -853,6 +992,15 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
 
     const commandMatch = assignment.right.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
     if (commandMatch) {
+      if (commandMatch[1] === "Angle") {
+        const rhsAngleExpr = evaluatePointOrScalarExpression(assignment.right, ctx);
+        if (rhsAngleExpr.ok) {
+          if (rhsAngleExpr.value.kind === "point") {
+            return { kind: "assignObject", name: left, cmd: { type: "CreatePointXY", x: rhsAngleExpr.value.x, y: rhsAngleExpr.value.y } };
+          }
+          return { kind: "assignScalar", name: left, value: rhsAngleExpr.value.value, expr: assignment.right.trim() };
+        }
+      }
       const args = splitArgs(commandMatch[2]);
       const rhsCmd = args ? parseCommand(commandMatch[1], args, ctx) : err("Invalid command arguments");
       if (rhsCmd.kind !== "error") {

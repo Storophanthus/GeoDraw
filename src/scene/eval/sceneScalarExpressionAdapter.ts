@@ -41,6 +41,11 @@ export function evaluateSceneScalarNumberExpression(params: {
         getPointWorldById: params.getPointWorldById,
         resolveLineAnchors: params.resolveLineAnchors,
       }),
+    resolvePointArg: (argExprRaw) =>
+      resolveScenePointArg(argExprRaw, {
+        points: params.points,
+        getPointWorldById: params.getPointWorldById,
+      }),
     evaluateMeasureArg: (fnName, argExprRaw) =>
       evaluateSceneMeasureArg(fnName, argExprRaw, {
         circles: params.circles,
@@ -91,6 +96,24 @@ function resolveSceneDistanceArg(
   }
 
   return { ok: false, error: `Unknown object in Distance(...): ${token}` };
+}
+
+function resolveScenePointArg(
+  raw: string,
+  deps: {
+    points: ScenePointLike[];
+    getPointWorldById: (pointId: string) => Vec2 | null;
+  }
+): { ok: true; value: Vec2 } | { ok: false; error: string } {
+  const token = stripOuterParens(raw.trim());
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) {
+    return { ok: false, error: "Point functions expect point identifiers" };
+  }
+  const point = deps.points.find((p) => p.name === token) ?? deps.points.find((p) => p.id === token);
+  if (!point) return { ok: false, error: `Unknown point: ${token}` };
+  const world = deps.getPointWorldById(point.id);
+  if (!world) return { ok: false, error: `Unknown point geometry: ${token}` };
+  return { ok: true, value: world };
 }
 
 function evaluateSceneMeasureArg(

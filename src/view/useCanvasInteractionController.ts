@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import type { RefObject } from "react";
 import type { Vec2 } from "../geo/vec2";
-import type { ActiveTool, HoveredHit, PendingSelection } from "../state/geoStore";
+import type { ActiveTool, HoveredHit, PendingSelection, SelectedObject } from "../state/geoStore";
+import type { ExportClipWorld } from "../state/slices/storeTypes";
 import type { Camera, Viewport } from "./camera";
 import { camera as camMath } from "./camera";
 import { runConstructClickAdapter, type ConstructClickIo } from "./constructClickAdapter";
@@ -13,6 +14,11 @@ import {
   createReadScreen,
 } from "./canvasInteractionHelpers";
 import { getAngleTextRenderSize, type ResolvedAngle } from "./labelOverlays";
+import {
+  hitTestExportClipHandle,
+  moveExportClipHandle,
+  type ExportClipHandle,
+} from "./exportClipHandles";
 import { createCanvasAuxHandlers, createPointerHandlers } from "./pointerEventController";
 import {
   computeCanvasCursor,
@@ -20,10 +26,20 @@ import {
   shouldCancelOnCanvasDoubleClick,
   type PointerMode,
 } from "./pointerInteraction";
-import { hitTestAngleLabelHandle, hitTestObjectLabelFromDom, hitTestPointLabel, hitTestPointLabelFromDom, hitTestTextLabelFromDom } from "./labelHit";
+import {
+  hitTestAngleLabelHandle,
+  hitTestObjectLabelFromDom,
+  hitTestPointLabel,
+  hitTestPointLabelFromDom,
+  hitTestSpecificTextLabelFromDom,
+  hitTestTextLabelFromDom,
+  hitTestRichTextNodeFromDom,
+  hitTestSpecificRichTextNodeFromDom,
+} from "./labelHit";
 import {
   hitTestAngleId as engineHitTestAngleId,
   hitTestCircleId as engineHitTestCircleId,
+  hitTestEllipseId as engineHitTestEllipseId,
   hitTestLineId as engineHitTestLineId,
   hitTestPolygonId as engineHitTestPolygonId,
   hitTestPointId as engineHitTestPointId,
@@ -42,7 +58,8 @@ export type PointerState = {
   pid: number;
   mode: PointerMode;
   pointId: string | null;
-  objectType: "point" | "angle" | "segment" | "line" | "circle" | "polygon" | "textLabel" | null;
+  clipHandle: ExportClipHandle | null;
+  objectType: "point" | "angle" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "textLabel" | "richText" | null;
   lastX: number;
   lastY: number;
   startX: number;
@@ -65,16 +82,27 @@ type InteractionActions = {
   movePolygonByWorldDelta: (id: string, deltaWorld: Vec2) => void;
   movePointLabelBy: (id: string, deltaScreenPx: Vec2) => void;
   moveAngleLabelTo: (id: string, world: Vec2) => void;
-  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "polygon"; id: string }, world: Vec2) => void;
+  moveObjectLabelTo: (obj: { type: "segment" | "line" | "circle" | "ellipse" | "polygon"; id: string }, world: Vec2) => void;
   moveTextLabelTo: (id: string, world: Vec2) => void;
   moveTextLabelByWorldDelta: (id: string, deltaWorld: Vec2) => void;
+  moveRichTextNodeByWorldDelta: (id: string, deltaWorld: Vec2) => void;
+  setExportClipWorld: (clip: ExportClipWorld) => void;
   setHoverScreen: (value: Vec2 | null) => void;
   setSnapDisabled: (value: boolean) => void;
   setCursorWorld: (value: Vec2 | null) => void;
   setHoveredHit: (hit: HoveredHit) => void;
-  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null) => void;
+  setSelectedObject: (selected: { type: "point" | "line" | "segment" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null) => void;
+  beginTextLabelEditing?: (id: string) => boolean;
+  beginRichTextEditing?: (id: string) => boolean;
   clearPendingSelection: () => void;
   zoomAtScreenPoint: (vp: Viewport, screen: Vec2, zoomFactor: number) => void;
+  openContextMenu?: (payload: {
+    clientX: number;
+    clientY: number;
+    screen: Vec2;
+    world: Vec2;
+    target: Exclude<SelectedObject, null> | null;
+  }) => void;
 };
 
 type InteractionDeps = {
@@ -84,13 +112,15 @@ type InteractionDeps = {
   dragBuffers: DragBufferRefs;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
   scene: SceneModel;
   camera: Camera;
   vp: Viewport;
   resolvedPoints: Array<{ point: ScenePoint; world: Vec2 }>;
   resolvedAngles: ResolvedAngle[];
   hoveredHit: HoveredHit;
+  exportClipWorld: ExportClipWorld | null;
+  selectedObject: { type: "point" | "line" | "segment" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
   pointLabelOffsetPx: Vec2;
   angleFixedTool: AngleFixedToolState;
   circleFixedTool: CircleFixedToolState;
@@ -117,6 +147,8 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     resolvedPoints,
     resolvedAngles,
     hoveredHit,
+    exportClipWorld,
+    selectedObject,
     pointLabelOffsetPx,
     angleFixedTool,
     circleFixedTool,
@@ -142,9 +174,15 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       tolerances,
     });
 
-    const applyCursor = (nextHovered: HoveredHit, modeOverride?: PointerMode) => {
+    // Clip handles only exist while a crop area does, and only the move tool can
+    // grab them — the clip tools themselves are busy drawing a replacement.
+    const resolveClipHandle = (screen: Vec2): ExportClipHandle | null =>
+      activeTool === "move" ? hitTestExportClipHandle(screen, exportClipWorld, camera, vp) : null;
+
+    const applyCursor = (nextHovered: HoveredHit, modeOverride?: PointerMode, screen?: Vec2) => {
       const mode = modeOverride ?? pointerRef.current.mode;
-      canvas.style.cursor = computeCanvasCursor(activeTool, mode, nextHovered, pendingSelection);
+      const hoveredClipHandle = screen ? resolveClipHandle(screen) : null;
+      canvas.style.cursor = computeCanvasCursor(activeTool, mode, nextHovered, pendingSelection, hoveredClipHandle);
     };
 
     const flushDragUpdate = () => {
@@ -183,6 +221,16 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           moveObjectLabelTo: actions.moveObjectLabelTo,
           moveTextLabelTo: actions.moveTextLabelTo,
           moveTextLabelByWorldDelta: actions.moveTextLabelByWorldDelta,
+          moveRichTextNodeByWorldDelta: actions.moveRichTextNodeByWorldDelta,
+          moveExportClipHandleTo: (handle, world) => {
+            if (!exportClipWorld) return;
+            const result = moveExportClipHandle(exportClipWorld, handle, world);
+            // A bound that crossed its opposite renames the grabbed handle; keep
+            // the pointer holding the same physical corner/edge so the rest of
+            // the drag still tracks the cursor.
+            pointerRef.current.clipHandle = result.handle;
+            actions.setExportClipWorld(result.clip);
+          },
           screenToWorld: (screen) => camMath.screenToWorld(screen, camera, vp),
           screenDeltaToWorldDelta: (delta) => {
             const world0 = camMath.screenToWorld({ x: 0, y: 0 }, camera, vp);
@@ -211,6 +259,34 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       dragAngleLabelScreenRef: dragBuffers.dragAngleLabelScreenRef,
     });
 
+    const resolveCanvasHits = (screen: Vec2, clientX: number, clientY: number) => ({
+      hitClipHandle: resolveClipHandle(screen),
+      hitTextLabelId: hitTestTextLabelFromDom(clientX, clientY, labelsLayerRef.current),
+      hitRichTextNodeId: hitTestRichTextNodeFromDom(clientX, clientY, labelsLayerRef.current),
+      hitPointId: engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
+      hitLabelId:
+        hitTestPointLabelFromDom(clientX, clientY, labelsLayerRef.current) ??
+        hitTestPointLabel(screen, resolvedPoints, camera, vp, pointLabelOffsetPx),
+      hitAngleLabelId: hitTestAngleLabelHandle(screen, resolvedAngles, camera, vp, getAngleTextRenderSize),
+      hitAngleId: engineHitTestAngleId(screen, resolvedAngles, camera, vp, tolerances.angle),
+      hitSegmentId: engineHitTestSegmentId(screen, scene, camera, vp, tolerances.segment),
+      hitPolygonId: engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment),
+      hitLineId: engineHitTestLineId(screen, scene, camera, vp, tolerances.line),
+      hitCircleId: engineHitTestCircleId(screen, scene, camera, vp, tolerances.circle),
+      hitEllipseId: engineHitTestEllipseId(screen, scene, camera, vp, tolerances.circle),
+      hitObjectLabel: hitTestObjectLabelFromDom(clientX, clientY, labelsLayerRef.current),
+    });
+
+    const resolveContextTarget = (hits: ReturnType<typeof resolveCanvasHits>): Exclude<SelectedObject, null> | null => {
+      const decision = decideMovePointerDown({
+        ...hits,
+        scenePoints: scene.points,
+        sceneSegments: scene.segments,
+        sceneAngles: scene.angles,
+      });
+      return decision.selectedObject;
+    };
+
     const { onDown, onMove, finish, cancelPendingHoverUpdate } = createPointerHandlers({
       canvas,
       activeTool,
@@ -229,20 +305,8 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       setCursorWorldFromScreen: (screen) => actions.setCursorWorld(camMath.screenToWorld(screen, camera, vp)),
       setHoveredHit: actions.setHoveredHit,
       setSelectedObject: actions.setSelectedObject,
-      resolveHits: (screen, e) => ({
-        hitTextLabelId: hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current),
-        hitPointId: engineHitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point),
-        hitLabelId:
-          hitTestPointLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current) ??
-          hitTestPointLabel(screen, resolvedPoints, camera, vp, pointLabelOffsetPx),
-        hitAngleLabelId: hitTestAngleLabelHandle(screen, resolvedAngles, camera, vp, getAngleTextRenderSize),
-        hitAngleId: engineHitTestAngleId(screen, resolvedAngles, camera, vp, tolerances.angle),
-        hitSegmentId: engineHitTestSegmentId(screen, scene, camera, vp, tolerances.segment),
-        hitPolygonId: engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment),
-        hitLineId: engineHitTestLineId(screen, scene, camera, vp, tolerances.line),
-        hitCircleId: engineHitTestCircleId(screen, scene, camera, vp, tolerances.circle),
-        hitObjectLabel: hitTestObjectLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current),
-      }),
+      beginTextLabelEditing: actions.beginTextLabelEditing,
+      resolveHits: (screen, e) => resolveCanvasHits(screen, e.clientX, e.clientY),
       decideMovePointerDown: (hits) =>
         decideMovePointerDown({
           ...hits,
@@ -255,6 +319,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           screen,
           pointerEvent: e,
           preHitTextLabelId: hits.hitTextLabelId ?? null,
+          preHitRichTextNodeId: hits.hitRichTextNodeId ?? null,
           activeTool,
           pendingSelection,
           copyStyleSource,
@@ -266,7 +331,11 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
           regularPolygonTool,
           transformTool,
           tolerances,
-          io: constructClickIo,
+          io: {
+            ...constructClickIo,
+            beginTextLabelEditing: actions.beginTextLabelEditing,
+            beginRichTextEditing: actions.beginRichTextEditing,
+          },
         }),
     });
 
@@ -281,6 +350,37 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     });
 
     const onDoubleClick = (e: MouseEvent) => {
+      if (activeTool === "move") {
+        const hitRichTextNodeId = hitTestRichTextNodeFromDom(e.clientX, e.clientY, labelsLayerRef.current);
+        if (hitRichTextNodeId) {
+          e.preventDefault();
+          actions.beginRichTextEditing?.(hitRichTextNodeId);
+          return;
+        }
+        if (
+          selectedObject?.type === "richText"
+          && hitTestSpecificRichTextNodeFromDom(e.clientX, e.clientY, labelsLayerRef.current, selectedObject.id, 12)
+        ) {
+          e.preventDefault();
+          actions.beginRichTextEditing?.(selectedObject.id);
+          return;
+        }
+
+        const hitTextLabelId = hitTestTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current);
+        if (hitTextLabelId) {
+          e.preventDefault();
+          actions.beginTextLabelEditing?.(hitTextLabelId);
+          return;
+        }
+        if (
+          selectedObject?.type === "textLabel"
+          && hitTestSpecificTextLabelFromDom(e.clientX, e.clientY, labelsLayerRef.current, selectedObject.id, 12)
+        ) {
+          e.preventDefault();
+          actions.beginTextLabelEditing?.(selectedObject.id);
+          return;
+        }
+      }
       if (!shouldCancelOnCanvasDoubleClick(activeTool, pendingSelection)) return;
       e.preventDefault();
       if (pendingSelection) {
@@ -292,11 +392,28 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       }
     };
 
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const screen = readScreen(e);
+      const hits = resolveCanvasHits(screen, e.clientX, e.clientY);
+      const target = resolveContextTarget(hits);
+      if (target) actions.setSelectedObject(target);
+      actions.openContextMenu?.({
+        clientX: e.clientX,
+        clientY: e.clientY,
+        screen,
+        world: camMath.screenToWorld(screen, camera, vp),
+        target,
+      });
+    };
+
     const unbind = bindCanvasEventLifecycle(canvas, {
       onDown,
       onMove,
       onFinish: finish,
       onDoubleClick,
+      onContextMenu,
       onLeave,
       onWheel,
     });
@@ -323,6 +440,8 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
     actions,
     clickEpsilonPx,
     hoveredHit,
+    exportClipWorld,
+    selectedObject,
     pendingSelection,
     pointLabelOffsetPx,
     resolvedPoints,

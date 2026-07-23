@@ -15,9 +15,10 @@ type RunConstructClickParams = {
   screen: Vec2;
   pointerEvent: PointerEvent;
   preHitTextLabelId?: string | null;
+  preHitRichTextNodeId?: string | null;
   activeTool: ActiveTool;
   pendingSelection: PendingSelection;
-  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "polygon" | "angle" | "textLabel" | "number"; id: string } | null;
+  copyStyleSource: { type: "point" | "line" | "segment" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | "number"; id: string } | null;
   scene: SceneModel;
   resolvedPoints: Array<{ point: SceneModel["points"][number]; world: Vec2 }>;
   camera: Camera;
@@ -40,6 +41,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     screen,
     pointerEvent,
     preHitTextLabelId = null,
+    preHitRichTextNodeId = null,
     activeTool,
     pendingSelection,
     copyStyleSource,
@@ -54,8 +56,16 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
     io,
   } = params;
 
+  const constructionPointTolerance =
+    activeTool !== "move" &&
+    activeTool !== "copyStyle" &&
+    activeTool !== "label" &&
+    activeTool !== "textbox"
+      ? tolerances.point + 4
+      : tolerances.point;
+
   const hitObject = hitTestTopObject(scene, camera, vp, screen, {
-    pointTolPx: tolerances.point,
+    pointTolPx: constructionPointTolerance,
     angleTolPx: tolerances.angle,
     segmentTolPx: tolerances.segment,
     lineTolPx: tolerances.line,
@@ -67,12 +77,18 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
       ? io.snapWorldToGrid(cursorWorld)
       : null;
   const snappedScreen = snappedWorld ? camMath.worldToScreen(snappedWorld, camera, vp) : null;
-  const rawHitPointId = hitTestPointId(screen, resolvedPoints, camera, vp, tolerances.point);
-  const snappedHitPointId = snappedScreen ? hitTestPointId(snappedScreen, resolvedPoints, camera, vp, tolerances.point) : null;
+  const rawHitPointId = hitTestPointId(screen, resolvedPoints, camera, vp, constructionPointTolerance);
+  const snappedHitPointId = snappedScreen
+    ? hitTestPointId(snappedScreen, resolvedPoints, camera, vp, constructionPointTolerance)
+    : null;
 
   let snap =
-    !pointerEvent.shiftKey && activeTool !== "move" && activeTool !== "copyStyle" && activeTool !== "label"
-      ? findBestSnap(screen, camera, vp, scene, tolerances.point)
+    !pointerEvent.shiftKey &&
+    activeTool !== "move" &&
+    activeTool !== "copyStyle" &&
+    activeTool !== "label" &&
+    activeTool !== "textbox"
+      ? findBestSnap(screen, camera, vp, scene, constructionPointTolerance)
       : null;
   // Grid-snapped point lookup is only a fallback when geometry snapping found nothing.
   // Otherwise it can steal clicks from on-line/on-circle snapping workflows.
@@ -95,6 +111,7 @@ export function runConstructClickAdapter(params: RunConstructClickParams): void 
       hitPointId: rawHitPointId ?? snappedHitPointId,
       hitSegmentId: hitTestSegmentId(screen, scene, camera, vp, tolerances.segment),
       hitTextLabelId: preHitTextLabelId,
+      hitRichTextNodeId: preHitRichTextNodeId,
       hitObject,
       shiftKey: pointerEvent.shiftKey,
       hasCopyStyleSource: Boolean(copyStyleSource),

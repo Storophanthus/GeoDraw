@@ -2,15 +2,15 @@ import { FolderOpen, Save, SaveAll, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { PreferencesDialog } from "./preferences/PreferencesDialog";
-import { useFileOperations } from "./file-controls/useFileOperations";
+import { useFileOperations, type UseFileOperationsOptions } from "./file-controls/useFileOperations";
 
 const MENU_EVENT_FILE_OPEN = "gd-menu-file-open";
 const MENU_EVENT_FILE_SAVE = "gd-menu-file-save";
 const MENU_EVENT_FILE_SAVE_AS = "gd-menu-file-save-as";
 
-export function FileControls() {
+export function FileControls(props: UseFileOperationsOptions) {
   const [preferencesOpen, setPreferencesOpen] = useState(false);
-  const { fileInputRef, handleSave, handleSaveAs, handleOpenClick, handleFileChange } = useFileOperations();
+  const { fileInputRef, handleSave, handleSaveAs, handleOpenClick, handleFileChange } = useFileOperations(props);
 
   const openActionRef = useRef<() => Promise<void>>(async () => { });
   const saveActionRef = useRef<() => Promise<void>>(async () => { });

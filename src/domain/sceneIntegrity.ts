@@ -2,6 +2,8 @@ import type { GeometryObjectRef, SceneModel } from "../scene/points";
 import {
   defaultCircleLabelPosWorld,
   defaultCircleLabelText,
+  defaultEllipseLabelPosWorld,
+  defaultEllipseLabelText,
   defaultLineLabelPosWorld,
   defaultLineLabelText,
   defaultPolygonLabelPosWorld,
@@ -11,6 +13,7 @@ import {
   isFiniteLabelPosWorld,
   resolveObjectLabelText,
 } from "../scene/objectLabels";
+import { normalizeGeometryLayerOrder } from "../scene/geometryLayerOrder";
 import { resolveIntersectionBranchIndexInScene } from "./intersectionReuse";
 
 function escapeRegExp(text: string): string {
@@ -146,10 +149,30 @@ function normalizeTextLabels(
           ? Math.max(8, Math.min(96, label.style.textSize))
           : 12;
       const useTex = Boolean(label.style?.useTex);
+      const textMode =
+        label.style?.textMode === "plain" || label.style?.textMode === "mixed" || label.style?.textMode === "tex"
+          ? label.style.textMode
+          : useTex
+            ? "tex"
+            : "plain";
+      const textAlign =
+        label.style?.textAlign === "left" || label.style?.textAlign === "center" || label.style?.textAlign === "right"
+          ? label.style.textAlign
+          : textMode === "mixed"
+            ? "left"
+            : "center";
       const rotationDeg =
         typeof label.style?.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
           ? Math.max(-3600, Math.min(3600, label.style.rotationDeg))
           : 0;
+      const boxWidthPx =
+        typeof label.style?.boxWidthPx === "number" && Number.isFinite(label.style.boxWidthPx)
+          ? Math.max(80, Math.min(960, label.style.boxWidthPx))
+          : undefined;
+      const boxHeightPx =
+        typeof label.style?.boxHeightPx === "number" && Number.isFinite(label.style.boxHeightPx)
+          ? Math.max(56, Math.min(640, label.style.boxHeightPx))
+          : undefined;
       const x = Number.isFinite(label.positionWorld?.x) ? label.positionWorld.x : 0;
       const y = Number.isFinite(label.positionWorld?.y) ? label.positionWorld.y : 0;
       const contentMode =
@@ -166,6 +189,12 @@ function normalizeTextLabels(
         ...label,
         name: typeof label.name === "string" ? label.name : label.id,
         text: typeof label.text === "string" ? label.text : "",
+        toolKind:
+          label.toolKind === "textbox" || label.toolKind === "label"
+            ? label.toolKind
+            : textMode === "mixed"
+              ? "textbox"
+              : "label",
         contentMode,
         numberId,
         expr,
@@ -174,8 +203,13 @@ function normalizeTextLabels(
         style: {
           textColor,
           textSize,
-          useTex,
+          useTex: textMode === "tex",
+          textMode,
+          textAlign,
+          boxWidthPx,
+          boxHeightPx,
           rotationDeg,
+          labelGlow: Boolean(label.style?.labelGlow),
         },
       };
     });
@@ -187,11 +221,18 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
   let segments = scene.segments;
   let lines = scene.lines;
   let circles = scene.circles;
+  let ellipses = scene.ellipses ?? [];
   let polygons = scene.polygons;
   let angles = scene.angles;
   let numbers = scene.numbers;
   let textLabels = Array.isArray(scene.textLabels) ? scene.textLabels : [];
   let changed = false;
+  const sameGeometryLayerOrder = (
+    a: NonNullable<SceneModel["geometryLayerOrder"]>,
+    b: NonNullable<SceneModel["geometryLayerOrder"]>
+  ) =>
+    a.length === b.length &&
+    a.every((item, idx) => item.type === b[idx]?.type && item.id === b[idx]?.id);
 
   const sameIds = (a: Array<{ id: string }>, b: Array<{ id: string }>) =>
     a.length === b.length && a.every((item, idx) => item.id === b[idx].id);
@@ -215,6 +256,13 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       if (circle.kind === "fixedRadius") return Number.isFinite(circle.radius) && circle.radius > 0;
       return pointIds.has(circle.throughId);
     });
+    const nextEllipses = ellipses.filter(
+      (ellipse) =>
+        pointIds.has(ellipse.focusAId) &&
+        pointIds.has(ellipse.focusBId) &&
+        pointIds.has(ellipse.throughId) &&
+        ellipse.focusAId !== ellipse.focusBId
+    );
     const nextAngles = angles.filter(
       (angle) => pointIds.has(angle.aId) && pointIds.has(angle.bId) && pointIds.has(angle.cId)
     );
@@ -293,10 +341,12 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       lines,
       segments,
       circles,
+      ellipses: nextEllipses,
       polygons,
       angles,
       numbers,
       textLabels: nextTextLabels,
+      geometryLayerOrder: scene.geometryLayerOrder,
     };
     const pointsWithBranches = points.map((point) => {
       if (
@@ -352,7 +402,11 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
           if (!pointIds.has(point.pointId)) return false;
           if (point.axis.type === "line") return nextLineIdsAfter.has(point.axis.id);
           if (point.axis.type === "segment") return nextSegmentIds.has(point.axis.id);
+          if (point.axis.type === "pointPair") return pointIds.has(point.axis.aId) && pointIds.has(point.axis.bId);
           return pointIds.has(point.axis.id);
+        }
+        if (point.kind === "pointByProjection") {
+          return pointIds.has(point.pointId) && pointIds.has(point.axisAId) && pointIds.has(point.axisBId);
         }
         if (point.kind === "circleLineIntersectionPoint") {
           return nextCircleIds.has(point.circleId) && nextLineIdsAfter.has(point.lineId);
@@ -397,6 +451,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       if (def.kind === "distancePoints") return nextPointIds.has(def.aId) && nextPointIds.has(def.bId);
       if (def.kind === "segmentLength") return nextSegmentIdsAfter.has(def.segId);
       if (def.kind === "circleRadius" || def.kind === "circleArea") return nextCircleIdsAfter.has(def.circleId);
+      if (def.kind === "polygonPerimeter" || def.kind === "polygonArea") return nextPolygonIds.has(def.polygonId);
       if (def.kind === "angleDegrees") return nextAngleIds.has(def.angleId);
       return true;
     });
@@ -416,9 +471,11 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       segments: nextSegmentsNormalized,
       lines: nextLines,
       circles: nextCirclesMigrated,
+      ellipses: nextEllipses,
       polygons: nextPolygons,
       angles: nextAngles,
       numbers: nextNumbers,
+      geometryLayerOrder: scene.geometryLayerOrder,
     };
 
     const nextSegmentsLabeled = nextSegmentsNormalized.map((segment) => {
@@ -511,9 +568,39 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       circles: nextCirclesLabeled,
     };
 
+    const nextEllipsesLabeled = nextEllipses.map((ellipse) => {
+      const fallbackText = defaultEllipseLabelText(ellipse, sceneForPolygonLabels);
+      const fallbackPos = defaultEllipseLabelPosWorld(ellipse, sceneForPolygonLabels) ?? undefined;
+      const showLabel = Boolean(ellipse.showLabel);
+      const labelText = resolveObjectLabelText(ellipse.labelText, fallbackText);
+      const labelPosWorld = isFiniteLabelPosWorld(ellipse.labelPosWorld) ? ellipse.labelPosWorld : fallbackPos;
+      const sameShow = Boolean(ellipse.showLabel) === showLabel;
+      const sameText = ellipse.labelText === labelText;
+      const samePos =
+        (ellipse.labelPosWorld === undefined && labelPosWorld === undefined)
+        || (
+          ellipse.labelPosWorld !== undefined
+          && labelPosWorld !== undefined
+          && ellipse.labelPosWorld.x === labelPosWorld.x
+          && ellipse.labelPosWorld.y === labelPosWorld.y
+        );
+      if (sameShow && sameText && samePos) return ellipse;
+      return {
+        ...ellipse,
+        showLabel,
+        labelText,
+        labelPosWorld,
+      };
+    });
+
+    const sceneForEllipseLabels: SceneModel = {
+      ...sceneForPolygonLabels,
+      ellipses: nextEllipsesLabeled,
+    };
+
     const nextPolygonsLabeled = nextPolygons.map((polygon) => {
-      const fallbackText = defaultPolygonLabelText(polygon, sceneForPolygonLabels);
-      const fallbackPos = defaultPolygonLabelPosWorld(polygon, sceneForPolygonLabels) ?? undefined;
+      const fallbackText = defaultPolygonLabelText(polygon, sceneForEllipseLabels);
+      const fallbackPos = defaultPolygonLabelPosWorld(polygon, sceneForEllipseLabels) ?? undefined;
       const showLabel = Boolean(polygon.showLabel);
       const labelText = resolveObjectLabelText(polygon.labelText, fallbackText);
       const labelPosWorld = isFiniteLabelPosWorld(polygon.labelPosWorld) ? polygon.labelPosWorld : fallbackPos;
@@ -542,6 +629,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       !sameIds(nextSegmentsLabeled, segments) ||
       !sameIds(nextLinesLabeled, lines) ||
       !sameIds(nextCirclesLabeled, circles) ||
+      !sameIds(nextEllipsesLabeled, ellipses) ||
       !sameIds(nextPolygonsLabeled, polygons) ||
       !sameIds(nextAngles, angles) ||
       !sameIds(nextTextLabels, textLabels) ||
@@ -551,6 +639,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
       nextSegmentsLabeled.some((segment, idx) => segment !== segments[idx]) ||
       nextLinesLabeled.some((line, idx) => line !== lines[idx]) ||
       nextCirclesLabeled.some((circle, idx) => circle !== circles[idx]) ||
+      nextEllipsesLabeled.some((ellipse, idx) => ellipse !== ellipses[idx]) ||
       nextPolygonsLabeled.some((polygon, idx) => polygon !== polygons[idx]) ||
       nextTextLabels.some((label, idx) => label !== textLabels[idx]);
 
@@ -559,6 +648,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     segments = nextSegmentsLabeled;
     lines = nextLinesLabeled;
     circles = nextCirclesLabeled;
+    ellipses = nextEllipsesLabeled;
     polygons = nextPolygonsLabeled;
     angles = nextAngles;
     numbers = nextNumbers;
@@ -567,6 +657,35 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
     if (!anyChanged) break;
   }
 
-  if (!changed) return scene;
-  return { ...scene, points, vectors, segments, lines, circles, polygons, angles, numbers, textLabels };
+  const geometryLayerOrder = normalizeGeometryLayerOrder({
+    ...scene,
+    points,
+    vectors,
+    segments,
+    lines,
+    circles,
+    ellipses,
+    polygons,
+    angles,
+    numbers,
+    textLabels,
+  });
+  const priorGeometryLayerOrder = Array.isArray(scene.geometryLayerOrder) ? scene.geometryLayerOrder : [];
+  const geometryLayerChanged = !sameGeometryLayerOrder(priorGeometryLayerOrder, geometryLayerOrder);
+
+  if (!changed && !geometryLayerChanged) return scene;
+  return {
+    ...scene,
+    points,
+    vectors,
+    segments,
+    lines,
+    circles,
+    ellipses,
+    polygons,
+    angles,
+    numbers,
+    textLabels,
+    geometryLayerOrder,
+  };
 }

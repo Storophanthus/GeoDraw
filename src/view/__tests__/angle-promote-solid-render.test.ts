@@ -1,6 +1,6 @@
 import type { SceneModel } from "../../scene/points";
-import { drawAngles, type ResolvedAngleForRender } from "../renderers/angles";
-import { drawSegments } from "../renderers/segments";
+import { drawAngleObject, type ResolvedAngleForRender } from "../renderers/angles";
+import { drawSegmentObject } from "../renderers/segments";
 import type { Camera, Viewport } from "../camera";
 
 function assert(condition: boolean, message: string): void {
@@ -110,9 +110,10 @@ function makeResolvedAngle(id: string, promoteToSolid: boolean): ResolvedAngleFo
 {
   const ctx = new FakeCanvasContext();
   ctx.setLineDash([8, 6]);
-  drawAngles(
+  drawAngleObject(
     ctx as unknown as CanvasRenderingContext2D,
     [makeResolvedAngle("solid", true)],
+    "solid",
     camera,
     viewport,
     null,
@@ -128,9 +129,10 @@ function makeResolvedAngle(id: string, promoteToSolid: boolean): ResolvedAngleFo
 {
   const ctx = new FakeCanvasContext();
   ctx.setLineDash([8, 6]);
-  drawAngles(
+  drawAngleObject(
     ctx as unknown as CanvasRenderingContext2D,
     [makeResolvedAngle("dashed", false)],
+    "dashed",
     camera,
     viewport,
     null,
@@ -216,20 +218,23 @@ function makeResolvedAngle(id: string, promoteToSolid: boolean): ResolvedAngleFo
     polygons: [],
     angles: [],
     textLabels: [],
+    richTextNodes: [],
   };
 
-  drawSegments(
+  drawSegmentObject(
     ctx as unknown as CanvasRenderingContext2D,
     segmentScene,
+    "seg_dashed",
     camera,
     viewport,
     null,
     null,
     null
   );
-  drawAngles(
+  drawAngleObject(
     ctx as unknown as CanvasRenderingContext2D,
     [makeResolvedAngle("after-segment", true)],
+    "after-segment",
     camera,
     viewport,
     null,

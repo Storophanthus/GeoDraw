@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "points": [
+    { "id": "o", "kind": "free", "name": "O", "captionTex": "O", "visible": true, "showLabel": "name", "position": { "x": 0, "y": 0 } },
+    { "id": "a", "kind": "free", "name": "A", "captionTex": "A", "visible": true, "showLabel": "name", "position": { "x": 4, "y": 0 } },
+    { "id": "i", "kind": "midpointPoints", "name": "I", "captionTex": "I", "visible": true, "showLabel": "name", "aId": "o", "bId": "a" },
+    { "id": "g", "kind": "free", "name": "G", "captionTex": "G", "visible": true, "showLabel": "name", "position": { "x": 3, "y": 0.5 } },
+    { "id": "d", "kind": "free", "name": "D", "captionTex": "D", "visible": true, "showLabel": "name", "position": { "x": 2.4, "y": 1.2 } },
+    { "id": "b", "kind": "free", "name": "B", "captionTex": "B", "visible": true, "showLabel": "name", "position": { "x": 1, "y": 1 } },
+    { "id": "c", "kind": "free", "name": "C", "captionTex": "C", "visible": true, "showLabel": "name", "position": { "x": 0, "y": 0 } },
+    { "id": "ia", "kind": "free", "name": "I_A", "captionTex": "I_A", "visible": true, "showLabel": "caption", "position": { "x": 1, "y": -1 } },
+    {
+      "id": "l",
+      "kind": "circleLineIntersectionPoint",
+      "name": "L",
+      "captionTex": "L",
+      "visible": true,
+      "showLabel": "name",
+      "circleId": "omega",
+      "lineId": "ig",
+      "branchIndex": 0,
+      "excludePointId": "i"
+    },
+    {
+      "id": "m",
+      "kind": "circleLineIntersectionPoint",
+      "name": "M",
+      "captionTex": "M",
+      "visible": true,
+      "showLabel": "name",
+      "circleId": "gamma",
+      "lineId": "il",
+      "branchIndex": 0,
+      "excludePointId": "i"
+    }
+  ],
+  "segments": [],
+  "lines": [
+    { "id": "ig", "kind": "twoPoint", "aId": "i", "bId": "g", "visible": false, "showLabel": false },
+    { "id": "il", "kind": "twoPoint", "aId": "i", "bId": "l", "visible": false, "showLabel": false }
+  ],
+  "circles": [
+    { "id": "omega", "kind": "threePoint", "aId": "i", "bId": "g", "cId": "d", "visible": true, "showLabel": false },
+    { "id": "gamma", "kind": "threePoint", "aId": "b", "bId": "c", "cId": "ia", "visible": true, "showLabel": false }
+  ],
+  "angles": [],
+  "numbers": []
+}

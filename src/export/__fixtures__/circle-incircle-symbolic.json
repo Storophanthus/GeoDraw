@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_1",
+      "name": "A",
+      "definition": { "kind": "free", "x": -4, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_2",
+      "name": "B",
+      "definition": { "kind": "free", "x": 4, "y": 0 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_3",
+      "name": "C",
+      "definition": { "kind": "free", "x": 1, "y": 6 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_4",
+      "name": "D",
+      "definition": {
+        "kind": "triangleCenter",
+        "centerKind": "incenter",
+        "aId": "p_1",
+        "bId": "p_2",
+        "cId": "p_3"
+      },
+      "visible": false,
+      "showLabel": "none"
+    }
+  ],
+  "lines": [],
+  "segments": [
+    { "id": "s_1", "aId": "p_1", "bId": "p_2", "visible": true },
+    { "id": "s_2", "aId": "p_2", "bId": "p_3", "visible": true },
+    { "id": "s_3", "aId": "p_3", "bId": "p_1", "visible": true }
+  ],
+  "circles": [
+    {
+      "id": "c_1",
+      "kind": "fixedRadius",
+      "centerId": "p_4",
+      "radius": 2.089948793473489,
+      "radiusExpr": "Inradius(A,B,C)",
+      "visible": true
+    }
+  ],
+  "angles": [],
+  "numbers": []
+}

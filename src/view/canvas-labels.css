@@ -1,0 +1,46 @@
+.labelsLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pointLabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(0, 0);
+  color: var(--gd-ui-text-strong, #0f172a);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pointLabel.plain {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  white-space: pre-wrap;
+  line-height: 1.18;
+  text-align: center;
+}
+
+.pointLabel.mixed {
+  white-space: normal;
+  line-height: 1.18;
+  text-align: center;
+}
+
+.pointLabel.tex .katex {
+  font-size: 0.95em;
+}
+
+.pointLabel.selectedTextLabel {
+  border-radius: 8px;
+  outline: 1px dashed color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 74%, white);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gd-ui-accent, #8b5a2b) 24%, transparent);
+  background: color-mix(in srgb, var(--gd-ui-surface, #fffaf0) 18%, transparent);
+}

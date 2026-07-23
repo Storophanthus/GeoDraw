@@ -102,31 +102,44 @@ const scene: SceneModel = {
   angles: [
     { id: "ang1", kind: "sector", aId: "pH", bId: "pI", cId: "pJ", visible: true, style: angleStyle },
   ],
+  geometryLayerOrder: [
+    { type: "segment", id: "s1" },
+    { type: "line", id: "l1" },
+    { type: "circle", id: "c1" },
+    { type: "polygon", id: "poly1" },
+    { type: "angle", id: "ang1" },
+  ],
 };
 
 const tikz = exportTikz(scene);
-const firstStrokeIdx = Math.min(
-  ...[
-    tikz.indexOf("\\tkzDrawSegment"),
-    tikz.indexOf("\\tkzDrawLine"),
-    tikz.indexOf("\\tkzDrawCircle"),
-    tikz.indexOf("\\draw["),
-    tikz.indexOf("\\tkzDrawSector"),
-  ].filter((v) => v >= 0)
-);
+const sectorFillIdx = tikz.indexOf("\\tkzFillSector");
+const sectorDrawIdx = tikz.indexOf("\\tkzDrawSector");
+const polygonFillIdx = tikz.indexOf("\\fill[");
+const polygonDrawIdx = tikz.indexOf("\\draw[");
+const circleFillIdx = tikz.indexOf("\\tkzFillCircle");
+const circleDrawIdx = tikz.indexOf("\\tkzDrawCircle");
+const lineDrawIdx = tikz.indexOf("\\tkzDrawLine");
+const segmentDrawIdx = tikz.indexOf("\\tkzDrawSegment");
 
-if (firstStrokeIdx < 0) {
-  throw new Error("Expected stroke commands in exported TikZ.");
+const indices = [
+  ["sector fill", sectorFillIdx],
+  ["sector draw", sectorDrawIdx],
+  ["polygon fill", polygonFillIdx],
+  ["polygon draw", polygonDrawIdx],
+  ["circle fill", circleFillIdx],
+  ["circle draw", circleDrawIdx],
+  ["line draw", lineDrawIdx],
+  ["segment draw", segmentDrawIdx],
+] as const;
+
+for (const [label, idx] of indices) {
+  if (idx < 0) throw new Error(`Expected ${label} command in exported TikZ.`);
 }
 
-const requiredFills = ["\\tkzFillCircle", "\\fill[", "\\tkzFillSector"];
-for (const fillCmd of requiredFills) {
-  const idx = tikz.indexOf(fillCmd);
-  if (idx < 0) {
-    throw new Error(`Expected fill command '${fillCmd}' in exported TikZ.`);
-  }
-  if (idx > firstStrokeIdx) {
-    throw new Error(`Expected fill command '${fillCmd}' before first stroke command.`);
+const ordered = [sectorFillIdx, sectorDrawIdx, polygonFillIdx, polygonDrawIdx, circleFillIdx, circleDrawIdx, lineDrawIdx, segmentDrawIdx];
+for (let i = 1; i < ordered.length; i += 1) {
+  if (ordered[i - 1] > ordered[i]) {
+    throw new Error("Expected geometry draw order to follow the explicit layer order.");
   }
 }
 
@@ -135,7 +148,7 @@ const labelsIdx = tikz.indexOf("% Labels");
 if (drawPointsIdx < 0 || labelsIdx < 0 || drawPointsIdx > labelsIdx) {
   throw new Error("Expected points layer before labels layer.");
 }
-if (drawPointsIdx < firstStrokeIdx) {
+if (drawPointsIdx < segmentDrawIdx) {
   throw new Error("Expected points to be emitted after draw objects.");
 }
 

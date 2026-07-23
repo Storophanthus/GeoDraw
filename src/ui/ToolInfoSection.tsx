@@ -3,6 +3,15 @@ import type { ActiveTool, PendingSelection } from "../state/slices/storeTypes";
 
 type AnglePreview = { ok: true; valueDeg: number } | { ok: false; error: string };
 
+export type TransformFactorSliderBinding = {
+  id: string;
+  name: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+};
+
 type ToolInfoSectionProps = {
   activeTool: ActiveTool;
   copyStyleHasSource: boolean;
@@ -22,6 +31,9 @@ type ToolInfoSectionProps = {
   setTransformTool: (next: { factorExpr?: string; angleExpr?: string; direction?: "CCW" | "CW" }) => void;
   transformFactorPreview: NumberExpressionEvalResult;
   transformAnglePreview: AnglePreview;
+  transformFactorSlider: TransformFactorSliderBinding | null;
+  createTransformFactorSlider: () => void;
+  updateTransformFactorSliderValue: (value: number) => void;
   pendingSelection: PendingSelection;
   pendingCircleFixedCenterLabel: string | null;
   createCircleFixedRadius: (centerId: string, radiusExpr: string) => string | null;
@@ -47,6 +59,9 @@ export function ToolInfoSection({
   setTransformTool,
   transformFactorPreview,
   transformAnglePreview,
+  transformFactorSlider,
+  createTransformFactorSlider,
+  updateTransformFactorSliderValue,
   pendingSelection,
   pendingCircleFixedCenterLabel,
   createCircleFixedRadius,
@@ -57,6 +72,7 @@ export function ToolInfoSection({
   const reflectPending = pendingSelection && pendingSelection.tool === "reflect" ? pendingSelection : null;
   const rotatePending = pendingSelection && pendingSelection.tool === "rotate" ? pendingSelection : null;
   const dilatePending = pendingSelection && pendingSelection.tool === "dilate" ? pendingSelection : null;
+  const invertPending = pendingSelection && pendingSelection.tool === "invert" ? pendingSelection : null;
 
   return (
     <>
@@ -70,6 +86,12 @@ export function ToolInfoSection({
       {activeTool === "label" && (
         <div className="toolInfo">
           Label: click object to show/select label, then drag label anchor to reposition.
+        </div>
+      )}
+      {activeTool === "textbox" && (
+        <div className="toolInfo">
+          <div>Textbox: click the canvas to place and type directly.</div>
+          <div className="statusText">Plain text stays plain. Use <code>$...$</code> for inline math and <code>\[...\]</code> for centered display math.</div>
         </div>
       )}
       {activeTool === "angle_fixed" && (
@@ -242,9 +264,9 @@ export function ToolInfoSection({
       )}
       {activeTool === "dilate" && (
         <div className="toolInfo">
-          <div className="subSectionTitle">Dilate Object</div>
+          <div className="subSectionTitle">Homothety / Dilate Object</div>
           <div className="controlRow">
-            <label className="controlLabel">Factor Expr</label>
+            <label className="controlLabel">Scale k</label>
             <input
               className="renameInput"
               type="text"
@@ -253,6 +275,37 @@ export function ToolInfoSection({
               placeholder="e.g. 2, 1/3, k_1"
             />
           </div>
+          {transformFactorSlider ? (
+            <div className="numberSliderValueRow">
+              <label className="controlLabel">{transformFactorSlider.name}</label>
+              <div className="numberSliderValueControls">
+                <input
+                  className="sizeSlider numberSliderTrack"
+                  type="range"
+                  min={transformFactorSlider.min}
+                  max={transformFactorSlider.max}
+                  step={transformFactorSlider.step}
+                  value={transformFactorSlider.value}
+                  onChange={(e) => updateTransformFactorSliderValue(Number(e.target.value))}
+                  aria-label={`Homothety scale slider ${transformFactorSlider.name}`}
+                />
+                <input
+                  className="scaleInputCompact numberSliderValueInput"
+                  type="number"
+                  step="any"
+                  value={transformFactorSlider.value}
+                  onChange={(e) => updateTransformFactorSliderValue(Number(e.target.value))}
+                  aria-label={`Homothety scale value ${transformFactorSlider.name}`}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="actionsRow">
+              <button className="actionButton secondary" onClick={createTransformFactorSlider}>
+                Use slider for k
+              </button>
+            </div>
+          )}
           <div className="statusText">
             {transformFactorPreview.ok && Number.isFinite(transformFactorPreview.value)
               ? `Resolved: k = ${transformFactorPreview.value.toFixed(6)}`
@@ -263,18 +316,34 @@ export function ToolInfoSection({
               ? "Step 1: click source object."
               : "Step 2: click center point O."}
           </div>
+          <div className="statusText">
+            {transformFactorSlider
+              ? "Images created with this k follow the slider — drag it to rescale them live."
+              : "Bind k to a slider to rescale created images live."}
+          </div>
+        </div>
+      )}
+      {activeTool === "invert" && (
+        <div className="toolInfo">
+          <div className="subSectionTitle">Invert Object</div>
+          <div className="statusText">
+            {!invertPending
+              ? "Step 1: click source point, line, or circle."
+              : "Step 2: click inversion circle."}
+          </div>
+          <div className="statusText">Inversion applies to points, lines, and circles.</div>
         </div>
       )}
       {activeTool === "export_clip" && (
         <div className="toolInfo">
-          <div className="subSectionTitle">Export Clip Polygon</div>
-          <div className="statusText">Click vertices, then click near the first vertex to close the clip path.</div>
+          <div className="subSectionTitle">Crop Area – Freeform</div>
+          <div className="statusText">Click vertices, then click near the first vertex to close the crop area.</div>
         </div>
       )}
       {activeTool === "export_clip_rect" && (
         <div className="toolInfo">
-          <div className="subSectionTitle">Export Clip Rectangle</div>
-          <div className="statusText">Click first corner, then second corner to set TikZ clip rectangle.</div>
+          <div className="subSectionTitle">Crop Area – Box</div>
+          <div className="statusText">Click first corner, then second corner to set the crop area.</div>
         </div>
       )}
     </>

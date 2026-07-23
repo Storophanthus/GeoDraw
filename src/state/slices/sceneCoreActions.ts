@@ -1,5 +1,5 @@
 import { getPointWorldPos, nextLabelFromIndex } from "../../scene/points";
-import type { ShowLabelMode, TriangleCenterKind } from "../../scene/points";
+import type { TextLabelToolKind, TriangleCenterKind } from "../../scene/points";
 import {
   defaultLineLabelPosWorld,
   defaultLineLabelText,
@@ -11,6 +11,7 @@ import {
 import { registerLinePair, registerSegmentPair } from "../../domain/rightAngleProvenance";
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
+import type { Vec2 } from "../../geo/vec2";
 
 type SceneCoreContext = {
   setState: (updater: (prev: GeoState) => GeoState, options?: SetStateOptions) => void;
@@ -38,12 +39,36 @@ function nextUnusedTextLabelName(state: GeoState): string {
   return name;
 }
 
+function nextUnusedCopyName(usedNames: Iterable<string>, sourceName: string): string {
+  const used = new Set(usedNames);
+  const base = `${sourceName.trim() || "Object"} copy`;
+  let name = base;
+  let idx = 2;
+  while (used.has(name)) {
+    name = `${base} ${idx}`;
+    idx += 1;
+  }
+  return name;
+}
+
+function duplicateOffsetWorld(world: Vec2, offsetWorld: Vec2 = { x: 0.35, y: -0.35 }) {
+  const dx = Number.isFinite(offsetWorld.x) ? offsetWorld.x : 0.35;
+  const dy = Number.isFinite(offsetWorld.y) ? offsetWorld.y : -0.35;
+  return { x: world.x + dx, y: world.y + dy };
+}
+
 export function createSceneCoreActions(
   ctx: SceneCoreContext
 ): Pick<
   GeoActions,
   | "createFreePoint"
   | "createTextLabel"
+  | "createRichTextNode"
+  | "duplicateTextLabel"
+  | "duplicateRichTextNode"
+  | "copyTextObjectToClipboard"
+  | "pasteTextClipboard"
+  | "migrateTextLabelToRichTextNode"
   | "createMidpointFromPoints"
   | "createMidpointFromSegment"
   | "createSegment"
@@ -74,7 +99,7 @@ export function createSceneCoreActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: false,
                 auxiliary: false,
                 position: world,
@@ -93,12 +118,14 @@ export function createSceneCoreActions(
       return createdId;
     },
 
-    createTextLabel(world) {
+    createTextLabel(world, preset = "label") {
       let createdId = "";
       ctx.setState((prev) => {
         if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return prev;
         const name = nextUnusedTextLabelName(prev);
         const id = `txt_${prev.nextTextLabelId}`;
+        const toolKind: TextLabelToolKind = preset === "textbox" ? "textbox" : "label";
+        const defaultStyle = toolKind === "textbox" ? prev.textboxToolDefaults : prev.labelToolDefaults;
         createdId = id;
         return {
           ...prev,
@@ -109,15 +136,13 @@ export function createSceneCoreActions(
               {
                 id,
                 name,
-                text: name,
+                text: toolKind === "textbox" ? "" : name,
+                toolKind,
                 contentMode: "static",
                 visible: true,
                 positionWorld: { x: world.x, y: world.y },
                 style: {
-                  textColor: prev.pointDefaults.labelColor,
-                  textSize: 12,
-                  useTex: true,
-                  rotationDeg: 0,
+                  ...defaultStyle,
                 },
               },
             ],
@@ -125,6 +150,282 @@ export function createSceneCoreActions(
           selectedObject: { type: "textLabel", id },
           recentCreatedObject: { type: "textLabel", id },
           nextTextLabelId: prev.nextTextLabelId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    createRichTextNode(world) {
+      let createdId = "";
+      ctx.setState((prev) => {
+        if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return prev;
+        const id = `rt_${prev.nextRichTextId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: [
+              ...(prev.scene.richTextNodes ?? []),
+              {
+                id,
+                type: "richText",
+                name: id,
+                visible: true,
+                positionWorld: { x: world.x, y: world.y },
+                style: {
+                  ...prev.richTextToolDefaults,
+                },
+                document: {
+                  kind: "document",
+                  blocks: [
+                    {
+                      kind: "paragraph",
+                      textAlign: prev.richTextToolDefaults.textAlign ?? "left",
+                      children: [{ kind: "text", text: "" }],
+                    },
+                  ],
+                },
+                boundsPx: { widthPx: 100, heightPx: 20 },
+              },
+            ],
+          },
+          selectedObject: { type: "richText", id },
+          recentCreatedObject: { type: "richText", id },
+          nextRichTextId: prev.nextRichTextId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    duplicateTextLabel(id, offsetWorld) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const source = (prev.scene.textLabels ?? []).find((label) => label.id === id);
+        if (!source) return prev;
+        const nextId = `txt_${prev.nextTextLabelId}`;
+        createdId = nextId;
+        const nextLabel = {
+          ...structuredClone(source),
+          id: nextId,
+          name: nextUnusedCopyName((prev.scene.textLabels ?? []).map((label) => label.name), source.name),
+          positionWorld: duplicateOffsetWorld(source.positionWorld, offsetWorld),
+        };
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels: [...(prev.scene.textLabels ?? []), nextLabel],
+          },
+          selectedObject: { type: "textLabel", id: nextId },
+          recentCreatedObject: { type: "textLabel", id: nextId },
+          nextTextLabelId: prev.nextTextLabelId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    duplicateRichTextNode(id, offsetWorld) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const source = (prev.scene.richTextNodes ?? []).find((node) => node.id === id);
+        if (!source) return prev;
+        const nextId = `rt_${prev.nextRichTextId}`;
+        createdId = nextId;
+        const nextNode = {
+          ...structuredClone(source),
+          id: nextId,
+          name: nextUnusedCopyName((prev.scene.richTextNodes ?? []).map((node) => node.name), source.name),
+          positionWorld: duplicateOffsetWorld(source.positionWorld, offsetWorld),
+        };
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: [...(prev.scene.richTextNodes ?? []), nextNode],
+          },
+          selectedObject: { type: "richText", id: nextId },
+          recentCreatedObject: { type: "richText", id: nextId },
+          nextRichTextId: prev.nextRichTextId + 1,
+        };
+      });
+      return createdId;
+    },
+
+    copyTextObjectToClipboard(target) {
+      let copied = false;
+      ctx.setState(
+        (prev) => {
+          if (target.type === "textLabel") {
+            const source = (prev.scene.textLabels ?? []).find((label) => label.id === target.id);
+            if (!source) return prev;
+            copied = true;
+            return {
+              ...prev,
+              textClipboard: {
+                payload: {
+                  type: "textLabel",
+                  text: source.text,
+                  toolKind: source.toolKind,
+                  contentMode: source.contentMode ?? "static",
+                  numberId: source.numberId,
+                  expr: source.expr,
+                  visible: source.visible,
+                  style: structuredClone(source.style),
+                },
+                origin: { ...source.positionWorld },
+                pasteCount: 0,
+              },
+            };
+          }
+          const source = (prev.scene.richTextNodes ?? []).find((node) => node.id === target.id);
+          if (!source) return prev;
+          copied = true;
+          return {
+            ...prev,
+            textClipboard: {
+              payload: {
+                type: "richText",
+                visible: source.visible,
+                document: structuredClone(source.document),
+                style: structuredClone(source.style),
+                boundsPx: source.boundsPx ? { ...source.boundsPx } : undefined,
+              },
+              origin: { ...source.positionWorld },
+              pasteCount: 0,
+            },
+          };
+        },
+        { history: "skip" }
+      );
+      return copied;
+    },
+
+    pasteTextClipboard(world, offsetWorld) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const clipboard = prev.textClipboard;
+        if (!clipboard) return prev;
+        const pasteCount = clipboard.pasteCount + 1;
+        const positionWorld = world ?? duplicateOffsetWorld(clipboard.origin, {
+          x: (offsetWorld?.x ?? 0.35) * pasteCount,
+          y: (offsetWorld?.y ?? -0.35) * pasteCount,
+        });
+
+        if (clipboard.payload.type === "textLabel") {
+          const nextId = `txt_${prev.nextTextLabelId}`;
+          createdId = nextId;
+          return {
+            ...prev,
+            scene: {
+              ...prev.scene,
+              textLabels: [
+                ...(prev.scene.textLabels ?? []),
+                {
+                  id: nextId,
+                  name: nextUnusedTextLabelName(prev),
+                  text: clipboard.payload.text,
+                  toolKind: clipboard.payload.toolKind,
+                  contentMode: clipboard.payload.contentMode ?? "static",
+                  numberId: clipboard.payload.numberId,
+                  expr: clipboard.payload.expr,
+                  visible: clipboard.payload.visible,
+                  positionWorld,
+                  style: structuredClone(clipboard.payload.style),
+                },
+              ],
+            },
+            selectedObject: { type: "textLabel", id: nextId },
+            recentCreatedObject: { type: "textLabel", id: nextId },
+            nextTextLabelId: prev.nextTextLabelId + 1,
+            textClipboard: { ...clipboard, pasteCount },
+          };
+        }
+
+        const nextId = `rt_${prev.nextRichTextId}`;
+        createdId = nextId;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            richTextNodes: [
+              ...(prev.scene.richTextNodes ?? []),
+              {
+                id: nextId,
+                type: "richText",
+                name: nextId,
+                visible: clipboard.payload.visible,
+                positionWorld,
+                style: structuredClone(clipboard.payload.style),
+                document: structuredClone(clipboard.payload.document),
+                boundsPx: clipboard.payload.boundsPx ? { ...clipboard.payload.boundsPx } : undefined,
+              },
+            ],
+          },
+          selectedObject: { type: "richText", id: nextId },
+          recentCreatedObject: { type: "richText", id: nextId },
+          nextRichTextId: prev.nextRichTextId + 1,
+          textClipboard: { ...clipboard, pasteCount },
+        };
+      });
+      return createdId;
+    },
+
+    migrateTextLabelToRichTextNode(id) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const textLabel = (prev.scene.textLabels ?? []).find(l => l.id === id);
+        if (!textLabel) return prev;
+
+        const newId = `rt_${prev.nextRichTextId}`;
+        createdId = newId;
+
+        const textLines = textLabel.text.split("\n");
+        const blocks = textLines.length > 0 ? textLines.map(line => ({
+          kind: "paragraph" as const,
+          textAlign: prev.richTextToolDefaults.textAlign ?? "left",
+          children: [{ kind: "text" as const, text: line }],
+        })) : [
+          {
+            kind: "paragraph" as const,
+            textAlign: prev.richTextToolDefaults.textAlign ?? "left",
+            children: [{ kind: "text" as const, text: "" }],
+          }
+        ];
+
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            textLabels: prev.scene.textLabels!.filter(l => l.id !== id),
+            richTextNodes: [
+              ...(prev.scene.richTextNodes ?? []),
+              {
+                id: newId,
+                type: "richText",
+                name: newId,
+                visible: textLabel.visible,
+                positionWorld: { ...textLabel.positionWorld },
+                style: {
+                  ...prev.richTextToolDefaults,
+                  textColor: textLabel.style.textColor,
+                  textSize: textLabel.style.textSize,
+                  rotationDeg:
+                    typeof textLabel.style.rotationDeg === "number" && Number.isFinite(textLabel.style.rotationDeg)
+                      ? textLabel.style.rotationDeg
+                      : prev.richTextToolDefaults.rotationDeg,
+                },
+                document: {
+                  kind: "document",
+                  blocks,
+                },
+                boundsPx: { widthPx: 200, heightPx: 30 * Math.max(1, textLines.length) },
+              },
+            ],
+          },
+          selectedObject: { type: "richText", id: newId },
+          recentCreatedObject: { type: "richText", id: newId },
+          nextRichTextId: prev.nextRichTextId + 1,
         };
       });
       return createdId;
@@ -154,7 +455,7 @@ export function createSceneCoreActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: true,
                 auxiliary: true,
                 aId,
@@ -196,7 +497,7 @@ export function createSceneCoreActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: true,
                 auxiliary: true,
                 segId,
@@ -223,15 +524,17 @@ export function createSceneCoreActions(
         const b = prev.scene.points.find((p) => p.id === bId);
         if (!a || !b) return prev;
         id = `s_${prev.nextSegmentId}`;
+        const showLabel = prev.objectLabelDefaults.segment;
         const newSegment = {
           id,
           aId,
           bId,
           visible: true,
-          showLabel: false,
-          labelText: defaultSegmentLabelText({ id, aId, bId, visible: true, showLabel: false, style: prev.segmentDefaults }, prev.scene),
+          showLabel,
+          labelGlow: prev.objectLabelDefaults.segmentGlow ?? true,
+          labelText: defaultSegmentLabelText({ id, aId, bId, visible: true, showLabel, style: prev.segmentDefaults }, prev.scene),
           labelPosWorld:
-            defaultSegmentLabelPosWorld({ id, aId, bId, visible: true, showLabel: false, style: prev.segmentDefaults }, prev.scene) ?? undefined,
+            defaultSegmentLabelPosWorld({ id, aId, bId, visible: true, showLabel, style: prev.segmentDefaults }, prev.scene) ?? undefined,
           style: { ...prev.segmentDefaults },
         };
         return {
@@ -260,20 +563,22 @@ export function createSceneCoreActions(
         const b = prev.scene.points.find((p) => p.id === bId);
         if (!a || !b) return prev;
         id = `l_${prev.nextLineId}`;
+        const showLabel = prev.objectLabelDefaults.line;
         const newLine = {
           id,
           kind: "twoPoint" as const,
           aId,
           bId,
           visible: true,
-          showLabel: false,
+          showLabel,
+          labelGlow: prev.objectLabelDefaults.lineGlow ?? true,
           labelText: defaultLineLabelText(
-            { id, kind: "twoPoint", aId, bId, visible: true, showLabel: false, style: prev.lineDefaults },
+            { id, kind: "twoPoint", aId, bId, visible: true, showLabel, style: prev.lineDefaults },
             prev.scene
           ),
           labelPosWorld:
             defaultLineLabelPosWorld(
-              { id, kind: "twoPoint", aId, bId, visible: true, showLabel: false, style: prev.lineDefaults },
+              { id, kind: "twoPoint", aId, bId, visible: true, showLabel, style: prev.lineDefaults },
               prev.scene
             ) ?? undefined,
           style: { ...prev.lineDefaults },
@@ -339,7 +644,7 @@ export function createSceneCoreActions(
             aId,
             bId,
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
             ownedByPolygonIds: [polygonId],
             style: prev.segmentDefaults,
           };
@@ -349,7 +654,8 @@ export function createSceneCoreActions(
             bId,
             ownedByPolygonIds: [polygonId],
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
+            labelGlow: prev.objectLabelDefaults.segmentGlow ?? true,
             labelText: defaultSegmentLabelText(segForLabel, prev.scene),
             labelPosWorld: defaultSegmentLabelPosWorld(segForLabel, prev.scene) ?? undefined,
             style: { ...prev.segmentDefaults },
@@ -359,15 +665,17 @@ export function createSceneCoreActions(
         }
 
         id = polygonId;
+        const showLabel = prev.objectLabelDefaults.polygon;
         const newPolygon = {
           id,
           pointIds: uniqueIds,
           visible: true,
-          showLabel: false,
-          labelText: defaultPolygonLabelText({ id, pointIds: uniqueIds, visible: true, showLabel: false, style: prev.polygonDefaults }, prev.scene),
+          showLabel,
+          labelGlow: prev.objectLabelDefaults.polygonGlow ?? true,
+          labelText: defaultPolygonLabelText({ id, pointIds: uniqueIds, visible: true, showLabel, style: prev.polygonDefaults }, prev.scene),
           labelPosWorld:
             defaultPolygonLabelPosWorld(
-              { id, pointIds: uniqueIds, visible: true, showLabel: false, style: prev.polygonDefaults },
+              { id, pointIds: uniqueIds, visible: true, showLabel, style: prev.polygonDefaults },
               prev.scene
             ) ?? undefined,
           style: { ...prev.polygonDefaults },
@@ -440,7 +748,7 @@ export function createSceneCoreActions(
             name,
             captionTex: name,
             visible: true,
-            showLabel: "name",
+            showLabel: prev.objectLabelDefaults.point,
             locked: true,
             auxiliary: true,
             centerId,
@@ -491,7 +799,7 @@ export function createSceneCoreActions(
             aId: pa,
             bId: pb,
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
             ownedByPolygonIds: [polygonId],
             style: prev.segmentDefaults,
           };
@@ -501,7 +809,8 @@ export function createSceneCoreActions(
             bId: pb,
             ownedByPolygonIds: [polygonId],
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
+            labelGlow: prev.objectLabelDefaults.segmentGlow ?? true,
             labelText: defaultSegmentLabelText(segForLabel, sceneWithNewPoints),
             labelPosWorld: defaultSegmentLabelPosWorld(segForLabel, sceneWithNewPoints) ?? undefined,
             style: { ...prev.segmentDefaults },
@@ -515,7 +824,7 @@ export function createSceneCoreActions(
           id: polygonId,
           pointIds,
           visible: true,
-          showLabel: false,
+          showLabel: prev.objectLabelDefaults.polygon,
           style: prev.polygonDefaults,
         };
         return {
@@ -530,7 +839,8 @@ export function createSceneCoreActions(
                 id: polygonId,
                 pointIds,
                 visible: true,
-                showLabel: false,
+                showLabel: prev.objectLabelDefaults.polygon,
+                labelGlow: prev.objectLabelDefaults.polygonGlow ?? true,
                 labelText: defaultPolygonLabelText(polygonForLabel, sceneWithNewPoints),
                 labelPosWorld: defaultPolygonLabelPosWorld(polygonForLabel, sceneWithNewPoints) ?? undefined,
                 style: { ...prev.polygonDefaults },
@@ -593,7 +903,7 @@ export function createSceneCoreActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: true,
                 auxiliary: true,
                 circleId,
@@ -635,7 +945,7 @@ export function createSceneCoreActions(
                 name,
                 captionTex: name,
                 visible: true,
-                showLabel: "name" as ShowLabelMode,
+                showLabel: prev.objectLabelDefaults.point,
                 locked: true,
                 auxiliary: true,
                 centerKind: centerKind as TriangleCenterKind,

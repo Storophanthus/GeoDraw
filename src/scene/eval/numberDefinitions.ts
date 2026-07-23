@@ -7,6 +7,7 @@ type AngleRef = { aId: string; bId: string; cId: string };
 type EvalNumberDefinitionOps = {
   getPointWorldById: (id: string) => Vec2 | null;
   getSegmentById: (id: string) => SegmentRef | null;
+  getPolygonPointIdsById: (id: string) => string[] | null;
   getCircleRadiusById: (id: string) => number | null;
   getAngleById: (id: string) => AngleRef | null;
   evaluateNumberExpression: (expr: string, excludeNumberId?: string) => number | null;
@@ -58,6 +59,19 @@ export function evalNumberDefinitionWithOps(
     return Math.PI * r * r;
   }
 
+  if (def.kind === "polygonPerimeter" || def.kind === "polygonArea") {
+    const pointIds = ops.getPolygonPointIdsById(def.polygonId);
+    if (!pointIds || pointIds.length < 3) return null;
+    const vertices: Vec2[] = [];
+    for (const pointId of pointIds) {
+      const world = ops.getPointWorldById(pointId);
+      if (!world) return null;
+      vertices.push(world);
+    }
+    if (def.kind === "polygonPerimeter") return polygonPerimeter(vertices, ops.distance);
+    return polygonArea(vertices);
+  }
+
   if (def.kind === "angleDegrees") {
     const angle = ops.getAngleById(def.angleId);
     if (!angle) return null;
@@ -79,4 +93,22 @@ export function evalNumberDefinitionWithOps(
   if (num === null || den === null) return null;
   if (Math.abs(den) <= 1e-12) return null;
   return num / den;
+}
+
+function polygonPerimeter(vertices: Vec2[], distance: (a: Vec2, b: Vec2) => number): number {
+  let total = 0;
+  for (let i = 0; i < vertices.length; i += 1) {
+    total += distance(vertices[i], vertices[(i + 1) % vertices.length]);
+  }
+  return total;
+}
+
+function polygonArea(vertices: Vec2[]): number {
+  let twiceArea = 0;
+  for (let i = 0; i < vertices.length; i += 1) {
+    const a = vertices[i];
+    const b = vertices[(i + 1) % vertices.length];
+    twiceArea += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(twiceArea) / 2;
 }

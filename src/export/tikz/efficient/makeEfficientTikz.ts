@@ -1,8 +1,25 @@
 import { baseColorTable } from "./colorTable";
 
-export function makeEfficientTikz(standardTex: string): string {
+export interface MakeEfficientTikzOptions {
+    /**
+     * Preserve numeric values that can change exported geometry or placement.
+     *
+     * Visual Exact uses this mode so coordinates, placement, stroke widths,
+     * dash lengths, font sizes, and every other numeric visual metric retain
+     * the precision produced by the renderer. Color and label compaction remain
+     * enabled because they preserve the rendered value.
+     *
+     * Defaults to false to preserve the existing reconstructible-export output.
+     */
+    preserveGeometry?: boolean;
+}
+
+export function makeEfficientTikz(
+    standardTex: string,
+    options: MakeEfficientTikzOptions = {}
+): string {
     let tex = standardTex;
-    tex = applyNumericRounding(tex);
+    tex = applyNumericRounding(tex, options.preserveGeometry === true);
     tex = applyColorSimplification(tex);
     tex = applyLabelGrouping(tex);
     // Final cleanup: remove multiple blank lines
@@ -12,16 +29,36 @@ export function makeEfficientTikz(standardTex: string): string {
 
 // --- 1. Numeric Rounding ---
 
-function applyNumericRounding(tex: string): string {
+function applyNumericRounding(tex: string, preserveGeometry: boolean): string {
+    // In Visual Exact, even "presentation" numbers are geometry: rounding a
+    // stroke width, dash length, or font size changes the rendered PDF. Keep
+    // the generated numeric stream intact and limit efficient-mode compaction
+    // to equivalent color names and label grouping.
+    if (preserveGeometry) return tex;
+
+    // Any numeric input to a tkz construction can affect incidence, branch
+    // identity, or even whether an intersection exists. Keep those lines exact;
+    // efficient export may shorten presentation values, but not topology.
+    const constructionLines: string[] = [];
+    tex = tex
+        .split("\n")
+        .map((line) => {
+            if (!/^\s*\\tkzDef[A-Za-z@]*/.test(line)) return line;
+            const index = constructionLines.push(line) - 1;
+            return `%%GD_CONSTRUCTION_LINE_${index}%%`;
+        })
+        .join("\n");
+
     // Helper to round numbers: 2 decimals, strip trailing zeros, -0 -> 0
-    const fmt = (numStr: string) => {
+    const fmtWithDecimals = (numStr: string, decimals: number) => {
         const n = parseFloat(numStr);
         if (isNaN(n)) return numStr;
-        // Round to 2 decimals
-        const rounded = Math.round(n * 100) / 100;
+        const factor = 10 ** decimals;
+        const rounded = Math.round(n * factor) / factor;
         // This automatically handles stripping trailing zeros and -0 -> 0 (JS 0 is always positive 0 usually, but Math.round handles it)
         return rounded.toString();
     };
+    const fmt = (numStr: string) => fmtWithDecimals(numStr, 2);
     const numberToken = "[-+]?\\d*\\.?\\d+(?:[eE][-+]?\\d+)?";
     const numberOnly = new RegExp(`^${numberToken}$`);
     const splitTopLevelComma = (input: string): string[] => {
@@ -43,11 +80,8 @@ function applyNumericRounding(tex: string): string {
         return out;
     };
 
-    // 1. scale=... in \begin{tikzpicture}[...]
-    tex = tex.replace(
-        new RegExp(`(\\\\begin\\{tikzpicture\\}\\[[^\\]]*?\\bscale=)(${numberToken})`, "g"),
-        (_m, prefix, val) => `${prefix}${fmt(val)}`
-    );
+    // 1. Preserve picture scale: tkz-euclide performs geometry using TeX
+    // dimensions after transforms, so scale rounding can perturb intersections.
 
     // 2. \tkzInit values (xmin/xmax/ymin/ymax)
     tex = tex.replace(/(\\tkzInit\[)([^\]]+)(\])/g, (_m, start, content, end) => {
@@ -56,33 +90,17 @@ function applyNumericRounding(tex: string): string {
         return `${start}${newContent}${end}`;
     });
 
-    // 3. coordinates inside \tkzDefPoints{...}
-    // Format: x/y/name, x/y/name
-    tex = tex.replace(/(\\tkzDefPoints{)([^}]+)(})/g, (_, start, content, end) => {
-        // split by comma, then split by slash
-        const parts = content.split(",").map((ptDef: string) => {
-            const trimmed = ptDef.trim();
-            if (!trimmed) return ptDef;
-            const [x, y, name] = trimmed.split("/");
-            if (x && y && name) {
-                return `${fmt(x)}/${fmt(y)}/${name}`;
-            }
-            return ptDef; // fallback
-        });
-        return `${start}${parts.join(", ")}${end}`;
-    });
-
-    // 4. pt values: line width=..., length=..., width=..., dash pattern=...
+    // 3. pt values: line width=..., length=..., width=..., dash pattern=...
     // Regex for "key=value pt" or "key=valuept"
     // Keys: line width, length, width
     // Note: dash pattern is complex (on Xpt off Ypt).
 
     // Simple keys first
-    const simpleKeys = ["line width", "length", "width", "size"]; // Added size= for angles
+    const simpleKeys = ["line width", "length", "width", "size"];
     const simpleKeysRegex = new RegExp(`(${simpleKeys.join("|")})=(${numberToken})pt`, "g");
     tex = tex.replace(simpleKeysRegex, (_, key, val) => `${key}=${fmt(val)}pt`);
 
-    // 4b. Font sizes in nodes: \fontsize{Xpt}{Ypt}\selectfont
+    // 3b. Font sizes in nodes: \fontsize{Xpt}{Ypt}\selectfont
     tex = tex.replace(
         new RegExp(`(\\\\fontsize\\{)(${numberToken})(pt\\}\\{)(${numberToken})(pt\\})`, "g"),
         (_m, p1, v1, p2, v2, p3) => `${p1}${fmt(v1)}${p2}${fmt(v2)}${p3}`
@@ -94,17 +112,17 @@ function applyNumericRounding(tex: string): string {
         return match.replace(dashPieceRegex, (_m, kind, val) => `${kind} ${fmt(val)}pt`);
     });
 
-    // 5. Unitless numeric fields (size=, mksize=, mkpos=)
+    // 4. Unitless numeric fields (size=, mksize=, mkpos=)
     // These keys appear in options usually without 'pt' (defaulting to cm or factor)
     const unitlessKeys = ["size", "mksize", "mkpos", "dist", "angle"];
     const unitlessKeysRegex = new RegExp(`(${unitlessKeys.join("|")})=(${numberToken})`, "g");
     tex = tex.replace(unitlessKeysRegex, (_, key, val) => `${key}=${fmt(val)}`);
 
-    // 5b. tkz angle syntax variants use "angle <value>" (e.g., tkzDefPointOnCircle / rotation options).
+    // 4b. tkz angle syntax variants use "angle <value>".
     const angleKeywordRegex = new RegExp(`(\\bangle\\s+)(${numberToken})(?=\\b)`, "g");
     tex = tex.replace(angleKeywordRegex, (_, prefix, val) => `${prefix}${fmt(val)}`);
 
-    // 5c. Numeric \foreach lists (e.g., \foreach \gdPos in {0.825000000000001,...})
+    // 4c. Numeric \foreach lists (e.g., \foreach \gdPos in {0.825000000000001,...})
     // Keep non-numeric tokens unchanged (like A/above).
     tex = tex.replace(
         /(\\foreach\s+\\[a-zA-Z@]+(?:\s*\/\s*\\[a-zA-Z@]+)*\s+in\s*\{)([^}]*)(\})/g,
@@ -132,7 +150,7 @@ function applyNumericRounding(tex: string): string {
     // Also handle arrow tip size in standard tikz arrows if present
     // We already handled "length=...pt" and "width=...pt" generally above.
 
-    // 6. Coordinates (x,y)
+    // 6. Non-construction coordinates (x,y)
     // Matches (Number, Number) or (Number,Number)
     tex = tex.replace(
         new RegExp(`\\(\\s*(${numberToken})\\s*,\\s*(${numberToken})\\s*\\)`, "g"),
@@ -146,7 +164,9 @@ function applyNumericRounding(tex: string): string {
         (_m, a, b, r) => `(${fmt(a)}:${fmt(b)}:${fmt(r)})`
     );
 
-    return tex;
+    return tex.replace(/%%GD_CONSTRUCTION_LINE_(\d+)%%/g, (_match, rawIndex: string) => {
+        return constructionLines[Number(rawIndex)] ?? _match;
+    });
 }
 
 // --- 2. Color Simplification ---
@@ -324,6 +344,23 @@ function applyLabelGrouping(tex: string): string {
         return body.replace(re, "__POINT__");
     }
 
+    function extractSharedWrapper(body: string): { prefix: string; inner: string; suffix: string } | null {
+        const wrappers = [
+            { prefix: "{\\gdLabelGlow{$", suffix: "$}}" },
+            { prefix: "\\gdLabelGlow{$", suffix: "$}" },
+            { prefix: "{$", suffix: "$}" },
+            { prefix: "$", suffix: "$" },
+        ];
+
+        for (const wrapper of wrappers) {
+            if (!body.startsWith(wrapper.prefix) || !body.endsWith(wrapper.suffix)) continue;
+            const inner = body.slice(wrapper.prefix.length, body.length - wrapper.suffix.length);
+            return { prefix: wrapper.prefix, inner, suffix: wrapper.suffix };
+        }
+
+        return null;
+    }
+
     function flushBuffer() {
         if (buffer.length === 0) return;
         if (buffer.length === 1) {
@@ -358,6 +395,40 @@ function applyLabelGrouping(tex: string): string {
                     newLines.push(`\\foreach \\P/\\pos in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){${body}}}`);
                 }
             } else {
+                const wrappedBodies = buffer.map((b) => extractSharedWrapper(b.body));
+                const firstWrapper = wrappedBodies[0];
+                const allSameWrapper =
+                    firstWrapper !== null &&
+                    wrappedBodies.every(
+                        (wrapped) =>
+                            wrapped !== null &&
+                            wrapped.prefix === firstWrapper.prefix &&
+                            wrapped.suffix === firstWrapper.suffix
+                    );
+
+                if (allSameWrapper && firstWrapper) {
+                    if (allSamePos) {
+                        const pts = buffer.map((b, index) => `${b.point}/{${wrappedBodies[index]!.inner}}`).join(",");
+                        const optStr = buffer[0].options;
+                        newLines.push(
+                            `\\foreach \\P/\\descr in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){${firstWrapper.prefix}\\descr${firstWrapper.suffix}}}`
+                        );
+                    } else {
+                        const pts = buffer
+                            .map((b, index) => {
+                                const pOpts = parseOptions(b.options);
+                                return `${b.point}/${pOpts.pos}/{${wrappedBodies[index]!.inner}}`;
+                            })
+                            .join(",");
+                        const optStr = otherOpts ? `\\pos, ${otherOpts}` : `\\pos`;
+                        newLines.push(
+                            `\\foreach \\P/\\pos/\\descr in {${pts}}{\\tkzLabelPoint[${optStr}](\\P){${firstWrapper.prefix}\\descr${firstWrapper.suffix}}}`
+                        );
+                    }
+                    buffer = [];
+                    return;
+                }
+
                 // Case 2: Varying bodies (e.g. $B_n$)
                 // We need to extract the description content.
                 // WE ASSUME the body has a consistent structure enclosing the text, e.g. \gdLabelGlow{...}

@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { save as tauriSave } from "@tauri-apps/plugin-dialog";
+import { create, writeTextFile } from "@tauri-apps/plugin-fs";
 import {
   GlobalWorkerOptions,
   getDocument,
@@ -12,11 +14,13 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
+import { buildStandaloneSource, deriveDefaultOptionalPreamble } from "../export/tikz/standaloneDocument";
 import { loadTikzPreviewSession } from "./tikzPreviewSession";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -38,12 +42,6 @@ const MAX_TIKZ_EDITOR_HISTORY = 250;
 const MIN_PDF_ZOOM = 0.4;
 const MAX_PDF_ZOOM = 4;
 const PDF_CANVAS_PADDING = 18;
-
-const REQUIRED_PREAMBLE = `\\documentclass[tikz,border=2pt]{standalone}
-\\usepackage{tkz-euclide}
-\\usepackage{xfp}
-\\usetikzlibrary{arrows.meta,bending,decorations.markings,patterns,patterns.meta,shapes.geometric}`;
-
 export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   const session = useMemo(() => loadTikzPreviewSession(token), [token]);
   const isTauriRuntime = useMemo(
@@ -60,6 +58,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   const [error, setError] = useState("");
   const [log, setLog] = useState("");
   const [copied, setCopied] = useState(false);
+  const [pdfContextMenu, setPdfContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
@@ -69,8 +68,10 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
 
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const pdfViewportRef = useRef<HTMLDivElement | null>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pdfContextMenuRef = useRef<HTMLDivElement | null>(null);
   const splitDragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -202,7 +203,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       trackHistory: false,
       resetHistory: true,
     });
-    const defaultPreamble = deriveDefaultOptionalPreamble(session?.uiCssVariables);
+    const defaultPreamble = deriveDefaultOptionalPreamble(nextTikz, session?.uiCssVariables);
     setOptionalPreamble(defaultPreamble);
     setOptionalPreambleOpen(Boolean(defaultPreamble));
     if (session) {
@@ -247,6 +248,33 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       window.removeEventListener("gesturechange", onGestureChange as EventListener, options);
     };
   }, []);
+
+  useEffect(() => {
+    if (!pdfContextMenu) return;
+    const close = () => setPdfContextMenu(null);
+
+    const onPointerDown = (event: PointerEvent) => {
+      const menu = pdfContextMenuRef.current;
+      if (!menu) return;
+      if (event.target instanceof Node && menu.contains(event.target)) return;
+      close();
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", close);
+    window.addEventListener("blur", close);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("blur", close);
+    };
+  }, [pdfContextMenu]);
 
   const renderPdfPage = useCallback(async (zoom: number) => {
     const document = pdfDocumentRef.current;
@@ -339,8 +367,9 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       }
 
       setPdfRenderError("");
+      const previewBytes = pdfData.slice();
       const loadingTask = getDocument({
-        data: pdfData,
+        data: previewBytes,
         // WKWebView/Tauri WebView can throw DataCloneError ("The object can not be cloned")
         // when PDF.js tries OffscreenCanvas/ImageDecoder worker paths.
         isOffscreenCanvasSupported: false,
@@ -399,6 +428,155 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     } catch {
       setCopied(false);
     }
+  };
+
+  const normalizeTauriPath = (path: string): string => {
+    const trimmed = path.trim();
+    if (trimmed.startsWith("file://")) {
+      const withoutScheme = trimmed.replace(/^file:\/\//, "");
+      return decodeURIComponent(withoutScheme);
+    }
+    return trimmed;
+  };
+
+  const defaultPreviewFileName = (extension: "pdf" | "png" | "svg" | "tex"): string => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    return `tikz-preview-${stamp}.${extension}`;
+  };
+
+  const downloadBlob = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    // WebKit can resolve the download asynchronously; immediate revocation can yield 0-byte files.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  const writeBinaryFileWithDialog = async (path: string, bytes: Uint8Array) => {
+    const file = await create(normalizeTauriPath(path));
+    try {
+      const written = await file.write(bytes);
+      if (written !== bytes.length) {
+        throw new Error(`Incomplete write: expected ${bytes.length} bytes, wrote ${written}.`);
+      }
+    } finally {
+      await file.close();
+    }
+  };
+
+  const saveBytesWithDialog = async (
+    bytes: Uint8Array,
+    extension: "pdf" | "png",
+    filterName: "PDF" | "PNG"
+  ) => {
+    if (isTauriRuntime) {
+      const path = await tauriSave({
+        defaultPath: defaultPreviewFileName(extension),
+        filters: [{ name: filterName, extensions: [extension] }],
+      });
+      if (!path) return;
+      await writeBinaryFileWithDialog(path, bytes);
+      return;
+    }
+    const mime = extension === "pdf" ? "application/pdf" : "image/png";
+    downloadBlob(new Blob([bytes], { type: mime }), defaultPreviewFileName(extension));
+  };
+
+  const saveTextWithDialog = async (
+    text: string,
+    extension: "svg" | "tex",
+    filterName: "SVG" | "LaTeX"
+  ) => {
+    if (isTauriRuntime) {
+      const path = await tauriSave({
+        defaultPath: defaultPreviewFileName(extension),
+        filters: [{ name: filterName, extensions: [extension] }],
+      });
+      if (!path) return;
+      await writeTextFile(normalizeTauriPath(path), text);
+      return;
+    }
+    const mimeType = extension === "svg" ? "image/svg+xml;charset=utf-8" : "text/plain;charset=utf-8";
+    downloadBlob(new Blob([text], { type: mimeType }), defaultPreviewFileName(extension));
+  };
+
+  const buildSvgSnapshotFromCanvas = (): string | null => {
+    const canvas = pdfCanvasRef.current;
+    if (!canvas) return null;
+    const width = Number.isFinite(canvas.clientWidth) && canvas.clientWidth > 0 ? canvas.clientWidth : canvas.width;
+    const height = Number.isFinite(canvas.clientHeight) && canvas.clientHeight > 0 ? canvas.clientHeight : canvas.height;
+    if (width <= 0 || height <= 0) return null;
+    const pngDataUrl = canvas.toDataURL("image/png");
+    return [
+      `<?xml version="1.0" encoding="UTF-8"?>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+      `  <image href="${pngDataUrl}" width="${width}" height="${height}" />`,
+      `</svg>`,
+      "",
+    ].join("\n");
+  };
+
+  const savePreviewPdf = async () => {
+    setPdfContextMenu(null);
+    if (!pdfData) return;
+    try {
+      await saveBytesWithDialog(pdfData.slice(), "pdf", "PDF");
+    } catch (err) {
+      setError(`Failed to save PDF: ${extractErrorMessage(err)}`);
+    }
+  };
+
+  const savePreviewPng = async () => {
+    setPdfContextMenu(null);
+    const canvas = pdfCanvasRef.current;
+    if (!canvas) return;
+    try {
+      const blob = await canvasToBlob(canvas, "image/png");
+      if (!blob) {
+        setError("Failed to render PNG snapshot from preview canvas.");
+        return;
+      }
+      await saveBytesWithDialog(new Uint8Array(await blob.arrayBuffer()), "png", "PNG");
+    } catch (err) {
+      setError(`Failed to save PNG: ${extractErrorMessage(err)}`);
+    }
+  };
+
+  const savePreviewSvg = async () => {
+    setPdfContextMenu(null);
+    try {
+      const svg = buildSvgSnapshotFromCanvas();
+      if (!svg) {
+        setError("Failed to render SVG snapshot from preview canvas.");
+        return;
+      }
+      await saveTextWithDialog(svg, "svg", "SVG");
+    } catch (err) {
+      setError(`Failed to save SVG: ${extractErrorMessage(err)}`);
+    }
+  };
+
+  const savePreviewTex = async () => {
+    setPdfContextMenu(null);
+    try {
+      const source = buildStandaloneSource(tikzCode, optionalPreamble);
+      await saveTextWithDialog(source, "tex", "LaTeX");
+    } catch (err) {
+      setError(`Failed to save LaTeX: ${extractErrorMessage(err)}`);
+    }
+  };
+
+  const onPdfViewportContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!pdfData) return;
+    event.preventDefault();
+    setPdfContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+    });
   };
 
   const startSplitDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -639,7 +817,11 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   const expandCompilerLog = Boolean(error) && !pdfData;
 
   return (
-    <div className="previewWindowRoot" style={session.uiCssVariables as CSSProperties | undefined}>
+    <div
+      className="previewWindowRoot"
+      ref={rootRef}
+      style={session.uiCssVariables as CSSProperties | undefined}
+    >
       <header className="previewWindowHeader">
         <h1 className="previewWindowTitle">TikZ Preview</h1>
         <div className="previewWindowActions">
@@ -652,6 +834,18 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
           </button>
           <button className="actionButton secondary" onClick={() => void copyEditedTikz()}>
             {copied ? "Copied" : "Copy Edited TikZ"}
+          </button>
+          <button className="actionButton secondary" onClick={() => void savePreviewPdf()} disabled={!pdfData}>
+            Save PDF
+          </button>
+          <button className="actionButton secondary" onClick={() => void savePreviewSvg()} disabled={!pdfData}>
+            Save SVG
+          </button>
+          <button className="actionButton secondary" onClick={() => void savePreviewPng()} disabled={!pdfData}>
+            Save PNG
+          </button>
+          <button className="actionButton secondary" onClick={() => void savePreviewTex()}>
+            Save Full LaTeX (.tex)
           </button>
         </div>
       </header>
@@ -669,6 +863,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
               className="pdfPreviewViewport"
               ref={pdfViewportRef}
               onWheel={onPdfViewportWheel}
+              onContextMenu={onPdfViewportContextMenu}
               onPointerDown={onPdfViewportPointerDown}
               onPointerMove={onPdfViewportPointerMove}
               onPointerUp={onPdfViewportPointerUpOrCancel}
@@ -790,46 +985,30 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
           />
         </section>
       </div>
+      {pdfContextMenu ? (
+        <div
+          ref={pdfContextMenuRef}
+          className="pdfPreviewContextMenu"
+          style={clampContextMenuPosition(pdfContextMenu, rootRef.current)}
+          role="menu"
+          aria-label="Save preview"
+        >
+          <button className="pdfPreviewContextMenuItem" role="menuitem" onClick={() => void savePreviewPdf()}>
+            Save as PDF
+          </button>
+          <button className="pdfPreviewContextMenuItem" role="menuitem" onClick={() => void savePreviewSvg()}>
+            Save as SVG
+          </button>
+          <button className="pdfPreviewContextMenuItem" role="menuitem" onClick={() => void savePreviewPng()}>
+            Save as PNG
+          </button>
+          <button className="pdfPreviewContextMenuItem" role="menuitem" onClick={() => void savePreviewTex()}>
+            Save as Full LaTeX (.tex)
+          </button>
+        </div>
+      ) : null}
     </div>
   );
-}
-
-function buildStandaloneSource(tikzCode: string, optionalPreamble: string): string {
-  const trimmed = tikzCode.trim();
-  if (looksLikeFullDocument(trimmed)) return tikzCode;
-  const extra = optionalPreamble.trim();
-  const preamble = extra ? `${REQUIRED_PREAMBLE}\n${extra}` : REQUIRED_PREAMBLE;
-  return `${preamble}\n\\begin{document}\n${tikzCode}\n\\end{document}\n`;
-}
-
-function deriveDefaultOptionalPreamble(uiCssVariables: Record<string, string> | undefined): string {
-  const normalizedHex = normalizeSceneBgHex(uiCssVariables?.["--gd-scene-bg"]);
-  if (!normalizedHex || normalizedHex === "FFFFFF") return "";
-  return `\\pagecolor[HTML]{${normalizedHex}}`;
-}
-
-function normalizeSceneBgHex(rawColor: string | undefined): string | null {
-  if (!rawColor) return null;
-  const trimmed = rawColor.trim();
-  const match = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/u.exec(trimmed);
-  if (!match) return null;
-  const hex = match[1];
-  if (hex.length === 3 || hex.length === 4) {
-    const expanded = hex
-      .slice(0, 3)
-      .split("")
-      .map((ch) => ch + ch)
-      .join("");
-    return expanded.toUpperCase();
-  }
-  if (hex.length === 8) {
-    return hex.slice(0, 6).toUpperCase();
-  }
-  return hex.toUpperCase();
-}
-
-function looksLikeFullDocument(text: string): boolean {
-  return /\\documentclass\b/.test(text) || /\\begin\{document\}/.test(text);
 }
 
 function extractErrorMessage(err: unknown): string {
@@ -871,6 +1050,37 @@ function decodeBase64ToBytes(value: string): Uint8Array {
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
   return out;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type);
+  });
+}
+
+function clampContextMenuPosition(
+  position: { x: number; y: number },
+  root: HTMLDivElement | null
+): CSSProperties {
+  const MENU_WIDTH = 170;
+  const MENU_HEIGHT = 170;
+  const PADDING = 10;
+  const bounds = root?.getBoundingClientRect() ?? {
+    left: 0,
+    top: 0,
+    right: window.innerWidth,
+    bottom: window.innerHeight,
+  };
+
+  const maxX = Math.max(bounds.left + PADDING, bounds.right - MENU_WIDTH - PADDING);
+  const maxY = Math.max(bounds.top + PADDING, bounds.bottom - MENU_HEIGHT - PADDING);
+  const x = Math.min(Math.max(position.x, bounds.left + PADDING), maxX);
+  const y = Math.min(Math.max(position.y, bounds.top + PADDING), maxY);
+
+  return {
+    left: x,
+    top: y,
+  };
 }
 
 function isEventInsidePdfViewport(event: Event, viewport: HTMLDivElement | null): boolean {

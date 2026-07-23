@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isSelectedObjectAlive } from "../domain/geometryGraph";
 import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import { formatRoundedDisplay } from "./displayFormat";
 import {
@@ -6,39 +7,74 @@ import {
   evaluateAngleExpressionDegrees,
   evaluateNumberExpression,
   getCircleWorldGeometry,
+  getEllipseWorldGeometry,
   getLineWorldAnchors,
   getNumberValue,
   getPointWorldPos,
+  resolveTextLabelToolKind,
 } from "../scene/points";
 import { selectConstructionDescription } from "../state/selectors/constructionDescription";
 import { useGeoStore } from "../state/geoStore";
 import { NumberStyleSection } from "./object-styles/NumberStyleSection";
+import { RichTextStyleSection } from "./object-styles/RichTextStyleSection";
 import { TextLabelStyleSection } from "./object-styles/TextLabelStyleSection";
-import { NumbersSection } from "./NumbersSection";
 import { ObjectStyleSections } from "./ObjectStyleSections";
 import { PointPropertiesSection } from "./PointPropertiesSection";
 import { ToolInfoSection } from "./ToolInfoSection";
+import { ToolDefaultStyleSections } from "./ToolDefaultStyleSections";
+import {
+  getToolDefaultKind,
+  reconcileRecentCreatedPanelClaim,
+  shouldShowToolPreconfigurePanelForState,
+  type RecentCreatedPanelClaim,
+} from "./toolPreconfigure";
 import {
   angleStyleEqual,
   circleStyleEqual,
   lineStyleEqual,
   pointStyleEqual,
   polygonStyleEqual,
+  richTextStyleEqual,
+  textLabelStyleEqual,
 } from "./object-styles/styleComparisons";
+import type { SelectedObject } from "../state/slices/storeTypes";
 
-export function PropertiesPanel({ visible }: { visible: boolean }) {
+type PropertiesPanelProps = {
+  visible: boolean;
+  multiSelectedObjects: Array<Exclude<SelectedObject, null>>;
+  setMultiSelectedObjects: (next: Array<Exclude<SelectedObject, null>>) => void;
+};
+
+function selectedObjectKey(obj: Exclude<SelectedObject, null>): string {
+  return `${obj.type}:${obj.id}`;
+}
+
+export function PropertiesPanel({
+  visible,
+  multiSelectedObjects,
+  setMultiSelectedObjects,
+}: PropertiesPanelProps) {
   const activeTool = useGeoStore((store) => store.activeTool);
+  const toolActivationVersion = useGeoStore((store) => store.toolActivationVersion);
+  const propertiesPanelIntent = useGeoStore((store) => store.propertiesPanelIntent);
   const scene = useGeoStore((store) => store.scene);
   const selectedObject = useGeoStore((store) => store.selectedObject);
+  const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
   const renameSelectedPoint = useGeoStore((store) => store.renameSelectedPoint);
   const deleteSelectedObject = useGeoStore((store) => store.deleteSelectedObject);
+  const deleteObjects = useGeoStore((store) => store.deleteObjects);
   const copyStyle = useGeoStore((store) => store.copyStyle);
   const pointDefaults = useGeoStore((store) => store.pointDefaults);
   const segmentDefaults = useGeoStore((store) => store.segmentDefaults);
   const lineDefaults = useGeoStore((store) => store.lineDefaults);
   const circleDefaults = useGeoStore((store) => store.circleDefaults);
+  const ellipseDefaults = useGeoStore((store) => store.ellipseDefaults);
   const polygonDefaults = useGeoStore((store) => store.polygonDefaults);
   const angleDefaults = useGeoStore((store) => store.angleDefaults);
+  const objectLabelDefaults = useGeoStore((store) => store.objectLabelDefaults);
+  const labelToolDefaults = useGeoStore((store) => store.labelToolDefaults);
+  const textboxToolDefaults = useGeoStore((store) => store.textboxToolDefaults);
+  const richTextToolDefaults = useGeoStore((store) => store.richTextToolDefaults);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
   const regularPolygonTool = useGeoStore((store) => store.regularPolygonTool);
@@ -48,30 +84,61 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const setSegmentDefaults = useGeoStore((store) => store.setSegmentDefaults);
   const setLineDefaults = useGeoStore((store) => store.setLineDefaults);
   const setCircleDefaults = useGeoStore((store) => store.setCircleDefaults);
+  const setEllipseDefaults = useGeoStore((store) => store.setEllipseDefaults);
   const setPolygonDefaults = useGeoStore((store) => store.setPolygonDefaults);
   const setAngleDefaults = useGeoStore((store) => store.setAngleDefaults);
+  const setObjectLabelDefaults = useGeoStore((store) => store.setObjectLabelDefaults);
+  const setLabelToolDefaults = useGeoStore((store) => store.setLabelToolDefaults);
+  const setTextboxToolDefaults = useGeoStore((store) => store.setTextboxToolDefaults);
+  const setRichTextToolDefaults = useGeoStore((store) => store.setRichTextToolDefaults);
   const setAngleFixedTool = useGeoStore((store) => store.setAngleFixedTool);
   const setCircleFixedTool = useGeoStore((store) => store.setCircleFixedTool);
   const setRegularPolygonTool = useGeoStore((store) => store.setRegularPolygonTool);
   const setTransformTool = useGeoStore((store) => store.setTransformTool);
+  const createNumber = useGeoStore((store) => store.createNumber);
+  const updateNumberDefinitionById = useGeoStore((store) => store.updateNumberDefinitionById);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
   const clearPendingSelection = useGeoStore((store) => store.clearPendingSelection);
   const updateSelectedPointStyle = useGeoStore((store) => store.updateSelectedPointStyle);
   const updateSelectedPointFields = useGeoStore((store) => store.updateSelectedPointFields);
+  const updatePointStyleByIds = useGeoStore((store) => store.updatePointStyleByIds);
+  const updatePointFieldsByIds = useGeoStore((store) => store.updatePointFieldsByIds);
   const updateSelectedSegmentStyle = useGeoStore((store) => store.updateSelectedSegmentStyle);
+  const updateSegmentStyleByIds = useGeoStore((store) => store.updateSegmentStyleByIds);
   const updateSelectedLineStyle = useGeoStore((store) => store.updateSelectedLineStyle);
+  const updateLineStyleByIds = useGeoStore((store) => store.updateLineStyleByIds);
   const updateSelectedCircleStyle = useGeoStore((store) => store.updateSelectedCircleStyle);
+  const updateCircleStyleByIds = useGeoStore((store) => store.updateCircleStyleByIds);
+  const updateSelectedEllipseStyle = useGeoStore((store) => store.updateSelectedEllipseStyle);
+  const updateEllipseStyleByIds = useGeoStore((store) => store.updateEllipseStyleByIds);
   const updateSelectedPolygonStyle = useGeoStore((store) => store.updateSelectedPolygonStyle);
+  const updatePolygonStyleByIds = useGeoStore((store) => store.updatePolygonStyleByIds);
   const updateSelectedAngleStyle = useGeoStore((store) => store.updateSelectedAngleStyle);
+  const updateAngleStyleByIds = useGeoStore((store) => store.updateAngleStyleByIds);
   const updateSelectedSegmentFields = useGeoStore((store) => store.updateSelectedSegmentFields);
+  const updateSegmentFieldsByIds = useGeoStore((store) => store.updateSegmentFieldsByIds);
   const updateSelectedLineFields = useGeoStore((store) => store.updateSelectedLineFields);
+  const updateLineFieldsByIds = useGeoStore((store) => store.updateLineFieldsByIds);
+  const convertSelectedLineToSegment = useGeoStore((store) => store.convertSelectedLineToSegment);
+  const convertLinesToSegmentsByIds = useGeoStore((store) => store.convertLinesToSegmentsByIds);
   const updateSelectedCircleFields = useGeoStore((store) => store.updateSelectedCircleFields);
+  const updateCircleFieldsByIds = useGeoStore((store) => store.updateCircleFieldsByIds);
+  const updateSelectedEllipseFields = useGeoStore((store) => store.updateSelectedEllipseFields);
+  const updateEllipseFieldsByIds = useGeoStore((store) => store.updateEllipseFieldsByIds);
   const updateSelectedPolygonFields = useGeoStore((store) => store.updateSelectedPolygonFields);
+  const updatePolygonFieldsByIds = useGeoStore((store) => store.updatePolygonFieldsByIds);
   const setSelectedPolygonOwnedSegmentsVisible = useGeoStore((store) => store.setSelectedPolygonOwnedSegmentsVisible);
   const updateSelectedNumberDefinition = useGeoStore((store) => store.updateSelectedNumberDefinition);
   const updateSelectedTextLabelFields = useGeoStore((store) => store.updateSelectedTextLabelFields);
+  const updateTextLabelFieldsByIds = useGeoStore((store) => store.updateTextLabelFieldsByIds);
   const updateSelectedTextLabelStyle = useGeoStore((store) => store.updateSelectedTextLabelStyle);
-  const createNumber = useGeoStore((store) => store.createNumber);
+  const updateTextLabelStyleByIds = useGeoStore((store) => store.updateTextLabelStyleByIds);
+  const updateSelectedRichTextFields = useGeoStore((store) => store.updateSelectedRichTextFields);
+  const updateRichTextFieldsByIds = useGeoStore((store) => store.updateRichTextFieldsByIds);
+  const updateSelectedRichTextStyle = useGeoStore((store) => store.updateSelectedRichTextStyle);
+  const updateRichTextStyleByIds = useGeoStore((store) => store.updateRichTextStyleByIds);
+  const updateSelectedRichTextDocument = useGeoStore((store) => store.updateSelectedRichTextDocument);
+  const updateRichTextDocumentByIds = useGeoStore((store) => store.updateRichTextDocumentByIds);
 
   const selectedPoint = useMemo(
     () => (selectedObject?.type === "point" ? scene.points.find((point) => point.id === selectedObject.id) ?? null : null),
@@ -88,6 +155,10 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   const selectedCircle = useMemo(
     () => (selectedObject?.type === "circle" ? scene.circles.find((item) => item.id === selectedObject.id) ?? null : null),
     [scene.circles, selectedObject]
+  );
+  const selectedEllipse = useMemo(
+    () => (selectedObject?.type === "ellipse" ? (scene.ellipses ?? []).find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.ellipses, selectedObject]
   );
   const selectedPolygon = useMemo(
     () => (selectedObject?.type === "polygon" ? scene.polygons.find((item) => item.id === selectedObject.id) ?? null : null),
@@ -113,6 +184,10 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     () => (selectedObject?.type === "textLabel" ? (scene.textLabels ?? []).find((item) => item.id === selectedObject.id) ?? null : null),
     [scene.textLabels, selectedObject]
   );
+  const selectedRichText = useMemo(
+    () => (selectedObject?.type === "richText" ? (scene.richTextNodes ?? []).find((item) => item.id === selectedObject.id) ?? null : null),
+    [scene.richTextNodes, selectedObject]
+  );
   const selectedPointWorld = useMemo(() => {
     if (!selectedPoint) return null;
     return getPointWorldPos(selectedPoint, scene);
@@ -129,6 +204,12 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     if (!geometry || !Number.isFinite(geometry.radius) || geometry.radius < 0) return null;
     return formatCircleEquation(geometry.center.x, geometry.center.y, geometry.radius);
   }, [scene, selectedCircle]);
+  const selectedEllipseDescription = useMemo(() => {
+    if (!selectedEllipse) return null;
+    const geometry = getEllipseWorldGeometry(selectedEllipse, scene);
+    if (!geometry) return null;
+    return `a=${formatRoundedDisplay(geometry.semiMajor, 2)}, b=${formatRoundedDisplay(geometry.semiMinor, 2)}`;
+  }, [scene, selectedEllipse]);
   const selectedAngleDegrees = useMemo(() => {
     if (!selectedAngle) return null;
     const aPoint = scene.points.find((point) => point.id === selectedAngle.aId);
@@ -179,40 +260,146 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
     () => evaluateAngleExpressionDegrees(scene, transformTool.angleExpr),
     [scene, transformTool.angleExpr]
   );
-  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "polygon" | "angle" | null>(() => {
+  const transformFactorSlider = useMemo(() => {
+    const name = transformTool.factorExpr.trim();
+    if (!name) return null;
+    const num = scene.numbers.find((item) => item.name === name && item.definition.kind === "slider");
+    if (!num || num.definition.kind !== "slider") return null;
+    const def = num.definition;
+    const min = Math.min(def.min, def.max);
+    const max = Math.max(def.min, def.max);
+    return {
+      id: num.id,
+      name: num.name,
+      value: Math.min(max, Math.max(min, def.value)),
+      min,
+      max,
+      step: Number.isFinite(def.step) && def.step > 0 ? def.step : 0.1,
+    };
+  }, [scene.numbers, transformTool.factorExpr]);
+  const createTransformFactorSlider = () => {
+    const resolved =
+      transformFactorPreview.ok && Number.isFinite(transformFactorPreview.value) ? transformFactorPreview.value : 2;
+    const usedNames = new Set(scene.numbers.map((item) => item.name));
+    let name = "k";
+    for (let i = 1; usedNames.has(name); i += 1) name = `k_${i}`;
+    const createdId = createNumber(
+      {
+        kind: "slider",
+        value: resolved,
+        min: Math.min(-3, Math.floor(resolved)),
+        max: Math.max(3, Math.ceil(resolved)),
+        step: 0.1,
+      },
+      name
+    );
+    if (!createdId) return;
+    setTransformTool({ factorExpr: name });
+  };
+  const updateTransformFactorSliderValue = (value: number) => {
+    if (!transformFactorSlider || !Number.isFinite(value)) return;
+    const num = scene.numbers.find((item) => item.id === transformFactorSlider.id);
+    if (!num || num.definition.kind !== "slider") return;
+    const def = num.definition;
+    const lo = Math.min(def.min, def.max);
+    const hi = Math.max(def.min, def.max);
+    updateNumberDefinitionById(num.id, { ...def, value: Math.min(hi, Math.max(lo, value)) });
+  };
+  const toolDefaultKind = useMemo(() => getToolDefaultKind(activeTool), [activeTool]);
+  const recentCreatedPanelClaimRef = useRef<RecentCreatedPanelClaim | null>(null);
+  const recentCreatedPanelState = reconcileRecentCreatedPanelClaim({
+    selectedObject,
+    recentCreatedObject,
+    previousClaim: recentCreatedPanelClaimRef.current,
+    toolActivationVersion,
+  });
+  recentCreatedPanelClaimRef.current = recentCreatedPanelState.claim;
+  const showToolPreconfigurePanel = shouldShowToolPreconfigurePanelForState({
+    activeTool,
+    propertiesPanelIntent,
+    recentCreatedOwnsPanel: recentCreatedPanelState.recentCreatedOwnsPanel,
+  });
+  const selectedStyleKind = useMemo<"point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText" | null>(() => {
     if (selectedPoint) return "point";
     if (selectedSegment) return "segment";
     if (selectedLine) return "line";
     if (selectedCircle) return "circle";
+    if (selectedEllipse) return "ellipse";
     if (selectedPolygon) return "polygon";
     if (selectedAngle) return "angle";
+    if (selectedTextLabel) return "textLabel";
+    if (selectedRichText) return "richText";
     return null;
-  }, [selectedAngle, selectedCircle, selectedLine, selectedPoint, selectedPolygon, selectedSegment]);
+  }, [selectedAngle, selectedCircle, selectedEllipse, selectedLine, selectedPoint, selectedPolygon, selectedRichText, selectedSegment, selectedTextLabel]);
   const selectedAngleRightStatus = useMemo<"none" | "approx" | "exact">(
     () => (selectedAngle ? resolveAngleRightStatus(scene, selectedAngle) : "none"),
     [scene, selectedAngle]
   );
   const selectedStyleAsDefault = useMemo(() => {
-    if (selectedPoint) return pointStyleEqual(pointDefaults, selectedPoint.style);
-    if (selectedSegment) return lineStyleEqual(segmentDefaults, selectedSegment.style);
-    if (selectedLine) return lineStyleEqual(lineDefaults, selectedLine.style);
-    if (selectedCircle) return circleStyleEqual(circleDefaults, selectedCircle.style);
-    if (selectedPolygon) return polygonStyleEqual(polygonDefaults, selectedPolygon.style);
+    if (selectedPoint) return pointStyleEqual(pointDefaults, selectedPoint.style) && selectedPoint.showLabel === objectLabelDefaults.point;
+    if (selectedSegment) {
+      return (
+        lineStyleEqual(segmentDefaults, selectedSegment.style) &&
+        Boolean(selectedSegment.showLabel) === objectLabelDefaults.segment &&
+        (selectedSegment.labelGlow !== false) === (objectLabelDefaults.segmentGlow ?? true)
+      );
+    }
+    if (selectedLine) {
+      return (
+        lineStyleEqual(lineDefaults, selectedLine.style) &&
+        Boolean(selectedLine.showLabel) === objectLabelDefaults.line &&
+        (selectedLine.labelGlow !== false) === (objectLabelDefaults.lineGlow ?? true)
+      );
+    }
+    if (selectedCircle) {
+      return (
+        circleStyleEqual(circleDefaults, selectedCircle.style) &&
+        Boolean(selectedCircle.showLabel) === objectLabelDefaults.circle &&
+        (selectedCircle.labelGlow !== false) === (objectLabelDefaults.circleGlow ?? true)
+      );
+    }
+    if (selectedEllipse) {
+      return (
+        circleStyleEqual(ellipseDefaults, selectedEllipse.style) &&
+        Boolean(selectedEllipse.showLabel) === objectLabelDefaults.ellipse &&
+        (selectedEllipse.labelGlow !== false) === (objectLabelDefaults.ellipseGlow ?? true)
+      );
+    }
+    if (selectedPolygon) {
+      return (
+        polygonStyleEqual(polygonDefaults, selectedPolygon.style) &&
+        Boolean(selectedPolygon.showLabel) === objectLabelDefaults.polygon &&
+        (selectedPolygon.labelGlow !== false) === (objectLabelDefaults.polygonGlow ?? true)
+      );
+    }
     if (selectedAngle) return angleStyleEqual(angleDefaults, selectedAngle.style);
+    if (selectedTextLabel) {
+      const defaults = resolveTextLabelToolKind(selectedTextLabel) === "textbox" ? textboxToolDefaults : labelToolDefaults;
+      return textLabelStyleEqual(defaults, selectedTextLabel.style);
+    }
+    if (selectedRichText) return richTextStyleEqual(richTextToolDefaults, selectedRichText.style);
     return false;
   }, [
     angleDefaults,
     circleDefaults,
+    ellipseDefaults,
+    labelToolDefaults,
     lineDefaults,
+    objectLabelDefaults,
     pointDefaults,
     polygonDefaults,
+    richTextToolDefaults,
     segmentDefaults,
     selectedAngle,
     selectedCircle,
+    selectedEllipse,
     selectedLine,
     selectedPoint,
     selectedPolygon,
+    selectedRichText,
     selectedSegment,
+    selectedTextLabel,
+    textboxToolDefaults,
   ]);
   const handleMakeStyleDefaultChange = (checked: boolean) => {
     if (!checked || !selectedStyleKind) return;
@@ -221,22 +408,47 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
         ...selectedPoint.style,
         labelOffsetPx: { ...selectedPoint.style.labelOffsetPx },
       });
+      setObjectLabelDefaults({ point: selectedPoint.showLabel });
       return;
     }
     if (selectedStyleKind === "segment" && selectedSegment) {
       setSegmentDefaults({ ...selectedSegment.style });
+      setObjectLabelDefaults({
+        segment: Boolean(selectedSegment.showLabel),
+        segmentGlow: selectedSegment.labelGlow !== false,
+      });
       return;
     }
     if (selectedStyleKind === "line" && selectedLine) {
       setLineDefaults({ ...selectedLine.style });
+      setObjectLabelDefaults({
+        line: Boolean(selectedLine.showLabel),
+        lineGlow: selectedLine.labelGlow !== false,
+      });
       return;
     }
     if (selectedStyleKind === "circle" && selectedCircle) {
       setCircleDefaults({ ...selectedCircle.style });
+      setObjectLabelDefaults({
+        circle: Boolean(selectedCircle.showLabel),
+        circleGlow: selectedCircle.labelGlow !== false,
+      });
+      return;
+    }
+    if (selectedStyleKind === "ellipse" && selectedEllipse) {
+      setEllipseDefaults({ ...selectedEllipse.style });
+      setObjectLabelDefaults({
+        ellipse: Boolean(selectedEllipse.showLabel),
+        ellipseGlow: selectedEllipse.labelGlow !== false,
+      });
       return;
     }
     if (selectedStyleKind === "polygon" && selectedPolygon) {
       setPolygonDefaults({ ...selectedPolygon.style });
+      setObjectLabelDefaults({
+        polygon: Boolean(selectedPolygon.showLabel),
+        polygonGlow: selectedPolygon.labelGlow !== false,
+      });
       return;
     }
     if (selectedStyleKind === "angle" && selectedAngle) {
@@ -244,17 +456,214 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
         ...selectedAngle.style,
         labelPosWorld: { ...angleDefaults.labelPosWorld },
       });
+      return;
     }
+    if (selectedStyleKind === "textLabel" && selectedTextLabel) {
+      if (resolveTextLabelToolKind(selectedTextLabel) === "textbox") {
+        setTextboxToolDefaults({ ...selectedTextLabel.style });
+      } else {
+        setLabelToolDefaults({ ...selectedTextLabel.style });
+      }
+      return;
+    }
+    if (selectedStyleKind === "richText" && selectedRichText) {
+      setRichTextToolDefaults({ ...selectedRichText.style });
+    }
+  };
+
+  const multiSelection = useMemo(() => {
+    const out: Array<Exclude<SelectedObject, null>> = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < multiSelectedObjects.length; i += 1) {
+      const obj = multiSelectedObjects[i];
+      if (!isSelectedObjectAlive(scene, obj)) continue;
+      const key = selectedObjectKey(obj);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(obj);
+    }
+    return out;
+  }, [multiSelectedObjects, scene]);
+  const linkedSameType = useMemo(
+    () => (selectedObject ? multiSelection.filter((obj) => obj.type === selectedObject.type) : []),
+    [multiSelection, selectedObject]
+  );
+  const linkedSameTypeIds = useMemo(() => linkedSameType.map((obj) => obj.id), [linkedSameType]);
+  const hasLinkedSelection = linkedSameTypeIds.length > 1;
+  const linkedConvertibleLineCount = useMemo(() => {
+    if (selectedObject?.type !== "line") return 0;
+    const lineById = new Map(scene.lines.map((line) => [line.id, line]));
+    let count = 0;
+    for (let i = 0; i < linkedSameTypeIds.length; i += 1) {
+      const line = lineById.get(linkedSameTypeIds[i]);
+      if (!line) continue;
+      if (!line.kind || line.kind === "twoPoint") count += 1;
+    }
+    return count;
+  }, [linkedSameTypeIds, scene.lines, selectedObject]);
+  const canConvertSelectedLineToSegment = useMemo(() => {
+    if (selectedObject?.type !== "line") return false;
+    if (hasLinkedSelection) return linkedConvertibleLineCount > 0;
+    return Boolean(selectedLine && (!selectedLine.kind || selectedLine.kind === "twoPoint"));
+  }, [hasLinkedSelection, linkedConvertibleLineCount, selectedLine, selectedObject]);
+  const handleDeleteFromProperties = () => {
+    if (!hasLinkedSelection) {
+      deleteSelectedObject();
+      return;
+    }
+    if (linkedSameType.length === 0) return;
+    deleteObjects(linkedSameType);
+    setMultiSelectedObjects([]);
+  };
+  const deleteButtonLabel = hasLinkedSelection ? "Delete All" : "Delete";
+
+  const handleUpdateSelectedPointStyle = (next: Parameters<typeof updateSelectedPointStyle>[0]) => {
+    if (selectedObject?.type === "point" && hasLinkedSelection) {
+      updatePointStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedPointStyle(next);
+  };
+  const handleUpdateSelectedPointFields = (next: Parameters<typeof updateSelectedPointFields>[0]) => {
+    if (selectedObject?.type === "point" && hasLinkedSelection) {
+      updatePointFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedPointFields(next);
+  };
+  const handleUpdateSelectedSegmentStyle = (next: Parameters<typeof updateSelectedSegmentStyle>[0]) => {
+    if (selectedObject?.type === "segment" && hasLinkedSelection) {
+      updateSegmentStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedSegmentStyle(next);
+  };
+  const handleUpdateSelectedSegmentFields = (next: Parameters<typeof updateSelectedSegmentFields>[0]) => {
+    if (selectedObject?.type === "segment" && hasLinkedSelection) {
+      updateSegmentFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedSegmentFields(next);
+  };
+  const handleUpdateSelectedLineStyle = (next: Parameters<typeof updateSelectedLineStyle>[0]) => {
+    if (selectedObject?.type === "line" && hasLinkedSelection) {
+      updateLineStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedLineStyle(next);
+  };
+  const handleUpdateSelectedLineFields = (next: Parameters<typeof updateSelectedLineFields>[0]) => {
+    if (selectedObject?.type === "line" && hasLinkedSelection) {
+      updateLineFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedLineFields(next);
+  };
+  const handleUpdateSelectedCircleStyle = (next: Parameters<typeof updateSelectedCircleStyle>[0]) => {
+    if (selectedObject?.type === "circle" && hasLinkedSelection) {
+      updateCircleStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedCircleStyle(next);
+  };
+  const handleUpdateSelectedCircleFields = (next: Parameters<typeof updateSelectedCircleFields>[0]) => {
+    if (selectedObject?.type === "circle" && hasLinkedSelection) {
+      updateCircleFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedCircleFields(next);
+  };
+  const handleUpdateSelectedEllipseStyle = (next: Parameters<typeof updateSelectedEllipseStyle>[0]) => {
+    if (selectedObject?.type === "ellipse" && hasLinkedSelection) {
+      updateEllipseStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedEllipseStyle(next);
+  };
+  const handleUpdateSelectedEllipseFields = (next: Parameters<typeof updateSelectedEllipseFields>[0]) => {
+    if (selectedObject?.type === "ellipse" && hasLinkedSelection) {
+      updateEllipseFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedEllipseFields(next);
+  };
+  const handleUpdateSelectedPolygonStyle = (next: Parameters<typeof updateSelectedPolygonStyle>[0]) => {
+    if (selectedObject?.type === "polygon" && hasLinkedSelection) {
+      updatePolygonStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedPolygonStyle(next);
+  };
+  const handleUpdateSelectedPolygonFields = (next: Parameters<typeof updateSelectedPolygonFields>[0]) => {
+    if (selectedObject?.type === "polygon" && hasLinkedSelection) {
+      updatePolygonFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedPolygonFields(next);
+  };
+  const handleUpdateSelectedAngleStyle = (next: Parameters<typeof updateSelectedAngleStyle>[0]) => {
+    if (selectedObject?.type === "angle" && hasLinkedSelection) {
+      updateAngleStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedAngleStyle(next);
+  };
+  const handleUpdateSelectedTextLabelFields = (next: Parameters<typeof updateSelectedTextLabelFields>[0]) => {
+    if (selectedObject?.type === "textLabel" && hasLinkedSelection) {
+      updateTextLabelFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedTextLabelFields(next);
+  };
+  const handleUpdateSelectedTextLabelStyle = (next: Parameters<typeof updateSelectedTextLabelStyle>[0]) => {
+    if (selectedObject?.type === "textLabel" && hasLinkedSelection) {
+      updateTextLabelStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedTextLabelStyle(next);
+  };
+  const handleUpdateSelectedRichTextFields = (next: Parameters<typeof updateSelectedRichTextFields>[0]) => {
+    if (selectedObject?.type === "richText" && hasLinkedSelection) {
+      updateRichTextFieldsByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedRichTextFields(next);
+  };
+  const handleUpdateSelectedRichTextStyle = (next: Parameters<typeof updateSelectedRichTextStyle>[0]) => {
+    if (selectedObject?.type === "richText" && hasLinkedSelection) {
+      updateRichTextStyleByIds(linkedSameTypeIds, next);
+      return;
+    }
+    updateSelectedRichTextStyle(next);
+  };
+  const handleUpdateSelectedRichTextDocument = (document: Parameters<typeof updateSelectedRichTextDocument>[0]) => {
+    if (selectedObject?.type === "richText" && hasLinkedSelection) {
+      updateRichTextDocumentByIds(linkedSameTypeIds, document);
+      return;
+    }
+    updateSelectedRichTextDocument(document);
+  };
+  const handleConvertSelectedLineToSegment = () => {
+    if (selectedObject?.type === "line" && hasLinkedSelection) {
+      const createdIds = convertLinesToSegmentsByIds(linkedSameTypeIds);
+      if (createdIds.length === 0) {
+        setMultiSelectedObjects([]);
+        return;
+      }
+      setMultiSelectedObjects(createdIds.map((id) => ({ type: "segment", id })));
+      return;
+    }
+    const createdId = convertSelectedLineToSegment();
+    if (!createdId) {
+      setMultiSelectedObjects([]);
+      return;
+    }
+    setMultiSelectedObjects([{ type: "segment", id: createdId }]);
   };
 
   const [nameInput, setNameInput] = useState("");
   const [renameError, setRenameError] = useState("");
   const [shapePickerOpen, setShapePickerOpen] = useState(false);
-  const [newNumberValue, setNewNumberValue] = useState("1");
-  const [newSliderMin, setNewSliderMin] = useState("0");
-  const [newSliderMax, setNewSliderMax] = useState("10");
-  const [newSliderStep, setNewSliderStep] = useState("0.1");
-  const [newSliderMode, setNewSliderMode] = useState<"real" | "degree">("real");
   const shapePickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -289,7 +698,7 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
   return (
     <section className="sidebarSection">
       <h2 className="sectionTitle">Properties</h2>
-      {selectedConstructionText && (
+      {!showToolPreconfigurePanel && selectedConstructionText && (
         <div className="constructionInfo">
           <div className="constructionTitle">Construction</div>
           <div>{selectedConstructionText}</div>
@@ -314,6 +723,9 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
         setTransformTool={setTransformTool}
         transformFactorPreview={transformFactorPreview}
         transformAnglePreview={transformAnglePreview}
+        transformFactorSlider={transformFactorSlider}
+        createTransformFactorSlider={createTransformFactorSlider}
+        updateTransformFactorSliderValue={updateTransformFactorSliderValue}
         pendingSelection={pendingSelection}
         pendingCircleFixedCenterLabel={
           pendingSelection && pendingSelection.tool === "circle_fixed"
@@ -323,18 +735,48 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
         createCircleFixedRadius={createCircleFixedRadius}
         clearPendingSelection={clearPendingSelection}
       />
-      {selectedNumber && (
+      {showToolPreconfigurePanel && (
+        <>
+          <ToolDefaultStyleSections
+            kind={toolDefaultKind}
+            scene={scene}
+            pointDefaults={pointDefaults}
+            segmentDefaults={segmentDefaults}
+            lineDefaults={lineDefaults}
+            circleDefaults={circleDefaults}
+            ellipseDefaults={ellipseDefaults}
+            polygonDefaults={polygonDefaults}
+            angleDefaults={angleDefaults}
+            objectLabelDefaults={objectLabelDefaults}
+            labelToolDefaults={labelToolDefaults}
+            richTextToolDefaults={richTextToolDefaults}
+            setPointDefaults={setPointDefaults}
+            setSegmentDefaults={setSegmentDefaults}
+            setLineDefaults={setLineDefaults}
+            setCircleDefaults={setCircleDefaults}
+            setEllipseDefaults={setEllipseDefaults}
+            setPolygonDefaults={setPolygonDefaults}
+            setAngleDefaults={setAngleDefaults}
+            setObjectLabelDefaults={setObjectLabelDefaults}
+            setLabelToolDefaults={setLabelToolDefaults}
+            setRichTextToolDefaults={setRichTextToolDefaults}
+          />
+          {!toolDefaultKind && <div className="emptyState">Tool settings are shown above.</div>}
+        </>
+      )}
+      {!showToolPreconfigurePanel && selectedNumber && (
         <NumberStyleSection
           selectedNumber={selectedNumber}
           selectedNumberValue={selectedNumberValue}
           updateSelectedNumberDefinition={updateSelectedNumberDefinition}
-          deleteSelectedObject={deleteSelectedObject}
+          deleteSelectedObject={handleDeleteFromProperties}
+          deleteLabel={deleteButtonLabel}
         />
       )}
-      {!selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedPolygon && !selectedAngle && !selectedTextLabel && !selectedNumber && (
+      {!showToolPreconfigurePanel && !selectedPoint && !selectedSegment && !selectedLine && !selectedCircle && !selectedEllipse && !selectedPolygon && !selectedAngle && !selectedTextLabel && !selectedRichText && !selectedNumber && (
         <div className="emptyState">Select an object to edit properties</div>
       )}
-      {selectedPoint && (
+      {!showToolPreconfigurePanel && selectedPoint && (
         <PointPropertiesSection
           selectedPoint={selectedPoint}
           selectedPointWorld={selectedPointWorld}
@@ -348,13 +790,14 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
           shapePickerOpen={shapePickerOpen}
           setShapePickerOpen={setShapePickerOpen}
           shapePickerRef={shapePickerRef}
-          updateSelectedPointFields={updateSelectedPointFields}
-          updateSelectedPointStyle={updateSelectedPointStyle}
-          deleteSelectedObject={deleteSelectedObject}
+          updateSelectedPointFields={handleUpdateSelectedPointFields}
+          updateSelectedPointStyle={handleUpdateSelectedPointStyle}
+          deleteSelectedObject={handleDeleteFromProperties}
+          deleteLabel={deleteButtonLabel}
         />
       )}
-      {selectedLine && (
-        <div className="toolInfo">
+      {!showToolPreconfigurePanel && selectedLine && (
+        <div className="toolInfo toolInfoStat">
           <div className="subSectionTitle">Line</div>
           <div className="detailRow">
             <span className="detailLabel">Equation</span>
@@ -362,8 +805,8 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
           </div>
         </div>
       )}
-      {selectedCircle && (
-        <div className="toolInfo">
+      {!showToolPreconfigurePanel && selectedCircle && (
+        <div className="toolInfo toolInfoStat">
           <div className="subSectionTitle">Circle</div>
           <div className="detailRow">
             <span className="detailLabel">Equation</span>
@@ -371,8 +814,17 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
           </div>
         </div>
       )}
-      {selectedAngle && (
-        <div className="toolInfo">
+      {!showToolPreconfigurePanel && selectedEllipse && (
+        <div className="toolInfo toolInfoStat">
+          <div className="subSectionTitle">Ellipse</div>
+          <div className="detailRow">
+            <span className="detailLabel">Semiaxes</span>
+            <span>{selectedEllipseDescription ?? "undefined"}</span>
+          </div>
+        </div>
+      )}
+      {!showToolPreconfigurePanel && selectedAngle && (
+        <div className="toolInfo toolInfoStat">
           <div className="subSectionTitle">{selectedAngle.kind === "sector" ? "Sector" : "Angle"}</div>
           <div className="detailRow">
             <span className="detailLabel">{selectedAngle.kind === "sector" ? "Sweep" : "Value"}</span>
@@ -380,79 +832,63 @@ export function PropertiesPanel({ visible }: { visible: boolean }) {
           </div>
         </div>
       )}
-      {selectedTextLabel && (
+      {!showToolPreconfigurePanel && selectedTextLabel && (
         <TextLabelStyleSection
           selectedTextLabel={selectedTextLabel}
           scene={scene}
           selectedTextLabelBoundNumberValue={selectedTextLabelBoundNumberValue}
           selectedTextLabelExprValue={selectedTextLabelExprValue}
-          updateSelectedTextLabelFields={updateSelectedTextLabelFields}
-          updateSelectedTextLabelStyle={updateSelectedTextLabelStyle}
-          deleteSelectedObject={deleteSelectedObject}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={handleMakeStyleDefaultChange}
+          updateSelectedTextLabelFields={handleUpdateSelectedTextLabelFields}
+          updateSelectedTextLabelStyle={handleUpdateSelectedTextLabelStyle}
+          deleteSelectedObject={handleDeleteFromProperties}
+          deleteLabel={deleteButtonLabel}
         />
       )}
-      {!selectedPoint && selectedStyleKind && (
-        <div className="cosmeticsBlock">
-          <label className="checkboxRow">
-            <input
-              type="checkbox"
-              checked={selectedStyleAsDefault}
-              onChange={(e) => handleMakeStyleDefaultChange(e.target.checked)}
-            />
-            Make this default for this object
-          </label>
-        </div>
+      {!showToolPreconfigurePanel && selectedRichText && (
+        <RichTextStyleSection
+          selectedRichText={selectedRichText}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={handleMakeStyleDefaultChange}
+          updateSelectedRichTextFields={handleUpdateSelectedRichTextFields}
+          updateSelectedRichTextStyle={handleUpdateSelectedRichTextStyle}
+          updateSelectedRichTextDocument={handleUpdateSelectedRichTextDocument}
+          deleteSelectedObject={handleDeleteFromProperties}
+          deleteLabel={deleteButtonLabel}
+        />
       )}
-      <ObjectStyleSections
-        selectedPointPresent={Boolean(selectedPoint)}
-        selectedSegment={selectedSegment}
-        selectedLine={selectedLine}
-        selectedCircle={selectedCircle}
-        selectedPolygon={selectedPolygon}
-        selectedPolygonOwnedEdgesVisible={selectedPolygonOwnedEdgesVisible}
-        selectedAngle={selectedAngle}
-        selectedAngleRightStatus={selectedAngleRightStatus}
-        updateSelectedSegmentStyle={updateSelectedSegmentStyle}
-        updateSelectedLineStyle={updateSelectedLineStyle}
-        updateSelectedCircleStyle={updateSelectedCircleStyle}
-        updateSelectedPolygonStyle={updateSelectedPolygonStyle}
-        updateSelectedAngleStyle={updateSelectedAngleStyle}
-        updateSelectedSegmentFields={updateSelectedSegmentFields}
-        updateSelectedLineFields={updateSelectedLineFields}
-        updateSelectedCircleFields={updateSelectedCircleFields}
-        updateSelectedPolygonFields={updateSelectedPolygonFields}
-        setSelectedPolygonOwnedSegmentsVisible={setSelectedPolygonOwnedSegmentsVisible}
-        deleteSelectedObject={deleteSelectedObject}
-      />
-      <NumbersSection
-        newNumberValue={newNumberValue}
-        setNewNumberValue={setNewNumberValue}
-        newSliderMin={newSliderMin}
-        setNewSliderMin={setNewSliderMin}
-        newSliderMax={newSliderMax}
-        setNewSliderMax={setNewSliderMax}
-        newSliderStep={newSliderStep}
-        setNewSliderStep={setNewSliderStep}
-        newSliderMode={newSliderMode}
-        setNewSliderMode={(next) => {
-          setNewSliderMode(next);
-          if (next === "degree") {
-            setNewSliderMin("0");
-            setNewSliderMax("360");
-            setNewSliderStep("1");
-            setNewNumberValue("0");
-          } else {
-            setNewSliderMin("0");
-            setNewSliderMax("10");
-            setNewSliderStep("0.1");
-            setNewNumberValue("1");
-          }
-        }}
-        selectedSegmentId={selectedSegment?.id ?? null}
-        selectedCircleId={selectedCircle?.id ?? null}
-        selectedAngleId={selectedAngle?.id ?? null}
-        createNumber={createNumber}
-      />
+      {!showToolPreconfigurePanel && (
+        <ObjectStyleSections
+          selectedPointPresent={Boolean(selectedPoint)}
+          selectedSegment={selectedSegment}
+          selectedLine={selectedLine}
+          selectedCircle={selectedCircle}
+          selectedEllipse={selectedEllipse}
+          selectedPolygon={selectedPolygon}
+          selectedPolygonOwnedEdgesVisible={selectedPolygonOwnedEdgesVisible}
+          selectedAngle={selectedAngle}
+          selectedAngleRightStatus={selectedAngleRightStatus}
+          updateSelectedSegmentStyle={handleUpdateSelectedSegmentStyle}
+          updateSelectedLineStyle={handleUpdateSelectedLineStyle}
+          updateSelectedCircleStyle={handleUpdateSelectedCircleStyle}
+          updateSelectedEllipseStyle={handleUpdateSelectedEllipseStyle}
+          updateSelectedPolygonStyle={handleUpdateSelectedPolygonStyle}
+          updateSelectedAngleStyle={handleUpdateSelectedAngleStyle}
+          updateSelectedSegmentFields={handleUpdateSelectedSegmentFields}
+          updateSelectedLineFields={handleUpdateSelectedLineFields}
+          updateSelectedCircleFields={handleUpdateSelectedCircleFields}
+          updateSelectedEllipseFields={handleUpdateSelectedEllipseFields}
+          canConvertSelectedLineToSegment={canConvertSelectedLineToSegment}
+          convertSelectedLineToSegment={handleConvertSelectedLineToSegment}
+          updateSelectedPolygonFields={handleUpdateSelectedPolygonFields}
+          setSelectedPolygonOwnedSegmentsVisible={setSelectedPolygonOwnedSegmentsVisible}
+          selectedStyleAsDefault={selectedStyleAsDefault}
+          onMakeStyleDefaultChange={handleMakeStyleDefaultChange}
+          deleteSelectedObject={handleDeleteFromProperties}
+          deleteLabel={deleteButtonLabel}
+        />
+      )}
     </section>
   );
 }

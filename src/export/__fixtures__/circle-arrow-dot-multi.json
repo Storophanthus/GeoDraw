@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "id": "p_o",
+      "name": "O",
+      "definition": { "kind": "free", "x": 0.5, "y": -0.5 },
+      "visible": true,
+      "showLabel": "name"
+    },
+    {
+      "id": "p_a",
+      "name": "A",
+      "definition": { "kind": "free", "x": 3.1, "y": -0.5 },
+      "visible": true,
+      "showLabel": "name"
+    }
+  ],
+  "lines": [],
+  "segments": [],
+  "circles": [
+    {
+      "id": "c_1",
+      "kind": "twoPoint",
+      "centerId": "p_o",
+      "throughId": "p_a",
+      "visible": true,
+      "style": {
+        "strokeColor": "#334155",
+        "strokeWidth": 1.8,
+        "strokeDash": "solid",
+        "strokeOpacity": 1,
+        "fillOpacity": 0,
+        "pattern": "",
+        "arrowMarks": [
+          {
+            "enabled": true,
+            "direction": "->",
+            "tip": "Dot",
+            "distribution": "multi",
+            "startPos": 0.1,
+            "endPos": 0.3,
+            "step": 0.1,
+            "pos": 0.1,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#334155"
+          },
+          {
+            "enabled": true,
+            "direction": "->",
+            "tip": "OpenDot",
+            "distribution": "single",
+            "pos": 0.62,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#334155"
+          }
+        ]
+      }
+    }
+  ],
+  "angles": [],
+  "numbers": []
+}

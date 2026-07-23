@@ -1,6 +1,7 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
-import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
+import { resolveAngleRightStatus, type AngleRightStatus } from "../domain/rightAngleProvenance";
 import { normalizeSceneIntegrity } from "../domain/sceneIntegrity";
+import { exportFriendlyColorNameByRgbKey, parseColorToRgb, resolveExportFriendlyColorName } from "../exportFriendlyColors";
 import {
   collectAngleMarkPositions,
   collectSegmentMarkPositions,
@@ -11,21 +12,34 @@ import {
   evaluateAngleExpressionDegrees,
   evaluateNumberExpression,
   getCircleWorldGeometry,
+  getEllipseWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
+  resolveTextLabelAlignment,
+  resolveTextLabelBoxHeightPx,
+  resolveTextLabelBoxWidthPx,
   resolveTextLabelDisplayText,
+  resolveTextLabelRenderMode,
   type GeometryObjectRef,
+  type SceneGeometryLayerRef,
+  type SceneCircle,
   SceneModel,
   ScenePoint,
   SegmentArrowMark,
+  type SegmentMarkSymbol,
   type PathArrowMark,
 } from "../scene/points";
+import { geometryLayerKey, getGeometryLayerOrder } from "../scene/geometryLayerOrder";
 import {
   defaultObjectLabelPosWorld,
   defaultObjectLabelText,
   isFiniteLabelPosWorld,
   resolveObjectLabelText,
 } from "../scene/objectLabels";
+import { angleBisectorRad, defaultAngleLabelDist, shortestAngleDiffRad } from "../scene/angleLabelPlacement";
+import { parseTextLabelRichText } from "../text/textLabelRichText";
+import { extractDisplayMathSource, extractInlineMathSource } from "../text-editor/richTextDocument";
+import type { RichTextDocument } from "../text-editor/richTextModel";
 import tkzMacroWhitelist from "../../docs/tkz-euclide-macros.json";
 import { assertNoUnknownTkzMacro } from "./tkzWhitelist";
 import type { TikzRendererCapabilities } from "./tikz/renderCapabilities";
@@ -53,13 +67,19 @@ export type TikzExportOptions = {
   worldToTikzScale?: number;
   screenPxPerWorld?: number;
   labelGlow?: boolean;
+  // Canvas-wide halo used by angle/object/free-text overlays. Point labels keep
+  // their own per-point halo color.
+  labelHaloColor?: string;
   drawLayerBackend?: DrawLayerBackendKind;
   segmentStrokeScale?: number;
   pointStrokeScale?: number;
   pointInnerSepFixedPt?: number;
   pointInnerSepScale?: number;
   segmentMarkSizeScale?: number;
+  segmentMarkRoundSizeScale?: number;
+  segmentMarkNonRoundSizeScale?: number;
   segmentMarkLineWidthScale?: number;
+  pathDotMarkSizeScale?: number;
   angleLabelFontScale?: number;
   angleArcStrokeScale?: number;
   angleArcSizeScale?: number;
@@ -67,6 +87,18 @@ export type TikzExportOptions = {
   rightAngleStrokeScale?: number;
   rightAngleSizeScale?: number;
   autoScaleToFitCm?: { maxWidthCm: number; maxHeightCm: number };
+  // When true, every point is emitted as a literal `\tkzDefPoint` at the position
+  // the app computes (full double precision), instead of being re-derived in TeX
+  // via tkz construction macros. The output is no longer parametric/editable, but
+  // it is pixel-faithful to the canvas and immune to tkz-euclide's fixed-point
+  // intersection drift and `common=` ordering fragility.
+  bakePointCoordinates?: boolean;
+};
+
+type ResolvedTikzExportOptions = TikzExportOptions & {
+  // Derived after viewport auto-fit. This is intentionally internal: callers
+  // provide canvas density, while the exporter resolves the final PDF metric.
+  resolvedCanvasPxToTikzPt?: number;
 };
 
 export type TikzCommand =
@@ -105,7 +137,8 @@ export type TikzCommand =
     secondName: string;
   }
   | { kind: "DefAngleBisectorLine"; auxName: string; a: string; b: string; c: string }
-  | { kind: "DefTriangleCenterPoint"; name: string; centerKind: "incenter" | "orthocenter" | "centroid"; a: string; b: string; c: string }
+  | { kind: "DefTriangleCenterPoint"; name: string; centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter"; a: string; b: string; c: string }
+  | { kind: "DefIncircle"; centerName: string; touchName: string; a: string; b: string; c: string }
   | { kind: "DefCircleCircumCenter"; centerName: string; a: string; b: string; c: string }
   | { kind: "DefPointOnCircle"; name: string; center: string; through: string; theta: number }
   | { kind: "DefMidPoint"; name: string; a: string; b: string }
@@ -115,21 +148,47 @@ export type TikzCommand =
   | { kind: "DrawSegment"; a: string; b: string; style?: string }
   | { kind: "MarkSegment"; a: string; b: string; style: string }
   | { kind: "DrawRaw"; tex: string }
-  | { kind: "DrawLine"; a: string; b: string; addLeft: number; addRight: number; style?: string }
+  | {
+    kind: "DrawLine";
+    a: string;
+    b: string;
+    addLeft: number;
+    addRight: number;
+    style?: string;
+    finiteFallback?: { ax: number; ay: number; bx: number; by: number };
+  }
   | { kind: "DrawCircle"; o: string; x: string; style?: string }
   | { kind: "FillCircle"; o: string; x: string; style?: string }
-  | { kind: "DrawCircleRadius"; o: string; radius: number; style?: string }
-  | { kind: "FillCircleRadius"; o: string; radius: number; style?: string }
+  | { kind: "DrawCircleRadius"; o: string; radius: number; radiusExpr?: string; style?: string }
+  | { kind: "FillCircleRadius"; o: string; radius: number; radiusExpr?: string; style?: string }
   | { kind: "DrawSector"; o: string; a: string; b: string; style?: string }
   | { kind: "FillSector"; o: string; a: string; b: string; style?: string }
   | { kind: "FillAngle"; a: string; b: string; c: string; style?: string }
   | { kind: "MarkAngle"; a: string; b: string; c: string; style?: string }
   | { kind: "MarkRightAngle"; a: string; b: string; c: string; style?: string }
-  | { kind: "LabelAngle"; a: string; b: string; c: string; text: string; style?: string }
+  | { kind: "LabelAngle"; a: string; b: string; c: string; text: string; style?: string; useGlow?: boolean }
   | { kind: "DrawPoints"; style: string; points: string[] }
   | { kind: "LabelPoints"; points: string[] }
-  | { kind: "LabelPoint"; name: string; text: string; options?: string; useGlow?: boolean }
-  | { kind: "LabelAt"; x: number; y: number; text: string; options?: string; useGlow?: boolean };
+  | {
+    kind: "LabelPoint";
+    name: string;
+    text: string;
+    options?: string;
+    useGlow?: boolean;
+    plainGlow?: { widthPt: number; color?: string };
+  }
+  | {
+    kind: "LabelAt";
+    x: number;
+    y: number;
+    text: string;
+    options?: string;
+    useGlow?: boolean;
+    textMode?: "math" | "raw";
+    plainGlow?: { widthPt: number; color?: string };
+  };
+
+const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.8;
 
 type PointStyleDef = {
   styleName: string;
@@ -141,6 +200,8 @@ type LabelPlacement = {
   yShiftPt: number;
   rawXShiftPt: number;
   rawYShiftPt: number;
+  offsetXPx: number;
+  offsetYPx: number;
   scale: number;
   bubbleRadiusPt: number;
 };
@@ -152,15 +213,26 @@ const PATH_ARROW_WIDTH_EXPORT_SCALE = 0.6 / 7.6;
 // Arrow width UI is stored as lineWidthPt = sliderValue * 8.
 const PATH_ARROW_WIDTH_UI_FACTOR = 8;
 const DEFAULT_PATH_ARROW_UI = 1.3;
-// Approximate conversion for tip geometry parity (canvas px -> TikZ pt).
-// 16.8px (Canvas) * 0.5 = 8.4pt base -> 10.08pt tip length (Stealth).
-const CANVAS_PX_TO_TIKZ_PT = 0.5;
+// Fallback only. Normal arrow export computes px->pt from the actual
+// canvas zoom and final TikZ coordinate scale.
+const FALLBACK_CANVAS_PX_TO_TIKZ_PT = 0.5;
+const TIKZ_PT_PER_CM = 72.27 / 2.54;
+
+type PathArrowExportMetrics = {
+  pathLengthWorld?: number;
+  screenPxPerWorld?: number;
+  canvasPxToTikzPt?: number;
+  canvasExact?: boolean;
+};
 
 function edgeKey(aId: string, bId: string): string {
   return aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`;
 }
 
 export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}): TikzCommand[] {
+  const bakePointCoordinates = options.bakePointCoordinates ?? false;
+  const emitPlainConstructions =
+    options.drawLayerBackend === "plain" && Boolean(options.bakePointCoordinates);
   const pointById = new Map(scene.points.map((p) => [p.id, p]));
   const lineById = new Map(scene.lines.map((l) => [l.id, l]));
   const segById = new Map(scene.segments.map((s) => [s.id, s]));
@@ -170,9 +242,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   const defs: TikzCommand[] = [];
   const constructions: TikzCommand[] = [];
-  const drawFills: TikzCommand[] = [];
-  const drawStrokes: TikzCommand[] = [];
-  const drawOverlays: TikzCommand[] = [];
+  const geometryBundles = new Map<string, TikzCommand[]>();
   const drawPointsLayer: TikzCommand[] = [];
   const drawLabelsLayer: TikzCommand[] = [];
   const definedPointIds = new Set<string>();
@@ -185,9 +255,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     }
   }
 
-  const freeItems: Array<{ name: string; x: number; y: number }> = [];
-  const viewport = options.viewport ?? computeExportViewport(scene);
+  const pushGeometryCommands = (ref: SceneGeometryLayerRef, commands: TikzCommand[]): void => {
+    if (commands.length === 0) return;
+    const key = geometryLayerKey(ref);
+    const bundle = geometryBundles.get(key);
+    if (bundle) {
+      bundle.push(...commands);
+      return;
+    }
+    geometryBundles.set(key, [...commands]);
+  };
+
   const exportPxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const freeItems: Array<{ name: string; x: number; y: number }> = [];
+  const viewport = options.viewport ?? computeExportViewport(scene, exportPxPerWorld);
   let coordScale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
   const labelScale = clampPositive(options.labelScale ?? 1, 0.1, 10);
   // Auto-fit viewport for document embedding. Fit both down and up so exported
@@ -206,10 +287,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const worldHeight = Math.max(1e-9, Math.abs(viewport.ymax - viewport.ymin));
   const fitScale = Math.min(maxWidthCm / worldWidth, maxHeightCm / worldHeight);
   coordScale = clampPositive(coordScale * fitScale, 0.01, 100);
-  // Calculate effective pixels per world unit for TikZ metric mapping.
-  // 1cm (TikZ default unit) approx equals 37.8px (at 96 DPI).
-  // This ensures gap pixels (defined in screen px) map to correct physical length in TikZ.
-  const arrowMetricPxPerWorld = coordScale * 37.8;
+  const canvasPxToTikzPt = (coordScale * TIKZ_PT_PER_CM) / exportPxPerWorld;
+  options = {
+    ...options,
+    resolvedCanvasPxToTikzPt: canvasPxToTikzPt,
+  } as ResolvedTikzExportOptions;
   defs.push({ kind: "SetupUnits", scale: coordScale });
   defs.push({ kind: "SetupLabelScale", scale: labelScale });
   defs.push({
@@ -221,10 +303,18 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     space: options.clipSpace ?? 0,
   });
   const globalAdd = options.globalLineAdd ?? 5;
+  const lineDrawClipBounds = lineDrawClipBoundsForOptions(viewport, options);
+  const plainLineDrawClipBounds = rawLineDrawClipBoundsForOptions(viewport, options);
   defs.push({ kind: "SetupLine", addLeft: globalAdd, addRight: globalAdd });
   if (options.clipRectWorld) {
     // Slightly expand explicit clip rectangle to avoid antialias/stroke edge shaving.
-    const clipPadWorld = 14 / exportPxPerWorld;
+    // Visual Exact must preserve the user's selected crop literally: padding
+    // changes both the visible PDF and its bounding box. Keep legacy tkz output
+    // unchanged.
+    const clipPadWorld =
+      options.drawLayerBackend === "plain" && options.bakePointCoordinates
+        ? 0
+        : 14 / exportPxPerWorld;
     defs.push({
       kind: "ClipRect",
       xmin: Math.min(options.clipRectWorld.xmin, options.clipRectWorld.xmax) - clipPadWorld,
@@ -234,7 +324,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     });
   }
   if (options.clipPolygonWorld && options.clipPolygonWorld.length >= 3) {
-    const clipPadWorld = 14 / exportPxPerWorld;
+    const clipPadWorld =
+      options.drawLayerBackend === "plain" && options.bakePointCoordinates
+        ? 0
+        : 14 / exportPxPerWorld;
     const points = options.clipPolygonWorld.map((p) => ({ x: p.x, y: p.y }));
     const center = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
     center.x /= points.length;
@@ -255,6 +348,43 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   let derivedAuxIndex = 0;
   const circleThroughNameById = new Map<string, string>();
   const circleCenterNameById = new Map<string, string>();
+  const incircleConstructedCircleIds = new Set<string>();
+  const incircleCircleIdsByCenterId = new Map<string, string[]>();
+
+  const normalizeExpr = (expr: string | undefined): string => (expr ?? "").replace(/\s+/g, "");
+  const buildInradiusExprCandidates = (a: string, b: string, c: string): string[] => {
+    const perms = [
+      [a, b, c],
+      [a, c, b],
+      [b, a, c],
+      [b, c, a],
+      [c, a, b],
+      [c, b, a],
+    ] as const;
+    return perms.map(([x, y, z]) => `Inradius(${x},${y},${z})`);
+  };
+  const isExportableIncircle = (circleId: string): boolean => {
+    const circle = circleById.get(circleId);
+    if (!circle || circle.kind !== "fixedRadius") return false;
+    const centerPoint = pointById.get(circle.centerId);
+    if (!centerPoint || centerPoint.kind !== "triangleCenter" || centerPoint.centerKind !== "incenter") return false;
+    const aPoint = pointById.get(centerPoint.aId);
+    const bPoint = pointById.get(centerPoint.bId);
+    const cPoint = pointById.get(centerPoint.cId);
+    if (!aPoint || !bPoint || !cPoint) return false;
+    const normalized = normalizeExpr(circle.radiusExpr);
+    if (!normalized) return false;
+    return buildInradiusExprCandidates(aPoint.name, bPoint.name, cPoint.name)
+      .map((expr) => normalizeExpr(expr))
+      .includes(normalized);
+  };
+
+  for (const circle of scene.circles) {
+    if (circle.kind !== "fixedRadius" || !isExportableIncircle(circle.id)) continue;
+    const ids = incircleCircleIdsByCenterId.get(circle.centerId);
+    if (ids) ids.push(circle.id);
+    else incircleCircleIdsByCenterId.set(circle.centerId, [circle.id]);
+  }
 
 
 
@@ -282,13 +412,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     resolvePoint(circle.cId);
     derivedAuxIndex += 1;
     const centerName = `tkzCircum_${derivedAuxIndex}`;
-    constructions.push({
-      kind: "DefCircleCircumCenter",
-      centerName,
-      a: mustName(pointName, circle.aId),
-      b: mustName(pointName, circle.bId),
-      c: mustName(pointName, circle.cId),
-    });
+    if (bakePointCoordinates) {
+      // Bake the circumcenter to a literal point so the drawn circle is exact.
+      const center = circleGeomById(circle.id).center;
+      constructions.push({ kind: "DefPoint", name: centerName, x: center.x, y: center.y });
+    } else {
+      constructions.push({
+        kind: "DefCircleCircumCenter",
+        centerName,
+        a: mustName(pointName, circle.aId),
+        b: mustName(pointName, circle.bId),
+        c: mustName(pointName, circle.cId),
+      });
+    }
     circleCenterNameById.set(circleId, centerName);
     return centerName;
   };
@@ -298,6 +434,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (cached) return cached;
     const circle = circleById.get(circleId);
     if (!circle) throw new Error(`Missing circle ${circleId}`);
+    if (incircleConstructedCircleIds.has(circle.id)) {
+      const throughName = circleThroughNameById.get(circle.id);
+      if (!throughName) throw new Error(`Missing incircle through point cache for ${circle.id}`);
+      return throughName;
+    }
     ensureCircleCenterName(circle.id);
     if (circle.kind === "threePoint") {
       resolvePoint(circle.aId);
@@ -339,6 +480,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       if (!anchorsWorld) {
         throw new Error(`Cannot export undefined tangent geometry: ${line.id}`);
       }
+      if (emitPlainConstructions) {
+        derivedAuxIndex += 1;
+        const auxName = `gdTan_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefPoint",
+          name: auxName,
+          x: anchorsWorld.b.x,
+          y: anchorsWorld.b.y,
+        });
+        const anchors = {
+          a: mustName(pointName, line.throughId),
+          b: auxName,
+        };
+        lineAnchorNames.set(lineId, anchors);
+        return anchors;
+      }
       derivedAuxIndex += 1;
       const auxName = `tkzTan_${derivedAuxIndex}`;
       constructions.push({
@@ -360,6 +517,31 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       }
       const geomA = circleGeomById(circleA.id);
       const geomB = circleGeomById(circleB.id);
+      const anchorsWorld = getLineWorldAnchors(line, scene);
+      if (emitPlainConstructions) {
+        if (!anchorsWorld) {
+          throw new Error(`Cannot export undefined circle-circle tangent geometry: ${line.id}`);
+        }
+        derivedAuxIndex += 1;
+        const tangentBaseName = `gdTanCC_${derivedAuxIndex}`;
+        const tangentAName = `${tangentBaseName}_a`;
+        constructions.push({
+          kind: "DefPoint",
+          name: tangentAName,
+          x: anchorsWorld.a.x,
+          y: anchorsWorld.a.y,
+        });
+        const tangentBName = `${tangentBaseName}_b`;
+        constructions.push({
+          kind: "DefPoint",
+          name: tangentBName,
+          x: anchorsWorld.b.x,
+          y: anchorsWorld.b.y,
+        });
+        const anchors = { a: tangentAName, b: tangentBName };
+        lineAnchorNames.set(lineId, anchors);
+        return anchors;
+      }
       const tangentTopology = classifyCircleCircleTangentTopology(geomA, geomB);
       assertCircleCircleTangentExportable(line, geomA, geomB);
       if (
@@ -395,7 +577,6 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         lineAnchorNames.set(lineId, anchors);
         return anchors;
       }
-      const anchorsWorld = getLineWorldAnchors(line, scene);
       if (!anchorsWorld) {
         throw new Error(`Cannot export undefined circle-circle tangent geometry: ${line.id}`);
       }
@@ -414,9 +595,15 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         }
       }
       const simWorld = resolveCircleSimilitudeCenter(geomA.center, geomA.radius, geomB.center, geomB.radius, simMode);
+      const canUseOuterUnsafeFallback =
+        tangentTopology.kind === "disjoint" ||
+        tangentTopology.kind === "intersecting" ||
+        (tangentTopology.kind === "degenerateTangency" &&
+          tangentTopology.mode === "external" &&
+          line.family === "outer");
       if (
         line.family === "outer" &&
-        (tangentTopology.kind === "disjoint" || tangentTopology.kind === "intersecting") &&
+        canUseOuterUnsafeFallback &&
         simWorld &&
         isTkzUnsafePoint(simWorld) &&
         Math.abs(geomA.radius - geomB.radius) > 1e-12
@@ -543,6 +730,30 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         resolvePoint(line.aId);
         resolvePoint(line.bId);
         resolvePoint(line.cId);
+      } else {
+        resolvePoint(line.throughId);
+        resolveLineLikeNames(line.base);
+      }
+      const anchorsWorld = getLineWorldAnchors(line, scene);
+      if (!anchorsWorld) {
+        throw new Error(`Cannot export undefined ${line.kind} geometry: ${line.id}`);
+      }
+      if (emitPlainConstructions) {
+        const baseAnchorName =
+          line.kind === "angleBisector" ? mustName(pointName, line.bId) : mustName(pointName, line.throughId);
+        derivedAuxIndex += 1;
+        const auxName = `${line.kind === "perpendicular" ? "gdPerp" : line.kind === "parallel" ? "gdPar" : "gdBis"}_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefPoint",
+          name: auxName,
+          x: anchorsWorld.b.x,
+          y: anchorsWorld.b.y,
+        });
+        const anchors = { a: baseAnchorName, b: auxName };
+        lineAnchorNames.set(lineId, anchors);
+        return anchors;
+      }
+      if (line.kind === "angleBisector") {
         derivedAuxIndex += 1;
         const auxName = `tkzBis_${derivedAuxIndex}`;
         constructions.push({
@@ -599,20 +810,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (!circleA || !circleB) return false;
     const geomA = circleGeomById(circleA.id);
     const geomB = circleGeomById(circleB.id);
-    const topology = classifyCircleCircleTangentTopology(geomA, geomB);
-    switch (topology.kind) {
-      case "intersecting":
-        return line.family === "inner";
-      case "degenerateTangency":
-        if (topology.near) return false;
-        return topology.mode === "internal" && line.family === "inner";
-      case "contained":
-      case "concentricUnequal":
-      case "coincident":
-        return true;
-      case "disjoint":
-        return false;
-    }
+    return circleCircleTangentHasNoCurrentAnchors(line, geomA, geomB);
   };
 
   const resolveLineLikeNames = (ref: { type: "line" | "segment"; id: string }): { a: string; b: string } => {
@@ -879,6 +1077,28 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
     const name = mustName(pointName, point.id);
 
+    if (bakePointCoordinates) {
+      // Baked-coordinate export: emit the app-computed position as a literal point
+      // instead of re-deriving it in TeX. No dependency recursion is needed.
+      const world = getPointWorldPosCached(scene, point.id);
+      if (!world) {
+        // No evaluated position (e.g. a dynamic intersection currently off-domain).
+        // It is not drawn on the canvas, so leave it undefined like the constructive path.
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
+      if (point.kind === "free") {
+        freeItems.push({ name, x: world.x, y: world.y });
+      } else {
+        constructions.push({ kind: "DefPoint", name, x: world.x, y: world.y });
+      }
+      definedPointIds.add(point.id);
+      visiting.delete(pointId);
+      visited.add(pointId);
+      return;
+    }
+
     if (point.kind === "free") {
       freeItems.push({ name, x: point.position.x, y: point.position.y });
       definedPointIds.add(point.id);
@@ -900,14 +1120,36 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       resolvePoint(point.aId);
       resolvePoint(point.bId);
       resolvePoint(point.cId);
-      constructions.push({
-        kind: "DefTriangleCenterPoint",
-        name,
-        centerKind: point.centerKind,
-        a: mustName(pointName, point.aId),
-        b: mustName(pointName, point.bId),
-        c: mustName(pointName, point.cId),
-      });
+      const incircleCircleIds = incircleCircleIdsByCenterId.get(point.id) ?? [];
+      if (point.centerKind === "incenter" && incircleCircleIds.length > 0) {
+        derivedAuxIndex += 1;
+        const touchName = `tkzInc_${derivedAuxIndex}`;
+        const a = mustName(pointName, point.aId);
+        const b = mustName(pointName, point.bId);
+        const c = mustName(pointName, point.cId);
+        constructions.push({
+          kind: "DefIncircle",
+          centerName: name,
+          touchName,
+          a,
+          b,
+          c,
+        });
+        for (const circleId of incircleCircleIds) {
+          circleCenterNameById.set(circleId, name);
+          circleThroughNameById.set(circleId, touchName);
+          incircleConstructedCircleIds.add(circleId);
+        }
+      } else {
+        constructions.push({
+          kind: "DefTriangleCenterPoint",
+          name,
+          centerKind: point.centerKind,
+          a: mustName(pointName, point.aId),
+          b: mustName(pointName, point.bId),
+          c: mustName(pointName, point.cId),
+        });
+      }
       definedPointIds.add(point.id);
     } else if (point.kind === "midpointPoints") {
       resolvePoint(point.aId);
@@ -1035,6 +1277,19 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           center: mustName(pointName, point.axis.id),
           factor: -1,
         });
+      } else if (point.axis.type === "pointPair") {
+        resolvePoint(point.axis.aId);
+        resolvePoint(point.axis.bId);
+        derivedAuxIndex += 1;
+        const footName = `tkzRefProj_${derivedAuxIndex}`;
+        constructions.push({
+          kind: "DefPointByReflection",
+          name,
+          point: mustName(pointName, point.pointId),
+          axisA: mustName(pointName, point.axis.aId),
+          axisB: mustName(pointName, point.axis.bId),
+          footName,
+        });
       } else {
         const axis = resolveLineLikeNames(point.axis);
         derivedAuxIndex += 1;
@@ -1048,6 +1303,18 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           footName,
         });
       }
+      definedPointIds.add(point.id);
+    } else if (point.kind === "pointByProjection") {
+      resolvePoint(point.pointId);
+      resolvePoint(point.axisAId);
+      resolvePoint(point.axisBId);
+      constructions.push({
+        kind: "DefPointByProjection",
+        name,
+        point: mustName(pointName, point.pointId),
+        axisA: mustName(pointName, point.axisAId),
+        axisB: mustName(pointName, point.axisBId),
+      });
       definedPointIds.add(point.id);
     } else if (point.kind === "circleLineIntersectionPoint") {
       const circle = circleById.get(point.circleId);
@@ -1072,6 +1339,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         return;
       }
       if (roots.length === 1) {
+        if (singleLineCircleRootIsExcluded(roots, point.excludePointId, scene)) {
+          visiting.delete(pointId);
+          visited.add(pointId);
+          return;
+        }
         constructions.push({
           kind: "DefPointByProjection",
           name,
@@ -1088,31 +1360,38 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       if (point.excludePointId) {
         const excluded = getPointWorldPosCached(scene, point.excludePointId);
         if (excluded) {
-          branch = inferLineCircleBranchFromExcludedWorld(
-            lineWorld.a,
-            lineWorld.b,
-            center,
-            { x: center.x + geom.radius, y: center.y },
-            excluded,
-            point.branchIndex
-          );
+          branch = inferLineCircleBranchFromExcludedRoots(roots, excluded, point.branchIndex);
         }
       }
-      let commonName: string | undefined;
-      if (point.excludePointId) {
-        commonName = mustName(pointName, point.excludePointId);
-      } else if (point.branchIndex === 1) {
+      let commonName = validDefinedLineCircleCommonPointName(
+        point.excludePointId,
+        roots,
+        branch,
+        scene,
+        definedPointIds,
+        pointName,
+        circle
+      );
+      if (!commonName) {
         const sibling = scene.points.find(
           (p) =>
             p.kind === "circleLineIntersectionPoint" &&
             p.id !== point.id &&
             p.circleId === point.circleId &&
             p.lineId === point.lineId &&
-            p.branchIndex === 0
+            definedPointIds.has(p.id)
         );
         if (sibling) {
           resolvePoint(sibling.id);
-          if (definedPointIds.has(sibling.id)) commonName = mustName(pointName, sibling.id);
+          commonName = validDefinedLineCircleCommonPointName(
+            sibling.id,
+            roots,
+            branch,
+            scene,
+            definedPointIds,
+            pointName,
+            circle
+          );
         }
       }
       let swap = false;
@@ -1169,8 +1448,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const circleThroughName = ensureCircleThroughName(circle.id);
       const geom = circleGeomById(circle.id);
       const center = geom.center;
-      const through = { x: center.x + geom.radius, y: center.y };
-      const roots = lineCircleIntersectionBranches(wa, wb, center, geom.radius);
+      const supportRoots = lineCircleIntersectionBranches(wa, wb, center, geom.radius);
+      const roots = filterLineCircleBranchesToFiniteDomain(supportRoots, true);
       if (roots.length === 0) {
         visiting.delete(pointId);
         visited.add(pointId);
@@ -1181,7 +1460,26 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         visited.add(pointId);
         return;
       }
+      const singleFiniteRootFactor = finiteSingleLineCircleRootFactor(roots, supportRoots);
       if (roots.length === 1) {
+        if (singleLineCircleRootIsExcluded(roots, point.excludePointId, scene)) {
+          visiting.delete(pointId);
+          visited.add(pointId);
+          return;
+        }
+        if (singleFiniteRootFactor !== null) {
+          constructions.push({
+            kind: "DefPointByDilation",
+            name,
+            center: segAName,
+            point: segBName,
+            factor: singleFiniteRootFactor,
+          });
+          definedPointIds.add(point.id);
+          visiting.delete(pointId);
+          visited.add(pointId);
+          return;
+        }
         constructions.push({
           kind: "DefPointByProjection",
           name,
@@ -1198,24 +1496,38 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       if (point.excludePointId) {
         const excluded = getPointWorldPosCached(scene, point.excludePointId);
         if (excluded) {
-          branch = inferLineCircleBranchFromExcludedWorld(wa, wb, center, through, excluded, point.branchIndex);
+          branch = inferLineCircleBranchFromExcludedRoots(roots, excluded, point.branchIndex);
         }
       }
-      let commonName: string | undefined;
-      if (point.excludePointId) {
-        commonName = mustName(pointName, point.excludePointId);
-      } else if (point.branchIndex === 1) {
+      let commonName = validDefinedLineCircleCommonPointName(
+        point.excludePointId,
+        roots,
+        branch,
+        scene,
+        definedPointIds,
+        pointName,
+        circle
+      );
+      if (!commonName) {
         const sibling = scene.points.find(
           (p) =>
             p.kind === "circleSegmentIntersectionPoint" &&
             p.id !== point.id &&
             p.circleId === point.circleId &&
             p.segId === point.segId &&
-            p.branchIndex === 0
+            definedPointIds.has(p.id)
         );
         if (sibling) {
           resolvePoint(sibling.id);
-          if (definedPointIds.has(sibling.id)) commonName = mustName(pointName, sibling.id);
+          commonName = validDefinedLineCircleCommonPointName(
+            sibling.id,
+            roots,
+            branch,
+            scene,
+            definedPointIds,
+            pointName,
+            circle
+          );
         }
       }
       let swap = false;
@@ -1277,12 +1589,23 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const cBThroughName = ensureCircleThroughName(cB.id);
       const cAGeom = circleGeomById(cA.id);
       const cBGeom = circleGeomById(cB.id);
-      const cAThrough = { x: cAGeom.center.x + cAGeom.radius, y: cAGeom.center.y };
+      const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
       let branch: 0 | 1 = point.branchIndex;
-      let commonName: string | undefined;
       if (point.excludePointId) {
-        commonName = mustName(pointName, point.excludePointId);
-      } else if (branch === 1) {
+        const excluded = getPointWorldPosCached(scene, point.excludePointId);
+        if (excluded) {
+          branch = inferCircleCircleBranchFromExcludedRoots(roots, excluded, point.branchIndex);
+        }
+      }
+      let commonName = validDefinedCircleCircleCommonPointName(
+        point.excludePointId,
+        roots,
+        branch,
+        scene,
+        definedPointIds,
+        pointName
+      );
+      if (!commonName && branch === 1) {
         const sibling = scene.points.find((p) => {
           if (p.id === point.id || p.kind !== "circleCircleIntersectionPoint") return false;
           return (
@@ -1291,13 +1614,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             definedPointIds.has(p.id)
           );
         });
-        if (sibling) commonName = mustName(pointName, sibling.id);
+        if (sibling) {
+          resolvePoint(sibling.id);
+          commonName = validDefinedCircleCircleCommonPointName(
+            sibling.id,
+            roots,
+            branch,
+            scene,
+            definedPointIds,
+            pointName
+          );
+        }
       }
       const targetWorld = getPointWorldPos(point, scene);
 
       // Find a common point (one that already exists and matches the OTHER intersection)
-      const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
-      if (roots.length === 2 && targetWorld) {
+      if (!commonName && roots.length === 2 && targetWorld) {
         const otherWorld = distance(roots[0], targetWorld) > distance(roots[1], targetWorld) ? roots[0] : roots[1];
         for (const pid of definedPointIds) {
           const pWorld = getPointWorldPosCached(scene, pid);
@@ -1313,16 +1645,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         if (!commonName) {
           const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
           if (roots.length === 2) {
-            const other = distance(roots[0], targetWorld) > distance(roots[1], targetWorld) ? roots[0] : roots[1];
-            const angleA_t = computeOrientedAngleRad(cAGeom.center, cAThrough, targetWorld);
-            const angleA_o = computeOrientedAngleRad(cAGeom.center, cAThrough, other);
-            if (angleA_t !== null && angleA_o !== null) {
-              const o1 = cAGeom.center;
-              const o2 = cBGeom.center;
-              const a_t = computeOrientedAngleRad(targetWorld, o1, o2);
-              if (a_t !== null) {
-                swap = a_t <= 0;
-              }
+            const o1 = cAGeom.center;
+            const o2 = cBGeom.center;
+            const a_t = computeOrientedAngleRad(o1, targetWorld, o2);
+            if (a_t !== null) {
+              swap = a_t >= Math.PI;
             }
           }
         }
@@ -1403,8 +1730,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           const cBGeom = circleGeomById(cB.id);
           const cAThrough = { x: cAGeom.center.x + cAGeom.radius, y: cAGeom.center.y };
           const cBThrough = { x: cBGeom.center.x + cBGeom.radius, y: cBGeom.center.y };
-          const branch = inferCircleCircleBranch(point, cAGeom.center, cAThrough, cBGeom.center, cBThrough);
-          let commonName: string | undefined;
+          const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
+          let branch = inferCircleCircleBranch(point, cAGeom.center, cAThrough, cBGeom.center, cBThrough);
+          if (point.excludePointId) {
+            const excluded = getPointWorldPosCached(scene, point.excludePointId);
+            if (excluded) {
+              branch = inferCircleCircleBranchFromExcludedRoots(roots, excluded, branch);
+            }
+          }
+          let commonName = validDefinedCircleCircleCommonPointName(
+            point.excludePointId,
+            roots,
+            branch,
+            scene,
+            definedPointIds,
+            pointName
+          );
           if (branch === 1) {
             const sibling = scene.points.find((p) => {
               if (p.id === point.id || p.kind !== "intersectionPoint") return false;
@@ -1413,13 +1754,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
               if (!aCircle || !bCircle) return false;
               return sameObjectPair(p.objA, p.objB, point.objA, point.objB) && definedPointIds.has(p.id);
             });
-            if (sibling) commonName = mustName(pointName, sibling.id);
+            if (sibling) {
+              resolvePoint(sibling.id);
+              commonName = validDefinedCircleCircleCommonPointName(
+                sibling.id,
+                roots,
+                branch,
+                scene,
+                definedPointIds,
+                pointName
+              );
+            }
           }
           const targetWorld = getPointWorldPos(point, scene);
 
           // Find a common point (one that already exists and matches the OTHER intersection)
-          const roots = circleCircleIntersections(cAGeom.center, cAGeom.radius, cBGeom.center, cBGeom.radius);
-          if (roots.length === 2 && targetWorld) {
+          if (!commonName && roots.length === 2 && targetWorld) {
             const otherWorld = distance(roots[0], targetWorld) > distance(roots[1], targetWorld) ? roots[0] : roots[1];
             for (const pid of definedPointIds) {
               const pWorld = getPointWorldPosCached(scene, pid);
@@ -1437,9 +1787,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
               if (roots.length === 2) {
                 const o1 = cAGeom.center;
                 const o2 = cBGeom.center;
-                const a_t = computeOrientedAngleRad(targetWorld, o1, o2);
+                const a_t = computeOrientedAngleRad(o1, targetWorld, o2);
                 if (a_t !== null) {
-                  swap = a_t <= 0;
+                  swap = a_t >= Math.PI;
                 }
               }
             }
@@ -1468,14 +1818,33 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           const geom = circleGeomById(mixed.c.id);
           const center = geom.center;
           const through = { x: center.x + geom.radius, y: center.y };
-          const branch = inferLineCircleBranchFromWorld(point, mixed.ll.worldA, mixed.ll.worldB, center, through);
-          const roots = lineCircleIntersectionBranches(mixed.ll.worldA, mixed.ll.worldB, center, geom.radius);
+          const supportRoots = lineCircleIntersectionBranches(mixed.ll.worldA, mixed.ll.worldB, center, geom.radius);
+          const roots = filterLineCircleBranchesToFiniteDomain(supportRoots, mixed.ll.finite);
           if (roots.length === 0) {
             visiting.delete(pointId);
             visited.add(pointId);
             return;
           }
+          const singleFiniteRootFactor = finiteSingleLineCircleRootFactor(roots, supportRoots);
           if (roots.length === 1) {
+            if (singleLineCircleRootIsExcluded(roots, point.excludePointId, scene)) {
+              visiting.delete(pointId);
+              visited.add(pointId);
+              return;
+            }
+            if (singleFiniteRootFactor !== null) {
+              constructions.push({
+                kind: "DefPointByDilation",
+                name,
+                center: mixed.ll.a,
+                point: mixed.ll.b,
+                factor: singleFiniteRootFactor,
+              });
+              definedPointIds.add(point.id);
+              visiting.delete(pointId);
+              visited.add(pointId);
+              return;
+            }
             constructions.push({
               kind: "DefPointByProjection",
               name,
@@ -1488,8 +1857,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
             visited.add(pointId);
             return;
           }
-          let mixCommonName: string | undefined;
-          if (branch === 1) {
+          let branch = inferLineCircleBranchFromWorld(point, mixed.ll.worldA, mixed.ll.worldB, center, through);
+          if (point.excludePointId) {
+            const excluded = getPointWorldPosCached(scene, point.excludePointId);
+            if (excluded) {
+              branch = inferLineCircleBranchFromExcludedRoots(roots, excluded, branch);
+            }
+          }
+          let mixCommonName = validDefinedLineCircleCommonPointName(
+            point.excludePointId,
+            roots,
+            branch,
+            scene,
+            definedPointIds,
+            pointName
+          );
+          if (!mixCommonName) {
             const sibling = scene.points.find(
               (p) =>
                 p.kind === "intersectionPoint" &&
@@ -1497,7 +1880,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
                 sameObjectPair(p.objA, p.objB, point.objA, point.objB) &&
                 definedPointIds.has(p.id)
             );
-            if (sibling) mixCommonName = mustName(pointName, sibling.id);
+            if (sibling) {
+              mixCommonName = validDefinedLineCircleCommonPointName(
+                sibling.id,
+                roots,
+                branch,
+                scene,
+                definedPointIds,
+                pointName
+              );
+            }
           }
           if (!mixCommonName) {
             mixCommonName = inferLineCircleCommonFromEndpointsWorld(
@@ -1505,8 +1897,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
               mixed.ll.endpointBId,
               mixed.ll.worldA,
               mixed.ll.worldB,
-              center,
-              through,
+              roots,
               branch,
               pointName
             );
@@ -1552,36 +1943,56 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   };
 
   for (const point of scene.points) {
+    // Visual Exact has no constructive dependency graph to preserve. Avoid
+    // emitting invisible orphan coordinates (especially huge off-canvas ones);
+    // visible geometry resolves its hidden anchors on demand below.
+    if (emitPlainConstructions && !point.visible) continue;
     const pointWorld = getPointWorldPosCached(scene, point.id);
     // Dynamic intersections can legitimately become undefined under drag.
-    // Skip undefined points (even visible ones) and let remaining defined
-    // geometry export normally.
-    if (!pointWorld) continue;
+    // A point with no evaluated position is not drawn on the canvas, so it
+    // should not block export unless visible geometry later depends on it.
+    if (!pointWorld) {
+      continue;
+    }
+    if (emitPlainConstructions) {
+      // Standalone point markers/labels are clipped by the canvas. Do not put
+      // remote coordinates into TeX merely because the source point is marked
+      // visible; geometry that actually needs the point resolves it on demand.
+      const visualPadWorld = 64 / exportPxPerWorld;
+      if (
+        pointWorld.x < plainLineDrawClipBounds.xmin - visualPadWorld ||
+        pointWorld.x > plainLineDrawClipBounds.xmax + visualPadWorld ||
+        pointWorld.y < plainLineDrawClipBounds.ymin - visualPadWorld ||
+        pointWorld.y > plainLineDrawClipBounds.ymax + visualPadWorld
+      ) {
+        continue;
+      }
+    }
     resolvePoint(point.id);
-  }
-
-  if (freeItems.length > 0) {
-    freeItems.sort((a, b) => a.name.localeCompare(b.name));
-    defs.push({ kind: "DefPoints", items: freeItems });
   }
 
   for (const seg of scene.segments) {
     if (!seg.visible) continue;
+    resolvePoint(seg.aId);
+    resolvePoint(seg.bId);
     if (!definedPointIds.has(seg.aId) || !definedPointIds.has(seg.bId)) {
       throw new Error(`Cannot export undefined segment geometry: ${seg.id}`);
     }
     const aName = mustName(pointName, seg.aId);
     const bName = mustName(pointName, seg.bId);
+    const segmentBundle: TikzCommand[] = [];
     const segmentArrows = seg.style.segmentArrowMarks ?? seg.style.segmentArrowMark;
     const segmentStrokeCarrierKey = selectSegmentStrokeCarrierArrowKey(seg.style, segmentArrows);
     if (!segmentStrokeCarrierKey) {
-      drawStrokes.push({
+      segmentBundle.push({
         kind: "DrawSegment",
         a: aName,
         b: bName,
         style: segmentStyleToTikz(seg.style, options, hasEnabledEndpointSegmentArrow(segmentArrows)),
       });
     }
+    const aWorld = getPointWorldPosCached(scene, seg.aId);
+    const bWorld = getPointWorldPosCached(scene, seg.bId);
     const markCommands = segmentMarksToTikz(
       seg.style,
       seg.style.strokeColor,
@@ -1589,11 +2000,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       seg.style.opacity,
       options,
       aName,
-      bName
+      bName,
+      aWorld ?? undefined,
+      bWorld ?? undefined
     );
-    drawOverlays.push(...markCommands);
-    const aWorld = getPointWorldPosCached(scene, seg.aId);
-    const bWorld = getPointWorldPosCached(scene, seg.bId);
+    segmentBundle.push(...markCommands);
     const segmentLengthWorld = aWorld && bWorld ? distance(aWorld, bWorld) : undefined;
     const arrowOverlay = segmentArrowsToTikz(
       segmentArrows,
@@ -1608,30 +2019,37 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       },
       {
         pathLengthWorld: segmentLengthWorld,
-        screenPxPerWorld: arrowMetricPxPerWorld,
-      }
+        screenPxPerWorld: exportPxPerWorld,
+        canvasPxToTikzPt,
+        canvasExact: options.drawLayerBackend === "plain",
+      },
+      options.pathDotMarkSizeScale,
+      options.drawLayerBackend === "plain"
     );
     if (arrowOverlay) {
       if (arrowOverlay.kind === "tkz") {
-        drawOverlays.push({
+        segmentBundle.push({
           kind: "DrawSegment",
           a: aName,
           b: bName,
           style: arrowOverlay.style,
         });
       } else {
-        drawOverlays.push({
+        segmentBundle.push({
           kind: "DrawRaw",
           tex: arrowOverlay.tex,
         });
       }
     }
+    pushGeometryCommands({ type: "segment", id: seg.id }, segmentBundle);
   }
   for (const line of scene.lines) {
     if (!line.visible) continue;
     if (line.kind === "circleCircleTangent" && isTopologicallyImpossibleCircleCircleTangent(line)) continue;
     const lineNames = resolveLineAnchorsById(line.id);
     const ext = computeLineDrawPlacement(scene, line);
+    const lineWorldAnchors = getLineWorldAnchors(line, scene);
+    if (!lineWorldAnchors) throw new Error(`Cannot export undefined line geometry: ${line.id}`);
     const circleCircleAnchorId = line.kind === "circleCircleTangent" ? `${line.id}#a` : null;
     const lineAnchorId =
       line.kind === "perpendicular" || line.kind === "parallel" || line.kind === "tangent"
@@ -1653,77 +2071,217 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         : ext.drawBId === lineAnchorId
           ? lineNames.a
           : pointName.get(ext.drawBId) ?? ext.drawBId;
-    drawStrokes.push({
+    const drawAWorld = resolveLineDrawReferenceWorld(scene, line, ext.drawAId, lineWorldAnchors);
+    const drawBWorld = resolveLineDrawReferenceWorld(scene, line, ext.drawBId, lineWorldAnchors);
+    const drawSpanWorld = drawAWorld && drawBWorld ? distance(drawAWorld, drawBWorld) : distance(lineWorldAnchors.a, lineWorldAnchors.b);
+    const finiteFallback =
+      options.drawLayerBackend === "plain"
+        ? lineSegmentThroughRect(lineWorldAnchors.a, lineWorldAnchors.b, plainLineDrawClipBounds)
+        : shouldUseFiniteLineDrawFallback(drawSpanWorld, globalAdd)
+          ? lineSegmentThroughRect(lineWorldAnchors.a, lineWorldAnchors.b, lineDrawClipBounds)
+          : null;
+    if (options.drawLayerBackend === "plain" && !finiteFallback) continue;
+    pushGeometryCommands({ type: "line", id: line.id }, [{
       kind: "DrawLine",
       a: drawAName,
       b: drawBName,
       addLeft: ext.addLeft,
       addRight: ext.addRight,
       style: lineStyleToTikz(line.style, options),
-    });
+      finiteFallback: finiteFallback ?? undefined,
+    }]);
   }
   for (const circle of scene.circles) {
     if (!circle.visible) continue;
+    // Visual Exact deliberately bakes the canvas result, rather than its
+    // construction.  A very large circle is a special case: putting its
+    // distant centre or enormous radius into TikZ can exceed TeX's dimension
+    // limit even though only a nearly-straight sliver is visible on canvas.
+    // Keep this strictly out of the reconstructible/tkz path.
+    const isPlainVisualExact = options.drawLayerBackend === "plain" && bakePointCoordinates;
+    const preflightGeom = isPlainVisualExact ? circleGeomById(circle.id) : null;
+    const hugePlainCircle = Boolean(preflightGeom && preflightGeom.radius * exportPxPerWorld > 6000);
+    if (hugePlainCircle && preflightGeom) {
+      const visibleCircle = hugeCircleVisibleBoundary(preflightGeom, plainLineDrawClipBounds);
+      if (!visibleCircle.intersects) {
+        // The canvas clip makes this circle entirely invisible.  In
+        // particular, do not resolve its centre just to emit a clipped-away
+        // coordinate definition.
+        continue;
+      }
+      if (visibleCircle.containsBounds) {
+        // Canvas has no circle boundary to show here; suppress fill as well
+        // rather than asking TikZ to paint an enormous disc.
+        continue;
+      }
+      const tangent = hugeCircleTangentSegment(preflightGeom, plainLineDrawClipBounds);
+      if (tangent) {
+        pushGeometryCommands({ type: "circle", id: circle.id }, [{
+          kind: "DrawRaw",
+          tex: `% gd plain visual-exact: huge circle rendered as clipped tangent\n\\draw[${circleStrokeStyleToTikz(circle.style, options)}] (${fmt(tangent.ax)},${fmt(tangent.ay)}) -- (${fmt(tangent.bx)},${fmt(tangent.by)});`,
+        }]);
+      }
+      // Arrow decorations are parameterized over the huge circumference and
+      // would reintroduce a giant path. The canvas-scale boundary above is the
+      // safe visual representation for this exceptional case.
+      continue;
+    }
     const centerName = ensureCircleCenterName(circle.id);
+    const throughName = incircleConstructedCircleIds.has(circle.id) ? ensureCircleThroughName(circle.id) : null;
+    const shouldExportPlainCirclesAsRadius = options.drawLayerBackend === "plain";
+    const circleRadiusForPlain = shouldExportPlainCirclesAsRadius ? circleGeomById(circle.id).radius : null;
+    const fixedRadiusExpr =
+      circle.kind === "fixedRadius" && !shouldExportPlainCirclesAsRadius
+        ? pgfSafeRadiusExpression(circle.radiusExpr)
+        : undefined;
     const fillStyle = circleFillStyleToTikz(circle.style);
     const strokeStyle = circleStrokeStyleToTikz(circle.style, options);
-    if (circle.kind === "fixedRadius") {
+    const circleBundle: TikzCommand[] = [];
+    if (circle.kind === "fixedRadius" && !throughName) {
       const geom = circleGeomById(circle.id);
       if (!Number.isFinite(geom.radius) || geom.radius <= 0) {
         throw new Error(`Unsupported construction: CircleFixedRadius (invalid radius for ${circle.id})`);
       }
+      const radiusExpr = shouldExportPlainCirclesAsRadius
+        ? undefined
+        : pgfSafeRadiusExpression(circle.radiusExpr);
       if (fillStyle) {
-        drawFills.push({
+        circleBundle.push({
           kind: "FillCircleRadius",
           o: centerName,
           radius: geom.radius,
+          radiusExpr: radiusExpr ?? undefined,
           style: fillStyle,
         });
       }
-      drawStrokes.push({
+      circleBundle.push({
         kind: "DrawCircleRadius",
         o: centerName,
         radius: geom.radius,
+        radiusExpr: radiusExpr ?? undefined,
         style: strokeStyle,
       });
+    } else if (throughName) {
+      if (shouldExportPlainCirclesAsRadius && !Number.isFinite(circleRadiusForPlain ?? Number.NaN)) {
+        throw new Error(`Unsupported construction: Circle plain export missing finite radius for ${circle.id}`);
+      }
+      if (fillStyle) {
+        if (shouldExportPlainCirclesAsRadius) {
+          circleBundle.push({
+            kind: "FillCircleRadius",
+            o: centerName,
+            radius: circleRadiusForPlain as number,
+            radiusExpr: fixedRadiusExpr ?? undefined,
+            style: fillStyle,
+          });
+        } else {
+          circleBundle.push({
+            kind: "FillCircle",
+            o: centerName,
+            x: throughName,
+            style: fillStyle,
+          });
+        }
+      }
+      if (shouldExportPlainCirclesAsRadius) {
+        circleBundle.push({
+          kind: "DrawCircleRadius",
+          o: centerName,
+          radius: circleRadiusForPlain as number,
+          radiusExpr: fixedRadiusExpr ?? undefined,
+          style: strokeStyle,
+        });
+      } else {
+        circleBundle.push({
+          kind: "DrawCircle",
+          o: centerName,
+          x: throughName,
+          style: strokeStyle,
+        });
+      }
     } else if (circle.kind === "threePoint") {
       if (!definedPointIds.has(circle.aId) || !definedPointIds.has(circle.bId) || !definedPointIds.has(circle.cId)) {
         throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
       }
       const through = mustName(pointName, circle.aId);
+      if (shouldExportPlainCirclesAsRadius && !Number.isFinite(circleRadiusForPlain ?? Number.NaN)) {
+        throw new Error(`Unsupported construction: Circle plain export missing finite radius for ${circle.id}`);
+      }
       if (fillStyle) {
-        drawFills.push({
-          kind: "FillCircle",
+        if (shouldExportPlainCirclesAsRadius) {
+          circleBundle.push({
+            kind: "FillCircleRadius",
+            o: centerName,
+            radius: circleRadiusForPlain as number,
+            style: fillStyle,
+          });
+        } else {
+          circleBundle.push({
+            kind: "FillCircle",
+            o: centerName,
+            x: through,
+            style: fillStyle,
+          });
+        }
+      }
+      if (shouldExportPlainCirclesAsRadius) {
+        circleBundle.push({
+          kind: "DrawCircleRadius",
+          o: centerName,
+          radius: circleRadiusForPlain as number,
+          style: strokeStyle,
+        });
+      } else {
+        circleBundle.push({
+          kind: "DrawCircle",
           o: centerName,
           x: through,
-          style: fillStyle,
+          style: strokeStyle,
         });
       }
-      drawStrokes.push({
-        kind: "DrawCircle",
-        o: centerName,
-        x: through,
-        style: strokeStyle,
-      });
     } else {
+      if (circle.kind === "fixedRadius") {
+        throw new Error(`Missing symbolic export path for fixed-radius circle ${circle.id}`);
+      }
       if (!definedPointIds.has(circle.throughId)) {
         throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
       }
       const through = mustName(pointName, circle.throughId);
+      if (shouldExportPlainCirclesAsRadius && !Number.isFinite(circleRadiusForPlain ?? Number.NaN)) {
+        throw new Error(`Unsupported construction: Circle plain export missing finite radius for ${circle.id}`);
+      }
       if (fillStyle) {
-        drawFills.push({
-          kind: "FillCircle",
+        if (shouldExportPlainCirclesAsRadius) {
+          circleBundle.push({
+            kind: "FillCircleRadius",
+            o: centerName,
+            radius: circleRadiusForPlain as number,
+            style: fillStyle,
+          });
+        } else {
+          circleBundle.push({
+            kind: "FillCircle",
+            o: centerName,
+            x: through,
+            style: fillStyle,
+          });
+        }
+      }
+      if (shouldExportPlainCirclesAsRadius) {
+        circleBundle.push({
+          kind: "DrawCircleRadius",
+          o: centerName,
+          radius: circleRadiusForPlain as number,
+          style: strokeStyle,
+        });
+      } else {
+        circleBundle.push({
+          kind: "DrawCircle",
           o: centerName,
           x: through,
-          style: fillStyle,
+          style: strokeStyle,
         });
       }
-      drawStrokes.push({
-        kind: "DrawCircle",
-        o: centerName,
-        x: through,
-        style: strokeStyle,
-      });
     }
     const circleGeom = circleGeomById(circle.id);
     const circleArrowOverlay = pathArrowOverlayToTikz(
@@ -1737,14 +2295,46 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       0.5,
       {
         pathLengthWorld: 2 * Math.PI * circleGeom.radius,
-        screenPxPerWorld: arrowMetricPxPerWorld,
+        screenPxPerWorld: exportPxPerWorld,
+        canvasPxToTikzPt,
+        canvasExact: options.drawLayerBackend === "plain",
       },
       undefined, // arcDef undefined -> Use markings (Decoration)
-      { bend: true } // Circle arrows use bend
+      { bend: true }, // Circle arrows use bend
+      options.pathDotMarkSizeScale
     );
     if (circleArrowOverlay) {
-      drawOverlays.push({ kind: "DrawRaw", tex: circleArrowOverlay });
+      circleBundle.push({ kind: "DrawRaw", tex: circleArrowOverlay });
     }
+    pushGeometryCommands({ type: "circle", id: circle.id }, circleBundle);
+  }
+  for (const ellipse of scene.ellipses ?? []) {
+    if (!ellipse.visible) continue;
+    if (
+      !definedPointIds.has(ellipse.focusAId) ||
+      !definedPointIds.has(ellipse.focusBId) ||
+      !definedPointIds.has(ellipse.throughId)
+    ) {
+      throw new Error(`Cannot export undefined ellipse geometry: ${ellipse.id}`);
+    }
+    const geom = getEllipseWorldGeometry(ellipse, scene);
+    if (!geom) throw new Error(`Cannot export undefined ellipse geometry: ${ellipse.id}`);
+    const ellipseArrows = ellipse.style.arrowMarks ?? (ellipse.style.arrowMark ? [ellipse.style.arrowMark] : []);
+    if (ellipseArrows.some((arrow) => Boolean(arrow?.enabled))) {
+      throw new Error(`Unsupported Ellipse style: arrow marks (${ellipse.id})`);
+    }
+    const fillStyle = circleFillStyleToTikz(ellipse.style);
+    const strokeStyle = circleStrokeStyleToTikz(ellipse.style, options);
+    const transformStyle = ellipseRotationStyleToTikz(geom.center, geom.rotationRad);
+    const ellipsePath = `(${fmt(geom.center.x)},${fmt(geom.center.y)}) ellipse[x radius=${fmt(geom.semiMajor)}, y radius=${fmt(geom.semiMinor)}]`;
+    const ellipseBundle: TikzCommand[] = [];
+    if (fillStyle) {
+      const fillOpts = [fillStyle, transformStyle].filter(Boolean).join(", ");
+      ellipseBundle.push({ kind: "DrawRaw", tex: `\\fill[${fillOpts}] ${ellipsePath};` });
+    }
+    const drawOpts = [strokeStyle, transformStyle].filter(Boolean).join(", ");
+    ellipseBundle.push({ kind: "DrawRaw", tex: `\\draw[${drawOpts}] ${ellipsePath};` });
+    pushGeometryCommands({ type: "ellipse", id: ellipse.id }, ellipseBundle);
   }
   for (const polygon of scene.polygons) {
     if (!polygon.visible) continue;
@@ -1760,10 +2350,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     }
     const fillStyle = polygonFillStyleToTikz(polygon.style);
     const strokeStyle = polygonStrokeStyleToTikz(polygon.style, options);
+    const polygonBundle: TikzCommand[] = [];
     const path = names.map((name, idx) => (idx === 0 ? `(${name})` : ` -- (${name})`)).join("");
     if (fillStyle) {
       const fillOpts = fillStyle ? `[${fillStyle}]` : "";
-      drawFills.push({ kind: "DrawRaw", tex: `\\fill${fillOpts} ${path} -- cycle;` });
+      polygonBundle.push({ kind: "DrawRaw", tex: `\\fill${fillOpts} ${path} -- cycle;` });
     }
     const strokeOpts = strokeStyle ? `[${strokeStyle}]` : "";
     for (let i = 0; i < polygon.pointIds.length; i += 1) {
@@ -1771,11 +2362,12 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const scopedKey = `${polygon.id}::${edgeKey(polygon.pointIds[i], polygon.pointIds[nextIndex])}`;
       // Polygon edges are managed by owned segment objects when present.
       if (polygonOwnedEdgePresence.has(scopedKey)) continue;
-      drawStrokes.push({
+      polygonBundle.push({
         kind: "DrawRaw",
         tex: `\\draw${strokeOpts} (${names[i]}) -- (${names[nextIndex]});`,
       });
     }
+    pushGeometryCommands({ type: "polygon", id: polygon.id }, polygonBundle);
   }
   for (const angle of scene.angles) {
     if (!angle.visible) continue;
@@ -1795,21 +2387,39 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const aName = mustName(pointName, angle.aId);
     const bName = mustName(pointName, angle.bId);
     const cName = mustName(pointName, angle.cId);
+    const angleBundle: TikzCommand[] = [];
     if (angle.kind === "sector") {
-      if (angle.style.fillEnabled) {
-        const fillStyle = sectorFillStyleToTikz(angle.style);
-        drawFills.push({ kind: "FillSector", o: bName, a: aName, b: cName, style: fillStyle });
-      }
-      drawStrokes.push({
-        kind: "DrawSector",
-        o: bName,
-        a: aName,
-        b: cName,
-        style: sectorDrawStyleToTikz(angle.style, options),
-      });
       const sectorRadius = distance(aWorld, bWorld);
       const sectorStart = Math.atan2(aWorld.y - bWorld.y, aWorld.x - bWorld.x);
       const sectorArcPath = arcPathExprFromWorld(bWorld, sectorRadius, sectorStart, theta, `(${aName})`);
+      const sectorDrawStyle = sectorDrawStyleToTikz(angle.style, options);
+      const sectorFillStyle = angle.style.fillEnabled ? sectorFillStyleToTikz(angle.style) : null;
+
+      if (options.drawLayerBackend === "plain") {
+        if (sectorFillStyle) {
+          angleBundle.push({
+            kind: "DrawRaw",
+            tex: `\\fill[${sectorFillStyle}] (${bName}) -- ${sectorArcPath} -- cycle;`,
+          });
+        }
+        const drawOpts = sectorDrawStyle ? `[${sectorDrawStyle}]` : "";
+        angleBundle.push({
+          kind: "DrawRaw",
+          tex: `\\draw${drawOpts} (${bName}) -- ${sectorArcPath} -- cycle;`,
+        });
+      } else {
+        if (sectorFillStyle) {
+          angleBundle.push({ kind: "FillSector", o: bName, a: aName, b: cName, style: sectorFillStyle });
+        }
+        angleBundle.push({
+          kind: "DrawSector",
+          o: bName,
+          a: aName,
+          b: cName,
+          style: sectorDrawStyle,
+        });
+      }
+
       const sectorArrowOverlay = pathArrowOverlayToTikz(
         angle.style.arcArrowMarks ?? angle.style.arcArrowMark,
         sectorArcPath,
@@ -1821,7 +2431,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         angle.style.markPos ?? 0.5,
         {
           pathLengthWorld: Math.abs(theta) * sectorRadius,
-          screenPxPerWorld: arrowMetricPxPerWorld,
+          screenPxPerWorld: exportPxPerWorld,
+          canvasPxToTikzPt,
+          canvasExact: false,
         },
         {
           center: bWorld,
@@ -1829,39 +2441,110 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           startRad: sectorStart,
           sweepRad: theta,
         },
-        { flex: true } // Keep angle arrows using flex
+        { flex: true }, // Keep angle arrows using flex
+        options.pathDotMarkSizeScale
       );
       if (sectorArrowOverlay) {
-        drawOverlays.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
+        if (options.drawLayerBackend !== "plain") {
+          angleBundle.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
+        }
       }
-      const sectorMarkOverlay = sectorMarksToTikz(
-        angle.style,
-        sectorArcPath,
-        {
-          strokeColor: angle.style.strokeColor,
-          strokeWidth: angle.style.strokeWidth,
-          opacity: angle.style.strokeOpacity,
-        },
-        options
-      );
+      const normalizedSectorMarkStyle =
+        angle.style.markStyle === "right"
+          ? "rightSquare"
+          : angle.style.markStyle;
+      const shouldDrawSectorArcMarks =
+        options.drawLayerBackend !== "plain" ||
+        normalizedSectorMarkStyle === "arc";
+      if (
+        options.drawLayerBackend === "plain" &&
+        normalizedSectorMarkStyle === "arc" &&
+        resolveAngleMarks(angle.style).length > 0
+      ) {
+        angleBundle.push({
+          kind: "DrawRaw",
+          tex: `\\draw[${sectorDrawStyle}] ${sectorArcPath};`,
+        });
+      }
+      const sectorMarkOverlay = shouldDrawSectorArcMarks
+        ? sectorMarksToTikz(
+            angle.style,
+            sectorArcPath,
+            {
+              strokeColor: angle.style.strokeColor,
+              strokeWidth: angle.style.strokeWidth,
+              opacity: angle.style.strokeOpacity,
+            },
+            options
+          )
+        : null;
       if (sectorMarkOverlay) {
-        drawOverlays.push({ kind: "DrawRaw", tex: sectorMarkOverlay });
+        angleBundle.push({ kind: "DrawRaw", tex: sectorMarkOverlay });
+      }
+      if (
+        options.drawLayerBackend === "plain" &&
+        sectorArrowOverlay
+      ) {
+        angleBundle.push({ kind: "DrawRaw", tex: sectorArrowOverlay });
+      }
+      pushGeometryCommands({ type: "angle", id: angle.id }, angleBundle);
+      if (
+        options.drawLayerBackend === "plain" &&
+        (angle.style.showLabel || angle.style.showValue)
+      ) {
+        const labelText = buildAngleLabelTex(
+          angle.style.labelText,
+          angle.style.showLabel,
+          angle.style.showValue,
+          theta
+        );
+        const labelCommand = labelText
+          ? plainAngleLabelCommand(angle, labelText, options)
+          : null;
+        if (labelCommand) drawLabelsLayer.push(labelCommand);
       }
       continue;
     }
     const rightStatus = resolveAngleRightStatus(scene, angle);
+    if (options.drawLayerBackend === "plain") {
+      angleBundle.push(
+        ...plainNonSectorAngleCommands(
+          angle,
+          aWorld,
+          bWorld,
+          cWorld,
+          theta,
+          rightStatus,
+          options
+        )
+      );
+      pushGeometryCommands({ type: "angle", id: angle.id }, angleBundle);
+      if (angle.style.showLabel || angle.style.showValue) {
+        const labelText = buildAngleLabelTex(
+          angle.style.labelText,
+          angle.style.showLabel,
+          angle.style.showValue,
+          theta
+        );
+        const labelCommand = labelText
+          ? plainAngleLabelCommand(angle, labelText, options)
+          : null;
+        if (labelCommand) drawLabelsLayer.push(labelCommand);
+      }
+      continue;
+    }
     const exportAsRight = rightStatus === "exact" || (rightStatus === "approx" && Boolean(angle.style.promoteToSolid));
     const markKind = resolveAngleMarkKind(angle.style.markStyle, exportAsRight);
     const rightSquareFillStyle =
       exportAsRight && markKind === "rightSquare" && angle.style.fillEnabled ? rightSquareFillStyleToTikz(angle.style) : null;
     if (angle.style.fillEnabled && !rightSquareFillStyle) {
       const fillStyle = angleFillStyleToTikz(angle.style, options);
-      drawFills.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
+      angleBundle.push({ kind: "FillAngle", a: aName, b: bName, c: cName, style: fillStyle });
     }
     if (markKind === "rightSquare" || markKind === "rightArcDot") {
       const markStyle = angleMarkStyleToTikz(angle.style, true, options, markKind);
       const mergedStyle = rightSquareFillStyle ? [markStyle, rightSquareFillStyle].filter(Boolean).join(", ") : markStyle;
-      drawOverlays.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: mergedStyle });
+      angleBundle.push({ kind: "MarkRightAngle", a: aName, b: bName, c: cName, style: mergedStyle });
     } else if (markKind === "arc") {
       const marks = resolveAngleMarks(angle.style);
       let arcLayerOffset = 0;
@@ -1874,7 +2557,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           markColor: mark.markColor,
           arcLayerOffset,
         });
-        drawOverlays.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
+        angleBundle.push({ kind: "MarkAngle", a: aName, b: bName, c: cName, style: markStyle });
         arcLayerOffset += mark.arcMultiplicity;
       }
     }
@@ -1892,7 +2575,9 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         angle.style.markPos ?? 0.5,
         {
           pathLengthWorld: Math.abs(theta) * arcRadius,
-          screenPxPerWorld: arrowMetricPxPerWorld,
+          screenPxPerWorld: exportPxPerWorld,
+          canvasPxToTikzPt,
+          canvasExact: false,
         },
         {
           center: bWorld,
@@ -1900,17 +2585,27 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           startRad: angleStart,
           sweepRad: theta,
         },
-        { flex: true } // Keep angle arrows using flex
+        { flex: true }, // Keep angle arrows using flex
+        options.pathDotMarkSizeScale
       );
       if (arcArrowOverlay) {
-        drawOverlays.push({ kind: "DrawRaw", tex: arcArrowOverlay });
+        angleBundle.push({ kind: "DrawRaw", tex: arcArrowOverlay });
       }
     }
+    pushGeometryCommands({ type: "angle", id: angle.id }, angleBundle);
     if (angle.style.showLabel || angle.style.showValue) {
       const labelText = buildAngleLabelTex(angle.style.labelText, angle.style.showLabel, angle.style.showValue, theta);
       if (labelText) {
-        const labelStyle = angleLabelStyleToTikz(angle.style, bWorld, options);
-        drawLabelsLayer.push({ kind: "LabelAngle", a: aName, b: bName, c: cName, text: labelText, style: labelStyle });
+        const labelStyle = angleLabelStyleToTikz(angle, aWorld, bWorld, cWorld, options, rightStatus !== "none");
+        drawLabelsLayer.push({
+          kind: "LabelAngle",
+          a: aName,
+          b: bName,
+          c: cName,
+          text: labelText,
+          style: labelStyle,
+          useGlow: (options.labelGlow ?? true) && Boolean(angle.style.labelGlow),
+        });
       }
     }
   }
@@ -1926,12 +2621,13 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const labelPlacementById = computeLabelPlacementMap(scene, options);
   const labels: Array<{ name: string; text: string; options?: string; useGlow?: boolean }> = [];
   const objectLabels: Array<{
-    type: "segment" | "line" | "circle" | "polygon";
+    type: "segment" | "line" | "circle" | "ellipse" | "polygon";
     id: string;
     x: number;
     y: number;
     text: string;
     color: string;
+    useGlow: boolean;
   }> = [];
   const objectLabelGlowEnabled = options.labelGlow ?? true;
 
@@ -1941,8 +2637,44 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (point.showLabel === "none") continue;
     const name = pointName.get(point.id);
     if (!name) continue;
-    const labelOptions = pointLabelOptionsToTikz(point, labelPlacementById.get(point.id) ?? null, options);
+    const placement = labelPlacementById.get(point.id) ?? null;
     const labelGlowEnabled = options.labelGlow ?? true;
+    const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    if (plainPxToPt !== null) {
+      const pointWorld = getPointWorldPosCached(scene, point.id);
+      if (!pointWorld) continue;
+      const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+      const offsetXPx = placement?.offsetXPx ?? point.style.labelOffsetPx.x;
+      const offsetYPx = placement?.offsetYPx ?? point.style.labelOffsetPx.y;
+      const canvasKatexScale =
+        point.showLabel === "caption" ? 0.95 : 1;
+      const fontPt = Math.max(
+        1,
+        point.style.labelFontPx * canvasKatexScale * plainPxToPt
+      );
+      const baselinePt = Math.max(fontPt, fontPt * 1.2);
+      drawLabelsLayer.push({
+        kind: "LabelAt",
+        x: pointWorld.x + offsetXPx / pxPerWorld,
+        y: pointWorld.y - offsetYPx / pxPerWorld,
+        text: point.showLabel === "name" ? point.name || name : point.captionTex || point.name || name,
+        options: [
+          point.showLabel === "caption" ? "anchor=north west" : "anchor=west",
+          "inner sep=0pt",
+          `text=${rgbColorExpr(point.style.labelColor)}`,
+          `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
+        ].join(", "),
+        useGlow: labelGlowEnabled && point.style.labelHaloWidthPx > 0,
+        plainGlow: {
+          widthPt: point.style.labelHaloWidthPx * plainPxToPt,
+          color: rgbColorExpr(
+            options.labelHaloColor ?? point.style.labelHaloColor
+          ),
+        },
+      });
+      continue;
+    }
+    const labelOptions = pointLabelOptionsToTikz(point, placement, options);
     if (point.showLabel === "name") {
       labels.push({
         name,
@@ -1974,6 +2706,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       y: labelPos.y,
       text,
       color: segment.style.strokeColor,
+      useGlow: objectLabelGlowEnabled && segment.labelGlow !== false,
     });
   }
 
@@ -1992,6 +2725,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       y: labelPos.y,
       text,
       color: line.style.strokeColor,
+      useGlow: objectLabelGlowEnabled && line.labelGlow !== false,
     });
   }
 
@@ -2009,6 +2743,25 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       y: labelPos.y,
       text,
       color: circle.style.strokeColor,
+      useGlow: objectLabelGlowEnabled && circle.labelGlow !== false,
+    });
+  }
+
+  for (const ellipse of scene.ellipses ?? []) {
+    if (!ellipse.visible || !ellipse.showLabel) continue;
+    const fallbackText = defaultObjectLabelText({ type: "ellipse", id: ellipse.id }, scene);
+    const text = resolveObjectLabelText(ellipse.labelText, fallbackText);
+    const fallbackPos = defaultObjectLabelPosWorld({ type: "ellipse", id: ellipse.id }, scene);
+    const labelPos = isFiniteLabelPosWorld(ellipse.labelPosWorld) ? ellipse.labelPosWorld : fallbackPos;
+    if (!labelPos) continue;
+    objectLabels.push({
+      type: "ellipse",
+      id: ellipse.id,
+      x: labelPos.x,
+      y: labelPos.y,
+      text,
+      color: ellipse.style.strokeColor,
+      useGlow: objectLabelGlowEnabled && ellipse.labelGlow !== false,
     });
   }
 
@@ -2026,23 +2779,68 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       y: labelPos.y,
       text,
       color: polygon.style.strokeColor,
+      useGlow: objectLabelGlowEnabled && polygon.labelGlow !== false,
     });
   }
 
   for (const label of scene.textLabels ?? []) {
     if (!label.visible) continue;
     const displayText = resolveTextLabelDisplayText(label, scene);
-    const text = label.style.useTex ? displayText : wrapPlainTextForMathMode(displayText);
-    // Free text labels are emitted as raw TikZ nodes (\node), which are not affected
-    // by tikzpicture scale. Fold final export geometry scale into these labels only.
-    // Calibration factor keeps exported free-text labels visually aligned with canvas size.
-    const textLabelFontScale = 0.82;
-    const fontPt = Math.max(1, Math.min(72, label.style.textSize * coordScale * textLabelFontScale));
+    const renderMode = resolveTextLabelRenderMode(label.style);
+    const boxWidthPx = resolveTextLabelBoxWidthPx(label.style);
+    const boxHeightPx = resolveTextLabelBoxHeightPx(label.style);
+    const textAlign = resolveTextLabelAlignment(label.style);
+    const text =
+      renderMode === "tex"
+        ? displayText
+        : renderMode === "mixed"
+          ? buildMixedTextLabelNodeText(displayText)
+          : buildPlainTextLabelNodeText(displayText);
+    const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    const fontPt =
+      plainPxToPt === null
+        ? Math.max(1, Math.min(72, label.style.textSize + 0.19))
+        : Math.max(
+            1,
+            Math.max(8, label.style.textSize) *
+              TEXT_LABEL_CANVAS_SIZE_SCALE *
+              (renderMode === "tex" ? 0.95 : 1) *
+              plainPxToPt
+          );
     const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
     const rotationDeg =
       typeof label.style.rotationDeg === "number" && Number.isFinite(label.style.rotationDeg)
         ? label.style.rotationDeg
         : 0;
+    const boxOptions =
+      plainPxToPt === null
+        ? boxWidthPx && renderMode !== "tex"
+          ? [
+              `text width=${fmt(
+                boxWidthPx / TEXT_LABEL_CANVAS_SIZE_SCALE
+              )}pt`,
+            ]
+          : []
+        : boxWidthPx || boxHeightPx
+          ? [
+              `inner xsep=${fmt(12 * plainPxToPt)}pt`,
+              `inner ysep=${fmt(10 * plainPxToPt)}pt`,
+              ...(boxWidthPx
+                ? [
+                    `text width=${fmt(
+                      Math.max(1, boxWidthPx - 24) * plainPxToPt
+                    )}pt`,
+                  ]
+                : []),
+              ...(boxHeightPx
+                ? [
+                    `minimum height=${fmt(
+                      boxHeightPx * plainPxToPt
+                    )}pt`,
+                  ]
+                : []),
+            ]
+          : [];
     drawLabelsLayer.push({
       kind: "LabelAt",
       x: label.positionWorld.x,
@@ -2050,11 +2848,69 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       text,
       options: [
         "anchor=center",
+        `align=${textAlign}`,
         `text=${rgbColorExpr(label.style.textColor)}`,
         `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
-        ...(Math.abs(rotationDeg) > 1e-9 ? [`rotate=${fmt(rotationDeg)}`] : []),
+        ...boxOptions,
+        ...(Math.abs(rotationDeg) > 1e-9
+          ? [`rotate=${fmt(plainPxToPt === null ? rotationDeg : -rotationDeg)}`]
+          : []),
       ].join(", "),
-      useGlow: false,
+      textMode: renderMode === "tex" ? "math" : "raw",
+      useGlow: (options.labelGlow ?? true) && Boolean(label.style.labelGlow),
+      ...(plainPxToPt === null
+        ? {}
+        : {
+            plainGlow: {
+              widthPt: 3.5 * plainPxToPt,
+              color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
+            },
+          }),
+    });
+  }
+
+  for (const node of scene.richTextNodes ?? []) {
+    if (!node.visible) continue;
+    const text = buildRichTextNodeText(node.document);
+    const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    const fontPt =
+      plainPxToPt === null
+        ? Math.max(1, Math.min(72, node.style.textSize + 0.19))
+        : Math.max(
+            1,
+            Math.max(8, node.style.textSize) *
+              TEXT_LABEL_CANVAS_SIZE_SCALE *
+              plainPxToPt
+          );
+    const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
+    const rotationDeg =
+      typeof node.style.rotationDeg === "number" && Number.isFinite(node.style.rotationDeg)
+        ? node.style.rotationDeg
+        : 0;
+    drawLabelsLayer.push({
+      kind: "LabelAt",
+      x: node.positionWorld.x,
+      y: node.positionWorld.y,
+      text,
+      options: [
+        "anchor=north west",
+        `align=${node.style.textAlign}`,
+        `text=${rgbColorExpr(node.style.textColor)}`,
+        `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
+        ...(Math.abs(rotationDeg) > 1e-9
+          ? [`rotate=${fmt(plainPxToPt === null ? rotationDeg : -rotationDeg)}`]
+          : []),
+      ].join(", "),
+      textMode: "raw",
+      useGlow: (options.labelGlow ?? true) && Boolean(node.style.labelGlow),
+      ...(plainPxToPt === null
+        ? {}
+        : {
+            plainGlow: {
+              widthPt: 3.5 * plainPxToPt,
+              color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
+            },
+          }),
     });
   }
 
@@ -2063,29 +2919,58 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     drawLabelsLayer.push({ kind: "LabelPoint", name: item.name, text: item.text, options: item.options, useGlow: item.useGlow });
   }
   objectLabels.sort((a, b) => {
-    const typeOrder = (type: "segment" | "line" | "circle" | "polygon") =>
-      type === "segment" ? 0 : type === "line" ? 1 : type === "circle" ? 2 : 3;
+    const typeOrder = (type: "segment" | "line" | "circle" | "ellipse" | "polygon") =>
+      type === "segment" ? 0 : type === "line" ? 1 : type === "circle" ? 2 : type === "ellipse" ? 3 : 4;
     const byType = typeOrder(a.type) - typeOrder(b.type);
     if (byType !== 0) return byType;
     return a.id.localeCompare(b.id);
   });
   for (const item of objectLabels) {
+    const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    const fontOptions =
+      plainPxToPt === null
+        ? []
+        : [
+            `font=\\fontsize{${fmt(16 * 0.95 * plainPxToPt)}pt}{${fmt(
+              19.2 * 0.95 * plainPxToPt
+            )}pt}\\selectfont`,
+          ];
     drawLabelsLayer.push({
       kind: "LabelAt",
       x: item.x,
       y: item.y,
       text: item.text,
-      options: [`anchor=center`, `text=${rgbColorExpr(item.color)}`].join(", "),
-      useGlow: objectLabelGlowEnabled,
+      options: [
+        plainPxToPt === null ? "anchor=center" : "anchor=north west",
+        ...(plainPxToPt === null ? [] : ["inner sep=0pt"]),
+        `text=${rgbColorExpr(item.color)}`,
+        ...fontOptions,
+      ].join(", "),
+      useGlow: item.useGlow,
+      ...(plainPxToPt === null
+        ? {}
+        : {
+            plainGlow: {
+              widthPt: 3.5 * plainPxToPt,
+              color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
+            },
+          }),
     });
+  }
+
+  const drawObjectsLayer = [...getGeometryLayerOrder(scene)]
+    .reverse()
+    .flatMap((ref) => geometryBundles.get(geometryLayerKey(ref)) ?? []);
+
+  if (freeItems.length > 0) {
+    freeItems.sort((a, b) => a.name.localeCompare(b.name));
+    defs.push({ kind: "DefPoints", items: freeItems });
   }
 
   return [
     ...defs,
     ...constructions,
-    ...drawFills,
-    ...drawStrokes,
-    ...drawOverlays,
+    ...drawObjectsLayer,
     ...drawPointsLayer,
     ...drawLabelsLayer,
   ];
@@ -2274,9 +3159,9 @@ export function renderTikz(
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint" || c.kind === "LabelAt");
   const drawPointLabels = drawLabels.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
   const drawOtherLabels = drawLabels.filter((c) => c.kind === "LabelAt");
-  const hasGlowLabels = drawLabels.some(
-    (c) => (c.kind === "LabelPoint" || c.kind === "LabelAt") && Boolean(c.useGlow)
-  );
+  const hasGlowLabels =
+    drawLabels.some((c) => (c.kind === "LabelPoint" || c.kind === "LabelAt") && Boolean(c.useGlow)) ||
+    drawAngleLabels.some((c) => Boolean(c.useGlow));
   const emitTkzSetup = options.emitTkzSetup ?? true;
   const groupMarkAngles = options.groupMarkAngles ?? false;
   const drawLayerBackend = options.drawLayerBackend ?? "tkz";
@@ -2332,8 +3217,11 @@ export function renderTikz(
   });
 
   out.push("\\end{tikzpicture}");
-  const withNamedColors = hoistNamedColors(out);
-  const withOptionalLibraries = injectOptionalTikzLibraries(withNamedColors);
+  const withNamedColors = hoistNamedColors(out, renderCtx.options.drawLayerBackend !== "plain");
+  const withOptionalLibraries = injectOptionalTikzLibraries(
+    withNamedColors,
+    renderCtx.options.drawLayerBackend === "plain"
+  );
   return withOptionalLibraries.join("\n");
 }
 
@@ -2367,7 +3255,12 @@ export function exportTikzEfficientWithOptions(scene: SceneModel, options: TikzE
     groupMarkAngles: true,
   });
   assertNoUnknownTkzMacro(standard);
-  return makeEfficientTikz(standard);
+  return makeEfficientTikz(
+    standard,
+    options.drawLayerBackend === "plain" && options.bakePointCoordinates
+      ? { preserveGeometry: true }
+      : undefined
+  );
 }
 
 export function exportTikzWithOptions(scene: SceneModel, options: TikzExportOptions): string {
@@ -2403,6 +3296,20 @@ function mustName(names: Map<string, string>, pointId: string): string {
 function fmt(v: number): string {
   if (!Number.isFinite(v)) return "0";
   return Number(v.toPrecision(15)).toString();
+}
+
+function pgfSafeRadiusExpression(exprRaw: string | undefined): string | null {
+  const expr = (exprRaw ?? "").trim();
+  if (!expr) return null;
+  if (Number.isFinite(Number(expr))) return null;
+  if (!/^[0-9A-Za-z_+\-*/^().,\s]+$/.test(expr)) return null;
+  const identifiers = expr.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) ?? [];
+  const allowed = new Set(["sqrt", "pow", "abs", "min", "max", "pi", "Pi", "PI", "e", "tau", "Tau", "TAU"]);
+  if (identifiers.some((id) => !allowed.has(id))) return null;
+  return expr
+    .replace(/\s+/g, "")
+    .replace(/\b(?:Pi|PI|pi)\b/g, "pi")
+    .replace(/\b(?:Tau|TAU|tau)\b/g, "(2*pi)");
 }
 
 function roundDecimal(v: number, decimals: number): number {
@@ -2478,10 +3385,20 @@ type CircleCircleTangentTopology =
   | { kind: "coincident" }
   | { kind: "degenerateTangency"; mode: "external" | "internal"; near: boolean };
 
-function classifyCircleCircleTangentTopology(
+function circleCircleTangentMetrics(
   a: { center: { x: number; y: number }; radius: number },
   b: { center: { x: number; y: number }; radius: number }
-): CircleCircleTangentTopology {
+): {
+  d: number;
+  r1: number;
+  r2: number;
+  sum: number;
+  diff: number;
+  extGap: number;
+  intGap: number;
+  exactTol: number;
+  nearTol: number;
+} {
   const d = distance(a.center, b.center);
   const r1 = a.radius;
   const r2 = b.radius;
@@ -2492,6 +3409,14 @@ function classifyCircleCircleTangentTopology(
   const diff = Math.abs(r1 - r2);
   const extGap = d - sum;
   const intGap = d - diff;
+  return { d, r1, r2, sum, diff, extGap, intGap, exactTol, nearTol };
+}
+
+function classifyCircleCircleTangentTopology(
+  a: { center: { x: number; y: number }; radius: number },
+  b: { center: { x: number; y: number }; radius: number }
+): CircleCircleTangentTopology {
+  const { d, r1, r2, sum, diff, extGap, intGap, exactTol, nearTol } = circleCircleTangentMetrics(a, b);
 
   if (d <= exactTol) {
     if (Math.abs(r1 - r2) <= exactTol) return { kind: "coincident" };
@@ -2532,9 +3457,9 @@ function assertCircleCircleTangentExportable(
         `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for intersecting circles${diag}`
       );
     case "degenerateTangency":
+      if (topology.mode === "external" && line.family === "outer") return;
       if (!topology.near) {
         if (isExactDegenerateCircleCircleTangentFamily(line, topology)) return;
-        if (topology.mode === "external" && line.family === "outer") return;
         if (topology.mode === "internal" && line.family === "inner") {
           throw new Error(
             `Cannot export circle-circle tangent ${line.id}: inner tangents are undefined for internally tangent circles${diag}`
@@ -2559,14 +3484,20 @@ function circleCircleTangentDiagnosticsSuffix(
   a: { center: { x: number; y: number }; radius: number },
   b: { center: { x: number; y: number }; radius: number }
 ): string {
-  const d = distance(a.center, b.center);
-  const r1 = a.radius;
-  const r2 = b.radius;
-  const sum = r1 + r2;
-  const diff = Math.abs(r1 - r2);
-  const extGap = d - sum;
-  const intGap = d - diff;
+  const { d, r1, r2, extGap, intGap } = circleCircleTangentMetrics(a, b);
   return ` (d=${fmt(d)}, r1=${fmt(r1)}, r2=${fmt(r2)}, extGap=${fmt(extGap)}, intGap=${fmt(intGap)})`;
+}
+
+function circleCircleTangentHasNoCurrentAnchors(
+  line: Extract<SceneModel["lines"][number], { kind: "circleCircleTangent" }>,
+  a: { center: { x: number; y: number }; radius: number },
+  b: { center: { x: number; y: number }; radius: number }
+): boolean {
+  const { d, r1, r2, sum, diff, exactTol } = circleCircleTangentMetrics(a, b);
+  if (!(r1 > 1e-12) || !(r2 > 1e-12)) return true;
+  if (d <= exactTol) return true;
+  if (line.family === "inner") return d < sum - exactTol;
+  return d < diff - exactTol;
 }
 
 function isExactDegenerateCircleCircleTangentFamily(
@@ -2658,7 +3589,15 @@ function lineLikeNamesFromRef(
   segById: Map<string, SceneModel["segments"][number]>,
   pointName: Map<string, string>,
   resolvePoint: (pointId: string) => void
-): { a: string; b: string; worldA: { x: number; y: number }; worldB: { x: number; y: number }; endpointAId?: string; endpointBId?: string } | null {
+): {
+  a: string;
+  b: string;
+  worldA: { x: number; y: number };
+  worldB: { x: number; y: number };
+  endpointAId?: string;
+  endpointBId?: string;
+  finite: boolean;
+} | null {
   if (ref.type === "line") {
     const line = lineById.get(ref.id);
     if (!line) return null;
@@ -2666,18 +3605,18 @@ function lineLikeNamesFromRef(
     const anchors = getLineWorldAnchors(line, scene);
     if (!anchors) return null;
     if (line.kind === "perpendicular" || line.kind === "parallel") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId, finite: false };
     }
     if (line.kind === "tangent") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId, finite: false };
     }
     if (line.kind === "circleCircleTangent") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, finite: false };
     }
     if (line.kind === "angleBisector") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.bId };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.bId, finite: false };
     }
-    return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.aId, endpointBId: line.bId };
+    return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.aId, endpointBId: line.bId, finite: false };
   }
   if (ref.type === "segment") {
     const seg = segById.get(ref.id);
@@ -2694,6 +3633,7 @@ function lineLikeNamesFromRef(
       worldB: wb,
       endpointAId: seg.aId,
       endpointBId: seg.bId,
+      finite: true,
     };
   }
   return null;
@@ -2720,26 +3660,6 @@ function inferLineCircleBranchFromWorld(
   return 0;
 }
 
-function inferLineCircleBranchFromExcludedWorld(
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-  center: { x: number; y: number },
-  through: { x: number; y: number },
-  excluded: { x: number; y: number },
-  fallback: 0 | 1
-): 0 | 1 {
-  const radius = distance(center, through);
-  const branches = lineCircleIntersectionBranches(a, b, center, radius);
-  if (branches.length < 2) return 0;
-
-  const ROOT_EPS = 1e-6;
-  const d0 = distance(branches[0].point, excluded);
-  const d1 = distance(branches[1].point, excluded);
-  if (d0 <= ROOT_EPS && d1 > ROOT_EPS) return 1;
-  if (d1 <= ROOT_EPS && d0 > ROOT_EPS) return 0;
-  return fallback;
-}
-
 function inferCircleCircleBranch(
   point: Extract<ScenePoint, { kind: "intersectionPoint" }>,
   _aCenter: { x: number; y: number },
@@ -2751,6 +3671,35 @@ function inferCircleCircleBranch(
     return (point.branchIndex as number) === 1 ? 1 : 0;
   }
   return 0;
+}
+
+function inferCircleCircleBranchFromExcludedRoots(
+  roots: Array<{ x: number; y: number }>,
+  excluded: { x: number; y: number },
+  fallback: 0 | 1
+): 0 | 1 {
+  if (roots.length < 2) return 0;
+  const ROOT_EPS = 1e-6;
+  const d0 = distance(roots[0], excluded);
+  const d1 = distance(roots[1], excluded);
+  if (d0 <= ROOT_EPS && d1 > ROOT_EPS) return 1;
+  if (d1 <= ROOT_EPS && d0 > ROOT_EPS) return 0;
+  return fallback;
+}
+
+function circleCircleRootMatchIndex(
+  roots: Array<{ x: number; y: number }>,
+  pointWorld: { x: number; y: number } | null
+): 0 | 1 | null {
+  if (!pointWorld || roots.length < 2) return null;
+  const ROOT_EPS = 1e-6;
+  const d0 = distance(roots[0], pointWorld);
+  const d1 = distance(roots[1], pointWorld);
+  const m0 = d0 <= ROOT_EPS;
+  const m1 = d1 <= ROOT_EPS;
+  if (m0 && !m1) return 0;
+  if (m1 && !m0) return 1;
+  return null;
 }
 
 function isCircleRef(ref: GeometryObjectRef): boolean {
@@ -2765,18 +3714,137 @@ function sameObjectRef(a: GeometryObjectRef, b: GeometryObjectRef): boolean {
   return a.type === b.type && a.id === b.id;
 }
 
+function filterLineCircleBranchesToFiniteDomain(
+  branches: Array<{ point: { x: number; y: number }; t: number }>,
+  finite: boolean
+): Array<{ point: { x: number; y: number }; t: number }> {
+  if (!finite) return branches;
+  return branches.filter((branch) => branch.t >= -FINITE_DOMAIN_EPS && branch.t <= 1 + FINITE_DOMAIN_EPS);
+}
+
+const FINITE_DOMAIN_EPS = 1e-6;
+
+function finiteSingleLineCircleRootFactor(
+  roots: Array<{ point: { x: number; y: number }; t: number }>,
+  supportRoots: Array<{ point: { x: number; y: number }; t: number }>
+): number | null {
+  if (roots.length !== 1 || supportRoots.length <= roots.length) return null;
+  const t = roots[0].t;
+  if (t < 0 && t >= -FINITE_DOMAIN_EPS) return 0;
+  if (t > 1 && t <= 1 + FINITE_DOMAIN_EPS) return 1;
+  return t;
+}
+
+function inferLineCircleBranchFromExcludedRoots(
+  roots: Array<{ point: { x: number; y: number }; t: number }>,
+  excluded: { x: number; y: number },
+  fallback: 0 | 1
+): 0 | 1 {
+  if (roots.length < 2) return 0;
+  const ROOT_EPS = 1e-6;
+  const d0 = distance(roots[0].point, excluded);
+  const d1 = distance(roots[1].point, excluded);
+  if (d0 <= ROOT_EPS && d1 > ROOT_EPS) return 1;
+  if (d1 <= ROOT_EPS && d0 > ROOT_EPS) return 0;
+  return fallback;
+}
+
+function lineCircleRootMatchIndex(
+  roots: Array<{ point: { x: number; y: number }; t: number }>,
+  pointWorld: { x: number; y: number } | null
+): 0 | 1 | null {
+  if (!pointWorld || roots.length < 2) return null;
+  const ROOT_EPS = 1e-6;
+  const d0 = distance(roots[0].point, pointWorld);
+  const d1 = distance(roots[1].point, pointWorld);
+  const m0 = d0 <= ROOT_EPS;
+  const m1 = d1 <= ROOT_EPS;
+  if (m0 && !m1) return 0;
+  if (m1 && !m0) return 1;
+  return null;
+}
+
+// Whether a point lies on `circle` by construction (not merely by numeric
+// coincidence). Only such points are safe to pass to tkz-euclide's `common=`:
+// that option matches the shared point against the freshly computed intersections
+// using an absolute tolerance, so when the picture is scaled it silently fails for
+// points that sit on the circle only approximately (e.g. an incenter that lies on
+// the circle by a theorem, or a free point dropped onto it). On that failure tkz
+// falls back to plain geometric ordering, which swaps the two `\tkzGetPoints`
+// slots relative to what `common=` promises. Genuine on-circle points match
+// robustly at any scale, so we keep `common=` only for them.
+function isPointConstructedOnCircle(pointId: string, circle: SceneCircle, scene: SceneModel): boolean {
+  if (circle.kind === "threePoint") {
+    if (pointId === circle.aId || pointId === circle.bId || pointId === circle.cId) return true;
+  } else if (circle.kind === "fixedRadius") {
+    // Only the center is named; nothing lies on the circle by construction.
+  } else if (pointId === circle.throughId) {
+    // twoPoint circle: the "through" point is on the circle (the center is not).
+    return true;
+  }
+  const point = scene.points.find((candidate) => candidate.id === pointId);
+  if (!point) return false;
+  if (point.kind === "pointOnCircle") return point.circleId === circle.id;
+  if (point.kind === "circleLineIntersectionPoint") return point.circleId === circle.id;
+  if (point.kind === "circleSegmentIntersectionPoint") return point.circleId === circle.id;
+  if (point.kind === "circleCircleIntersectionPoint") {
+    return point.circleAId === circle.id || point.circleBId === circle.id;
+  }
+  return false;
+}
+
+function validDefinedLineCircleCommonPointName(
+  pointId: string | undefined,
+  roots: Array<{ point: { x: number; y: number }; t: number }>,
+  selectedBranch: 0 | 1,
+  scene: SceneModel,
+  definedPointIds: Set<string>,
+  pointName: Map<string, string>,
+  circle?: SceneCircle
+): string | undefined {
+  if (!pointId || !definedPointIds.has(pointId) || roots.length < 2) return undefined;
+  if (circle && !isPointConstructedOnCircle(pointId, circle, scene)) return undefined;
+  const pointWorld = getPointWorldPosCached(scene, pointId);
+  const match = lineCircleRootMatchIndex(roots, pointWorld);
+  if (match === null || match === selectedBranch) return undefined;
+  return mustName(pointName, pointId);
+}
+
+function validDefinedCircleCircleCommonPointName(
+  pointId: string | undefined,
+  roots: Array<{ x: number; y: number }>,
+  selectedBranch: 0 | 1,
+  scene: SceneModel,
+  definedPointIds: Set<string>,
+  pointName: Map<string, string>
+): string | undefined {
+  if (!pointId || !definedPointIds.has(pointId) || roots.length < 2) return undefined;
+  const pointWorld = getPointWorldPosCached(scene, pointId);
+  const match = circleCircleRootMatchIndex(roots, pointWorld);
+  if (match === null || match === selectedBranch) return undefined;
+  return mustName(pointName, pointId);
+}
+
+function singleLineCircleRootIsExcluded(
+  roots: Array<{ point: { x: number; y: number }; t: number }>,
+  excludePointId: string | undefined,
+  scene: SceneModel
+): boolean {
+  if (!excludePointId || roots.length !== 1) return false;
+  const excluded = getPointWorldPosCached(scene, excludePointId);
+  if (!excluded) return false;
+  return distance(excluded, roots[0].point) <= 1e-6;
+}
+
 function inferLineCircleCommonFromEndpointsWorld(
   lineAId: string | undefined,
   lineBId: string | undefined,
   lineAWorld: { x: number; y: number },
   lineBWorld: { x: number; y: number },
-  circleO: { x: number; y: number },
-  circleX: { x: number; y: number },
+  branches: Array<{ point: { x: number; y: number }; t: number }>,
   selectedBranch: 0 | 1,
   pointName: Map<string, string>
 ): string | undefined {
-  const radius = distance(circleO, circleX);
-  const branches = lineCircleIntersectionBranches(lineAWorld, lineBWorld, circleO, radius);
   if (branches.length < 2) return undefined;
 
   const ROOT_EPS = 1e-6;
@@ -2792,7 +3860,7 @@ function inferLineCircleCommonFromEndpointsWorld(
   return undefined;
 }
 
-function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number; ymin: number; ymax: number } {
+function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: number; xmax: number; ymin: number; ymax: number } {
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -2822,6 +3890,17 @@ function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number;
     add(center.x + r, center.y + r);
   }
 
+  for (const ellipse of scene.ellipses ?? []) {
+    const geom = getEllipseWorldGeometry(ellipse, scene);
+    if (!geom) continue;
+    const cos = Math.cos(geom.rotationRad);
+    const sin = Math.sin(geom.rotationRad);
+    const rx = Math.sqrt(geom.semiMajor * geom.semiMajor * cos * cos + geom.semiMinor * geom.semiMinor * sin * sin);
+    const ry = Math.sqrt(geom.semiMajor * geom.semiMajor * sin * sin + geom.semiMinor * geom.semiMinor * cos * cos);
+    add(geom.center.x - rx, geom.center.y - ry);
+    add(geom.center.x + rx, geom.center.y + ry);
+  }
+
   for (const angle of scene.angles) {
     if (!angle.visible) continue;
     const vertex = getPointWorldPosCached(scene, angle.bId);
@@ -2835,6 +3914,14 @@ function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number;
     add(vertex.x - r, vertex.y - r);
     add(vertex.x + r, vertex.y + r);
     add(angle.style.labelPosWorld.x, angle.style.labelPosWorld.y);
+  }
+
+  for (const node of scene.richTextNodes ?? []) {
+    if (!node.visible) continue;
+    add(node.positionWorld.x, node.positionWorld.y);
+    const widthWorld = Math.max(0.5, (node.boundsPx?.widthPx ?? 320) / pxPerWorld);
+    const heightWorld = Math.max(0.3, (node.boundsPx?.heightPx ?? Math.max(18, node.style.textSize * 1.5)) / pxPerWorld);
+    add(node.positionWorld.x + widthWorld, node.positionWorld.y - heightWorld);
   }
 
   if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
@@ -2853,6 +3940,183 @@ function computeExportViewport(scene: SceneModel): { xmin: number; xmax: number;
     ymin: minY - pad,
     ymax: maxY + pad,
   };
+}
+
+const TKZ_DRAW_LINE_SAFE_EXTENDED_LENGTH = 400;
+
+function rawLineDrawClipBoundsForOptions(
+  viewport: TikzExportViewport,
+  options: TikzExportOptions
+): TikzExportViewport {
+  if (options.clipRectWorld) return normalizeViewportRect(options.clipRectWorld);
+  if (options.clipPolygonWorld && options.clipPolygonWorld.length >= 3) {
+    return boundsForPoints(options.clipPolygonWorld);
+  }
+  return normalizeViewportRect(viewport);
+}
+
+function lineDrawClipBoundsForOptions(
+  viewport: TikzExportViewport,
+  options: TikzExportOptions
+): TikzExportViewport {
+  const rawBounds = options.clipRectWorld
+    ? normalizeViewportRect(options.clipRectWorld)
+    : options.clipPolygonWorld && options.clipPolygonWorld.length >= 3
+      ? boundsForPoints(options.clipPolygonWorld)
+      : normalizeViewportRect(viewport);
+  const width = Math.max(1e-9, rawBounds.xmax - rawBounds.xmin);
+  const height = Math.max(1e-9, rawBounds.ymax - rawBounds.ymin);
+  const pad = Math.max(0.5, Math.abs(options.clipSpace ?? 0), 0.02 * Math.max(width, height));
+  return {
+    xmin: rawBounds.xmin - pad,
+    xmax: rawBounds.xmax + pad,
+    ymin: rawBounds.ymin - pad,
+    ymax: rawBounds.ymax + pad,
+  };
+}
+
+function normalizeViewportRect(rect: TikzExportViewport): TikzExportViewport {
+  return {
+    xmin: Math.min(rect.xmin, rect.xmax),
+    xmax: Math.max(rect.xmin, rect.xmax),
+    ymin: Math.min(rect.ymin, rect.ymax),
+    ymax: Math.max(rect.ymin, rect.ymax),
+  };
+}
+
+function boundsForPoints(points: Array<{ x: number; y: number }>): TikzExportViewport {
+  let xmin = Number.POSITIVE_INFINITY;
+  let xmax = Number.NEGATIVE_INFINITY;
+  let ymin = Number.POSITIVE_INFINITY;
+  let ymax = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+    xmin = Math.min(xmin, point.x);
+    xmax = Math.max(xmax, point.x);
+    ymin = Math.min(ymin, point.y);
+    ymax = Math.max(ymax, point.y);
+  }
+  if (!Number.isFinite(xmin) || !Number.isFinite(xmax) || !Number.isFinite(ymin) || !Number.isFinite(ymax)) {
+    return { xmin: -10, xmax: 10, ymin: -10, ymax: 10 };
+  }
+  return normalizeViewportRect({ xmin, xmax, ymin, ymax });
+}
+
+function shouldUseFiniteLineDrawFallback(drawSpanWorld: number, globalAdd: number): boolean {
+  if (!Number.isFinite(drawSpanWorld) || drawSpanWorld <= 1e-9) return true;
+  const extensionFactor = 1 + 2 * Math.max(0, globalAdd);
+  return drawSpanWorld * extensionFactor > TKZ_DRAW_LINE_SAFE_EXTENDED_LENGTH;
+}
+
+function resolveLineDrawReferenceWorld(
+  scene: SceneModel,
+  line: SceneModel["lines"][number],
+  id: string,
+  anchors: { a: { x: number; y: number }; b: { x: number; y: number } }
+): { x: number; y: number } | null {
+  if (id === line.id) return anchors.b;
+  if (line.kind === "circleCircleTangent" && id === `${line.id}#a`) return anchors.a;
+  return getPointWorldPosCached(scene, id);
+}
+
+function lineSegmentThroughRect(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  rect: TikzExportViewport
+): { ax: number; ay: number; bx: number; by: number } | null {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (!(len > 1e-12)) return null;
+
+  const candidates: Array<{ x: number; y: number; t: number }> = [];
+  const eps = 1e-7;
+  const addCandidate = (t: number) => {
+    if (!Number.isFinite(t)) return;
+    const x = a.x + t * dx;
+    const y = a.y + t * dy;
+    if (x < rect.xmin - eps || x > rect.xmax + eps || y < rect.ymin - eps || y > rect.ymax + eps) return;
+    if (candidates.some((candidate) => Math.hypot(candidate.x - x, candidate.y - y) <= 1e-6)) return;
+    candidates.push({ x, y, t });
+  };
+
+  if (Math.abs(dx) > 1e-12) {
+    addCandidate((rect.xmin - a.x) / dx);
+    addCandidate((rect.xmax - a.x) / dx);
+  }
+  if (Math.abs(dy) > 1e-12) {
+    addCandidate((rect.ymin - a.y) / dy);
+    addCandidate((rect.ymax - a.y) / dy);
+  }
+
+  if (candidates.length >= 2) {
+    candidates.sort((p, q) => p.t - q.t);
+    const first = candidates[0];
+    const last = candidates[candidates.length - 1];
+    return { ax: first.x, ay: first.y, bx: last.x, by: last.y };
+  }
+
+  const center = {
+    x: (rect.xmin + rect.xmax) / 2,
+    y: (rect.ymin + rect.ymax) / 2,
+  };
+  const tCenter = ((center.x - a.x) * dx + (center.y - a.y) * dy) / (len * len);
+  const nearest = {
+    x: a.x + tCenter * dx,
+    y: a.y + tCenter * dy,
+  };
+  const ux = dx / len;
+  const uy = dy / len;
+  const halfSpan = Math.hypot(rect.xmax - rect.xmin, rect.ymax - rect.ymin) / 2;
+  return {
+    ax: nearest.x - ux * halfSpan,
+    ay: nearest.y - uy * halfSpan,
+    bx: nearest.x + ux * halfSpan,
+    by: nearest.y + uy * halfSpan,
+  };
+}
+
+function hugeCircleVisibleBoundary(
+  circle: { center: { x: number; y: number }; radius: number },
+  bounds: TikzExportViewport
+): { intersects: boolean; containsBounds: boolean } {
+  const { center, radius } = circle;
+  if (!Number.isFinite(radius) || radius <= 0) return { intersects: false, containsBounds: false };
+  const nearestX = Math.max(bounds.xmin, Math.min(bounds.xmax, center.x));
+  const nearestY = Math.max(bounds.ymin, Math.min(bounds.ymax, center.y));
+  const minDistance = Math.hypot(nearestX - center.x, nearestY - center.y);
+  const maxDistance = Math.max(
+    Math.hypot(bounds.xmin - center.x, bounds.ymin - center.y),
+    Math.hypot(bounds.xmin - center.x, bounds.ymax - center.y),
+    Math.hypot(bounds.xmax - center.x, bounds.ymin - center.y),
+    Math.hypot(bounds.xmax - center.x, bounds.ymax - center.y)
+  );
+  const epsilon = Math.max(1e-9, radius * 1e-12);
+  return {
+    intersects: radius >= minDistance - epsilon && radius <= maxDistance + epsilon,
+    containsBounds: radius > maxDistance + epsilon,
+  };
+}
+
+function hugeCircleTangentSegment(
+  circle: { center: { x: number; y: number }; radius: number },
+  bounds: TikzExportViewport
+): { ax: number; ay: number; bx: number; by: number } | null {
+  // Match drawHugeCircleAsClippedLine on the canvas: approximate the visible
+  // arc at the radial point facing the viewport center.
+  const viewportCenter = {
+    x: (bounds.xmin + bounds.xmax) * 0.5,
+    y: (bounds.ymin + bounds.ymax) * 0.5,
+  };
+  const dx = viewportCenter.x - circle.center.x;
+  const dy = viewportCenter.y - circle.center.y;
+  const length = Math.hypot(dx, dy);
+  if (!(length > 1e-12)) return null;
+  const point = {
+    x: circle.center.x + (dx / length) * circle.radius,
+    y: circle.center.y + (dy / length) * circle.radius,
+  };
+  return lineSegmentThroughRect(point, { x: point.x - dy / length, y: point.y + dx / length }, bounds);
 }
 
 function computeLineDrawPlacement(
@@ -3101,6 +4365,55 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   const draw = rgbColorExpr(s.strokeColor);
   const fill = rgbColorExpr(s.fillColor);
   const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
+  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  if (plainPxToPt !== null) {
+    const radiusPx = Math.max(1.5, s.sizePx * pointScale);
+    const strokeWidthPt = Math.max(0.1, s.strokeWidth * pointScale * plainPxToPt);
+    const radiusPt = radiusPx * plainPxToPt;
+    if (shape.kind === "dot") {
+      const diameterPt = Math.max(1.2, radiusPx * 0.4) * 2 * plainPxToPt;
+      const opts = [
+        "shape=circle",
+        "draw=none",
+        `fill=${fill}`,
+        "line width=0pt",
+        "inner sep=0pt",
+        "outer sep=0pt",
+        `minimum size=${fmt(diameterPt)}pt`,
+      ];
+      if (s.fillOpacity < 0.999) opts.push(`fill opacity=${fmt(clamp01(s.fillOpacity))}`);
+      return opts.join(", ");
+    }
+    if (shape.kind === "lineGlyph") {
+      const plainShapeName =
+        s.shape === "plus" ? "rectangle" : shape.shapeName;
+      const overlayPlus = s.shape === "plus" || shape.overlayPlus;
+      const opts = [
+        `shape=${plainShapeName}`,
+        s.shape === "plus" ? "draw=none" : `draw=${draw}`,
+        "fill=none",
+        `line width=${fmt(strokeWidthPt)}pt`,
+        "inner sep=0pt",
+        "outer sep=0pt",
+        `minimum size=${fmt(radiusPt * 2)}pt`,
+      ];
+      if (s.strokeOpacity < 0.999) opts.push(`draw opacity=${fmt(clamp01(s.strokeOpacity))}`);
+      if (overlayPlus) opts.push(crossPlusOverlayPathPicture(draw, strokeWidthPt, s.strokeOpacity));
+      return opts.join(", ");
+    }
+    const opts = [
+      `shape=${shape.shapeName}`,
+      `draw=${draw}`,
+      `fill=${fill}`,
+      `line width=${fmt(strokeWidthPt)}pt`,
+      "inner sep=0pt",
+      "outer sep=0pt",
+      `minimum size=${fmt(radiusPt * 2)}pt`,
+    ];
+    if (s.strokeOpacity < 0.999) opts.push(`draw opacity=${fmt(clamp01(s.strokeOpacity))}`);
+    if (s.fillOpacity < 0.999) opts.push(`fill opacity=${fmt(clamp01(s.fillOpacity))}`);
+    return opts.join(", ");
+  }
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
   const pointConv = TIKZ_EXPORT_CALIBRATION.pointConversion;
   const pointStrokeScale = clampPositive(options.pointStrokeScale ?? 1, 0.01, 100);
@@ -3174,16 +4487,20 @@ function segmentMarkStyleBaseToTikz(
   options: TikzExportOptions
 ): string | null {
   if (!mark?.enabled || mark.mark === "none") return null;
-  const allowedMarks = new Set(["|", "||", "|||", "s", "s|", "s||", "x", "o", "oo", "z"]);
-  if (!allowedMarks.has(mark.mark)) {
+  const tikzMark = mapSegmentMarkSymbolToTikz(mark.mark);
+  if (!tikzMark) {
     throw new Error(`Unsupported SegmentMark: mark=${String(mark.mark)}`);
   }
   if (!Number.isFinite(mark.sizePt) || mark.sizePt <= 0) {
     throw new Error("Unsupported SegmentMark: sizePt");
   }
   const sizeScale = clampPositive(options.segmentMarkSizeScale ?? 1, 0.01, 100);
+  const roundSizeScale = clampPositive(options.segmentMarkRoundSizeScale ?? 1, 0.01, 100);
+  const nonRoundSizeScale = clampPositive(options.segmentMarkNonRoundSizeScale ?? 1, 0.01, 100);
+  const symbolScale = isRoundSegmentMarkSymbol(mark.mark) ? roundSizeScale : nonRoundSizeScale;
+  const symbolSpecificScale = segmentMarkSymbolExportScale(mark.mark);
   const widthScale = clampPositive(options.segmentMarkLineWidthScale ?? 1, 0.01, 100);
-  const opts: string[] = [`mark=${mark.mark}`, `size=${fmt(mark.sizePt * sizeScale)}pt`];
+  const opts: string[] = [`mark=${tikzMark}`, `size=${fmt(mark.sizePt * sizeScale * symbolScale * symbolSpecificScale)}pt`];
   opts.push(`color=${rgbColorExpr(mark.color ?? segmentStrokeColor)}`);
   const opacity = clamp01(segmentOpacity);
   if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
@@ -3196,6 +4513,21 @@ function segmentMarkStyleBaseToTikz(
     opts.push(`line width=${fmt(strokeWidthToTikzPt(segmentStrokeWidth, options))}pt`);
   }
   return opts.join(", ");
+}
+
+function mapSegmentMarkSymbolToTikz(mark: SegmentMarkSymbol): string | null {
+  if (mark === "none") return null;
+  if (mark === "dot") return "*";
+  return mark;
+}
+
+function isRoundSegmentMarkSymbol(mark: SegmentMarkSymbol): boolean {
+  return mark === "o" || mark === "oo" || mark === "dot";
+}
+
+function segmentMarkSymbolExportScale(mark: SegmentMarkSymbol): number {
+  if (mark === "oo") return 2;
+  return 1;
 }
 
 function segmentMarkToTikz(
@@ -3221,11 +4553,33 @@ function segmentMarksToTikz(
   segmentOpacity: number,
   options: TikzExportOptions,
   aName: string,
-  bName: string
+  bName: string,
+  aWorld?: { x: number; y: number },
+  bWorld?: { x: number; y: number }
 ): TikzCommand[] {
   const marks = resolveSegmentMarks(style);
   if (marks.length === 0) return [];
   const out: TikzCommand[] = [];
+  if (options.drawLayerBackend === "plain") {
+    if (!aWorld || !bWorld) return out;
+    for (const mark of marks) {
+      const positions = collectSegmentMarkPositions(mark, 0.5);
+      for (const pos of positions) {
+        const tex = plainSegmentMarkToTikz(
+          mark,
+          pos,
+          aWorld,
+          bWorld,
+          segmentStrokeColor,
+          segmentStrokeWidth,
+          segmentOpacity,
+          options
+        );
+        if (tex) out.push({ kind: "DrawRaw", tex });
+      }
+    }
+    return out;
+  }
   for (const mark of marks) {
     const positions = collectSegmentMarkPositions(mark, 0.5);
     if ((mark.distribution ?? "single") === "multi" && positions.length > 1) {
@@ -3253,6 +4607,125 @@ function segmentMarksToTikz(
   return out;
 }
 
+function plainSegmentMarkToTikz(
+  mark: NonNullable<SceneModel["segments"][number]["style"]["segmentMark"]>,
+  posRaw: number,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  segmentStrokeColor: string,
+  segmentStrokeWidth: number,
+  segmentOpacity: number,
+  options: TikzExportOptions
+): string | null {
+  if (!mark.enabled || mark.mark === "none") return null;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (!Number.isFinite(length) || length <= 1e-12) return null;
+  const ux = dx / length;
+  const uy = dy / length;
+  // Canvas builds its normal in screen coordinates (Y down). Converted back
+  // into world/TikZ coordinates (Y up), that normal is (uy,-ux).
+  const nx = uy;
+  const ny = -ux;
+  const pos = clamp01(Number.isFinite(posRaw) ? posRaw : 0.5);
+  const center = { x: a.x + dx * pos, y: a.y + dy * pos };
+  const sizePx = Math.max(1, mark.sizePt);
+  const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const sizeWorld = sizePx / pxPerWorld;
+  const tickHalfWorld = (sizePx * 2.2) / pxPerWorld;
+  const gapWorld = Math.max(2, sizePx * 0.85) / pxPerWorld;
+  const lineWidthPx = Math.max(0.5, mark.lineWidthPt ?? segmentStrokeWidth);
+  const lineWidthPt =
+    lineWidthPx *
+    clampPositive(options.lineScale ?? 1, 0.05, 10) *
+    (resolvedPlainCanvasPxToTikzPt(options) ?? FALLBACK_CANVAS_PX_TO_TIKZ_PT);
+  const color = rgbColorExpr(mark.color ?? segmentStrokeColor);
+  const opacity = normalizedOpacity(segmentOpacity);
+  const drawOpts = [
+    `color=${color}`,
+    `line width=${fmt(Math.max(0.1, lineWidthPt))}pt`,
+    "line cap=round",
+    "line join=round",
+  ];
+  if (opacity < 0.999) drawOpts.push(`opacity=${fmt(opacity)}`);
+  const draw = (points: Array<{ x: number; y: number }>, close = false): string => {
+    const path = points.map((p) => `(${fmt(p.x)},${fmt(p.y)})`).join(" -- ");
+    return `\\draw[${drawOpts.join(", ")}] ${path}${close ? " -- cycle" : ""};`;
+  };
+  const along = (amount: number) => ({
+    x: center.x + ux * amount,
+    y: center.y + uy * amount,
+  });
+  const cross = (origin: { x: number; y: number }, amount: number) => ({
+    x: origin.x + nx * amount,
+    y: origin.y + ny * amount,
+  });
+  const tick = (offset: number): string => {
+    const origin = along(offset);
+    return draw([cross(origin, -tickHalfWorld), cross(origin, tickHalfWorld)]);
+  };
+  const slash = (offset: number): string => {
+    const origin = along(offset);
+    const p1 = {
+      x: origin.x - ux * tickHalfWorld - nx * tickHalfWorld * 0.55,
+      y: origin.y - uy * tickHalfWorld - ny * tickHalfWorld * 0.55,
+    };
+    const p2 = {
+      x: origin.x + ux * tickHalfWorld + nx * tickHalfWorld * 0.55,
+      y: origin.y + uy * tickHalfWorld + ny * tickHalfWorld * 0.55,
+    };
+    return draw([p1, p2]);
+  };
+
+  if (mark.mark === "|") return tick(0);
+  if (mark.mark === "||") return `${tick(-gapWorld * 0.5)}\n${tick(gapWorld * 0.5)}`;
+  if (mark.mark === "|||") return `${tick(-gapWorld)}\n${tick(0)}\n${tick(gapWorld)}`;
+  if (mark.mark === "s") return slash(0);
+  if (mark.mark === "s|") return `${slash(-gapWorld * 0.5)}\n${tick(gapWorld * 0.5)}`;
+  if (mark.mark === "s||") return `${slash(-gapWorld)}\n${tick(0)}\n${tick(gapWorld)}`;
+  if (mark.mark === "x") {
+    return [
+      draw([
+        { x: center.x - nx * sizeWorld - ux * sizeWorld * 0.6, y: center.y - ny * sizeWorld - uy * sizeWorld * 0.6 },
+        { x: center.x + nx * sizeWorld + ux * sizeWorld * 0.6, y: center.y + ny * sizeWorld + uy * sizeWorld * 0.6 },
+      ]),
+      draw([
+        { x: center.x - nx * sizeWorld + ux * sizeWorld * 0.6, y: center.y - ny * sizeWorld + uy * sizeWorld * 0.6 },
+        { x: center.x + nx * sizeWorld - ux * sizeWorld * 0.6, y: center.y + ny * sizeWorld - uy * sizeWorld * 0.6 },
+      ]),
+    ].join("\n");
+  }
+  if (mark.mark === "o") {
+    const radius = Math.max(1.2, sizePx * 0.6) / pxPerWorld;
+    return `\\draw[${drawOpts.join(", ")}] (${fmt(center.x)},${fmt(center.y)}) circle[radius=${fmt(radius)}];`;
+  }
+  if (mark.mark === "oo") {
+    const radius = Math.max(1.2, sizePx * 0.55) / pxPerWorld;
+    const left = along(-gapWorld * 0.55);
+    const right = along(gapWorld * 0.55);
+    return [
+      `\\draw[${drawOpts.join(", ")}] (${fmt(left.x)},${fmt(left.y)}) circle[radius=${fmt(radius)}];`,
+      `\\draw[${drawOpts.join(", ")}] (${fmt(right.x)},${fmt(right.y)}) circle[radius=${fmt(radius)}];`,
+    ].join("\n");
+  }
+  if (mark.mark === "dot") {
+    const radius = Math.max(1.2, sizePx * 0.58) / pxPerWorld;
+    const fillOpts = [`fill=${color}`];
+    if (opacity < 0.999) fillOpts.push(`fill opacity=${fmt(opacity)}`);
+    return `\\fill[${fillOpts.join(", ")}] (${fmt(center.x)},${fmt(center.y)}) circle[radius=${fmt(radius)}];`;
+  }
+  if (mark.mark === "z") {
+    return draw([
+      { x: center.x - ux * gapWorld - nx * sizeWorld * 0.8, y: center.y - uy * gapWorld - ny * sizeWorld * 0.8 },
+      { x: center.x + ux * gapWorld + nx * sizeWorld * 0.8, y: center.y + uy * gapWorld - ny * sizeWorld * 0.2 },
+      { x: center.x - ux * gapWorld - nx * sizeWorld * 0.8, y: center.y - uy * gapWorld + ny * sizeWorld * 0.8 },
+      { x: center.x + ux * gapWorld + nx * sizeWorld * 0.8, y: center.y + uy * gapWorld + ny * sizeWorld * 0.2 },
+    ]);
+  }
+  return null;
+}
+
 function segmentArrowsToTikz(
   styleArrows: SegmentArrowMark | SegmentArrowMark[] | undefined,
   aName: string,
@@ -3264,7 +4737,9 @@ function segmentArrowsToTikz(
     segmentStrokeWidthPt: number;
     segmentStrokeCarrierKey: string | null;
   },
-  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number }
+  metrics?: PathArrowExportMetrics,
+  dotSizeScale?: number,
+  plainBackend = false
 ): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
   const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
   if (arrows.length === 0) return null;
@@ -3272,15 +4747,47 @@ function segmentArrowsToTikz(
   if (effectiveArrows.length === 0) return null;
 
   const rawTexs: string[] = [];
+  const drawEndpointSegment = (
+    style: string,
+    from: string,
+    to: string
+  ): string =>
+    plainBackend
+      ? `\\draw[${style}] (${from}) -- (${to});`
+      : `\\tkzDrawSegment[${style}](${from},${to})`;
 
   for (const effectiveArrow of effectiveArrows) {
+    const tip = resolveArrowTipName(effectiveArrow.tip, "SegmentArrowMark");
+    if (isDotArrowTip(tip)) {
+      const dotOverlays = segmentDotArrowOverlaysToTikz(
+        effectiveArrow,
+        tip,
+        aName,
+        bName,
+        {
+          strokeColor: base.strokeColor,
+          strokeWidth: base.strokeWidth,
+          opacity: base.opacity,
+        },
+        metrics,
+        dotSizeScale
+      );
+      if (dotOverlays.length > 0) {
+        rawTexs.push(...dotOverlays);
+      }
+      continue;
+    }
+
     if (effectiveArrow.mode === "mid") {
       const midOverlay = pathArrowOverlayToTikz(
         effectiveArrow,
         `(${aName}) -- (${bName})`,
         base,
         effectiveArrow.pos ?? 0.5,
-        metrics as { pathLengthWorld: number; screenPxPerWorld: number }
+        metrics,
+        undefined,
+        undefined,
+        dotSizeScale
       );
       if (midOverlay) {
         rawTexs.push(midOverlay);
@@ -3290,7 +4797,6 @@ function segmentArrowsToTikz(
 
     // End arrow logic
     ensureSupportedArrowDirection(effectiveArrow.direction, "SegmentArrowMark");
-    const tip = resolveArrowTipName(effectiveArrow.tip, "SegmentArrowMark");
     const arrowColor = rgbColorExpr(effectiveArrow.color ?? base.strokeColor);
     const opacity = normalizedOpacity(base.opacity);
     const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
@@ -3304,20 +4810,19 @@ function segmentArrowsToTikz(
       effectiveArrow.mode === "end" &&
       (isCarrierArrow || hasSameColorCarrier);
     const arrowWidth = useSegmentStrokeWidthForEndpoint ? base.segmentStrokeWidthPt : overlayArrowWidthPt;
-    // Keep endpoint-arrow defaults aligned with decoration arrows.
-    const effectiveScale = clampPositive(effectiveArrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.75;
     const arrowWidthUi = resolvePathArrowWidthUi(effectiveArrow.lineWidthPt);
+    const canvasPxToTikzPt = resolveCanvasPxToTikzPt(metrics);
     const tipMetrics = resolvePathArrowTipMetricsPx(
       tip,
-      1.0,
+      effectiveArrow.sizeScale,
       arrowWidthUi,
       "PathArrowMark",
       effectiveArrow.arrowLength
     );
     const tipSpec = resolveArrowTipSpec(
       tip,
-      tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
-      tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale
+      tipMetrics.lengthPx * canvasPxToTikzPt,
+      tipMetrics.widthPx * canvasPxToTikzPt
     );
     const drawStyleBase = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,line cap=butt${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
       }`;
@@ -3329,7 +4834,7 @@ function segmentArrowsToTikz(
       (metrics?.screenPxPerWorld as number) > 0
         ? (metrics?.pathLengthWorld as number) * (metrics?.screenPxPerWorld as number)
         : NaN;
-    const tipLengthPx = tipMetrics.lengthPx * effectiveScale;
+    const tipLengthPx = tipMetrics.lengthPx;
     const shortTailFrac = Number.isFinite(pathLengthPx)
       ? Math.max(0.01, Math.min(0.35, (tipLengthPx * 1.1) / (pathLengthPx as number)))
       : 0.06;
@@ -3338,35 +4843,145 @@ function segmentArrowsToTikz(
 
     if (effectiveArrow.direction === "->") {
       if (preferHeadOnlyEndpointOverlay) {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${aName})!${shortTailT}!(${bName})$,${bName})`);
+        rawTexs.push(
+          drawEndpointSegment(
+            drawStyleForward,
+            `$(${aName})!${shortTailT}!(${bName})$`,
+            bName
+          )
+        );
       } else {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}](${aName},${bName})`);
+        rawTexs.push(
+          drawEndpointSegment(drawStyleForward, aName, bName)
+        );
       }
     } else if (effectiveArrow.direction === "<-") {
       if (preferHeadOnlyEndpointOverlay) {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${bName})!${shortTailT}!(${aName})$,${aName})`);
+        rawTexs.push(
+          drawEndpointSegment(
+            drawStyleForward,
+            `$(${bName})!${shortTailT}!(${aName})$`,
+            aName
+          )
+        );
       } else {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}](${bName},${aName})`);
+        rawTexs.push(
+          drawEndpointSegment(drawStyleForward, bName, aName)
+        );
       }
     } else if (effectiveArrow.direction === "<->") {
       if (preferHeadOnlyEndpointOverlay) {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${aName})!${shortTailT}!(${bName})$,${bName})`);
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${bName})!${shortTailT}!(${aName})$,${aName})`);
+        rawTexs.push(
+          drawEndpointSegment(
+            drawStyleForward,
+            `$(${aName})!${shortTailT}!(${bName})$`,
+            bName
+          )
+        );
+        rawTexs.push(
+          drawEndpointSegment(
+            drawStyleForward,
+            `$(${bName})!${shortTailT}!(${aName})$`,
+            aName
+          )
+        );
       } else {
-        rawTexs.push(`\\tkzDrawSegment[${drawStyleBase},{${tipSpec}}-{${tipSpec}}](${aName},${bName})`);
+        rawTexs.push(
+          drawEndpointSegment(
+            `${drawStyleBase},{${tipSpec}}-{${tipSpec}}`,
+            aName,
+            bName
+          )
+        );
       }
     } else {
       // >-< inward endpoint arrows need a short extension outside each endpoint
       // to orient arrowheads toward the segment interior.
-      const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * effectiveScale));
+      const tailFrac = Math.max(0.02, Math.min(0.14, 0.03 + 0.03 * clampPositive(effectiveArrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20)));
       const tNeg = fmt(-tailFrac);
-      rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${aName})!${tNeg}!(${bName})$,${aName})`);
-      rawTexs.push(`\\tkzDrawSegment[${drawStyleForward}]($(${bName})!${tNeg}!(${aName})$,${bName})`);
+      rawTexs.push(
+        drawEndpointSegment(
+          drawStyleForward,
+          `$(${aName})!${tNeg}!(${bName})$`,
+          aName
+        )
+      );
+      rawTexs.push(
+        drawEndpointSegment(
+          drawStyleForward,
+          `$(${bName})!${tNeg}!(${aName})$`,
+          bName
+        )
+      );
     }
   }
 
   if (rawTexs.length === 0) return null;
   return { kind: "raw", tex: rawTexs.join("\n") };
+}
+
+function segmentDotArrowOverlaysToTikz(
+  arrow: SegmentArrowMark,
+  tip: "Dot" | "OpenDot",
+  aName: string,
+  bName: string,
+  base: { strokeColor: string; strokeWidth: number; opacity: number },
+  metrics?: PathArrowExportMetrics,
+  dotSizeScale?: number
+): string[] {
+  const pathExpr = `(${aName}) -- (${bName})`;
+  const overlays: string[] = [];
+  const pushDotOverlay = (pos: number) => {
+    const overlay = pathArrowOverlayToTikz(
+      {
+        enabled: true,
+        direction: "->",
+        tip,
+        distribution: "single",
+        pos: clamp01(pos),
+        sizeScale: arrow.sizeScale,
+        color: arrow.color,
+        lineWidthPt: arrow.lineWidthPt,
+        pairGapPx: arrow.pairGapPx,
+        arrowLength: arrow.arrowLength,
+      },
+      pathExpr,
+      base,
+      clamp01(pos),
+      metrics,
+      undefined,
+      undefined,
+      dotSizeScale
+    );
+    if (overlay) overlays.push(overlay);
+  };
+
+  if (arrow.mode === "end") {
+    if (arrow.direction === "->") {
+      pushDotOverlay(1);
+      return overlays;
+    }
+    if (arrow.direction === "<-") {
+      pushDotOverlay(0);
+      return overlays;
+    }
+    pushDotOverlay(0);
+    pushDotOverlay(1);
+    return overlays;
+  }
+
+  const midOverlay = pathArrowOverlayToTikz(
+    arrow,
+    pathExpr,
+    base,
+    arrow.pos ?? 0.5,
+    metrics,
+    undefined,
+    undefined,
+    dotSizeScale
+  );
+  if (midOverlay) overlays.push(midOverlay);
+  return overlays;
 }
 
 function normalizeLegacyEndpointMidArrow(arrow: SegmentArrowMark): SegmentArrowMark {
@@ -3523,9 +5138,10 @@ function pathArrowOverlayToTikz(
   pathExpr: string,
   base: { strokeColor: string; strokeWidth: number; opacity: number },
   fallbackPos: number,
-  metrics?: { pathLengthWorld?: number; screenPxPerWorld?: number },
-  arcDef?: { center: { x: number; y: number }; radius: number; startRad: number; sweepRad: number },
-  arrowTipOptions?: { bend?: boolean; flex?: boolean }
+  metrics?: PathArrowExportMetrics,
+  _arcDef?: { center: { x: number; y: number }; radius: number; startRad: number; sweepRad: number },
+  _arrowTipOptions?: { bend?: boolean; flex?: boolean },
+  dotSizeScale?: number
 ): string | null {
   const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
   const results: string[] = [];
@@ -3534,101 +5150,87 @@ function pathArrowOverlayToTikz(
     if (!arrow?.enabled) continue;
     ensureSupportedArrowDirection(arrow.direction, "PathArrowMark");
     const tip = resolveArrowTipName(arrow.tip, "PathArrowMark");
+    const isDotTip = isDotArrowTip(tip);
     const arrowColor = rgbColorExpr(arrow.color ?? base.strokeColor);
     const opacity = normalizedOpacity(base.opacity);
-    const sourceStrokeWidth = resolveArrowSourceWidth(undefined, base.strokeWidth);
-    const arrowWidth = Math.max(0.1, sourceStrokeWidth * PATH_ARROW_WIDTH_EXPORT_SCALE);
-    // User snippet requires scale=0.75 for arcs/paths.
-    const effectiveScale = clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * 0.75;
     const arrowWidthUi = resolvePathArrowWidthUi(arrow.lineWidthPt);
+    const canvasPxToTikzPt = resolveCanvasPxToTikzPt(metrics);
+    const resolvedDotSizeScale = clampPositive(dotSizeScale ?? 1, 0.05, 20);
 
-    // Bending fix: Use scale=1.0 for the arrow command so TikZ bending calculations
-    // see the true physical size relative to the path. Bake the scale into dimensions.
-    const arrowScaleCommand = 1.0;
-
-    const tipMetrics = resolvePathArrowTipMetricsPx(tip, 1.0, arrowWidthUi, "PathArrowMark", arrow.arrowLength);
-    const tipSpec = resolveArrowTipSpec(
-      tip,
-      tipMetrics.lengthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
-      tipMetrics.widthPx * CANVAS_PX_TO_TIKZ_PT * effectiveScale,
-      { ...arrowTipOptions, opacity: arcDef ? opacity : undefined }
-    );
-
-    // Standard opts for Markings (Deco)
-    const arrowOptsMarking = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(arrowScaleCommand)}${opacity < 0.999 ? `,opacity=${fmt(opacity)}` : ""
-      }`;
-
-    // Opts for Constructive Path (Flex)
-    const arrowOptsConstructive = `color=${arrowColor},line width=${fmt(arrowWidth)}pt,scale=${fmt(
-      arrowScaleCommand
-    )},draw opacity=0`;
-
-    const forwardCmd = `\\arrow[${arrowOptsMarking}]{${tipSpec}}`;
-    const reverseCmd = `\\arrowreversed[${arrowOptsMarking}]{${tipSpec}}`;
-    const pairDelta = computePathArrowPairDelta(
-      tipMetrics.pairSeparationPx * effectiveScale,
-      metrics?.pathLengthWorld,
-      metrics?.screenPxPerWorld,
-      arrow.pairGapPx
-    );
-    const positions = collectPathArrowPositions(arrow, fallbackPos);
     const marks: string[] = [];
-    const paths: string[] = [];
+    let pairDelta = 0;
+    let markerCmd = "";
+    let forwardCmd = "";
+    let reverseCmd = "";
+
+    if (isDotTip) {
+      const dotMetrics = resolvePathDotMarkMetricsPx(
+        arrowWidthUi,
+        clampPositive(arrow.sizeScale ?? DEFAULT_PATH_ARROW_UI, 0.1, 20) * resolvedDotSizeScale,
+        arrow.arrowLength
+      );
+      markerCmd = dotMarkCommandToTikz(
+        tip,
+        arrowColor,
+        opacity,
+        dotMetrics.radiusPx * canvasPxToTikzPt,
+        dotMetrics.strokePx * canvasPxToTikzPt
+      );
+      pairDelta = computePathArrowPairDelta(
+        dotMetrics.pairSeparationPx,
+        metrics?.pathLengthWorld,
+        metrics?.screenPxPerWorld,
+        arrow.pairGapPx
+      );
+    } else {
+      const tipMetrics = resolvePathArrowTipMetricsPx(
+        tip,
+        arrow.sizeScale,
+        arrowWidthUi,
+        "PathArrowMark",
+        arrow.arrowLength
+      );
+      forwardCmd = pathArrowGlyphCommandToTikz(tip, arrowColor, opacity, tipMetrics, canvasPxToTikzPt, false);
+      reverseCmd = pathArrowGlyphCommandToTikz(tip, arrowColor, opacity, tipMetrics, canvasPxToTikzPt, true);
+      pairDelta = computePathArrowPairDelta(
+        tipMetrics.pairSeparationPx,
+        metrics?.pathLengthWorld,
+        metrics?.screenPxPerWorld,
+        arrow.pairGapPx
+      );
+    }
+    const positions = collectPathArrowPositions(arrow, fallbackPos);
 
     const addMark = (pos: number, command: string) => {
       marks.push(`mark=at position ${fmt(clamp01(pos))} with {${command}}`);
     };
 
-    const addConstructivePath = (pos: number, reversed: boolean) => {
-      if (!arcDef) return;
-      const isCCW = arcDef.sweepRad >= 0;
-      const targetRad = arcDef.startRad + arcDef.sweepRad * clamp01(pos);
-      const epsilon = 0.2;
-      const aEnd = targetRad;
-      const aStart = targetRad - (isCCW ? epsilon : -epsilon);
-      const pCenter = arcDef.center;
-      const r = arcDef.radius;
-      const startDeg = (aStart * 180) / Math.PI;
-      const endDeg = (aEnd * 180) / Math.PI;
-      const arcPath = `(${fmt(pCenter.x + Math.cos(aStart) * r)},${fmt(
-        pCenter.y + Math.sin(aStart) * r
-      )}) arc (${fmt(startDeg)}:${fmt(endDeg)}:${fmt(r)})`;
-      const finalTipSpec = reversed ? tipSpec.replace(/\]$/, ",reversed]") : tipSpec;
-      paths.push(`\\draw[${arrowOptsConstructive}, -{${finalTipSpec}}] ${arcPath};`);
-    };
-
     for (let i = 0; i < positions.length; i += 1) {
       const p = positions[i];
+      if (isDotTip) {
+        if (arrow.direction === "->" || arrow.direction === "<-") {
+          addMark(p, markerCmd);
+        } else {
+          addMark(p - pairDelta, markerCmd);
+          addMark(p + pairDelta, markerCmd);
+        }
+        continue;
+      }
       if (arrow.direction === "->") {
-        if (arcDef) addConstructivePath(p, false);
-        else addMark(p, forwardCmd);
+        addMark(p, forwardCmd);
       } else if (arrow.direction === "<-") {
-        if (arcDef) addConstructivePath(p, true);
-        else addMark(p, reverseCmd);
+        addMark(p, reverseCmd);
       } else if (arrow.direction === "<->") {
-        if (arcDef) {
-          addConstructivePath(p - pairDelta, true);
-          addConstructivePath(p + pairDelta, false);
-        } else {
-          addMark(p - pairDelta, reverseCmd);
-          addMark(p + pairDelta, forwardCmd);
-        }
+        addMark(p - pairDelta, reverseCmd);
+        addMark(p + pairDelta, forwardCmd);
       } else {
-        if (arcDef) {
-          addConstructivePath(p - pairDelta, false);
-          addConstructivePath(p + pairDelta, true);
-        } else {
-          addMark(p - pairDelta, forwardCmd);
-          addMark(p + pairDelta, reverseCmd);
-        }
+        addMark(p - pairDelta, forwardCmd);
+        addMark(p + pairDelta, reverseCmd);
       }
     }
 
-    if (arcDef) {
-      results.push(paths.join("\n"));
-    } else if (marks.length > 0) {
+    if (marks.length > 0) {
       const opts: string[] = ["postaction=decorate", `decoration={markings,${marks.join(",")}}`];
-      if (opacity < 0.999) opts.push(`opacity=${fmt(opacity)}`);
       results.push(`\\path[${opts.join(", ")}] ${pathExpr};`);
     }
   }
@@ -3644,16 +5246,29 @@ function sectorMarksToTikz(
 ): string | null {
   const marks = resolveAngleMarks(style);
   if (marks.length === 0) return null;
-  const lineWidthPt = strokeWidthToTikzPt(base.strokeWidth, options);
+  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  const lineWidthPt =
+    plainPxToPt === null
+      ? strokeWidthToTikzPt(base.strokeWidth, options)
+      : strokeWidthToTikzPt(
+          base.strokeWidth * ANGLE_CANVAS_STROKE_SCALE,
+          options
+        );
   const overlays: string[] = [];
   for (let i = 0; i < marks.length; i += 1) {
     const mark = marks[i];
+    const markSize =
+      (mark.markSize ?? 1.2) *
+      clampPositive(options.angleMarkSizeScale ?? 1, 0.01, 100);
     const markCommand = sectorMarkSymbolCommandToTikz(
       mark.markSymbol,
-      Math.max(0.2, (mark.markSize ?? 1.2) * CANVAS_PX_TO_TIKZ_PT),
+      plainPxToPt === null
+        ? Math.max(0.2, markSize * FALLBACK_CANVAS_PX_TO_TIKZ_PT)
+        : markSize,
       rgbColorExpr(mark.markColor ?? style.markColor ?? base.strokeColor),
       lineWidthPt,
-      normalizedOpacity(base.opacity)
+      normalizedOpacity(base.opacity),
+      plainPxToPt ?? undefined
     );
     if (!markCommand) continue;
     const positions = collectAngleMarkPositions(mark, style.markPos ?? 0.5);
@@ -3668,17 +5283,28 @@ function sectorMarksToTikz(
 
 function sectorMarkSymbolCommandToTikz(
   symbol: AngleMarkSymbol,
-  sizePt: number,
+  size: number,
   colorExpr: string,
   lineWidthPt: number,
-  opacity: number
+  opacity: number,
+  canvasPxToTikzPt?: number
 ): string | null {
   const count = symbol === "|" ? 1 : symbol === "||" ? 2 : symbol === "|||" ? 3 : 0;
   if (count === 0) return null;
-  const tickHalf = Math.max(0.2, sizePt * 2.2);
-  const gap = Math.max(0.2, sizePt * 0.85);
+  const tickHalf =
+    canvasPxToTikzPt === undefined
+      ? Math.max(0.2, size * 2.2)
+      : Math.max(1.4, size * 2.2) * canvasPxToTikzPt;
+  const gap =
+    canvasPxToTikzPt === undefined
+      ? Math.max(0.2, size * 0.85)
+      : Math.max(1.8, size * 0.85) * canvasPxToTikzPt;
   const offsets = count === 1 ? [0] : count === 2 ? [-gap * 0.5, gap * 0.5] : [-gap, 0, gap];
-  const drawOpts = [`color=${colorExpr}`, `line width=${fmt(Math.max(0.1, lineWidthPt))}pt`, "line cap=round"];
+  const drawOpts = [
+    `color=${colorExpr}`,
+    `line width=${fmt(Math.max(0.1, lineWidthPt))}pt`,
+    canvasPxToTikzPt === undefined ? "line cap=round" : "line cap=butt",
+  ];
   if (opacity < 0.999) drawOpts.push(`opacity=${fmt(opacity)}`);
   return offsets
     .map((offset) => {
@@ -3746,12 +5372,18 @@ function ensureSupportedArrowDirection(
   throw new Error(`Unsupported ${context}: direction=${String(direction)}`);
 }
 
+type ResolvedArrowTipName = "Stealth" | "Latex" | "Triangle" | "Dot" | "OpenDot";
+
+function isDotArrowTip(tip: ResolvedArrowTipName): tip is "Dot" | "OpenDot" {
+  return tip === "Dot" || tip === "OpenDot";
+}
+
 function resolveArrowTipName(
   tip: unknown,
   context: "SegmentArrowMark" | "PathArrowMark"
-): "Stealth" | "Latex" | "Triangle" {
+): ResolvedArrowTipName {
   if (tip === undefined || tip === null || tip === "") return "Stealth";
-  if (tip === "Stealth" || tip === "Latex" || tip === "Triangle") return tip;
+  if (tip === "Stealth" || tip === "Latex" || tip === "Triangle" || tip === "Dot" || tip === "OpenDot") return tip;
   throw new Error(`Unsupported ${context}: tip=${String(tip)}`);
 }
 
@@ -3773,49 +5405,111 @@ function resolveArrowTipSpec(
   return `${tip}[length=${fmt(Math.max(0.5, lengthPt))}pt,width=${fmt(Math.max(0.4, widthPt))}pt${extra}]`;
 }
 
+function resolveCanvasPxToTikzPt(metrics: PathArrowExportMetrics | undefined): number {
+  const value = metrics?.canvasPxToTikzPt;
+  if (Number.isFinite(value) && (value as number) > 0) return value as number;
+  return FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+}
+
 function resolvePathArrowWidthUi(lineWidthPt: unknown): number {
   if (!Number.isFinite(lineWidthPt) || (lineWidthPt as number) <= 0) return DEFAULT_PATH_ARROW_UI;
   return clampPositive((lineWidthPt as number) / PATH_ARROW_WIDTH_UI_FACTOR, 0.2, 12);
 }
 
+type PathArrowTipMetricsPx = {
+  lengthPx: number;
+  widthPx: number;
+  halfWidthPx: number;
+  notchDistancePx: number;
+  lineWidthPx: number;
+  pairSeparationPx: number;
+};
+
 function resolvePathArrowTipMetricsPx(
   tip: "Stealth" | "Latex" | "Triangle",
-  _arrowScale: number,
+  sizeScale: unknown,
   widthUi: number,
-  context: "SegmentArrowMark" | "PathArrowMark",
+  _context: "SegmentArrowMark" | "PathArrowMark",
   arrowLength?: number
-): { lengthPx: number; widthPx: number; pairSeparationPx: number } {
-  // If arrowLength is provided, use it as the base size (uncoupled from scale).
-  // Base length: arrowLength is now a multiplier (default 1.0).
-  // 1.0 corresponds to 16.8px, matching the tuned `(1,1,3) -> 15.12pt` visually.
-  // For PathArrowMark (Arcs), reduce by 0.9x to match user requirement (9pt vs 10pt).
-  const contextScale = context === "PathArrowMark" ? 0.9 : 1.0;
-  const baseSize = (arrowLength ?? 1.0) * 16.8 * contextScale;
-
-  const widthScale = Math.sqrt(Math.max(0.2, Math.min(12, widthUi)));
+): PathArrowTipMetricsPx {
+  const numericSizeScale =
+    typeof sizeScale === "number" && Number.isFinite(sizeScale) ? sizeScale : DEFAULT_PATH_ARROW_UI;
+  const scale = clampPositive(numericSizeScale, 0.2, 8);
+  const normalizedWidthUi = Math.max(0.2, Math.min(12, widthUi));
+  const baseLength = (arrowLength ?? 1.0) * 16.8;
+  const headSize = Math.max(4, baseLength * scale);
+  const referenceSize = 24 * scale;
+  const widthScale = Math.sqrt(normalizedWidthUi) * (referenceSize / headSize);
   const profile =
     tip === "Latex"
-      ? { lengthMul: 0.95, wingMul: 0.34 }
+      ? { lengthMul: 0.95, wingMul: 0.34, notchMul: 0 }
       : tip === "Triangle"
-        ? { lengthMul: 1.071, wingMul: 0.56 } // Tuned to 9.0pt (from 8.4pt)
-        : { lengthMul: 1.2, wingMul: 0.44 };
-
-  // If arrowLength is explicit, we don't multiply by profile.lengthMul because 
-  // the user likely interprets "Length" as the total length.
-  // But for "Stealth", the visual length including notch might differ.
-  // Let's stick to using baseSize as the driver.
-  const lengthPx = Math.max(4, baseSize * profile.lengthMul);
-
-  // Width calculation
-  // We want width to be independent of length (matching Canvas logic).
-  // Canvas uses a fixed reference size (24) equivalent.
-  // Here we use the raw definition: 16.8 base size (unscaled by arrowLength).
-  const widthBase = 16.8;
-  const halfWidthPx = Math.max(1.2, widthBase * profile.wingMul * widthScale);
+        ? { lengthMul: 1.0, wingMul: 0.56, notchMul: 0 }
+        : { lengthMul: 1.2, wingMul: 0.44, notchMul: 0.34 };
+  const lengthPx = headSize * profile.lengthMul;
+  const halfWidthPx = headSize * profile.wingMul * widthScale;
   const widthPx = halfWidthPx * 2;
+  const notchDistancePx = lengthPx * (1 - profile.notchMul);
+  const pairSeparationPx = Math.max(3, Math.max(headSize * 1.45, headSize * 1.05 * widthScale));
+  const lineWidthPx = Math.max(0.8, normalizedWidthUi * 1.35);
+  return { lengthPx, widthPx, halfWidthPx, notchDistancePx, lineWidthPx, pairSeparationPx };
+}
 
-  const pairSeparationPx = Math.max(3, Math.max(baseSize * 0.9, baseSize * 0.65 * widthScale));
-  return { lengthPx, widthPx, pairSeparationPx };
+function pathArrowGlyphCommandToTikz(
+  tip: "Stealth" | "Latex" | "Triangle",
+  colorExpr: string,
+  opacity: number,
+  metrics: PathArrowTipMetricsPx,
+  pxToPt: number,
+  reversed: boolean
+): string {
+  const len = Math.max(0.5, metrics.lengthPx * pxToPt);
+  const wing = Math.max(0.3, metrics.halfWidthPx * pxToPt);
+  const notch = Math.max(0, metrics.notchDistancePx * pxToPt);
+  const stroke = Math.max(0.1, metrics.lineWidthPx * pxToPt);
+  const opacityOpt = opacity < 0.999 ? `,opacity=${fmt(opacity)}` : "";
+  const x = (value: number) => fmt(reversed ? value : -value);
+  const y = (value: number) => fmt(reversed ? -value : value);
+
+  if (tip === "Latex") {
+    return `\\draw[color=${colorExpr},line width=${fmt(stroke)}pt,line cap=round,line join=round${opacityOpt}] (${x(len)}pt,${y(wing)}pt) -- (0pt,0pt) -- (${x(len)}pt,${y(-wing)}pt);`;
+  }
+
+  const middle =
+    tip === "Stealth"
+      ? ` -- (${x(notch)}pt,0pt)`
+      : "";
+  return `\\fill[color=${colorExpr}${opacityOpt}] (0pt,0pt) -- (${x(len)}pt,${y(wing)}pt)${middle} -- (${x(len)}pt,${y(-wing)}pt) -- cycle;`;
+}
+
+function resolvePathDotMarkMetricsPx(
+  widthUi: number,
+  effectiveScale: number,
+  arrowLength: number | undefined
+): { radiusPx: number; strokePx: number; pairSeparationPx: number } {
+  const widthScale = Math.sqrt(Math.max(0.2, Math.min(12, widthUi)));
+  const lengthScale = Math.max(0.2, Math.min(4, arrowLength ?? 1.0));
+  const radiusPx = Math.max(1.2, 2.2 * effectiveScale * widthScale * lengthScale);
+  const strokePx = Math.max(0.8, 0.8 * effectiveScale * widthScale);
+  const pairSeparationPx = Math.max(3, radiusPx * 3.2);
+  return { radiusPx, strokePx, pairSeparationPx };
+}
+
+function dotMarkCommandToTikz(
+  tip: "Dot" | "OpenDot",
+  colorExpr: string,
+  opacity: number,
+  radiusPt: number,
+  strokePt: number
+): string {
+  if (tip === "Dot") {
+    const fillOpts = [`color=${colorExpr}`];
+    if (opacity < 0.999) fillOpts.push(`opacity=${fmt(opacity)}`);
+    return `\\fill[${fillOpts.join(", ")}] (0pt,0pt) circle[radius=${fmt(Math.max(0.3, radiusPt))}pt];`;
+  }
+  const drawOpts = [`color=${colorExpr}`, `line width=${fmt(Math.max(0.1, strokePt))}pt`];
+  if (opacity < 0.999) drawOpts.push(`opacity=${fmt(opacity)}`);
+  return `\\draw[${drawOpts.join(", ")}] (0pt,0pt) circle[radius=${fmt(Math.max(0.3, radiusPt))}pt];`;
 }
 
 function resolveArrowSourceWidth(_lineWidthPt: unknown, baseStrokeWidth: unknown): number {
@@ -3883,6 +5577,12 @@ function circleFillStyleToTikz(style: SceneModel["circles"][number]["style"]): s
     if (pattern.patternColorExpr) parts.push(pattern.patternColorExpr);
   }
   return parts.join(", ");
+}
+
+function ellipseRotationStyleToTikz(center: { x: number; y: number }, rotationRad: number): string {
+  const rotationDeg = (rotationRad * 180) / Math.PI;
+  if (!Number.isFinite(rotationDeg) || Math.abs(rotationDeg) <= 1e-9) return "";
+  return `rotate around={${fmt(rotationDeg)}:(${fmt(center.x)},${fmt(center.y)})}`;
 }
 
 function polygonStrokeStyleToTikz(style: SceneModel["polygons"][number]["style"], options: TikzExportOptions): string {
@@ -4014,6 +5714,395 @@ function resolveAngleMarkKind(
   return "rightSquare";
 }
 
+const ANGLE_CANVAS_STROKE_SCALE = 3.25 / 1.8;
+const LABEL_GLOW_WIDTH_PX = 3.5;
+
+function plainAngleStrokeStyleToTikz(
+  style: SceneModel["angles"][number]["style"],
+  options: TikzExportOptions,
+  dashPx?: readonly [number, number]
+): string {
+  const plainPxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const widthPt = Math.max(
+    0.1,
+    style.strokeWidth * ANGLE_CANVAS_STROKE_SCALE * lineScale * plainPxToPt
+  );
+  const out = [
+    `color=${rgbColorExpr(style.strokeColor)}`,
+    `line width=${fmt(widthPt)}pt`,
+    "line cap=butt",
+    "line join=miter",
+  ];
+  if (dashPx) {
+    out.push(
+      `dash pattern=on ${fmt(dashPx[0] * lineScale * plainPxToPt)}pt off ${fmt(
+        dashPx[1] * lineScale * plainPxToPt
+      )}pt`
+    );
+  }
+  const opacity = normalizedOpacity(style.strokeOpacity);
+  if (opacity < 0.999) out.push(`opacity=${fmt(opacity)}`);
+  return out.join(", ");
+}
+
+function plainAngleFillStyleToTikz(
+  style: SceneModel["angles"][number]["style"]
+): string {
+  return sectorFillStyleToTikz(style);
+}
+
+function plainAngleRightGeometry(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  c: { x: number; y: number },
+  sizeWorld: number
+): {
+  p1: { x: number; y: number };
+  p2: { x: number; y: number };
+  p3: { x: number; y: number };
+  u: { x: number; y: number };
+  v: { x: number; y: number };
+} | null {
+  const adx = a.x - b.x;
+  const ady = a.y - b.y;
+  const cdx = c.x - b.x;
+  const cdy = c.y - b.y;
+  const alen = Math.hypot(adx, ady);
+  const clen = Math.hypot(cdx, cdy);
+  if (alen <= 1e-12 || clen <= 1e-12) return null;
+  const u = { x: adx / alen, y: ady / alen };
+  const v = { x: cdx / clen, y: cdy / clen };
+  const p1 = { x: b.x + u.x * sizeWorld, y: b.y + u.y * sizeWorld };
+  const p3 = { x: b.x + v.x * sizeWorld, y: b.y + v.y * sizeWorld };
+  const p2 = { x: p1.x + v.x * sizeWorld, y: p1.y + v.y * sizeWorld };
+  return { p1, p2, p3, u, v };
+}
+
+function plainWorldPath(points: Array<{ x: number; y: number }>): string {
+  return points
+    .map((point) => `(${fmt(point.x)},${fmt(point.y)})`)
+    .join(" -- ");
+}
+
+function plainAngleBarMarksToTikz(
+  mark: ReturnType<typeof resolveAngleMarks>[number],
+  style: SceneModel["angles"][number]["style"],
+  center: { x: number; y: number },
+  startRad: number,
+  sweepRad: number,
+  radiusWorld: number,
+  radiusPx: number,
+  options: TikzExportOptions,
+  collectDistributedPositions: boolean
+): string[] {
+  const count =
+    mark.markSymbol === "|"
+      ? 1
+      : mark.markSymbol === "||"
+        ? 2
+        : mark.markSymbol === "|||"
+          ? 3
+          : 0;
+  if (count === 0) return [];
+  const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const plainPxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const markSizeScale = clampPositive(options.angleMarkSizeScale ?? 1, 0.01, 100);
+  const sizePx =
+    (Number.isFinite(mark.markSize) ? Math.max(0.2, mark.markSize) : 1.2) *
+    markSizeScale;
+  const tickHalfPx = Math.max(1.4, sizePx * 2.2);
+  const gapPx = Math.max(1.8, sizePx * 0.85);
+  const baseStep = Math.max(0.01, Math.min(0.2, gapPx / Math.max(1, radiusPx)));
+  const lineWidthPt =
+    Math.max(
+      0.5,
+      style.strokeWidth * ANGLE_CANVAS_STROKE_SCALE * lineScale
+    ) * plainPxToPt;
+  const color = rgbColorExpr(
+    mark.markColor ?? style.markColor ?? style.strokeColor
+  );
+  const drawOptions = [
+    `color=${color}`,
+    `line width=${fmt(Math.max(0.1, lineWidthPt))}pt`,
+    "line cap=butt",
+  ];
+  const opacity = normalizedOpacity(style.strokeOpacity);
+  if (opacity < 0.999) drawOptions.push(`opacity=${fmt(opacity)}`);
+  const positions = collectDistributedPositions
+    ? collectAngleMarkPositions(mark, 0.5)
+    : [clamp01(mark.markPos)];
+  const out: string[] = [];
+  for (const pos of positions) {
+    const baseAngle = startRad + sweepRad * clamp01(pos);
+    for (let i = 0; i < count; i += 1) {
+      // Canvas lays bars along the screen-space arc. Reversing Y reverses that
+      // angular offset in world coordinates.
+      const phi =
+        baseAngle - (i - (count - 1) * 0.5) * baseStep;
+      const nx = Math.cos(phi);
+      const ny = Math.sin(phi);
+      const cx = center.x + nx * radiusWorld;
+      const cy = center.y + ny * radiusWorld;
+      const halfWorld = tickHalfPx / pxPerWorld;
+      out.push(
+        `\\draw[${drawOptions.join(", ")}] (${fmt(
+          cx - nx * halfWorld
+        )},${fmt(cy - ny * halfWorld)}) -- (${fmt(
+          cx + nx * halfWorld
+        )},${fmt(cy + ny * halfWorld)});`
+      );
+    }
+  }
+  return out;
+}
+
+function plainNonSectorAngleCommands(
+  angle: SceneModel["angles"][number],
+  aWorld: { x: number; y: number },
+  bWorld: { x: number; y: number },
+  cWorld: { x: number; y: number },
+  theta: number,
+  rightStatus: AngleRightStatus,
+  options: TikzExportOptions
+): TikzCommand[] {
+  const style = angle.style;
+  const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const plainPxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const arcSizeScale = clampPositive(
+    options.angleArcSizeScale ?? 1,
+    0.01,
+    100
+  );
+  const radiusPx =
+    Math.max(18, Math.min(120, style.arcRadius * 34)) * arcSizeScale;
+  const radiusWorld = radiusPx / pxPerWorld;
+  const startRad = Math.atan2(
+    aWorld.y - bWorld.y,
+    aWorld.x - bWorld.x
+  );
+  const arcPath = arcPathExprFromWorld(
+    bWorld,
+    radiusWorld,
+    startRad,
+    theta
+  );
+  const rightLike = rightStatus !== "none";
+  const rightSolid =
+    rightStatus === "exact" ||
+    (rightStatus === "approx" && Boolean(style.promoteToSolid));
+  const markKind = resolveAngleMarkKind(style.markStyle, rightLike);
+  const mappedStrokePx =
+    style.strokeWidth * ANGLE_CANVAS_STROKE_SCALE * lineScale;
+  const rightSizePx =
+    Math.max(7, radiusPx * 0.34 + mappedStrokePx * 0.3) *
+    clampPositive(options.rightAngleSizeScale ?? 1, 0.01, 100);
+  const rightGeometry = plainAngleRightGeometry(
+    aWorld,
+    bWorld,
+    cWorld,
+    rightSizePx / pxPerWorld
+  );
+  const approximateDash =
+    rightStatus === "approx" &&
+    !rightSolid &&
+    (markKind === "rightSquare" || markKind === "rightArcDot")
+      ? ([6, 4] as const)
+      : undefined;
+  const strokeStyle = plainAngleStrokeStyleToTikz(
+    style,
+    options,
+    approximateDash
+  );
+  const commands: TikzCommand[] = [];
+
+  if (style.fillEnabled && style.fillOpacity > 0) {
+    const fillStyle = plainAngleFillStyleToTikz(style);
+    if (rightLike && markKind === "rightSquare" && rightGeometry) {
+      commands.push({
+        kind: "DrawRaw",
+        tex: `\\fill[${fillStyle}] ${plainWorldPath([
+          bWorld,
+          rightGeometry.p1,
+          rightGeometry.p2,
+          rightGeometry.p3,
+        ])} -- cycle;`,
+      });
+    } else {
+      commands.push({
+        kind: "DrawRaw",
+        tex: `\\fill[${fillStyle}] (${fmt(bWorld.x)},${fmt(
+          bWorld.y
+        )}) -- ${arcPath} -- cycle;`,
+      });
+    }
+  }
+
+  if (markKind === "rightSquare" && rightGeometry) {
+    commands.push({
+      kind: "DrawRaw",
+      tex: `\\draw[${strokeStyle}] ${plainWorldPath([
+        rightGeometry.p1,
+        rightGeometry.p2,
+        rightGeometry.p3,
+      ])};`,
+    });
+  } else if (markKind === "rightArcDot") {
+    commands.push({
+      kind: "DrawRaw",
+      tex: `\\draw[${strokeStyle}] ${arcPath};`,
+    });
+    if (rightGeometry) {
+      const dotCenter = {
+        x:
+          bWorld.x +
+          (rightGeometry.u.x + rightGeometry.v.x) *
+            (rightSizePx / pxPerWorld) *
+            0.55,
+        y:
+          bWorld.y +
+          (rightGeometry.u.y + rightGeometry.v.y) *
+            (rightSizePx / pxPerWorld) *
+            0.55,
+      };
+      const dotRadiusWorld =
+        Math.max(1.8, Math.min(4.5, rightSizePx * 0.18)) /
+        pxPerWorld;
+      const dotOpts = [`fill=${rgbColorExpr(style.strokeColor)}`];
+      const opacity = normalizedOpacity(style.strokeOpacity);
+      if (opacity < 0.999) {
+        dotOpts.push(`fill opacity=${fmt(opacity)}`);
+      }
+      commands.push({
+        kind: "DrawRaw",
+        tex: `\\fill[${dotOpts.join(", ")}] (${fmt(
+          dotCenter.x
+        )},${fmt(dotCenter.y)}) circle[radius=${fmt(
+          dotRadiusWorld
+        )}];`,
+      });
+    }
+  } else if (markKind === "arc") {
+    const marks = resolveAngleMarks(style);
+    let arcLayerOffset = 0;
+    for (const mark of marks) {
+      for (let layer = 0; layer < mark.arcMultiplicity; layer += 1) {
+        const layerRadiusPx =
+          radiusPx + (arcLayerOffset + layer) * 6;
+        commands.push({
+          kind: "DrawRaw",
+          tex: `\\draw[${strokeStyle}] ${arcPathExprFromWorld(
+            bWorld,
+            layerRadiusPx / pxPerWorld,
+            startRad,
+            theta
+          )};`,
+        });
+      }
+      const markRadiusPx =
+        radiusPx +
+        (arcLayerOffset + (mark.arcMultiplicity - 1) * 0.5) * 6;
+      const marksTex = plainAngleBarMarksToTikz(
+        mark,
+        style,
+        bWorld,
+        startRad,
+        theta,
+        markRadiusPx / pxPerWorld,
+        markRadiusPx,
+        options,
+        false
+      );
+      for (const tex of marksTex) {
+        commands.push({ kind: "DrawRaw", tex });
+      }
+      arcLayerOffset += mark.arcMultiplicity;
+    }
+  }
+
+  if (markKind === "arc" || markKind === "rightArcDot") {
+    const arrowOverlay = pathArrowOverlayToTikz(
+      style.arcArrowMarks ?? style.arcArrowMark,
+      arcPath,
+      {
+        strokeColor: style.strokeColor,
+        strokeWidth: mappedStrokePx,
+        opacity: style.strokeOpacity,
+      },
+      style.markPos ?? 0.5,
+      {
+        pathLengthWorld: Math.abs(theta) * radiusWorld,
+        screenPxPerWorld: pxPerWorld,
+        canvasPxToTikzPt: plainPxToPt,
+        canvasExact: true,
+      },
+      {
+        center: bWorld,
+        radius: radiusWorld,
+        startRad,
+        sweepRad: theta,
+      },
+      { flex: true },
+      options.pathDotMarkSizeScale
+    );
+    if (arrowOverlay) {
+      commands.push({ kind: "DrawRaw", tex: arrowOverlay });
+    }
+  }
+  return commands;
+}
+
+function plainAngleLabelCommand(
+  angle: SceneModel["angles"][number],
+  text: string,
+  options: TikzExportOptions
+): Extract<TikzCommand, { kind: "LabelAt" }> | null {
+  if (!isFiniteLabelPosWorld(angle.style.labelPosWorld)) return null;
+  const plainPxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+  const fontScale = clampPositive(
+    options.angleLabelFontScale ?? 1,
+    0.01,
+    100
+  );
+  const fontPx =
+    Math.max(8, angle.style.textSize * (25 / 16)) *
+    0.95 *
+    fontScale;
+  const fontPt = fontPx * plainPxToPt;
+  return {
+    kind: "LabelAt",
+    x: angle.style.labelPosWorld.x,
+    y: angle.style.labelPosWorld.y,
+    text,
+    options: [
+      "anchor=north west",
+      "inner sep=0pt",
+      `text=${rgbColorExpr(angle.style.textColor)}`,
+      `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(
+        fontPt * 1.2
+      )}pt}\\selectfont`,
+    ].join(", "),
+    useGlow:
+      (options.labelGlow ?? true) && Boolean(angle.style.labelGlow),
+    plainGlow: {
+      widthPt: LABEL_GLOW_WIDTH_PX * plainPxToPt,
+      color: options.labelHaloColor
+        ? rgbColorExpr(options.labelHaloColor)
+        : undefined,
+    },
+  };
+}
+
 function angleFillStyleToTikz(style: SceneModel["angles"][number]["style"], options: TikzExportOptions): string {
   if (!Number.isFinite(style.fillOpacity)) {
     throw new Error("Unsupported Angle style: fillOpacity is not finite.");
@@ -4040,31 +6129,76 @@ function rightSquareFillStyleToTikz(style: SceneModel["angles"][number]["style"]
 }
 
 function angleLabelStyleToTikz(
-  style: SceneModel["angles"][number]["style"],
+  angle: SceneModel["angles"][number],
+  aWorld: { x: number; y: number },
   vertexWorld: { x: number; y: number },
-  options: TikzExportOptions
+  cWorld: { x: number; y: number },
+  options: TikzExportOptions,
+  rightLike: boolean
 ): string {
-  const dx = style.labelPosWorld.x - vertexWorld.x;
-  const dy = style.labelPosWorld.y - vertexWorld.y;
-  const dist = Math.hypot(dx, dy);
-  if (!Number.isFinite(dist) || dist <= 1e-9) {
-    throw new Error("Unsupported Angle style: labelPosWorld is invalid.");
+  let dist = Number.NaN;
+  let angleRad = Number.NaN;
+  let labelVectorAngleRad = Number.NaN;
+  if (isFiniteLabelPosWorld(angle.style.labelPosWorld)) {
+    const dx = angle.style.labelPosWorld.x - vertexWorld.x;
+    const dy = angle.style.labelPosWorld.y - vertexWorld.y;
+    dist = Math.hypot(dx, dy);
+    angleRad = Math.atan2(dy, dx);
+    labelVectorAngleRad = angleRad;
   }
-  const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  if (!Number.isFinite(dist) || dist <= 1e-9 || !Number.isFinite(angleRad)) {
+    const bisectorRad = angleBisectorRad(aWorld, vertexWorld, cWorld);
+    if (bisectorRad === null || !Number.isFinite(bisectorRad)) {
+      throw new Error("Unsupported Angle style: labelPosWorld is invalid.");
+    }
+    angleRad = bisectorRad;
+    dist = defaultAngleLabelDist(angle.style.arcRadius, rightLike);
+  }
+  if (angle.kind !== "sector") {
+    const bisectorRad = angleBisectorRad(aWorld, vertexWorld, cWorld);
+    if (bisectorRad !== null && Number.isFinite(bisectorRad)) {
+      angleRad = bisectorRad;
+    }
+    const labelRadiusWorld = nonSectorAngleRadiusWorldFromStyle(angle.style, options);
+    if (Number.isFinite(labelRadiusWorld) && labelRadiusWorld > 1e-9) {
+      if (labelRadiusWorld < 0.24) {
+        const labelVectorLeadsBisector =
+          Number.isFinite(labelVectorAngleRad) &&
+          Number.isFinite(angleRad) &&
+          shortestAngleDiffRad(labelVectorAngleRad, angleRad) > (10 * Math.PI) / 180;
+        dist = labelRadiusWorld * (labelVectorLeadsBisector ? 0.76 : 0.53);
+      } else if (dist >= labelRadiusWorld * 0.65) {
+        const sweepRad = computeOrientedAngleRad(aWorld, vertexWorld, cWorld);
+        const sweepDeg = sweepRad === null ? Number.NaN : (sweepRad * 180) / Math.PI;
+        const labelRadiusRatio = Number.isFinite(sweepDeg) && sweepDeg <= 20 ? 0.98 : 0.867;
+        dist = Math.max(dist, labelRadiusWorld * labelRadiusRatio);
+      }
+    }
+  }
+  const angleDeg = (angleRad * 180) / Math.PI;
   const labelFontScale = clampPositive(options.angleLabelFontScale ?? 1, 0.01, 100);
-  const fontPt = Math.max(6, Math.min(72, style.textSize * labelFontScale));
+  const fontPt = Math.max(6, Math.min(72, angle.style.textSize * labelFontScale));
   // Keep angle-label baseline spacing at 3/4 of the previous "original" export
   // profile (12pt -> 16.2pt), so 9pt maps to 12.15pt.
   const lineHeightPt = Math.max(6, fontPt * 1.35);
   return [
-    `dist=${fmt(dist)}`,
+    `dist=${fmt(roundDecimal(dist, 2))}`,
     `angle=${fmt(angleDeg)}`,
-    `text=${rgbColorExpr(style.textColor)}`,
+    `text=${rgbColorExpr(angle.style.textColor)}`,
     `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(lineHeightPt)}pt}\\selectfont`,
   ].join(", ");
 }
 
 function sectorDrawStyleToTikz(style: SceneModel["angles"][number]["style"], options: TikzExportOptions): string {
+  if (options.drawLayerBackend === "plain") {
+    const dash =
+      style.strokeDash === "dashed"
+        ? ([7, 5] as const)
+        : style.strokeDash === "dotted"
+          ? ([2, 4] as const)
+          : undefined;
+    return plainAngleStrokeStyleToTikz(style, options, dash);
+  }
   return lineLikeStyleToTikz(style.strokeColor, style.strokeWidth, style.strokeDash ?? "solid", style.strokeOpacity, options);
 }
 
@@ -4138,18 +6272,33 @@ function lineLikeStyleToTikz(
   options: TikzExportOptions
 ): string {
   const widthPt = strokeWidthToTikzPt(strokeWidth, options);
+  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
   const opts: string[] = [
     `color=${rgbColorExpr(strokeColor)}`,
     `line width=${fmt(widthPt)}pt`,
   ];
+  if (plainPxToPt !== null && dash !== "dotted") {
+    // Canvas applyStrokeDash uses butt caps for solid and dashed geometry.
+    opts.push("line cap=butt");
+  }
   if (dash === "dashed") {
-    const onPt = Math.max(1.5, Math.min(12, 3 * widthPt));
-    const offPt = Math.max(2, Math.min(16, 4 * widthPt));
+    const onPt =
+      plainPxToPt === null
+        ? Math.max(1.5, Math.min(12, 3 * widthPt))
+        : 8 * lineScale * plainPxToPt;
+    const offPt =
+      plainPxToPt === null
+        ? Math.max(2, Math.min(16, 4 * widthPt))
+        : 6 * lineScale * plainPxToPt;
     opts.push(`dash pattern=on ${fmt(onPt)}pt off ${fmt(offPt)}pt`);
   }
   if (dash === "dotted") {
     // Use explicit round-cap dots so thick dotted strokes stay dotted (not tiny dashes).
-    const offPt = Math.max(1.8, Math.min(20, 3.2 * widthPt));
+    const offPt =
+      plainPxToPt === null
+        ? Math.max(1.8, Math.min(20, 3.2 * widthPt))
+        : Math.max(4, strokeWidth * 2.4) * lineScale * plainPxToPt;
     opts.push("line cap=round");
     opts.push(`dash pattern=on 0pt off ${fmt(offPt)}pt`);
   }
@@ -4159,8 +6308,16 @@ function lineLikeStyleToTikz(
 
 function strokeWidthToTikzPt(strokeWidth: number, options: TikzExportOptions): number {
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
-  const pxToPt = TIKZ_EXPORT_CALIBRATION.pointConversion.matchCanvasPxToPt;
+  const pxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    TIKZ_EXPORT_CALIBRATION.pointConversion.matchCanvasPxToPt;
   return Math.max(0.1, strokeWidth * lineScale * pxToPt);
+}
+
+function resolvedPlainCanvasPxToTikzPt(options: TikzExportOptions): number | null {
+  if (options.drawLayerBackend !== "plain") return null;
+  const value = (options as ResolvedTikzExportOptions).resolvedCanvasPxToTikzPt;
+  return Number.isFinite(value) && (value as number) > 0 ? (value as number) : null;
 }
 
 function crossPlusOverlayPathPicture(draw: string, lineWidthPt: number, strokeOpacity: number): string {
@@ -4242,7 +6399,8 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
   const result = new Map<string, LabelPlacement>();
   const scale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
   const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
-  const ptPerPxForShift = 0.75 / scale;
+  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  const ptPerPxForShift = plainPxToPt ?? 0.75 / scale;
   const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
   const labelStack = new Map<string, number>();
   for (const point of scene.points) {
@@ -4258,19 +6416,22 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
     const spread = stackIndex === 0 ? 0 : 10 * ring;
 
     // Follow canvas semantics: stored offset plus deterministic stack spread.
-    let dxPx = point.style.labelOffsetPx.x + Math.cos(angle) * spread;
-    let dyPx = point.style.labelOffsetPx.y + Math.sin(angle) * spread;
+    const appliesStackSpread = point.showLabel === "name";
+    let dxPx = point.style.labelOffsetPx.x + (appliesStackSpread ? Math.cos(angle) * spread : 0);
+    let dyPx = point.style.labelOffsetPx.y + (appliesStackSpread ? Math.sin(angle) * spread : 0);
 
     // Keep label clear of marker even if user offset is tiny.
-    const metrics = pointStyleMetricsPx(point, pointScale);
     const text = point.showLabel === "caption" ? point.captionTex || point.name : point.name;
     const labelRpx = computeLabelBubbleRadiusPx(text, point.style.labelFontPx, point.style.labelHaloWidthPx);
-    const minClearPx = metrics.markerRadiusPx + labelRpx + Math.max(2, point.style.labelHaloWidthPx * 0.35);
-    const dist = Math.hypot(dxPx, dyPx);
-    if (dist < minClearPx) {
-      const dir = dist > 1e-6 ? { x: dxPx / dist, y: dyPx / dist } : normalize2({ x: 1, y: -1 });
-      dxPx = dir.x * minClearPx;
-      dyPx = dir.y * minClearPx;
+    if (plainPxToPt === null) {
+      const metrics = pointStyleMetricsPx(point, pointScale);
+      const minClearPx = metrics.markerRadiusPx + labelRpx + Math.max(2, point.style.labelHaloWidthPx * 0.35);
+      const dist = Math.hypot(dxPx, dyPx);
+      if (dist < minClearPx) {
+        const dir = dist > 1e-6 ? { x: dxPx / dist, y: dyPx / dist } : normalize2({ x: 1, y: -1 });
+        dxPx = dir.x * minClearPx;
+        dyPx = dir.y * minClearPx;
+      }
     }
 
     // Keep caption labels on the same quadrant rule as name labels.
@@ -4284,6 +6445,8 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
       yShiftPt: -dyPx * ptPerPxForShift,
       rawXShiftPt: rawDxPx * ptPerPxForShift,
       rawYShiftPt: -rawDyPx * ptPerPxForShift,
+      offsetXPx: dxPx,
+      offsetYPx: dyPx,
       scale,
       bubbleRadiusPt: labelRpx * ptPerPxForShift,
     });
@@ -4297,6 +6460,36 @@ function pointStyleMetricsPx(point: ScenePoint, pointScale: number): { markerRad
   return { markerRadiusPx: sizePx + strokePx * 0.5 };
 }
 
+const TIKZ_CORE_COLOR_NAMES = new Set([
+  "black",
+  "white",
+  "red",
+  "green",
+  "blue",
+  "cyan",
+  "magenta",
+  "yellow",
+  "gray",
+  "grey",
+  "darkgray",
+  "darkgrey",
+  "lightgray",
+  "lightgrey",
+  "orange",
+  "lime",
+  "olive",
+  "teal",
+  "purple",
+  "violet",
+  "brown",
+  "pink",
+]);
+
+function isCoreTikzColorName(rawColor: string): boolean {
+  const normalized = rawColor.trim().toLowerCase();
+  return TIKZ_CORE_COLOR_NAMES.has(normalized);
+}
+
 function computeLabelBubbleRadiusPx(text: string, labelFontPx: number, haloWidthPx: number): number {
   const fontPx = Math.max(6, Math.min(48, labelFontPx));
   const content = (text && text.length > 0 ? text : "X").replace(/\\[a-zA-Z]+|[{}$]/g, "");
@@ -4308,24 +6501,17 @@ function computeLabelBubbleRadiusPx(text: string, labelFontPx: number, haloWidth
   return baseRadius + haloPad;
 }
 
-function rgbColorExpr(hex: string): string {
-  const clean = hex.trim().replace(/^#/, "");
-  const full =
-    /^[0-9a-fA-F]{6}$/.test(clean)
-      ? clean
-      : /^[0-9a-fA-F]{3}$/.test(clean)
-        ? clean
-          .split("")
-          .map((ch) => ch + ch)
-          .join("")
-        : "000000";
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
+function rgbColorExpr(rawColor: string): string {
+  const named = resolveExportFriendlyColorName(rawColor);
+  if (named && isCoreTikzColorName(rawColor)) return named;
+  if (named && isCoreTikzColorName(named)) return named;
+
+  const rgb = parseColorToRgb(rawColor) ?? { r: 0, g: 0, b: 0 };
+  const { r, g, b } = rgb;
   return `{rgb,255:red,${r};green,${g};blue,${b}}`;
 }
 
-function hoistNamedColors(lines: string[]): string[] {
+function hoistNamedColors(lines: string[], preferNamed: boolean): string[] {
   const rgbPattern = /\{rgb,255:red,(\d+);green,(\d+);blue,(\d+)\}/g;
   const colorMap = new Map<string, string>();
   const colorDefs: string[] = [];
@@ -4345,9 +6531,14 @@ function hoistNamedColors(lines: string[]): string[] {
       const key = `${r},${g},${b}`;
       let name = colorMap.get(key);
       if (!name) {
-        name = toName(r, g, b);
-        colorMap.set(key, name);
+      const mapped = exportFriendlyColorNameByRgbKey[key];
+      const isCore = mapped && isCoreTikzColorName(mapped);
+      const useMapped = mapped !== undefined;
+      name = useMapped ? mapped : toName(r, g, b);
+      colorMap.set(key, name);
+      if (mapped === undefined || (!isCore && !preferNamed)) {
         colorDefs.push(`\\definecolor{${name}}{RGB}{${r},${g},${b}}`);
+      }
       }
       return name;
     })
@@ -4363,7 +6554,7 @@ function hoistNamedColors(lines: string[]): string[] {
   return out;
 }
 
-function injectOptionalTikzLibraries(lines: string[]): string[] {
+function injectOptionalTikzLibraries(lines: string[], defaultLibs: boolean): string[] {
   const beginIdx = lines.findIndex((line) => line.trim().startsWith("\\begin{tikzpicture}"));
   if (beginIdx < 0) return lines;
 
@@ -4371,13 +6562,21 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
   let needsPatternsMeta = false;
   let needsDecorationsMarkings = false;
   let needsArrowsMeta = false;
+  let needsArrowsLibrary = false;
+  let needsThroughLibrary = false;
   let needsShapesGeometric = false;
+  let needsShapesMisc = false;
+  let needsCalc = false;
   const patternRegex = /pattern\s*=|pattern color\s*=/;
   const patternMetaRegex = /pattern\s*=\s*\{/;
   const decorationRegex = /postaction\s*=\s*decorate|decoration\s*=\s*\{markings/i;
   const arrowTipRegex =
     /-\{(?:Stealth|Latex|Triangle)\[[^\]]*\]|\\arrow(?:reversed)?\[[^\]]*\]\{(?:Stealth|Latex|Triangle)(?:\[[^\]]*\])?\}/;
+  const arrowStyleRegex = />=\s*triangle|triangle\s+45/i;
   const geometricShapeRegex = /shape\s*=\s*diamond|regular polygon(?:\s|,|$)/;
+  const miscShapeRegex = /shape\s*=\s*cross out(?:\s|,|$)/;
+  const throughRegex = /through=/i;
+  const calcCoordinateRegex = /\(\$\s*\(/;
   for (const line of lines) {
     if (patternMetaRegex.test(line)) {
       needsPatternsMeta = true;
@@ -4386,22 +6585,32 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
       needsPatterns = true;
     }
     if (decorationRegex.test(line)) needsDecorationsMarkings = true;
-    if (arrowTipRegex.test(line)) needsArrowsMeta = true;
-    if (geometricShapeRegex.test(line)) needsShapesGeometric = true;
+  if (arrowTipRegex.test(line)) needsArrowsMeta = true;
+  if (arrowStyleRegex.test(line)) needsArrowsLibrary = true;
+  if (throughRegex.test(line)) needsThroughLibrary = true;
+  if (geometricShapeRegex.test(line)) needsShapesGeometric = true;
+  if (miscShapeRegex.test(line)) needsShapesMisc = true;
+  if (calcCoordinateRegex.test(line)) needsCalc = true;
+  }
+
+  const requestedLibs: string[] = defaultLibs ? ["patterns", "through", "arrows"] : [];
+  if (needsShapesGeometric) requestedLibs.push("shapes.geometric");
+  if (defaultLibs && needsShapesMisc) requestedLibs.push("shapes.misc");
+  if (needsPatterns) requestedLibs.push("patterns");
+  if (needsPatternsMeta) requestedLibs.push("patterns.meta");
+  if (needsThroughLibrary) requestedLibs.push("through");
+  if (needsDecorationsMarkings) requestedLibs.push("decorations.markings");
+  if (defaultLibs && needsCalc) requestedLibs.push("calc");
+  if (needsArrowsLibrary || needsArrowsMeta) requestedLibs.push("arrows");
+  if (needsArrowsMeta) {
+    requestedLibs.push("arrows.meta");
+    requestedLibs.push("bending");
   }
 
   const libraryLines: string[] = [];
-  if (needsShapesGeometric) {
-    libraryLines.push("\\usetikzlibrary{shapes.geometric}");
-  }
-  if (needsPatterns) {
-    libraryLines.push(needsPatternsMeta ? "\\usetikzlibrary{patterns,patterns.meta}" : "\\usetikzlibrary{patterns}");
-  }
-  if (needsDecorationsMarkings) {
-    const suffix = needsArrowsMeta ? ",arrows.meta,bending" : "";
-    libraryLines.push(`\\usetikzlibrary{decorations.markings${suffix}}`);
-  } else if (needsArrowsMeta) {
-    libraryLines.push("\\usetikzlibrary{arrows.meta,bending}");
+  if (requestedLibs.length > 0) {
+    const uniq = [...new Set(requestedLibs)];
+    libraryLines.push(`\\usetikzlibrary{${uniq.join(",")}}`);
   }
 
   if (libraryLines.length === 0) return lines;
@@ -4418,12 +6627,16 @@ function injectOptionalTikzLibraries(lines: string[]): string[] {
 
 function escapeTikzText(value: string): string {
   // Pass TeX label content through so commands like \alpha and ^{\circ} work.
-  return value;
+  // Every caller wraps the result in $...$ (math mode). A blank line (2+
+  // consecutive newlines — e.g. pressing Enter twice in the label textarea)
+  // is a LaTeX paragraph break, and \par is illegal inside math mode, so
+  // collapse and trim rather than emitting a document that won't compile.
+  return value.replace(/\n{2,}/g, "\n").trim();
 }
 
-function wrapPlainTextForMathMode(value: string): string {
-  const escaped = value
-    .replace(/\\/g, "\\textbackslash ")
+function escapeTikzPlainText(value: string): string {
+  return value
+    .replace(/\\/g, "\\textbackslash{}")
     .replace(/\{/g, "\\{")
     .replace(/\}/g, "\\}")
     .replace(/\$/g, "\\$")
@@ -4433,7 +6646,91 @@ function wrapPlainTextForMathMode(value: string): string {
     .replace(/_/g, "\\_")
     .replace(/\^/g, "\\^{}")
     .replace(/~/g, "\\~{}");
-  return `\\mbox{${escaped}}`;
+}
+
+function buildPlainTextLabelNodeText(value: string): string {
+  const lines = value.split("\n").map((line) => escapeTikzPlainText(line));
+  if (lines.length === 0 || lines.every((line) => line.length === 0)) return "\\mbox{}";
+  return lines.join(" \\\\ ");
+}
+
+function buildMixedTextLabelNodeText(value: string): string {
+  const segments = parseTextLabelRichText(value);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  const pushCurrentLine = (force = false) => {
+    if (!force && currentLine.length === 0) return;
+    lines.push(currentLine);
+    currentLine = "";
+  };
+
+  for (let i = 0; i < segments.length; i += 1) {
+    const segment = segments[i];
+    if (segment.kind === "text") {
+      const textLines = segment.content.split("\n");
+      for (let j = 0; j < textLines.length; j += 1) {
+        if (currentLine.length === 0 && lines.length > 0 && j === 0 && textLines[j].length === 0) {
+          continue;
+        }
+        currentLine += escapeTikzPlainText(textLines[j]);
+        if (j < textLines.length - 1) pushCurrentLine(true);
+      }
+      continue;
+    }
+    if (segment.kind === "inlineMath") {
+      currentLine += `$${segment.content || "\\,"}$`;
+      continue;
+    }
+    pushCurrentLine();
+    lines.push(`$\\displaystyle ${segment.content || "\\,"}$`);
+  }
+
+  pushCurrentLine(lines.length === 0);
+  if (lines.length === 0) return "\\mbox{}";
+  return lines.join(" \\\\ ");
+}
+
+function buildRichTextNodeText(document: RichTextDocument): string {
+  const lines: string[] = [];
+  let currentLine = "";
+
+  const pushCurrentLine = (force = false) => {
+    if (!force && currentLine.length === 0) return;
+    lines.push(currentLine);
+    currentLine = "";
+  };
+
+  const appendPlainText = (value: string) => {
+    const textLines = value.split("\n");
+    for (let i = 0; i < textLines.length; i += 1) {
+      currentLine += escapeTikzPlainText(textLines[i]);
+      if (i < textLines.length - 1) pushCurrentLine(true);
+    }
+  };
+
+  for (const block of document.blocks) {
+    if (block.kind === "displayMath") {
+      pushCurrentLine();
+      lines.push(`$\\displaystyle ${extractDisplayMathSource(block) || "\\,"}$`);
+      continue;
+    }
+
+    for (const child of block.children) {
+      if (child.kind === "text") {
+        appendPlainText(child.text);
+      } else if (child.kind === "symbol") {
+        currentLine += `$${child.command || escapeTikzPlainText(child.text)}$`;
+      } else {
+        currentLine += `$${extractInlineMathSource(child) || "\\,"}$`;
+      }
+    }
+    pushCurrentLine(lines.length === 0);
+  }
+
+  pushCurrentLine(lines.length === 0);
+  if (lines.length === 0) return "\\mbox{}";
+  return lines.join(" \\\\ ");
 }
 
 function clamp01(v: number): number {
@@ -4497,5 +6794,5 @@ function formatAngleDegreesValueForTex(degRaw: number): string {
   const deg = ((degRaw % 360) + 360) % 360;
   const nearest5 = Math.round(deg / 5) * 5;
   if (Math.abs(deg - nearest5) <= 1e-3) return String(nearest5);
-  return deg.toFixed(2);
+  return deg.toFixed(2).replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0+$/u, "");
 }

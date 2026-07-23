@@ -1,5 +1,5 @@
 import type { Vec2 } from "../geo/vec2";
-import type { GeometryObjectRef, LineLikeObjectRef, ReflectionObjectRef } from "../scene/points";
+import type { GeometryObjectRef, LineLikeObjectRef, ReflectionObjectRef, TextLabelToolKind, SceneModel } from "../scene/points";
 import type { ActiveTool, PendingSelection, TransformableObjectRef } from "../state/geoStore";
 import type { ExportClipWorld } from "../state/slices/storeTypes";
 import { camera as camMath, type Camera, type Viewport } from "../view/camera";
@@ -9,7 +9,8 @@ export type ToolClickHits = {
   hitPointId: string | null;
   hitSegmentId: string | null;
   hitTextLabelId?: string | null;
-  hitObject: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | null;
+  hitRichTextNodeId?: string | null;
+  hitObject: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "richText"; id: string } | null;
   shiftKey: boolean;
   hasCopyStyleSource: boolean;
   snap: SnapCandidate | null;
@@ -19,7 +20,9 @@ export type ToolClickIO = {
   setPendingSelection: (next: PendingSelection) => void;
   clearPendingSelection: () => void;
   createFreePoint: (world: Vec2) => string;
-  createTextLabel: (world: Vec2) => string;
+  createTextLabel: (world: Vec2, preset?: TextLabelToolKind) => string;
+  createRichTextNode?: (world: Vec2) => string;
+  migrateTextLabelToRichTextNode?: (id: string) => string | null;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
   createPolygon: (pointIds: string[]) => string | null;
@@ -27,6 +30,7 @@ export type ToolClickIO = {
   createCircle: (centerId: string, throughId: string) => string | null;
   createAuxiliaryCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
+  createEllipseFociPoint: (focusAId: string, focusBId: string, throughId: string) => string | null;
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createTangentLines: (throughId: string, circleId: string) => string[];
@@ -64,17 +68,21 @@ export type ToolClickIO = {
   ) => string | null;
   transformObjectByDilation: (source: TransformableObjectRef, centerId: string, factorExpr: string) => string | null;
   transformObjectByReflection: (source: TransformableObjectRef, axis: ReflectionObjectRef) => string | null;
+  transformObjectByInversion: (source: TransformableObjectRef, inversionCircleId: string) => string | null;
   createIntersectionPoint: (objA: GeometryObjectRef, objB: GeometryObjectRef, preferredWorld: Vec2) => string | null;
   createCircleCenterPoint: (circleId: string) => string | null;
   setExportClipWorld: (clip: ExportClipWorld | null) => void;
-  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string } | null) => void;
-  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string }) => void;
-  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle" | "textLabel"; id: string }) => void;
-  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }) => void;
+  setSelectedObject: (obj: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText"; id: string } | null) => void;
+  setCopyStyleSource: (obj: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText"; id: string }) => void;
+  applyCopyStyleTo: (obj: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle" | "textLabel" | "richText"; id: string }) => void;
+  enableObjectLabel: (obj: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }) => void;
+  beginTextLabelEditing?: (id: string) => boolean;
+  beginRichTextEditing?: (id: string) => boolean;
+  textLabels?: NonNullable<SceneModel["textLabels"]>;
   angleFixedTool: { angleExpr: string; direction: "CCW" | "CW" };
   regularPolygonTool: { sides: number; direction: "CCW" | "CW" };
   transformTool: {
-    mode: "translate" | "rotate" | "dilate" | "reflect";
+    mode: "translate" | "rotate" | "dilate" | "reflect" | "invert";
     angleExpr: string;
     direction: "CCW" | "CW";
     factorExpr: string;
@@ -224,6 +232,8 @@ export function handleToolClick(
   if (activeTool === "copyStyle") {
     const target = hits.hitTextLabelId
       ? ({ type: "textLabel", id: hits.hitTextLabelId } as const)
+      : hits.hitRichTextNodeId
+      ? ({ type: "richText", id: hits.hitRichTextNodeId } as const)
       : hits.hitObject;
     if (!target) return;
     io.setSelectedObject(target);
@@ -247,11 +257,47 @@ export function handleToolClick(
     return;
   }
 
-  if (activeTool === "translate" || activeTool === "rotate" || activeTool === "dilate" || activeTool === "reflect") {
+  if (activeTool === "textbox") {
+    if (hits.hitRichTextNodeId) {
+      io.setSelectedObject({ type: "richText", id: hits.hitRichTextNodeId });
+      io.beginRichTextEditing?.(hits.hitRichTextNodeId);
+      return;
+    }
+    // Migration: If they click an old textbox toolKind textLabel while in textbox mode, migrate it?
+    // Wait, let's just let them edit it for now, or we can see if it's textLabel.
+    if (hits.hitTextLabelId) {
+      if (io.textLabels) {
+        const label = io.textLabels.find((l: NonNullable<SceneModel["textLabels"]>[number]) => l.id === hits.hitTextLabelId);
+        if (label?.toolKind === "textbox") {
+          const newId = io.migrateTextLabelToRichTextNode?.(label.id) ?? null;
+          if (newId) {
+            io.setSelectedObject({ type: "richText", id: newId });
+            io.beginRichTextEditing?.(newId);
+          } else {
+            io.setSelectedObject({ type: "textLabel", id: label.id });
+          }
+          return;
+        }
+      }
+    }
+    const snapWorld = !hits.shiftKey ? hits.snap?.world ?? null : null;
+    const world = snapWorld ?? maybeSnapWorldToGrid(camMath.screenToWorld(screen, io.camera, io.vp));
+    const richTextId = io.createRichTextNode?.(world) ?? null;
+    if (richTextId) {
+      io.setSelectedObject({ type: "richText", id: richTextId });
+      return;
+    }
+    const id = io.createTextLabel(world, "textbox");
+    io.setSelectedObject({ type: "textLabel", id });
+    return;
+  }
+
+  if (activeTool === "translate" || activeTool === "rotate" || activeTool === "dilate" || activeTool === "reflect" || activeTool === "invert") {
     const pendingTranslate = pendingSelection && pendingSelection.tool === "translate" ? pendingSelection : null;
     const pendingRotate = pendingSelection && pendingSelection.tool === "rotate" ? pendingSelection : null;
     const pendingDilate = pendingSelection && pendingSelection.tool === "dilate" ? pendingSelection : null;
     const pendingReflect = pendingSelection && pendingSelection.tool === "reflect" ? pendingSelection : null;
+    const pendingInvert = pendingSelection && pendingSelection.tool === "invert" ? pendingSelection : null;
     const resolveTransformSource = (): TransformableObjectRef | null => {
       if (!hits.hitObject) return null;
       if (hits.hitObject.type === "point") return { type: "point", id: hits.hitObject.id };
@@ -273,6 +319,11 @@ export function handleToolClick(
       if (hits.hitPointId) return { type: "point", id: hits.hitPointId };
       if (hits.hitObject?.type === "point") return { type: "point", id: hits.hitObject.id };
       return resolveLineLikeTarget();
+    };
+    const resolveInversionCircleId = (): string | null => {
+      if (hits.snap?.kind === "onCircle" && hits.snap.circleId) return hits.snap.circleId;
+      if (hits.hitObject?.type === "circle") return hits.hitObject.id;
+      return null;
     };
 
     if (activeTool === "translate") {
@@ -343,20 +394,41 @@ export function handleToolClick(
       return;
     }
 
-    if (!pendingReflect) {
-      const source = resolveTransformSource();
-      if (!source) return;
-      io.setPendingSelection({
-        tool: "reflect",
-        step: 2,
-        source,
-      });
-      return;
+    if (activeTool === "reflect") {
+      if (!pendingReflect) {
+        const source = resolveTransformSource();
+        if (!source) return;
+        io.setPendingSelection({
+          tool: "reflect",
+          step: 2,
+          source,
+        });
+        return;
+      }
+      if (pendingReflect.step === 2) {
+        const axis = resolveReflectionTarget();
+        if (!axis) return;
+        const created = io.transformObjectByReflection(pendingReflect.source, axis);
+        if (!created) return;
+        io.clearPendingSelection();
+        return;
+      }
     }
-    if (pendingReflect.step === 2) {
-      const axis = resolveReflectionTarget();
-      if (!axis) return;
-      const created = io.transformObjectByReflection(pendingReflect.source, axis);
+
+    if (activeTool === "invert") {
+      if (!pendingInvert) {
+        const source = resolveTransformSource();
+        if (!source || (source.type !== "point" && source.type !== "line" && source.type !== "circle")) return;
+        io.setPendingSelection({
+          tool: "invert",
+          step: 2,
+          source,
+        });
+        return;
+      }
+      const inversionCircleId = resolveInversionCircleId();
+      if (!inversionCircleId) return;
+      const created = io.transformObjectByInversion(pendingInvert.source, inversionCircleId);
       if (!created) return;
       io.clearPendingSelection();
       return;
@@ -501,6 +573,29 @@ export function handleToolClick(
     }
     const cId = resolveOrCreatePointAtCursor();
     const created = io.createCircleThreePoint(pendingSelection.first.id, pendingSelection.second.id, cId);
+    if (!created) return;
+    io.clearPendingSelection();
+    return;
+  }
+
+  if (activeTool === "ellipse_foci_point") {
+    if (!pendingSelection || pendingSelection.tool !== "ellipse_foci_point") {
+      io.setPendingSelection({ tool: "ellipse_foci_point", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+    if (pendingSelection.step === 2) {
+      const focusBId = resolveOrCreatePointAtCursor();
+      if (focusBId === pendingSelection.first.id) return;
+      io.setPendingSelection({
+        tool: "ellipse_foci_point",
+        step: 3,
+        first: pendingSelection.first,
+        second: { type: "point", id: focusBId },
+      });
+      return;
+    }
+    const throughId = resolveOrCreatePointAtCursor();
+    const created = io.createEllipseFociPoint(pendingSelection.first.id, pendingSelection.second.id, throughId);
     if (!created) return;
     io.clearPendingSelection();
     return;
@@ -792,6 +887,10 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     if (!pendingSelection || pendingSelection.tool !== "reflect") return false;
     return false;
   }
+  if (activeTool === "invert") {
+    if (!pendingSelection || pendingSelection.tool !== "invert") return false;
+    return false;
+  }
   if (activeTool === "perp_line" || activeTool === "parallel_line") {
     if (!pendingSelection || (pendingSelection.tool !== "perp_line" && pendingSelection.tool !== "parallel_line")) return true;
     return pendingSelection.first.type === "lineLike";
@@ -807,6 +906,7 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
     activeTool === "circle_cp" ||
     activeTool === "circle_3p" ||
     activeTool === "circle_fixed" ||
+    activeTool === "ellipse_foci_point" ||
     activeTool === "polygon" ||
     activeTool === "regular_polygon" ||
     activeTool === "sector" ||
@@ -822,7 +922,7 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
 export function isValidTarget(
   activeTool: ActiveTool,
   pendingSelection: PendingSelection,
-  hoveredHit: { type: "point" | "segment" | "line2p" | "circle" | "polygon" | "angle"; id: string } | null,
+  hoveredHit: { type: "point" | "segment" | "line2p" | "circle" | "ellipse" | "polygon" | "angle"; id: string } | null,
   hoverSnap: SnapCandidate | null = null
 ): boolean {
   const hasSectorArcSnap = hoverSnap?.kind === "onSectorArc";
@@ -835,6 +935,7 @@ export function isValidTarget(
   if (activeTool === "circle_cp") return hoveredHit.type === "point";
   if (activeTool === "circle_3p") return hoveredHit.type === "point";
   if (activeTool === "circle_fixed") return hoveredHit.type === "point";
+  if (activeTool === "ellipse_foci_point") return hoveredHit.type === "point";
   if (activeTool === "polygon") return hoveredHit.type === "point";
   if (activeTool === "regular_polygon") return hoveredHit.type === "point";
   if (activeTool === "translate") {
@@ -889,6 +990,12 @@ export function isValidTarget(
     }
     return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "segment";
   }
+  if (activeTool === "invert") {
+    if (!pendingSelection || pendingSelection.tool !== "invert") {
+      return hoveredHit.type === "point" || hoveredHit.type === "line2p" || hoveredHit.type === "circle";
+    }
+    return hoveredHit.type === "circle";
+  }
   if (activeTool === "angle_bisector") return hoveredHit.type === "point";
   if (activeTool === "angle") return hoveredHit.type === "point";
   if (activeTool === "sector") return hoveredHit.type === "point";
@@ -897,7 +1004,7 @@ export function isValidTarget(
     return hoveredHit.type === "point";
   }
   if (activeTool === "export_clip" || activeTool === "export_clip_rect") return false;
-  if (activeTool === "label") {
+  if (activeTool === "label" || activeTool === "textbox") {
     return false;
   }
   if (activeTool === "perp_line") {

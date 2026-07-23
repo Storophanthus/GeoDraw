@@ -2,17 +2,20 @@ import * as React from "react";
 import { Plus, Copy, Trash2 } from "lucide-react";
 import { useClickAway } from "react-use";
 import { type PathArrowMark, type SegmentArrowMark, type ArrowDirection, type ArrowTipStyle } from "../../scene/points";
+import { ColorSwatchInput } from "../ColorField";
 
 const ARROW_DIRECTION_OPTIONS: Array<{ value: ArrowDirection; label: string }> = [
-    { value: "->", label: "─▶" },
-    { value: "<-", label: "◀─" },
-    { value: "<->", label: "◀─▶" },
-    { value: ">-<", label: "▶─◀" },
+    { value: "->", label: ">" },
+    { value: "<-", label: "<" },
+    { value: "<->", label: "< >" },
+    { value: ">-<", label: "> <" },
 ];
 const ARROW_TIP_OPTIONS: Array<{ value: ArrowTipStyle; label: string }> = [
-    { value: "Stealth", label: "─➤" },
-    { value: "Latex", label: "─❯" },
-    { value: "Triangle", label: "─▶" },
+    { value: "Stealth", label: "Stealth" },
+    { value: "Latex", label: "Latex" },
+    { value: "Triangle", label: "Triangle" },
+    { value: "Dot", label: "Dot" },
+    { value: "OpenDot", label: "Open Dot" },
 ];
 
 export const DEFAULT_PATH_ARROW_UI = 1.0;
@@ -55,10 +58,6 @@ export type ArrowListControlProps<T extends PathArrowMark> = {
     onChange: (arrows: T[]) => void;
     strokeColor: string;
     createArrow?: () => T;
-    renderPlacementControl?: (args: {
-        selectedArrow: T;
-        updateSelectedArrow: (updates: Record<string, unknown>) => void;
-    }) => React.ReactNode;
 };
 
 export function ArrowListControl<T extends PathArrowMark>({
@@ -66,7 +65,6 @@ export function ArrowListControl<T extends PathArrowMark>({
     onChange,
     strokeColor,
     createArrow,
-    renderPlacementControl,
 }: ArrowListControlProps<T>) {
     const makeArrow = React.useCallback(() => {
         if (createArrow) return createArrow();
@@ -82,6 +80,7 @@ export function ArrowListControl<T extends PathArrowMark>({
     const actualIndex = Math.max(0, Math.min(selectedByIndex, safeArrows.length - 1));
     const selectedArrow = safeArrows[actualIndex] ?? makeArrow();
     const selectedPlacementMode = (selectedArrow as { mode?: SegmentArrowMark["mode"] }).mode;
+    const hasPlacementMode = selectedPlacementMode === "mid" || selectedPlacementMode === "end";
     const isEndpointPlacement = selectedPlacementMode === "end";
 
     const updateSelectedArrow = (updates: Record<string, unknown>) => {
@@ -230,7 +229,7 @@ export function ArrowListControl<T extends PathArrowMark>({
                                             className="iconButton"
                                             onClick={() => updateSelectedArrow({ direction: direction.value })}
                                             style={{
-                                                height: "32px",
+                                                height: "36px",
                                                 borderRadius: "6px",
                                                 border: "1px solid var(--gd-ui-border, #cbd5e1)",
                                                 background:
@@ -241,9 +240,13 @@ export function ArrowListControl<T extends PathArrowMark>({
                                                     selectedArrow.direction === direction.value
                                                         ? "var(--gd-ui-accent-contrast, #fff)"
                                                         : "var(--gd-ui-text, #334155)",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                padding: "0 4px",
                                             }}
                                         >
-                                            {direction.label}
+                                            <ArrowDirectionGlyph direction={direction.value} />
                                         </button>
                                     ))}
                                 </div>
@@ -253,10 +256,10 @@ export function ArrowListControl<T extends PathArrowMark>({
                                 <label className="controlLabel">Tip Style</label>
                                 <div style={{ position: "relative", width: "100%" }}>
                                     <button
-                                        className="shapeButton"
+                                        className="shapeButton arrowTipButton"
                                         onClick={() => setIsTipPickerOpen((v) => !v)}
                                         type="button"
-                                        style={{ height: "32px", justifyContent: "center" }}
+                                        style={{ height: "46px", justifyContent: "center", padding: "0 4px" }}
                                     >
                                         <ArrowTipGlyph tip={selectedArrow.tip ?? "Stealth"} />
                                     </button>
@@ -267,7 +270,7 @@ export function ArrowListControl<T extends PathArrowMark>({
                                                 return (
                                                     <button
                                                         key={tip.value}
-                                                        className={`shapeCell ${isActive ? "active" : ""}`}
+                                                        className={`shapeCell arrowTipCell ${isActive ? "active" : ""}`}
                                                         onClick={() => {
                                                             updateSelectedArrow({ tip: tip.value });
                                                             setIsTipPickerOpen(false);
@@ -284,88 +287,62 @@ export function ArrowListControl<T extends PathArrowMark>({
                                 </div>
                             </div>
 
-                            {renderPlacementControl?.({ selectedArrow, updateSelectedArrow })}
+                            {hasPlacementMode && (
+                                <div className="controlRow" style={{ gridTemplateColumns: "74px minmax(0, 1fr)" }}>
+                                    <label className="controlLabel">Placement</label>
+                                    <div className="arrowIconToggleGrid">
+                                        <ArrowIconToggleButton
+                                            selected={selectedPlacementMode === "mid"}
+                                            onClick={() => updateSelectedArrow({ mode: "mid" })}
+                                            title="Middle"
+                                        >
+                                            <ArrowPlacementGlyph mode="mid" />
+                                        </ArrowIconToggleButton>
+                                        <ArrowIconToggleButton
+                                            selected={selectedPlacementMode === "end"}
+                                            onClick={() => updateSelectedArrow({ mode: "end", distribution: "single" })}
+                                            title="Endpoint"
+                                        >
+                                            <ArrowPlacementGlyph mode="end" />
+                                        </ArrowIconToggleButton>
+                                    </div>
+                                </div>
+                            )}
 
                             {!isEndpointPlacement && (
-                                <div className="controlRow" style={{ gridTemplateColumns: "100px 1fr" }}>
+                                <div className="controlRow" style={{ gridTemplateColumns: "74px minmax(0, 1fr)" }}>
                                     <label className="controlLabel">Distribution</label>
-                                    <div
-                                        style={{
-                                            display: "grid",
-                                            gridTemplateColumns: "1fr 1fr",
-                                            gap: "4px",
-                                        }}
-                                    >
-                                        <button
-                                            type="button"
-                                            className="iconButton"
+                                    <div className="arrowIconToggleGrid">
+                                        <ArrowIconToggleButton
+                                            selected={(selectedArrow.distribution ?? "single") === "single"}
                                             onClick={() => updateSelectedArrow({ distribution: "single" })}
-                                            style={{
-                                                height: "32px",
-                                                borderRadius: "6px",
-                                                border: "1px solid var(--gd-ui-border, #cbd5e1)",
-                                                background:
-                                                    (selectedArrow.distribution ?? "single") === "single"
-                                                        ? "var(--gd-ui-accent, #2563eb)"
-                                                        : "var(--gd-ui-surface, #fff)",
-                                                color:
-                                                    (selectedArrow.distribution ?? "single") === "single"
-                                                        ? "var(--gd-ui-accent-contrast, #fff)"
-                                                        : "var(--gd-ui-text, #334155)",
-                                            }}
+                                            title="Single"
                                         >
-                                            Single
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="iconButton"
+                                            <ArrowDistributionGlyph distribution="single" />
+                                        </ArrowIconToggleButton>
+                                        <ArrowIconToggleButton
+                                            selected={(selectedArrow.distribution ?? "single") === "multi"}
                                             onClick={() => updateSelectedArrow({ distribution: "multi" })}
-                                            style={{
-                                                height: "32px",
-                                                borderRadius: "6px",
-                                                border: "1px solid var(--gd-ui-border, #cbd5e1)",
-                                                background:
-                                                    (selectedArrow.distribution ?? "single") === "multi"
-                                                        ? "var(--gd-ui-accent, #2563eb)"
-                                                        : "var(--gd-ui-surface, #fff)",
-                                                color:
-                                                    (selectedArrow.distribution ?? "single") === "multi"
-                                                        ? "var(--gd-ui-accent-contrast, #fff)"
-                                                        : "var(--gd-ui-text, #334155)",
-                                            }}
+                                            title="Multi"
                                         >
-                                            Multi
-                                        </button>
+                                            <ArrowDistributionGlyph distribution="multi" />
+                                        </ArrowIconToggleButton>
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        {isEndpointPlacement ? (
+                        {isEndpointPlacement ? null : selectedArrow.distribution === "multi" ? (
                             <div className="nestedGroup" style={{
                                 background: "var(--gd-ui-surface-soft, #f8fafc)",
                                 border: "1px solid var(--gd-ui-border-soft, #e2e8f0)",
                                 borderRadius: "8px",
-                                padding: "10px 12px",
+                                padding: "9px 10px",
                                 display: "flex",
                                 flexDirection: "column",
                                 gap: "6px"
                             }}>
-                                <span style={{ fontSize: "12px", color: "var(--gd-ui-text-subtle, #64748b)" }}>
-                                    Endpoint placement anchors arrow tips to segment ends.
-                                </span>
-                            </div>
-                        ) : selectedArrow.distribution === "multi" ? (
-                            <div className="nestedGroup" style={{
-                                background: "var(--gd-ui-surface-soft, #f8fafc)",
-                                border: "1px solid var(--gd-ui-border-soft, #e2e8f0)",
-                                borderRadius: "8px",
-                                padding: "10px 12px",
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "8px"
-                            }}>
-                                <div className="controlRow controlRowWithNumeric" style={{ marginTop: 0, gridTemplateColumns: "88px 1fr 68px" }}>
+                                <div className="controlRow controlRowWithNumeric" style={{ marginTop: 0, gridTemplateColumns: "48px minmax(0, 1fr) 54px" }}>
                                     <label className="controlLabel">Start</label>
                                     <input
                                         className="sizeSlider"
@@ -386,7 +363,7 @@ export function ArrowListControl<T extends PathArrowMark>({
                                         onChange={(e) => updateSelectedArrow({ startPos: Number(e.target.value) })}
                                     />
                                 </div>
-                                <div className="controlRow controlRowWithNumeric" style={{ marginTop: 0, gridTemplateColumns: "88px 1fr 68px" }}>
+                                <div className="controlRow controlRowWithNumeric" style={{ marginTop: 0, gridTemplateColumns: "48px minmax(0, 1fr) 54px" }}>
                                     <label className="controlLabel">End</label>
                                     <input
                                         className="sizeSlider"
@@ -407,7 +384,7 @@ export function ArrowListControl<T extends PathArrowMark>({
                                         onChange={(e) => updateSelectedArrow({ endPos: Number(e.target.value) })}
                                     />
                                 </div>
-                                <div className="controlRow controlRowWithNumeric" style={{ marginTop: 0, gridTemplateColumns: "88px 1fr 68px" }}>
+                                <div className="controlRow controlRowWithNumeric" style={{ marginTop: 0, gridTemplateColumns: "48px minmax(0, 1fr) 54px" }}>
                                     <label className="controlLabel">Step</label>
                                     <input
                                         className="sizeSlider"
@@ -430,7 +407,7 @@ export function ArrowListControl<T extends PathArrowMark>({
                                 </div>
                             </div>
                         ) : (
-                            <div className="controlRow controlRowWithNumeric" style={{ gridTemplateColumns: "100px 1fr 70px" }}>
+                            <div className="controlRow controlRowWithNumeric" style={{ gridTemplateColumns: "64px minmax(0, 1fr) 56px" }}>
                                 <label className="controlLabel">Arrow Pos</label>
                                 <input
                                     className="sizeSlider"
@@ -457,23 +434,21 @@ export function ArrowListControl<T extends PathArrowMark>({
                             background: "var(--gd-ui-surface-soft, #f8fafc)",
                             border: "1px solid var(--gd-ui-border-soft, #e2e8f0)",
                             borderRadius: "8px",
-                            padding: "10px 12px",
+                            padding: "9px 10px",
                             display: "flex",
                             flexDirection: "column",
-                            gap: "8px"
+                            gap: "6px"
                         }}>
-                            <div className="controlRow" style={{ gridTemplateColumns: "100px 1fr" }}>
+                            <div className="controlRow" style={{ gridTemplateColumns: "74px minmax(0, 1fr)" }}>
                                 <label className="controlLabel">Arrow Color</label>
-                                <input
-                                    className="colorInput"
-                                    type="color"
+                                <ColorSwatchInput
                                     value={selectedArrow.color ?? strokeColor}
                                     onChange={(e) => updateSelectedArrow({ color: e.target.value })}
-                                    style={{ width: "100%", borderRadius: "6px", height: "32px" }}
+                                    style={{ width: "64px", borderRadius: "8px", height: "30px" }}
                                 />
                             </div>
 
-                            <div className="controlRow controlRowWithNumeric" style={{ gridTemplateColumns: "100px 1fr 70px" }}>
+                            <div className="controlRow controlRowWithNumeric" style={{ gridTemplateColumns: "64px minmax(0, 1fr) 56px" }}>
                                 <label className="controlLabel">Width</label>
                                 <input
                                     className="sizeSlider"
@@ -503,7 +478,7 @@ export function ArrowListControl<T extends PathArrowMark>({
                                 />
                             </div>
 
-                            <div className="controlRow controlRowWithNumeric" style={{ gridTemplateColumns: "100px 1fr 70px" }}>
+                            <div className="controlRow controlRowWithNumeric" style={{ gridTemplateColumns: "64px minmax(0, 1fr) 56px" }}>
                                 <label className="controlLabel">Size</label>
                                 <input
                                     className="sizeSlider"
@@ -525,7 +500,7 @@ export function ArrowListControl<T extends PathArrowMark>({
                                 />
                             </div>
 
-                            <div className="controlRow controlRowWithNumeric" style={{ gridTemplateColumns: "100px 1fr 70px" }}>
+                            <div className="controlRow controlRowWithNumeric" style={{ gridTemplateColumns: "64px minmax(0, 1fr) 56px" }}>
                                 <label className="controlLabel">Length</label>
                                 <input
                                     className="sizeSlider"
@@ -555,8 +530,80 @@ export function ArrowListControl<T extends PathArrowMark>({
 }
 
 function ArrowTipGlyph({ tip }: { tip: ArrowTipStyle }) {
-    if (tip === "Stealth") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─➤</span>;
-    if (tip === "Latex") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─❯</span>;
-    if (tip === "Triangle") return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─▶</span>;
-    return <span style={{ fontSize: "16px", fontWeight: "bold" }}>─➤</span>;
+    const resolvedTip = tip ?? "Stealth";
+    return (
+        <svg className="arrowControlGlyph arrowTipGlyph" viewBox="0 0 80 48" aria-hidden="true">
+            {resolvedTip === "Dot" ? (
+                <circle cx="44" cy="24" r="9.5" fill="currentColor" />
+            ) : resolvedTip === "OpenDot" ? (
+                <circle cx="44" cy="24" r="9" fill="none" stroke="currentColor" strokeWidth="4.5" />
+            ) : resolvedTip === "Latex" ? (
+                <path d="M58 24 L24 9 M58 24 L24 39" fill="none" stroke="currentColor" strokeWidth="6.4" strokeLinecap="round" strokeLinejoin="round" />
+            ) : resolvedTip === "Triangle" ? (
+                <path d="M61 24 L22 7 L22 41 Z" fill="currentColor" />
+            ) : (
+                <path d="M62 24 L21 7 L36 24 L21 41 Z" fill="currentColor" />
+            )}
+        </svg>
+    );
+}
+
+function ArrowDirectionGlyph({ direction }: { direction: ArrowDirection }) {
+    const leftHead = <path d="M24 16 L58 4 L46 16 L58 28 Z" fill="currentColor" />;
+    const rightHead = <path d="M88 16 L54 4 L66 16 L54 28 Z" fill="currentColor" />;
+    return (
+        <svg className="arrowControlGlyph" viewBox="0 0 112 32" aria-hidden="true">
+            {(direction === "<-" || direction === "<->" || direction === ">-<") && leftHead}
+            {(direction === "->" || direction === "<->" || direction === ">-<") && rightHead}
+        </svg>
+    );
+}
+
+function ArrowIconToggleButton({
+    selected,
+    onClick,
+    title,
+    children,
+}: {
+    selected: boolean;
+    onClick: () => void;
+    title: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <button
+            type="button"
+            className={`arrowIconToggleButton ${selected ? "active" : ""}`}
+            onClick={onClick}
+            title={title}
+            aria-label={title}
+        >
+            {children}
+        </button>
+    );
+}
+
+function ArrowPlacementGlyph({ mode }: { mode: NonNullable<SegmentArrowMark["mode"]> }) {
+    return (
+        <svg className="arrowIconToggleSvg" viewBox="0 0 88 32" aria-hidden="true">
+            <line x1="7" y1="16" x2="81" y2="16" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" />
+            <circle cx="7" cy="16" r="3.4" fill="currentColor" />
+            <circle cx="81" cy="16" r="3.4" fill="currentColor" opacity={mode === "end" ? 0 : 1} />
+            {mode === "mid" ? (
+                <path d="M51 16 L35 7.5 L35 24.5 Z" fill="currentColor" />
+            ) : (
+                <path d="M84 16 L64 6.5 L64 25.5 Z" fill="currentColor" />
+            )}
+        </svg>
+    );
+}
+
+function ArrowDistributionGlyph({ distribution }: { distribution: NonNullable<PathArrowMark["distribution"]> }) {
+    const arrow = (cx: number) => <path key={cx} d={`M${cx + 8} 16 L${cx - 6} 8 L${cx - 6} 24 Z`} fill="currentColor" />;
+    return (
+        <svg className="arrowIconToggleSvg" viewBox="0 0 88 32" aria-hidden="true">
+            <line x1="7" y1="16" x2="81" y2="16" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" />
+            {distribution === "single" ? arrow(44) : [arrow(27), arrow(44), arrow(61)]}
+        </svg>
+    );
 }

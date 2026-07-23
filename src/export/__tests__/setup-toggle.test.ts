@@ -93,4 +93,30 @@ if (!withSetupExplicit.includes("\\tkzInit[")) {
   throw new Error("Expected export with emitTkzSetup=true to include \\tkzInit.");
 }
 
+const plainViewport = exportTikzWithOptions(scene, {
+  drawLayerBackend: "plain",
+  bakePointCoordinates: true,
+  // Plain rendering must remain tkz-free even if a caller leaves this legacy
+  // setup option enabled.
+  emitTkzSetup: true,
+  viewport: { xmin: -5, xmax: 7, ymin: -3, ymax: 4 },
+  clipSpace: 0,
+});
+if (!plainViewport.includes("\\path[use as bounding box] (-5,-3) rectangle (7,4);")) {
+  throw new Error("Expected plain export to set an explicit bounding box from SetupViewport.");
+}
+if (!plainViewport.includes("\\clip (-5,-3) rectangle (7,4);")) {
+  throw new Error("Expected plain export to clip drawing to SetupViewport.");
+}
+if (!plainViewport.includes(">=triangle 45") || !plainViewport.includes("\\usetikzlibrary{patterns,through,arrows}")) {
+  throw new Error("Expected plain export to retain triangle 45 and load its arrows library.");
+}
+if (
+  plainViewport.includes("\\tkzInit[") ||
+  plainViewport.includes("\\tkzClip[") ||
+  plainViewport.includes("\\tkzSetUpLine[")
+) {
+  throw new Error("Expected plain viewport setup to avoid tkz-euclide setup macros.");
+}
+
 console.log("✓ export setup-toggle test passed");

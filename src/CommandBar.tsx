@@ -1,8 +1,10 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { CircleHelp } from "lucide-react";
 import { parseCommandInput, type ParseContext, type Symbol } from "./CommandParser";
 import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos } from "./scene/points";
 import type { SceneModel } from "./scene/points";
 import { commandBarApi, useGeoStore } from "./state/geoStore";
+import { CommandReferenceDialog } from "./ui/commandReference/CommandReferenceDialog";
 
 type StatusKind = "idle" | "ok" | "error";
 
@@ -17,7 +19,7 @@ function buildParseContext(
   scene: SceneModel,
   ans: number | null,
   scalarVars: Record<string, number>,
-  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }>
+  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }>
 ): ParseContext {
   const symbolsByLabel = new Map<string, Symbol[]>();
   const add = (symbol: Symbol) => {
@@ -94,6 +96,7 @@ export function CommandBar() {
   const createCircle = useGeoStore((store) => store.createCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
+  const createEllipseFociPoint = useGeoStore((store) => store.createEllipseFociPoint);
   const createMidpointFromPoints = useGeoStore((store) => store.createMidpointFromPoints);
   const createMidpointFromSegment = useGeoStore((store) => store.createMidpointFromSegment);
   const createTriangleCenterPoint = useGeoStore((store) => store.createTriangleCenterPoint);
@@ -101,6 +104,7 @@ export function CommandBar() {
   const createPointByRotation = useGeoStore((store) => store.createPointByRotation);
   const createPointByDilation = useGeoStore((store) => store.createPointByDilation);
   const createPointByReflection = useGeoStore((store) => store.createPointByReflection);
+  const createPointByProjection = useGeoStore((store) => store.createPointByProjection);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createTangentLines = useGeoStore((store) => store.createTangentLines);
@@ -115,6 +119,8 @@ export function CommandBar() {
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [collapsed, setCollapsed] = useState(false);
+  const [referenceOpen, setReferenceOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const statusColor = useMemo(() => {
     if (status.kind === "ok") return "var(--gd-ui-success-text, #166534)";
@@ -317,10 +323,30 @@ export function CommandBar() {
       return;
     }
 
+    if (cmd.type === "CreatePointByProjection") {
+      const pointId = createPointByProjection(cmd.pointId, cmd.axisAId, cmd.axisBId);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct projected point" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
     if (cmd.type === "CreatePerpendicularLine") {
       const lineId = createPerpendicularLine(cmd.throughId, cmd.base);
       if (!lineId) {
         setStatus({ kind: "error", text: "Cannot construct line" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created line ${lineId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePerpendicularBisector") {
+      const lineId = commandBarApi.createPerpendicularBisector(cmd.aId, cmd.bId);
+      if (!lineId) {
+        setStatus({ kind: "error", text: "Cannot construct perpendicular bisector" });
         return;
       }
       setStatus({ kind: "ok", text: `Created line ${lineId}` });
@@ -418,6 +444,26 @@ export function CommandBar() {
       return;
     }
 
+    if (cmd.type === "CreateEllipseFociPoint") {
+      const ellipseId = createEllipseFociPoint(cmd.focusAId, cmd.focusBId, cmd.throughId);
+      if (!ellipseId) {
+        setStatus({ kind: "error", text: "Cannot construct ellipse" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created ellipse ${ellipseId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateIncircle") {
+      const circleId = commandBarApi.createIncircle(cmd.aId, cmd.bId, cmd.cId);
+      if (!circleId) {
+        setStatus({ kind: "error", text: "Cannot construct incircle" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created circle ${circleId}` });
+      return;
+    }
+
     if (cmd.type === "CreateCircleXYR") {
       const centerId = createFreePoint({ x: cmd.x, y: cmd.y });
       const circleId = createCircleFixedRadius(centerId, String(cmd.r));
@@ -427,6 +473,21 @@ export function CommandBar() {
       }
       setStatus({ kind: "ok", text: `Created circle ${circleId}` });
     }
+  };
+
+  const handleInsertTemplate = (template: string) => {
+    setInput(template);
+    setReferenceOpen(false);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      const openParen = template.indexOf("(");
+      const closeParen = template.lastIndexOf(")");
+      if (openParen >= 0 && closeParen > openParen) {
+        el.setSelectionRange(openParen + 1, closeParen);
+      }
+    });
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -464,45 +525,62 @@ export function CommandBar() {
   };
 
   return (
-    <div className="commandBarWrap">
-      {collapsed ? (
-        <div className="commandBarCollapsed">
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            className="commandBarCollapseButton"
-            title="Show command bar"
-          >
-            ▴ Command
-          </button>
-        </div>
-      ) : (
-        <div className="commandBarExpanded">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            className="commandBarInput"
-            placeholder="Command: 5*5, X=A+B, Point(x,y), Midpoint(A,B), Translate(P,A,B), Rotate(P,O,30), Dilate(P,O,2), Reflect(P,l|O)"
-          />
-          <button
-            type="button"
-            onClick={runCommand}
-            className="commandBarRunButton"
-          >
-            Run
-          </button>
-          <button
-            type="button"
-            onClick={() => setCollapsed(true)}
-            className="commandBarHideButton"
-            title="Hide command bar"
-          >
-            ▾
-          </button>
-          <div className="commandBarStatus" style={{ color: statusColor }}>{status.text}</div>
-        </div>
-      )}
-    </div>
+    <>
+      <div className="commandBarWrap">
+        {collapsed ? (
+          <div className="commandBarCollapsed">
+            <button
+              type="button"
+              onClick={() => setCollapsed(false)}
+              className="commandBarCollapseButton"
+              title="Show command bar"
+            >
+              ▴ Command
+            </button>
+          </div>
+        ) : (
+          <div className="commandBarExpanded">
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKeyDown}
+              className="commandBarInput"
+              placeholder="Try 5*5, Point(1,2), or M=Midpoint(A,B) — the ? button lists all commands"
+            />
+            <button
+              type="button"
+              onClick={runCommand}
+              className="commandBarRunButton"
+            >
+              Run
+            </button>
+            <button
+              type="button"
+              onClick={() => setReferenceOpen(true)}
+              className="commandBarHelpButton"
+              title="Command reference"
+              aria-label="Command reference"
+            >
+              <CircleHelp size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              className="commandBarHideButton"
+              title="Hide command bar"
+            >
+              ▾
+            </button>
+            <div className="commandBarStatus" style={{ color: statusColor }}>{status.text}</div>
+          </div>
+        )}
+      </div>
+      <CommandReferenceDialog
+        open={referenceOpen}
+        onClose={() => setReferenceOpen(false)}
+        onInsert={handleInsertTemplate}
+      />
+    </>
   );
 }

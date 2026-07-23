@@ -111,6 +111,9 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     createCircleThreePoint() {
       return null;
     },
+    createEllipseFociPoint() {
+      return null;
+    },
     createPolygon() {
       return null;
     },
@@ -181,6 +184,9 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     transformObjectByReflection() {
       return null;
     },
+    transformObjectByInversion() {
+      return null;
+    },
     createIntersectionPoint() {
       return null;
     },
@@ -212,6 +218,7 @@ function makeIo(overrides: Partial<TestIO> = {}): TestIO {
     ...baseIo,
     ...overrides,
     createTextLabel: overrides.createTextLabel ?? baseIo.createTextLabel,
+    createRichTextNode: () => "rich_text",
   };
 }
 

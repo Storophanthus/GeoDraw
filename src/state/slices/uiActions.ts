@@ -2,6 +2,7 @@ import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
 import {
   applyProfileColorsToDefaults,
+  getRecommendedUiProfileForColorProfile,
   getUiProfileBaseVariables,
   recolorSceneForProfile,
   type SceneStyleDefaults,
@@ -19,8 +20,13 @@ export function createUiActions(
   | "setSegmentDefaults"
   | "setLineDefaults"
   | "setCircleDefaults"
+  | "setEllipseDefaults"
   | "setPolygonDefaults"
   | "setAngleDefaults"
+  | "setObjectLabelDefaults"
+  | "setLabelToolDefaults"
+  | "setTextboxToolDefaults"
+  | "setRichTextToolDefaults"
   | "setAngleFixedTool"
   | "setCircleFixedTool"
   | "setRegularPolygonTool"
@@ -36,6 +42,8 @@ export function createUiActions(
   | "setDependencyGlowEnabled"
   | "setExportClipWorld"
   | "clearExportClipWorld"
+  | "requestTextEdit"
+  | "clearTextEditRequest"
 > {
   return {
     setPointDefaults(next) {
@@ -78,6 +86,16 @@ export function createUiActions(
       }));
     },
 
+    setEllipseDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        ellipseDefaults: {
+          ...prev.ellipseDefaults,
+          ...next,
+        },
+      }));
+    },
+
     setPolygonDefaults(next) {
       ctx.setState((prev) => ({
         ...prev,
@@ -93,6 +111,46 @@ export function createUiActions(
         ...prev,
         angleDefaults: {
           ...prev.angleDefaults,
+          ...next,
+        },
+      }));
+    },
+
+    setObjectLabelDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        objectLabelDefaults: {
+          ...prev.objectLabelDefaults,
+          ...next,
+        },
+      }));
+    },
+
+    setLabelToolDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        labelToolDefaults: {
+          ...prev.labelToolDefaults,
+          ...next,
+        },
+      }));
+    },
+
+    setTextboxToolDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        textboxToolDefaults: {
+          ...prev.textboxToolDefaults,
+          ...next,
+        },
+      }));
+    },
+
+    setRichTextToolDefaults(next) {
+      ctx.setState((prev) => ({
+        ...prev,
+        richTextToolDefaults: {
+          ...prev.richTextToolDefaults,
           ...next,
         },
       }));
@@ -162,27 +220,42 @@ export function createUiActions(
     setColorProfile(profileId) {
       ctx.setState((prev) => {
         if (prev.colorProfileId === profileId) return prev;
+        const prevRecommendedUi = getRecommendedUiProfileForColorProfile(prev.colorProfileId);
+        const nextRecommendedUi = getRecommendedUiProfileForColorProfile(profileId);
+        const keepProfilePairing = prev.uiColorProfileId === prevRecommendedUi;
+        const shouldForceUiPairing =
+          nextRecommendedUi === "image" || nextRecommendedUi === "image_palette";
         const nextDefaults = applyProfileColorsToDefaults(
           {
             pointDefaults: prev.pointDefaults,
             segmentDefaults: prev.segmentDefaults,
-            lineDefaults: prev.lineDefaults,
-            circleDefaults: prev.circleDefaults,
+              lineDefaults: prev.lineDefaults,
+              circleDefaults: prev.circleDefaults,
+              ellipseDefaults: prev.ellipseDefaults,
             polygonDefaults: prev.polygonDefaults,
             angleDefaults: prev.angleDefaults,
-          } satisfies SceneStyleDefaults,
-          profileId
-        );
+            labelToolDefaults: prev.labelToolDefaults,
+            textboxToolDefaults: prev.textboxToolDefaults,
+            richTextToolDefaults: prev.richTextToolDefaults,
+            } satisfies SceneStyleDefaults,
+            profileId
+          );
         return {
           ...prev,
           colorProfileId: profileId,
+          uiColorProfileId: shouldForceUiPairing || keepProfilePairing ? nextRecommendedUi : prev.uiColorProfileId,
           scene: recolorSceneForProfile(prev.scene, prev.colorProfileId, profileId),
           pointDefaults: nextDefaults.pointDefaults,
           segmentDefaults: nextDefaults.segmentDefaults,
           lineDefaults: nextDefaults.lineDefaults,
           circleDefaults: nextDefaults.circleDefaults,
+          ellipseDefaults: nextDefaults.ellipseDefaults,
           polygonDefaults: nextDefaults.polygonDefaults,
           angleDefaults: nextDefaults.angleDefaults,
+          objectLabelDefaults: prev.objectLabelDefaults,
+          labelToolDefaults: nextDefaults.labelToolDefaults,
+          textboxToolDefaults: nextDefaults.textboxToolDefaults,
+          richTextToolDefaults: nextDefaults.richTextToolDefaults,
         };
       });
     },
@@ -251,8 +324,12 @@ export function createUiActions(
                 segmentDefaults: prev.segmentDefaults,
                 lineDefaults: prev.lineDefaults,
                 circleDefaults: prev.circleDefaults,
+                ellipseDefaults: prev.ellipseDefaults,
                 polygonDefaults: prev.polygonDefaults,
                 angleDefaults: prev.angleDefaults,
+                labelToolDefaults: prev.labelToolDefaults,
+                textboxToolDefaults: prev.textboxToolDefaults,
+                richTextToolDefaults: prev.richTextToolDefaults,
               } satisfies SceneStyleDefaults,
               nextColorProfileId
             )
@@ -261,8 +338,12 @@ export function createUiActions(
               segmentDefaults: prev.segmentDefaults,
               lineDefaults: prev.lineDefaults,
               circleDefaults: prev.circleDefaults,
+              ellipseDefaults: prev.ellipseDefaults,
               polygonDefaults: prev.polygonDefaults,
               angleDefaults: prev.angleDefaults,
+              labelToolDefaults: prev.labelToolDefaults,
+              textboxToolDefaults: prev.textboxToolDefaults,
+              richTextToolDefaults: prev.richTextToolDefaults,
             };
 
           const pointDefaults = next.pointDefaults
@@ -280,6 +361,9 @@ export function createUiActions(
           const circleDefaults = next.circleDefaults
             ? { ...next.circleDefaults }
             : baseDefaults.circleDefaults;
+          const ellipseDefaults = next.ellipseDefaults
+            ? { ...next.ellipseDefaults }
+            : baseDefaults.ellipseDefaults;
           const polygonDefaults = next.polygonDefaults
             ? { ...next.polygonDefaults }
             : baseDefaults.polygonDefaults;
@@ -289,9 +373,22 @@ export function createUiActions(
               labelPosWorld: { ...next.angleDefaults.labelPosWorld },
             }
             : baseDefaults.angleDefaults;
+          const labelToolDefaults = next.labelToolDefaults
+            ? { ...next.labelToolDefaults }
+            : baseDefaults.labelToolDefaults;
+          const textboxToolDefaults = next.textboxToolDefaults
+            ? { ...next.textboxToolDefaults }
+            : baseDefaults.textboxToolDefaults;
+          const richTextToolDefaults = next.richTextToolDefaults
+            ? { ...next.richTextToolDefaults }
+            : baseDefaults.richTextToolDefaults;
           const canvasThemeOverrides = next.canvasThemeOverrides
             ? { ...next.canvasThemeOverrides }
             : prev.canvasThemeOverrides;
+          const normalizedUiColorProfileId =
+            next.uiColorProfileId === "image"
+              ? "image_palette"
+              : next.uiColorProfileId;
 
           return {
             ...prev,
@@ -300,7 +397,7 @@ export function createUiActions(
               ? recolorSceneForProfile(prev.scene, prev.colorProfileId, nextColorProfileId)
               : prev.scene,
             canvasThemeOverrides,
-            uiColorProfileId: next.uiColorProfileId ?? prev.uiColorProfileId,
+            uiColorProfileId: normalizedUiColorProfileId ?? prev.uiColorProfileId,
             uiCssOverrides: next.uiCssOverrides ? { ...next.uiCssOverrides } : prev.uiCssOverrides,
             gridEnabled: next.gridEnabled ?? prev.gridEnabled,
             axesEnabled: next.axesEnabled ?? prev.axesEnabled,
@@ -309,8 +406,13 @@ export function createUiActions(
             segmentDefaults,
             lineDefaults,
             circleDefaults,
+            ellipseDefaults,
             polygonDefaults,
             angleDefaults,
+            objectLabelDefaults: next.objectLabelDefaults ? { ...next.objectLabelDefaults } : prev.objectLabelDefaults,
+            labelToolDefaults,
+            textboxToolDefaults,
+            richTextToolDefaults,
             angleFixedTool: next.angleFixedTool ? { ...next.angleFixedTool } : prev.angleFixedTool,
             circleFixedTool: next.circleFixedTool ? { ...next.circleFixedTool } : prev.circleFixedTool,
             regularPolygonTool: next.regularPolygonTool ? { ...next.regularPolygonTool } : prev.regularPolygonTool,
@@ -341,6 +443,34 @@ export function createUiActions(
         ...prev,
         exportClipWorld: null,
       }));
+    },
+
+    requestTextEdit(target) {
+      ctx.setState(
+        (prev) => ({
+          ...prev,
+          activeTool: "move",
+          selectedObject: { type: target.type, id: target.id },
+          textEditRequest: {
+            ...target,
+            requestId: (prev.textEditRequest?.requestId ?? 0) + 1,
+          },
+        }),
+        { history: "skip" }
+      );
+    },
+
+    clearTextEditRequest(requestId) {
+      ctx.setState(
+        (prev) => {
+          if (prev.textEditRequest?.requestId !== requestId) return prev;
+          return {
+            ...prev,
+            textEditRequest: null,
+          };
+        },
+        { history: "skip" }
+      );
     },
   };
 }

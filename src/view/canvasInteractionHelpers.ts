@@ -6,6 +6,7 @@ import type { DragBufferAccess } from "./pointerDragInteraction";
 import {
   hitTestAngleId as engineHitTestAngleId,
   hitTestCircleId as engineHitTestCircleId,
+  hitTestEllipseId as engineHitTestEllipseId,
   hitTestLineId as engineHitTestLineId,
   hitTestPolygonId as engineHitTestPolygonId,
   hitTestPointId as engineHitTestPointId,
@@ -30,6 +31,7 @@ type HoveredHitResolverArgs = {
     segment: number;
     line: number;
     circle: number;
+    ellipse?: number;
   };
 };
 
@@ -42,7 +44,7 @@ type DragBufferRefs = {
 };
 
 export function createReadScreen(canvas: HTMLCanvasElement) {
-  return (e: PointerEvent | WheelEvent): Vec2 => {
+  return (e: PointerEvent | WheelEvent | MouseEvent): Vec2 => {
     const rect = canvas.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
@@ -67,6 +69,8 @@ export function createHoveredHitResolver({
     if (lineId) return { type: "line2p", id: lineId };
     const circleId = engineHitTestCircleId(screen, scene, camera, vp, tolerances.circle);
     if (circleId) return { type: "circle", id: circleId };
+    const ellipseId = engineHitTestEllipseId(screen, scene, camera, vp, tolerances.ellipse ?? tolerances.circle);
+    if (ellipseId) return { type: "ellipse", id: ellipseId };
     const polygonId = engineHitTestPolygonId(screen, scene, camera, vp, tolerances.segment);
     if (polygonId) return { type: "polygon", id: polygonId };
     return null;

@@ -59,6 +59,9 @@ const io: ConstructClickIo = {
   createCircleThreePoint() {
     return null;
   },
+  createEllipseFociPoint() {
+    return null;
+  },
   createPerpendicularLine() {
     return null;
   },
@@ -120,6 +123,9 @@ const io: ConstructClickIo = {
     return null;
   },
   transformObjectByReflection() {
+    return null;
+  },
+  transformObjectByInversion() {
     return null;
   },
   createIntersectionPoint() {

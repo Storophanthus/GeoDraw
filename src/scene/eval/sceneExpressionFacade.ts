@@ -27,6 +27,10 @@ export function evaluateAngleExpressionDegreesWithCtxInSceneModel(
   return evaluateAngleExpressionDegreesWithCtxInScene(
     exprRaw,
     {
+      points: scene.points.map((point) => ({
+        id: point.id,
+        name: point.name,
+      })),
       angles: scene.angles.map((angle) => ({
         id: angle.id,
         aId: angle.aId,
@@ -58,6 +62,7 @@ export function evaluateAngleExpressionDegreesWithCtxInSceneModel(
         return { aName: pa.name, bName: pb.name, cName: pc.name };
       },
       getNumberValue: (numberId) => deps.evalNumberById(numberId, scene, ctx),
+      getPointWorldById: (pointId) => deps.getPointWorldById(pointId, scene, ctx),
     }
   );
 }

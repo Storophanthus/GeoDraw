@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from "react";
 import { camera as cameraMath } from "../view/camera";
-import { getNumberValue, type SceneNumberDefinition } from "../scene/points";
+import { getNumberValue, type ReflectionObjectRef, type SceneNumberDefinition } from "../scene/points";
 import {
+  cloneHistorySnapshot,
+  takeHistorySnapshot,
+  type HistorySnapshot,
   type SetStateOptions,
 } from "./slices/historySlice";
 import { createInitialGeoState } from "./slices";
@@ -66,8 +69,18 @@ const runtime = createStoreRuntime({
 const setState: (updater: (prev: GeoState) => GeoState, options?: SetStateOptions) => void = runtime.setState;
 const commandBarObjectAliases = new Map<
   string,
-  { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }
+  { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }
 >();
+
+export type GeoDocumentRuntimeState = {
+  snapshot: HistorySnapshot;
+  camera: GeoState["camera"];
+  propertiesPanelIntent: GeoState["propertiesPanelIntent"];
+  undoStack: HistorySnapshot[];
+  redoStack: HistorySnapshot[];
+  lastHistoryActionKey: string | null;
+  commandAliases: Array<[string, CommandAliasTarget]>;
+};
 
 function edgeKey(aId: string, bId: string): string {
   return aId < bId ? `${aId}::${bId}` : `${bId}::${aId}`;
@@ -78,6 +91,7 @@ function isAliasTargetAlive(scene: GeoState["scene"], target: CommandAliasTarget
   if (target.type === "segment") return scene.segments.some((s) => s.id === target.id);
   if (target.type === "line") return scene.lines.some((l) => l.id === target.id);
   if (target.type === "circle") return scene.circles.some((c) => c.id === target.id);
+  if (target.type === "ellipse") return (scene.ellipses ?? []).some((e) => e.id === target.id);
   if (target.type === "polygon") return scene.polygons.some((pg) => pg.id === target.id);
   return scene.angles.some((a) => a.id === target.id);
 }
@@ -103,6 +117,51 @@ function applyAssignedPointLabel(pointId: string, label: string): void {
       },
     };
   });
+}
+
+function hideHelperPoint(pointId: string): void {
+  setState((prev) => {
+    const point = prev.scene.points.find((p) => p.id === pointId);
+    if (!point) return prev;
+    return {
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((p) =>
+          p.id === pointId
+            ? { ...p, visible: false, showLabel: "none", auxiliary: true }
+            : p
+        ),
+      },
+    };
+  });
+}
+
+function hideHelperSegment(segId: string): void {
+  setState((prev) => {
+    const seg = prev.scene.segments.find((s) => s.id === segId);
+    if (!seg) return prev;
+    return {
+      ...prev,
+      scene: {
+        ...prev.scene,
+        segments: prev.scene.segments.map((s) =>
+          s.id === segId
+            ? { ...s, visible: false, showLabel: false, labelText: undefined, labelPosWorld: undefined }
+            : s
+        ),
+      },
+    };
+  });
+}
+
+function buildInradiusExpr(aId: string, bId: string, cId: string): string | null {
+  const scene = runtime.getState().scene;
+  const a = scene.points.find((p) => p.id === aId);
+  const b = scene.points.find((p) => p.id === bId);
+  const c = scene.points.find((p) => p.id === cId);
+  if (!a || !b || !c) return null;
+  return `Inradius(${a.name},${b.name},${c.name})`;
 }
 
 const actions: GeoActions = {
@@ -148,6 +207,17 @@ const actions: GeoActions = {
     setState,
   }),
 };
+
+function canUseCommandObjectLabel(nameRaw: string): boolean {
+  const name = nameRaw.trim();
+  if (!name) return false;
+  const state = runtime.getState();
+  pruneStaleCommandAliases(state.scene);
+  if (commandBarObjectAliases.has(name)) return false;
+  if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return false;
+  if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return false;
+  return true;
+}
 
 export const commandBarApi = {
   getScalarVars(): Record<string, number> {
@@ -228,14 +298,47 @@ export const commandBarApi = {
     if (!created) return { ok: false as const, error: `Name already used: ${trimmed}` };
     return { ok: true as const, mode: "created", id: created };
   },
-  getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }> {
+  getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }> {
     pruneStaleCommandAliases(runtime.getState().scene);
     return Object.fromEntries(commandBarObjectAliases.entries());
+  },
+  createPerpendicularBisector(aId: string, bId: string): string | null {
+    const helperSegmentId = actions.createSegment(aId, bId);
+    if (!helperSegmentId) return null;
+    hideHelperSegment(helperSegmentId);
+    const midpointId = actions.createMidpointFromSegment(helperSegmentId);
+    if (!midpointId) return null;
+    hideHelperPoint(midpointId);
+    return actions.createPerpendicularLine(midpointId, { type: "segment", id: helperSegmentId });
+  },
+  createPerpendicularBisectorWithLabel(aId: string, bId: string, label: string): string | null {
+    const name = label.trim();
+    if (!canUseCommandObjectLabel(name)) return null;
+    const lineId = commandBarApi.createPerpendicularBisector(aId, bId);
+    if (!lineId) return null;
+    commandBarObjectAliases.set(name, { type: "line", id: lineId });
+    return lineId;
+  },
+  createIncircle(aId: string, bId: string, cId: string): string | null {
+    const centerId = actions.createTriangleCenterPoint("incenter", aId, bId, cId);
+    if (!centerId) return null;
+    hideHelperPoint(centerId);
+    const radiusExpr = buildInradiusExpr(aId, bId, cId);
+    if (!radiusExpr) return null;
+    return actions.createCircleFixedRadius(centerId, radiusExpr);
+  },
+  createIncircleWithLabel(aId: string, bId: string, cId: string, label: string): string | null {
+    const name = label.trim();
+    if (!canUseCommandObjectLabel(name)) return null;
+    const circleId = commandBarApi.createIncircle(aId, bId, cId);
+    if (!circleId) return null;
+    commandBarObjectAliases.set(name, { type: "circle", id: circleId });
+    return circleId;
   },
   applyObjectAssignment(
     name: string,
     cmd: Command
-  ): { ok: true; mode: "created" | "updated"; objectType: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string } | { ok: false; error: string } {
+  ): { ok: true; mode: "created" | "updated"; objectType: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string } | { ok: false; error: string } {
     const label = name.trim();
     if (!label) return { ok: false as const, error: "Assignment name is empty" };
     const scene = runtime.getState().scene;
@@ -269,6 +372,11 @@ export const commandBarApi = {
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         return { ok: true as const, mode: "created", objectType: "line", id };
       }
+      if (cmd.type === "CreatePerpendicularBisector") {
+        const id = commandBarApi.createPerpendicularBisectorWithLabel(cmd.aId, cmd.bId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "line", id };
+      }
       if (cmd.type === "CreateAngleBisector") {
         const id = commandBarApi.createAngleBisectorWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
@@ -299,10 +407,20 @@ export const commandBarApi = {
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         return { ok: true as const, mode: "created", objectType: "circle", id };
       }
+      if (cmd.type === "CreateIncircle") {
+        const id = commandBarApi.createIncircleWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "circle", id };
+      }
       if (cmd.type === "CreateCircleThreePoint") {
         const id = commandBarApi.createCircleThreePointWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         return { ok: true as const, mode: "created", objectType: "circle", id };
+      }
+      if (cmd.type === "CreateEllipseFociPoint") {
+        const id = commandBarApi.createEllipseFociPointWithLabel(cmd.focusAId, cmd.focusBId, cmd.throughId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "ellipse", id };
       }
       if (cmd.type === "CreateAngle") {
         const id = commandBarApi.createAngleWithLabel(cmd.aId, cmd.bId, cmd.cId, label);
@@ -357,6 +475,12 @@ export const commandBarApi = {
       }
       if (cmd.type === "CreatePointByReflection") {
         const id = commandBarApi.createPointByReflectionWithLabel(cmd.pointId, cmd.axis, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "CreatePointByProjection") {
+        const id = commandBarApi.createPointByProjectionWithLabel(cmd.pointId, cmd.axisAId, cmd.axisBId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         applyAssignedPointLabel(id, label);
         return { ok: true as const, mode: "created", objectType: "point", id };
@@ -523,6 +647,39 @@ export const commandBarApi = {
         : { ok: false as const, error: `Cannot redefine circle ${label} with this command` };
     }
 
+    if (existing.type === "ellipse") {
+      if (cmd.type !== "CreateEllipseFociPoint") return { ok: false as const, error: `Cannot redefine ellipse ${label} with this command` };
+      let updated = false;
+      setState((prev) => {
+        const oldEllipse = (prev.scene.ellipses ?? []).find((e) => e.id === existing.id);
+        if (!oldEllipse) return prev;
+        const hasPoint = (id: string) => prev.scene.points.some((p) => p.id === id);
+        if (cmd.focusAId === cmd.focusBId || !hasPoint(cmd.focusAId) || !hasPoint(cmd.focusBId) || !hasPoint(cmd.throughId)) return prev;
+        updated = true;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            ellipses: (prev.scene.ellipses ?? []).map((ellipse) =>
+              ellipse.id === oldEllipse.id
+                ? {
+                  ...oldEllipse,
+                  focusAId: cmd.focusAId,
+                  focusBId: cmd.focusBId,
+                  throughId: cmd.throughId,
+                }
+                : ellipse
+            ),
+          },
+          selectedObject: { type: "ellipse", id: oldEllipse.id },
+          recentCreatedObject: { type: "ellipse", id: oldEllipse.id },
+        };
+      });
+      return updated
+        ? { ok: true as const, mode: "updated", objectType: "ellipse", id: existing.id }
+        : { ok: false as const, error: `Cannot redefine ellipse ${label} with this command` };
+    }
+
     if (existing.type === "polygon") {
       if (cmd.type !== "CreatePolygonByPoints") return { ok: false as const, error: `Cannot redefine polygon ${label} with this command` };
       let updated = false;
@@ -573,7 +730,8 @@ export const commandBarApi = {
             bId,
             ownedByPolygonIds: [polygonId],
             visible: true,
-            showLabel: false,
+            showLabel: prev.objectLabelDefaults.segment,
+            labelGlow: prev.objectLabelDefaults.segmentGlow ?? true,
             style: { ...prev.segmentDefaults },
           });
           currentEdgeIndexByKey.set(key, newSegments.length - 1);
@@ -692,7 +850,8 @@ export const commandBarApi = {
               bId,
               ownedBySectorIds: [angleId],
               visible: true,
-              showLabel: false,
+              showLabel: prev.objectLabelDefaults.segment,
+              labelGlow: prev.objectLabelDefaults.segmentGlow ?? true,
               style: { ...prev.segmentDefaults },
             });
             edgeIndexByKey.set(key, newSegments.length - 1);
@@ -757,7 +916,7 @@ export const commandBarApi = {
               name,
               captionTex: name,
               visible: true,
-              showLabel: "name",
+              showLabel: prev.objectLabelDefaults.point,
               locked: false,
               auxiliary: false,
               position: { x, y },
@@ -908,7 +1067,7 @@ export const commandBarApi = {
     return pointId;
   },
   createTriangleCenterPointWithLabel(
-    centerKind: "incenter" | "orthocenter" | "centroid",
+    centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter",
     aId: string,
     bId: string,
     cId: string,
@@ -1010,7 +1169,7 @@ export const commandBarApi = {
   },
   createPointByReflectionWithLabel(
     pointId: string,
-    axis: { type: "line" | "segment" | "point"; id: string },
+    axis: ReflectionObjectRef,
     label: string
   ): string | null {
     const name = label.trim();
@@ -1021,6 +1180,28 @@ export const commandBarApi = {
     if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
     if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
     const createdId = actions.createPointByReflection(pointId, axis);
+    if (!createdId) return null;
+    setState((prev) => ({
+      ...prev,
+      scene: {
+        ...prev.scene,
+        points: prev.scene.points.map((point) =>
+          point.id === createdId ? { ...point, name, captionTex: name } : point
+        ),
+      },
+    }));
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
+  },
+  createPointByProjectionWithLabel(pointId: string, axisAId: string, axisBId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const createdId = actions.createPointByProjection(pointId, axisAId, axisBId);
     if (!createdId) return null;
     setState((prev) => ({
       ...prev,
@@ -1059,6 +1240,19 @@ export const commandBarApi = {
     if (!circleId) return null;
     commandBarObjectAliases.set(name, { type: "circle", id: circleId });
     return circleId;
+  },
+  createEllipseFociPointWithLabel(focusAId: string, focusBId: string, throughId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const ellipseId = actions.createEllipseFociPoint(focusAId, focusBId, throughId);
+    if (!ellipseId) return null;
+    commandBarObjectAliases.set(name, { type: "ellipse", id: ellipseId });
+    return ellipseId;
   },
   createCircleCenterRadiusWithLabel(centerId: string, r: number, label: string, rExpr?: string): string | null {
     const name = label.trim();
@@ -1181,8 +1375,61 @@ export function getGeoStore(): GeoStore {
   return { ...runtime.getState(), ...actions };
 }
 
+export function captureGeoDocumentRuntimeState(): GeoDocumentRuntimeState {
+  const state = runtime.getState();
+  pruneStaleCommandAliases(state.scene);
+  return {
+    snapshot: cloneHistorySnapshot(takeHistorySnapshot(state)),
+    camera: structuredClone(state.camera),
+    propertiesPanelIntent: state.propertiesPanelIntent,
+    undoStack: runtime.history.undoStack.map(cloneHistorySnapshot),
+    redoStack: runtime.history.redoStack.map(cloneHistorySnapshot),
+    lastHistoryActionKey: runtime.history.getLastHistoryActionKey(),
+    commandAliases: Array.from(commandBarObjectAliases.entries()).map(([name, target]) => [name, { ...target }]),
+  };
+}
+
+export function restoreGeoDocumentRuntimeState(documentState: GeoDocumentRuntimeState): void {
+  runtime.history.undoStack.length = 0;
+  runtime.history.undoStack.push(...documentState.undoStack.map(cloneHistorySnapshot));
+  runtime.history.redoStack.length = 0;
+  runtime.history.redoStack.push(...documentState.redoStack.map(cloneHistorySnapshot));
+  runtime.history.setLastHistoryActionKey(documentState.lastHistoryActionKey);
+
+  commandBarObjectAliases.clear();
+  for (const [name, target] of documentState.commandAliases) {
+    commandBarObjectAliases.set(name, { ...target });
+  }
+
+  runtime.history.setIsRestoringHistory(true);
+  try {
+    setState(
+      (prev) => {
+        const restored = restoreGeoStateFromSnapshot(prev, documentState.snapshot);
+        const next = {
+          ...restored,
+          camera: structuredClone(documentState.camera),
+          propertiesPanelIntent: documentState.propertiesPanelIntent,
+          canUndo: runtime.history.undoStack.length > 0,
+          canRedo: runtime.history.redoStack.length > 0,
+        };
+        rebuildRightAngleProvenance(next.scene);
+        pruneStaleCommandAliases(next.scene);
+        return next;
+      },
+      { history: "skip" }
+    );
+  } finally {
+    runtime.history.setIsRestoringHistory(false);
+  }
+}
+
 export function useGeoStore<T>(selector: (store: GeoStore) => T): T {
   return useSyncExternalStore(runtime.subscribe, () => selector(getGeoStore()), () => selector(getGeoStore()));
+}
+
+export function subscribeGeoStore(listener: () => void): () => void {
+  return runtime.subscribe(listener);
 }
 
 export { geoStoreHelpers };

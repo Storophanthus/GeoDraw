@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import type { Vec2 } from "../geo/vec2";
 import {
   beginSceneEvalTick,
   endSceneEvalTick,
   getPointWorldPos,
+  resolveTextLabelToolKind,
   type ScenePoint,
 } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
+import type { HistorySnapshot } from "../state/slices/historySlice";
 import { getCanvasColorTheme, getUiCssVariables } from "../state/colorProfiles";
 import type { Viewport } from "./camera";
 import type { ConstructClickIo } from "./constructClickAdapter";
@@ -21,8 +25,22 @@ import { resolveAngles } from "./angleResolution";
 import { CanvasLabelsLayer } from "./CanvasLabelsLayer";
 import { renderCanvasFrame } from "./renderFrame";
 import { useCanvasInteractionController, type PointerState } from "./useCanvasInteractionController";
+import { GeoContextMenu, type GeoContextMenuState } from "../ui/GeoContextMenu";
 import { isValidTarget } from "../tools/toolClick";
-import { applyDilationToObject, applyReflectionToObject, applyRotationToObject, applyTranslationToObject } from "../tools/objectTransforms";
+import {
+  CanvasTextEditor,
+  createRichTextOverlays,
+  RichTextCanvasEditor,
+  useRichTextToolController,
+  useTextboxToolController,
+} from "../text-editor";
+import {
+  applyDilationToObject,
+  applyInversionToObject,
+  applyReflectionToObject,
+  applyRotationToObject,
+  applyTranslationToObject,
+} from "../tools/objectTransforms";
 import { snapWorldToRectGrid } from "../render/rectGrid";
 import type { PendingPreviewTheme } from "./previews/pendingPreview";
 
@@ -46,6 +64,16 @@ const GRID_SETTINGS_BASE = {
 
 const ANGLE_STROKE_RENDER_SCALE = 3.25 / 1.8;
 
+type OpenSnapshotFilePatch = {
+  savedName?: string | null;
+  fileHandle?: FileSystemFileHandle | null;
+  tauriPath?: string | null;
+};
+
+type CanvasViewProps = {
+  openSnapshotAsDocument?: (snapshot: HistorySnapshot, file?: OpenSnapshotFilePatch) => void;
+};
+
 function getAngleStrokeRenderWidth(rawStrokeWidth: number): number {
   return rawStrokeWidth * ANGLE_STROKE_RENDER_SCALE;
 }
@@ -56,7 +84,7 @@ function parsePositiveNumber(raw: string, fallback: number): number {
   return value;
 }
 
-export function CanvasView() {
+export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const labelsLayerRef = useRef<HTMLDivElement | null>(null);
   const pointerRef = useRef<PointerState>({
@@ -64,6 +92,7 @@ export function CanvasView() {
     pid: -1,
     mode: "idle",
     pointId: null,
+    clipHandle: null,
     objectType: null,
     lastX: 0,
     lastY: 0,
@@ -87,6 +116,7 @@ export function CanvasView() {
   const uiCssOverrides = useGeoStore((store) => store.uiCssOverrides);
   const selectedObject = useGeoStore((store) => store.selectedObject);
   const recentCreatedObject = useGeoStore((store) => store.recentCreatedObject);
+  const textEditRequest = useGeoStore((store) => store.textEditRequest);
   const hoveredHit = useGeoStore((store) => store.hoveredHit);
   const cursorWorld = useGeoStore((store) => store.cursorWorld);
   const pendingSelection = useGeoStore((store) => store.pendingSelection);
@@ -109,6 +139,8 @@ export function CanvasView() {
   const zoomAtScreenPoint = useGeoStore((store) => store.zoomAtScreenPoint);
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
   const createTextLabel = useGeoStore((store) => store.createTextLabel);
+  const createRichTextNode = useGeoStore((store) => store.createRichTextNode);
+  const migrateTextLabelToRichTextNode = useGeoStore((store) => store.migrateTextLabelToRichTextNode);
   const createSegment = useGeoStore((store) => store.createSegment);
   const createLine = useGeoStore((store) => store.createLine);
   const createPolygon = useGeoStore((store) => store.createPolygon);
@@ -117,6 +149,7 @@ export function CanvasView() {
   const createAuxiliaryCircle = useGeoStore((store) => store.createAuxiliaryCircle);
   const createCircleThreePoint = useGeoStore((store) => store.createCircleThreePoint);
   const createCircleFixedRadius = useGeoStore((store) => store.createCircleFixedRadius);
+  const createEllipseFociPoint = useGeoStore((store) => store.createEllipseFociPoint);
   const createPerpendicularLine = useGeoStore((store) => store.createPerpendicularLine);
   const createParallelLine = useGeoStore((store) => store.createParallelLine);
   const createTangentLines = useGeoStore((store) => store.createTangentLines);
@@ -143,11 +176,21 @@ export function CanvasView() {
   const moveObjectLabelTo = useGeoStore((store) => store.moveObjectLabelTo);
   const moveTextLabelTo = useGeoStore((store) => store.moveTextLabelTo);
   const moveTextLabelByWorldDelta = useGeoStore((store) => store.moveTextLabelByWorldDelta);
+  const moveRichTextNodeByWorldDelta = useGeoStore((store) => store.moveRichTextNodeByWorldDelta);
   const enableObjectLabel = useGeoStore((store) => store.enableObjectLabel);
   const setCopyStyleSource = useGeoStore((store) => store.setCopyStyleSource);
   const applyCopyStyleTo = useGeoStore((store) => store.applyCopyStyleTo);
   const setExportClipWorld = useGeoStore((store) => store.setExportClipWorld);
   const setObjectVisibility = useGeoStore((store) => store.setObjectVisibility);
+  const updateTextLabelFieldsByIds = useGeoStore((store) => store.updateTextLabelFieldsByIds);
+  const updateTextLabelStyleByIds = useGeoStore((store) => store.updateTextLabelStyleByIds);
+  const updateRichTextDocumentByIds = useGeoStore((store) => store.updateRichTextDocumentByIds);
+  const updateRichTextFieldsByIds = useGeoStore((store) => store.updateRichTextFieldsByIds);
+  const updateRichTextStyleByIds = useGeoStore((store) => store.updateRichTextStyleByIds);
+  const deleteSelectedObject = useGeoStore((store) => store.deleteSelectedObject);
+  const clearTextEditRequest = useGeoStore((store) => store.clearTextEditRequest);
+  const loadSnapshot = useGeoStore((store) => store.loadSnapshot);
+  const fitViewToScene = useGeoStore((store) => store.fitViewToScene);
   const angleFixedTool = useGeoStore((store) => store.angleFixedTool);
   const circleFixedTool = useGeoStore((store) => store.circleFixedTool);
   const regularPolygonTool = useGeoStore((store) => store.regularPolygonTool);
@@ -156,6 +199,12 @@ export function CanvasView() {
   const [vp, setVp] = useState<Viewport>({ widthPx: 800, heightPx: 600 });
   const [hoverScreen, setHoverScreen] = useState<Vec2 | null>(null);
   const [snapDisabled, setSnapDisabled] = useState(false);
+  const [dropTargetActive, setDropTargetActive] = useState(false);
+  const [contextMenu, setContextMenu] = useState<GeoContextMenuState | null>(null);
+  const isTauriRuntime = useMemo(
+    () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as object),
+    []
+  );
   const canvasTheme = useMemo(
     () => getCanvasColorTheme(colorProfileId, canvasThemeOverrides),
     [colorProfileId, canvasThemeOverrides]
@@ -195,131 +244,178 @@ export function CanvasView() {
     []
   );
   const constructClickIo = useMemo<ConstructClickIo>(
-    () => ({
-      setPendingSelection,
-      clearPendingSelection,
-      createFreePoint,
-      createTextLabel,
-      createSegment,
-      createLine,
-      createPolygon,
-      createRegularPolygon,
-      createCircle,
-      createAuxiliaryCircle,
-      createCircleThreePoint,
-      createCircleFixedRadius,
-      createPerpendicularLine,
-      createParallelLine,
-      createTangentLines,
-      createCircleTangentLines,
-      createAngleBisectorLine,
-      createAngle,
-      createSector,
-      createAngleFixed,
-      createMidpointFromPoints,
-      createMidpointFromSegment,
-      createPointOnLine,
-      createPointOnSegment,
-      createPointOnCircle,
-      createPointByTranslation,
-      createPointByRotation,
-      createPointByDilation,
-      createPointByReflection,
-      transformObjectByTranslation: (source, fromId, toId) =>
-        applyTranslationToObject(source, fromId, toId, {
-          scene,
-          createPointByTranslation,
-          createPointByRotation,
-          createPointByDilation,
-          createPointByReflection,
-          createPointOnLine,
-          createSegment,
-          createLine,
-          createAngleBisectorLine,
-          createCircle,
-          createCircleThreePoint,
-          createCircleFixedRadius,
-          createPolygon,
-          createAngle,
-          createSector,
-          setObjectVisibility,
-        }),
-      transformObjectByRotation: (source, centerId, angleExpr, direction) =>
-        applyRotationToObject(source, centerId, angleExpr, direction, {
-          scene,
-          createPointByTranslation,
-          createPointByRotation,
-          createPointByDilation,
-          createPointByReflection,
-          createPointOnLine,
-          createSegment,
-          createLine,
-          createAngleBisectorLine,
-          createCircle,
-          createCircleThreePoint,
-          createCircleFixedRadius,
-          createPolygon,
-          createAngle,
-          createSector,
-          setObjectVisibility,
-        }),
-      transformObjectByDilation: (source, centerId, factorExpr) =>
-        applyDilationToObject(source, centerId, factorExpr, {
-          scene,
-          createPointByTranslation,
-          createPointByRotation,
-          createPointByDilation,
-          createPointByReflection,
-          createPointOnLine,
-          createSegment,
-          createLine,
-          createAngleBisectorLine,
-          createCircle,
-          createCircleThreePoint,
-          createCircleFixedRadius,
-          createPolygon,
-          createAngle,
-          createSector,
-          setObjectVisibility,
-        }),
-      transformObjectByReflection: (source, axis) =>
-        applyReflectionToObject(source, axis, {
-          scene,
-          createPointByTranslation,
-          createPointByRotation,
-          createPointByDilation,
-          createPointByReflection,
-          createPointOnLine,
-          createSegment,
-          createLine,
-          createAngleBisectorLine,
-          createCircle,
-          createCircleThreePoint,
-          createCircleFixedRadius,
-          createPolygon,
-          createAngle,
-          createSector,
-          setObjectVisibility,
-        }),
-      createCircleCenterPoint,
-      createIntersectionPoint,
-      setSelectedObject,
-      setCopyStyleSource,
-      applyCopyStyleTo,
-      enableObjectLabel,
-      setExportClipWorld,
-      getPointWorldById: (id) => {
-        const point = scene.points.find((p) => p.id === id);
-        return point ? getPointWorldPos(point, scene) : null;
-      },
-      gridSnapEnabled: effectiveGridSnapEnabled,
-      snapWorldToGrid: (world) => snapWorldToRectGrid(world, camera, gridSettings),
-    }),
+    () => {
+      const cloneObjectStyle = (
+        source: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string },
+        target: { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }
+      ) => {
+        setCopyStyleSource(source);
+        applyCopyStyleTo(target);
+      };
+      return {
+        setPendingSelection,
+        clearPendingSelection,
+        createFreePoint,
+        createTextLabel,
+        createRichTextNode,
+        migrateTextLabelToRichTextNode,
+        createSegment,
+        createLine,
+        createPolygon,
+        createRegularPolygon,
+        createCircle,
+        createAuxiliaryCircle,
+        createCircleThreePoint,
+        createCircleFixedRadius,
+        createEllipseFociPoint,
+        createPerpendicularLine,
+        createParallelLine,
+        createTangentLines,
+        createCircleTangentLines,
+        createAngleBisectorLine,
+        createAngle,
+        createSector,
+        createAngleFixed,
+        createMidpointFromPoints,
+        createMidpointFromSegment,
+        createPointOnLine,
+        createPointOnSegment,
+        createPointOnCircle,
+        createPointByTranslation,
+        createPointByRotation,
+        createPointByDilation,
+        createPointByReflection,
+        transformObjectByTranslation: (source, fromId, toId) =>
+          applyTranslationToObject(source, fromId, toId, {
+            scene,
+            createPointByTranslation,
+            createPointByRotation,
+            createPointByDilation,
+            createPointByReflection,
+            createPointOnLine,
+            createPointOnCircle,
+            createSegment,
+            createLine,
+            createAngleBisectorLine,
+            createCircle,
+            createCircleThreePoint,
+            createCircleFixedRadius,
+            createCircleCenterPoint,
+            createPolygon,
+            createAngle,
+            createSector,
+            setObjectVisibility,
+            cloneObjectStyle,
+          }),
+        transformObjectByRotation: (source, centerId, angleExpr, direction) =>
+          applyRotationToObject(source, centerId, angleExpr, direction, {
+            scene,
+            createPointByTranslation,
+            createPointByRotation,
+            createPointByDilation,
+            createPointByReflection,
+            createPointOnLine,
+            createPointOnCircle,
+            createSegment,
+            createLine,
+            createAngleBisectorLine,
+            createCircle,
+            createCircleThreePoint,
+            createCircleFixedRadius,
+            createCircleCenterPoint,
+            createPolygon,
+            createAngle,
+            createSector,
+            setObjectVisibility,
+            cloneObjectStyle,
+          }),
+        transformObjectByDilation: (source, centerId, factorExpr) =>
+          applyDilationToObject(source, centerId, factorExpr, {
+            scene,
+            createPointByTranslation,
+            createPointByRotation,
+            createPointByDilation,
+            createPointByReflection,
+            createPointOnLine,
+            createPointOnCircle,
+            createSegment,
+            createLine,
+            createAngleBisectorLine,
+            createCircle,
+            createCircleThreePoint,
+            createCircleFixedRadius,
+            createCircleCenterPoint,
+            createPolygon,
+            createAngle,
+            createSector,
+            setObjectVisibility,
+            cloneObjectStyle,
+          }),
+        transformObjectByReflection: (source, axis) =>
+          applyReflectionToObject(source, axis, {
+            scene,
+            createPointByTranslation,
+            createPointByRotation,
+            createPointByDilation,
+            createPointByReflection,
+            createPointOnLine,
+            createPointOnCircle,
+            createSegment,
+            createLine,
+            createAngleBisectorLine,
+            createCircle,
+            createCircleThreePoint,
+            createCircleFixedRadius,
+            createCircleCenterPoint,
+            createPolygon,
+            createAngle,
+            createSector,
+            setObjectVisibility,
+            cloneObjectStyle,
+          }),
+        transformObjectByInversion: (source, inversionCircleId) =>
+          applyInversionToObject(source, inversionCircleId, {
+            scene,
+            createPointByTranslation,
+            createPointByRotation,
+            createPointByDilation,
+            createPointByReflection,
+            createPointOnLine,
+            createPointOnCircle,
+            createSegment,
+            createLine,
+            createAngleBisectorLine,
+            createCircle,
+            createCircleThreePoint,
+            createCircleFixedRadius,
+            createCircleCenterPoint,
+            createPolygon,
+            createAngle,
+            createSector,
+            setObjectVisibility,
+            cloneObjectStyle,
+          }),
+        createCircleCenterPoint,
+        createIntersectionPoint,
+        setSelectedObject,
+        setCopyStyleSource,
+        applyCopyStyleTo,
+        enableObjectLabel,
+        setExportClipWorld,
+        getPointWorldById: (id) => {
+          const point = scene.points.find((p) => p.id === id);
+          return point ? getPointWorldPos(point, scene) : null;
+        },
+        gridSnapEnabled: effectiveGridSnapEnabled,
+        snapWorldToGrid: (world) => snapWorldToRectGrid(world, camera, gridSettings),
+      };
+    },
     [
       setPendingSelection,
       clearPendingSelection,
       createFreePoint,
       createTextLabel,
+      createRichTextNode,
       createSegment,
       createLine,
       createPolygon,
@@ -328,6 +424,7 @@ export function CanvasView() {
       createAuxiliaryCircle,
       createCircleThreePoint,
       createCircleFixedRadius,
+      createEllipseFociPoint,
       createPerpendicularLine,
       createParallelLine,
       createTangentLines,
@@ -385,17 +482,63 @@ export function CanvasView() {
     [resolvedPoints, camera, vp, canvasTheme.backgroundColor]
   );
   const angleLabelOverlays = useMemo(
-    () => createAngleLabelOverlays(resolvedAngles, camera, vp),
-    [resolvedAngles, camera, vp]
+    () => createAngleLabelOverlays(resolvedAngles, camera, vp, canvasTheme.backgroundColor),
+    [resolvedAngles, camera, vp, canvasTheme.backgroundColor]
   );
   const objectLabelOverlays = useMemo(
-    () => createObjectLabelOverlays(scene, camera, vp),
-    [scene, camera, vp]
+    () => createObjectLabelOverlays(scene, camera, vp, canvasTheme.backgroundColor),
+    [scene, camera, vp, canvasTheme.backgroundColor]
   );
   const textLabelOverlays = useMemo(
-    () => createTextLabelOverlays(scene, camera, vp),
-    [scene, camera, vp]
+    () => createTextLabelOverlays(scene, camera, vp, canvasTheme.backgroundColor),
+    [scene, camera, vp, canvasTheme.backgroundColor]
   );
+  const richTextOverlays = useMemo(
+    () => createRichTextOverlays(scene, camera, vp, canvasTheme.backgroundColor),
+    [scene, camera, vp, canvasTheme.backgroundColor]
+  );
+  const textboxTool = useTextboxToolController({
+    activeTool,
+    scene,
+    recentCreatedObject,
+    textLabelOverlays,
+    setSelectedObject,
+    updateTextLabelFieldsByIds,
+    updateTextLabelStyleByIds,
+    deleteSelectedObject,
+  });
+
+  const richTextTool = useRichTextToolController({
+    activeTool,
+    scene,
+    camera,
+    vp,
+    recentCreatedObject,
+    richTextOverlays,
+    setSelectedObject,
+    updateRichTextDocumentByIds,
+    updateRichTextFieldsByIds,
+    updateRichTextStyleByIds,
+    deleteSelectedObject,
+  });
+
+  useEffect(() => {
+    if (!textEditRequest) return;
+    if (textEditRequest.type === "richText") {
+      richTextTool.beginRichTextEditing(textEditRequest.id);
+    } else {
+      textboxTool.beginTextLabelEditing(textEditRequest.id);
+    }
+    clearTextEditRequest(textEditRequest.requestId);
+  }, [clearTextEditRequest, richTextTool, textboxTool, textEditRequest]);
+
+  useEffect(() => {
+    const legacyTextboxLabels = (scene.textLabels ?? []).filter((label) => resolveTextLabelToolKind(label) === "textbox");
+    if (legacyTextboxLabels.length === 0) return;
+    for (const label of legacyTextboxLabels) {
+      migrateTextLabelToRichTextNode(label.id);
+    }
+  }, [migrateTextLabelToRichTextNode, scene.textLabels]);
 
   const hoverSnap: SnapCandidate | null = useMemo(() => {
     if (!hoverScreen) return null;
@@ -437,9 +580,9 @@ export function CanvasView() {
     () => () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const selectedDrawableObject = selectedObject?.type === "number" || selectedObject?.type === "textLabel" ? null : selectedObject;
-      const recentDrawableObject = recentCreatedObject?.type === "number" || recentCreatedObject?.type === "textLabel" ? null : recentCreatedObject;
-      const copySourceDrawable = copyStyle.source?.type === "number" || copyStyle.source?.type === "textLabel" ? null : copyStyle.source;
+      const selectedDrawableObject = selectedObject?.type === "number" || selectedObject?.type === "textLabel" || selectedObject?.type === "richText" ? null : selectedObject;
+      const recentDrawableObject = recentCreatedObject?.type === "number" || recentCreatedObject?.type === "textLabel" || recentCreatedObject?.type === "richText" ? null : recentCreatedObject;
+      const copySourceDrawable = copyStyle.source?.type === "number" || copyStyle.source?.type === "textLabel" || copyStyle.source?.type === "richText" ? null : copyStyle.source;
       renderCanvasFrame({
         canvas,
         scene,
@@ -530,6 +673,8 @@ export function CanvasView() {
     resolvedPoints,
     resolvedAngles,
     hoveredHit,
+    exportClipWorld,
+    selectedObject,
     pointLabelOffsetPx: pointDefaults.labelOffsetPx,
     angleFixedTool,
     regularPolygonTool,
@@ -547,27 +692,243 @@ export function CanvasView() {
       moveObjectLabelTo,
       moveTextLabelTo,
       moveTextLabelByWorldDelta,
+      moveRichTextNodeByWorldDelta,
+      setExportClipWorld,
       setHoverScreen,
       setSnapDisabled,
       setCursorWorld,
       setHoveredHit,
       setSelectedObject,
+      beginTextLabelEditing: textboxTool.beginTextLabelEditing,
+      beginRichTextEditing: richTextTool.beginRichTextEditing,
       clearPendingSelection,
       zoomAtScreenPoint,
+      openContextMenu: ({ clientX, clientY, target, world }) =>
+        setContextMenu({
+          x: clientX,
+          y: clientY,
+          target: target ?? { type: "empty", world },
+        }),
     },
   });
 
+  const scheduleFitView = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const canvas = canvasRef.current;
+        const rect = canvas?.getBoundingClientRect();
+        const widthPx = rect?.width && rect.width > 1 ? rect.width : window.innerWidth;
+        const heightPx = rect?.height && rect.height > 1 ? rect.height : window.innerHeight;
+        fitViewToScene({ widthPx, heightPx });
+      });
+    });
+  }, [fitViewToScene]);
+
+  const loadDroppedSnapshotText = useCallback(
+    (text: string, source: string, file: OpenSnapshotFilePatch = {}) => {
+      try {
+        const parsed = JSON.parse(text) as HistorySnapshot;
+        if (!isValidSnapshotPayload(parsed)) {
+          alert("Unsupported file format. Use a GeoDraw .geodraw/.json snapshot file.");
+          return;
+        }
+        if (openSnapshotAsDocument) {
+          openSnapshotAsDocument(parsed, { savedName: baseName(source), ...file });
+        } else {
+          loadSnapshot(parsed);
+        }
+        scheduleFitView();
+      } catch (err) {
+        console.error(`Failed to open dropped file (${source}):`, err);
+        alert("Failed to open dropped file. It may be corrupted or incompatible.");
+      }
+    },
+    [loadSnapshot, openSnapshotAsDocument, scheduleFitView]
+  );
+
+  useEffect(() => {
+    if (!isTauriRuntime) return;
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void getCurrentWindow()
+      .onDragDropEvent(async (event) => {
+        if (disposed) return;
+        const payload = event.payload;
+        if (payload.type === "enter") {
+          if (payload.paths.some(isSupportedSnapshotPath)) {
+            setDropTargetActive(true);
+          }
+          return;
+        }
+        if (payload.type === "over") return;
+        if (payload.type === "leave") {
+          setDropTargetActive(false);
+          return;
+        }
+        setDropTargetActive(false);
+        const path = payload.paths.find(isSupportedSnapshotPath);
+        if (!path) return;
+        try {
+          const text = await readTextFile(path);
+          if (disposed) return;
+          loadDroppedSnapshotText(text, path, {
+            fileHandle: null,
+            savedName: baseName(path),
+            tauriPath: path,
+          });
+        } catch (err) {
+          console.error("Failed to read dropped file path:", err);
+          alert("Failed to open dropped file. Check file permissions and try again.");
+        }
+      })
+      .then((off) => {
+        if (disposed) {
+          off();
+        } else {
+          unlisten = off;
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to register desktop drag-drop listener:", err);
+      });
+
+    return () => {
+      disposed = true;
+      if (unlisten) unlisten();
+    };
+  }, [isTauriRuntime, loadDroppedSnapshotText]);
+
+  const handleCanvasDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    const dataTransfer = event.dataTransfer;
+    if (!dataTransfer || !hasFileDragPayload(dataTransfer)) return;
+    const files = dataTransfer.files;
+    if (files.length > 0 && !Array.from(files).some(isSupportedSnapshotFile)) return;
+    event.preventDefault();
+    dataTransfer.dropEffect = "copy";
+    setDropTargetActive(true);
+  };
+
+  const handleCanvasDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
+    const dataTransfer = event.dataTransfer;
+    if (!dataTransfer || !hasFileDragPayload(dataTransfer)) return;
+    event.preventDefault();
+    setDropTargetActive(true);
+  };
+
+  const handleCanvasDragLeave = (event: ReactDragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setDropTargetActive(false);
+  };
+
+  const handleCanvasDrop = async (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDropTargetActive(false);
+    const files = collectDroppedFiles(event.dataTransfer);
+    if (!files || files.length === 0) return;
+    const file = Array.from(files).find(isSupportedSnapshotFile);
+    if (!file) return;
+    const text = await file.text();
+    loadDroppedSnapshotText(text, file.name, { fileHandle: null, savedName: file.name, tauriPath: null });
+  };
+
   return (
-    <div className="canvasStack">
+    <div
+      className={dropTargetActive ? "canvasStack canvasStackDropActive" : "canvasStack"}
+      onDragEnter={handleCanvasDragEnter}
+      onDragOver={handleCanvasDragOver}
+      onDragLeave={handleCanvasDragLeave}
+      onDrop={(event) => void handleCanvasDrop(event)}
+    >
       <canvas ref={canvasRef} className="drawingCanvas" />
       <CanvasLabelsLayer
         labelsLayerRef={labelsLayerRef}
         labelOverlays={labelOverlays}
         angleLabelOverlays={angleLabelOverlays}
         objectLabelOverlays={objectLabelOverlays}
-        textLabelOverlays={textLabelOverlays}
+        textLabelOverlays={textboxTool.visibleTextLabelOverlays}
+        richTextOverlays={richTextTool.visibleRichTextOverlays}
         selectedTextLabelId={selectedObject?.type === "textLabel" ? selectedObject.id : null}
       />
+      {textboxTool.editorSession && (
+        <CanvasTextEditor
+          sessionKey={textboxTool.editorSession.id}
+          editorRef={textboxTool.editorRef}
+          value={textboxTool.editorSession.value}
+          editorKind={textboxTool.editorSession.editorKind}
+          textColor={textboxTool.editorSession.overlay.textColor}
+          fontSizePx={Math.max(8, textboxTool.editorSession.overlay.textSize)}
+          shouldIgnoreBlur={textboxTool.editorSession.shouldIgnoreBlur}
+          sourceStyle={textboxTool.editorSession.sourceStyle}
+          onChangeValue={textboxTool.editorSession.setValue}
+          onCommit={textboxTool.editorSession.commit}
+          onCancel={textboxTool.editorSession.cancel}
+          shellStyle={textboxTool.editorSession.shellStyle}
+        />
+      )}
+      {richTextTool.editorSession && (
+        <RichTextCanvasEditor
+          sessionKey={richTextTool.editorSession.id}
+          document={richTextTool.editorSession.document}
+          style={richTextTool.editorSession.style}
+          shellStyle={richTextTool.editorSession.shellStyle}
+          onChangeDocument={richTextTool.editorSession.setDocument}
+          onMeasure={richTextTool.editorSession.setMeasuredBounds}
+          onCommit={richTextTool.editorSession.commit}
+          onCancel={richTextTool.editorSession.cancel}
+        />
+      )}
+      <GeoContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
     </div>
   );
+}
+
+function isSupportedSnapshotFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return name.endsWith(".geodraw") || name.endsWith(".json");
+}
+
+function isSupportedSnapshotPath(path: string): boolean {
+  const normalized = path.replace(/\\/g, "/").toLowerCase();
+  return normalized.endsWith(".geodraw") || normalized.endsWith(".json");
+}
+
+function baseName(path: string): string {
+  const norm = path.replace(/\\/g, "/");
+  const idx = norm.lastIndexOf("/");
+  return idx >= 0 ? norm.slice(idx + 1) : norm;
+}
+
+function hasFileDragPayload(dataTransfer: DataTransfer): boolean {
+  if (dataTransfer.files.length > 0) return true;
+  if (Array.from(dataTransfer.items).some((item) => item.kind === "file")) return true;
+  return Array.from(dataTransfer.types ?? []).includes("Files");
+}
+
+function collectDroppedFiles(dataTransfer: DataTransfer | null): File[] {
+  if (!dataTransfer) return [];
+  const directFiles = Array.from(dataTransfer.files ?? []);
+  if (directFiles.length > 0) return directFiles;
+  return Array.from(dataTransfer.items ?? [])
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+}
+
+function isValidSnapshotPayload(data: unknown): data is HistorySnapshot {
+  if (!data || typeof data !== "object") return false;
+  const root = data as Record<string, unknown>;
+  if (!root.scene || typeof root.scene !== "object") return false;
+  if (typeof root.activeTool !== "string") return false;
+  const scene = root.scene as Record<string, unknown>;
+  if (!Array.isArray(scene.points)) return false;
+  if (!Array.isArray(scene.lines)) return false;
+  if (!Array.isArray(scene.circles)) return false;
+  if (!Array.isArray(scene.segments)) return false;
+  if (scene.angles !== undefined && !Array.isArray(scene.angles)) return false;
+  if (scene.numbers !== undefined && !Array.isArray(scene.numbers)) return false;
+  if (scene.labels !== undefined && !Array.isArray(scene.labels)) return false;
+  return true;
 }

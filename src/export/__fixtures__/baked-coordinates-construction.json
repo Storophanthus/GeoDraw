@@ -1,0 +1,24 @@
+{
+  "exportOptions": { "bakePointCoordinates": true },
+  "scene": {
+    "points": [
+      { "id": "p1", "kind": "free", "name": "A", "x": 0, "y": 0 },
+      { "id": "p2", "kind": "free", "name": "B", "x": 4, "y": 0 },
+      { "id": "p3", "kind": "free", "name": "C", "x": 1, "y": 3 },
+      { "id": "p4", "kind": "triangleCenter", "name": "I", "centerKind": "incenter", "aId": "p1", "bId": "p2", "cId": "p3" },
+      { "id": "p5", "kind": "circleLineIntersectionPoint", "name": "X", "circleId": "c1", "lineId": "l1", "branchIndex": 1, "excludePointId": "p1" }
+    ],
+    "lines": [
+      { "id": "l1", "kind": "twoPoint", "aId": "p1", "bId": "p4", "visible": true }
+    ],
+    "segments": [
+      { "id": "s1", "aId": "p1", "bId": "p2", "visible": true },
+      { "id": "s2", "aId": "p2", "bId": "p3", "visible": true },
+      { "id": "s3", "aId": "p3", "bId": "p1", "visible": true },
+      { "id": "s4", "aId": "p1", "bId": "p5", "visible": true }
+    ],
+    "circles": [
+      { "id": "c1", "kind": "threePoint", "aId": "p1", "bId": "p2", "cId": "p3", "visible": true }
+    ]
+  }
+}

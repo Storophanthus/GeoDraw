@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -105,7 +106,10 @@ fn compile_tex_document(tex_path: &Path, work_dir: &Path) -> Result<CompileRunRe
                 engine: run.binary,
             });
         }
-        return Err(format!("TeX compilation failed.\n\n{}", run.log));
+        let lowered = run.log.to_lowercase();
+        if !lowered.contains("pdflatex: command not found") {
+            return Err(format!("TeX compilation failed.\n\n{}", run.log));
+        }
     }
 
     let pdflatex_args = vec![
@@ -167,15 +171,52 @@ fn run_command(
     args: &[String],
     work_dir: &Path,
 ) -> Result<RunAttempt, std::io::Error> {
-    let output = Command::new(binary)
-        .args(args)
-        .current_dir(work_dir)
-        .output()?;
+    let mut command = Command::new(binary);
+    command.args(args).current_dir(work_dir);
+    augment_command_path(&mut command, binary);
+    let output = command.output()?;
     Ok(RunAttempt {
         binary: binary.to_string(),
         ok: output.status.success(),
         log: build_process_log(binary, args, &output),
     })
+}
+
+fn augment_command_path(command: &mut Command, binary: &str) {
+    let mut entries: Vec<PathBuf> = Vec::new();
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+
+    let mut push_entry = |path: PathBuf| {
+        if path.as_os_str().is_empty() {
+            return;
+        }
+        if seen.insert(path.clone()) {
+            entries.push(path);
+        }
+    };
+
+    if let Some(parent) = Path::new(binary).parent() {
+        if !parent.as_os_str().is_empty() {
+            push_entry(parent.to_path_buf());
+        }
+    }
+
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for path in std::env::split_paths(&path_var) {
+            push_entry(path);
+        }
+    }
+
+    for extra in ["/Library/TeX/texbin", "/usr/texbin"] {
+        let extra_path = PathBuf::from(extra);
+        if extra_path.exists() {
+            push_entry(extra_path);
+        }
+    }
+
+    if let Ok(joined) = std::env::join_paths(entries) {
+        command.env("PATH", joined);
+    }
 }
 
 fn build_process_log(binary: &str, args: &[String], output: &Output) -> String {
@@ -214,17 +255,24 @@ const EVENT_FILE_SAVE: &str = "gd-menu-file-save";
 const EVENT_FILE_SAVE_AS: &str = "gd-menu-file-save-as";
 
 #[cfg(desktop)]
+const MENU_CHECK_UPDATES: &str = "check_updates";
+#[cfg(desktop)]
+const EVENT_CHECK_UPDATES: &str = "gd-menu-check-updates";
+
+#[cfg(desktop)]
 fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>> {
-    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 
     let menu = Menu::default(app)?;
 
     let mut file_submenu: Option<tauri::menu::Submenu<R>> = None;
+    let mut help_submenu: Option<tauri::menu::Submenu<R>> = None;
     for item in menu.items()? {
         if let Some(submenu) = item.as_submenu() {
-            if submenu.text()? == "File" {
-                file_submenu = Some(submenu.clone());
-                break;
+            match submenu.text()?.as_str() {
+                "File" => file_submenu = Some(submenu.clone()),
+                "Help" => help_submenu = Some(submenu.clone()),
+                _ => {}
             }
         }
     }
@@ -243,6 +291,16 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<tau
         file.prepend_items(&[&open, &save, &save_as, &sep])?;
     }
 
+    let check_updates =
+        MenuItem::with_id(app, MENU_CHECK_UPDATES, "Check for Updates…", true, None::<&str>)?;
+    match help_submenu {
+        Some(help) => help.prepend_items(&[&check_updates, &PredefinedMenuItem::separator(app)?])?,
+        None => {
+            let help = Submenu::with_items(app, "Help", true, &[&check_updates])?;
+            menu.append(&help)?;
+        }
+    }
+
     Ok(menu)
 }
 
@@ -259,6 +317,10 @@ fn forward_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, event: tauri
     }
     if event.id() == MENU_FILE_SAVE_AS {
         let _ = app.emit(EVENT_FILE_SAVE_AS, ());
+        return;
+    }
+    if event.id() == MENU_CHECK_UPDATES {
+        let _ = app.emit(EVENT_CHECK_UPDATES, ());
     }
 }
 
@@ -272,6 +334,8 @@ pub fn run() {
 
     #[cfg(desktop)]
     let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .menu(|app| build_menu(app))
         .on_menu_event(|app, event| forward_menu_event(app, event));
 

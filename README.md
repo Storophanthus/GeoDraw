@@ -12,6 +12,16 @@ This repository contains the app core: geometry engine, scene/state model, const
 - TikZ/tkz-euclide export with preview window, editable `tikzpicture`, optional preamble, and compiler log.
 - Desktop runtime via Tauri with file operations and PDF compilation flow.
 
+## Recent Feature Highlights
+
+- Inversion transform tool for line/circle inversion about a selected circle.
+- Transform-generated objects keep source styling (color, stroke, labels, marks/arrows) for parity workflows.
+- Object Browser linking for batch edits/deletes on same-type objects, including `Shift + ArrowUp/ArrowDown` link expansion.
+- Line properties now include `Convert to Segment` (single and linked-multi), which hides eligible source lines and creates matching segments.
+- Command bar additions: `Circumcenter(A,B,C)`, `Perimeter(...)`, `Inradius(A,B,C)`, `Circumradius(A,B,C)`.
+- Canvas drag-and-drop open for `.geodraw`/`.json` snapshots.
+- TikZ preview PDF pane supports right-click save as PDF/SVG/PNG.
+
 ## Documentation
 
 - User manual (LaTeX source): `docs/user-manual.tex`
@@ -39,6 +49,42 @@ For desktop app development:
 ```bash
 npm run tauri
 ```
+
+## Windows Setup
+
+### Option A: Try instantly (web)
+
+- Open: `https://storophanthus.github.io/GeoDraw/`
+
+### Option B: Run desktop app (Tauri)
+
+Install prerequisites:
+
+1. Node.js LTS
+2. Rust (stable, MSVC toolchain)
+3. Visual Studio Build Tools (Desktop development with C++)
+
+Then run:
+
+```bash
+npm ci
+npm run tauri
+```
+
+### TeX compiler on Windows (for PDF Preview compile)
+
+GeoDraw desktop currently looks for `latexmk`/`pdflatex` on `PATH` (plus macOS fixed paths).  
+On Windows, install MiKTeX or TeX Live and ensure binaries are available on `PATH`.
+
+Check in PowerShell:
+
+```powershell
+where.exe latexmk
+where.exe pdflatex
+```
+
+If both commands return paths, GeoDraw should be able to compile TikZ previews.
+If not, add your TeX `bin` folder to PATH and restart the app/terminal.
 
 ## Web Deployment (GitHub Pages)
 

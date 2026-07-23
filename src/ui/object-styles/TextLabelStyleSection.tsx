@@ -1,5 +1,7 @@
-import type { SceneModel } from "../../scene/points";
+import { resolveTextLabelRenderMode, type SceneModel } from "../../scene/points";
+import { ColorSwatchInput } from "../ColorField";
 import { formatRoundedDisplay } from "../displayFormat";
+import { StyleSectionHeader } from "../StyleSectionHeader";
 
 type TextLabel = NonNullable<SceneModel["textLabels"]>[number];
 
@@ -8,9 +10,13 @@ type TextLabelStyleSectionProps = {
     scene: SceneModel;
     selectedTextLabelBoundNumberValue: number | null;
     selectedTextLabelExprValue: number | null;
+    selectedStyleAsDefault: boolean;
+    onMakeStyleDefaultChange: (checked: boolean) => void;
     updateSelectedTextLabelFields: (patch: Partial<TextLabel>) => void;
     updateSelectedTextLabelStyle: (patch: Partial<TextLabel["style"]>) => void;
     deleteSelectedObject: () => void;
+    deleteLabel?: string;
+    mode?: "object" | "toolDefault";
 };
 
 export function TextLabelStyleSection({
@@ -18,66 +24,84 @@ export function TextLabelStyleSection({
     scene,
     selectedTextLabelBoundNumberValue,
     selectedTextLabelExprValue,
+    selectedStyleAsDefault,
+    onMakeStyleDefaultChange,
     updateSelectedTextLabelFields,
     updateSelectedTextLabelStyle,
     deleteSelectedObject,
+    deleteLabel = "Delete",
+    mode = "object",
 }: TextLabelStyleSectionProps) {
+    const renderMode = resolveTextLabelRenderMode(selectedTextLabel.style);
     return (
-        <div className="toolInfo">
-            <div className="subSectionTitle">Text Label</div>
-            <div className="statusText">
-                Position: ({formatRoundedDisplay(selectedTextLabel.positionWorld.x, 3)}, {formatRoundedDisplay(selectedTextLabel.positionWorld.y, 3)})
-            </div>
+        // Not `.toolInfo`: that class is a 2-column grid meant for a title beside a
+        // single short stat. Used as a generic wrapper it auto-places every field
+        // into alternating columns instead of stacking them (see PointPropertiesSection's
+        // V3 migration, which hit the same bug).
+        <>
+            <StyleSectionHeader
+                title="Text Label"
+                selectedStyleAsDefault={selectedStyleAsDefault}
+                onMakeStyleDefaultChange={onMakeStyleDefaultChange}
+                mode={mode}
+            />
+            {mode === "object" && (
+                <>
+                    <div className="statusText">
+                        Position: ({formatRoundedDisplay(selectedTextLabel.positionWorld.x, 3)}, {formatRoundedDisplay(selectedTextLabel.positionWorld.y, 3)})
+                    </div>
 
-            <div className="fieldBlock">
-                <label className="fieldLabel">Name</label>
-                <input
-                    className="renameInput"
-                    value={selectedTextLabel.name}
-                    onChange={(e) => updateSelectedTextLabelFields({ name: e.target.value })}
-                />
-            </div>
+                    <div className="fieldBlock">
+                        <label className="fieldLabel">Name</label>
+                        <input
+                            className="renameInput"
+                            value={selectedTextLabel.name}
+                            onChange={(e) => updateSelectedTextLabelFields({ name: e.target.value })}
+                        />
+                    </div>
 
-            <div className="fieldBlock">
-                <label className="fieldLabel">Text</label>
-                <textarea
-                    className="renameInput"
-                    value={selectedTextLabel.text}
-                    rows={3}
-                    disabled={selectedTextLabel.contentMode === "number" || selectedTextLabel.contentMode === "expression"}
-                    onChange={(e) => updateSelectedTextLabelFields({ text: e.target.value })}
-                />
-            </div>
+                    <div className="fieldBlock">
+                        <label className="fieldLabel">Text</label>
+                        <textarea
+                            className="renameInput textLabelTextareaInput"
+                            value={selectedTextLabel.text}
+                            rows={3}
+                            disabled={selectedTextLabel.contentMode === "number" || selectedTextLabel.contentMode === "expression"}
+                            onChange={(e) => updateSelectedTextLabelFields({ text: e.target.value })}
+                        />
+                    </div>
 
-            <div className="controlRow">
-                <label className="controlLabel">Content</label>
-                <select
-                    className="selectInput"
-                    value={
-                        selectedTextLabel.contentMode === "number"
-                            ? "number"
-                            : selectedTextLabel.contentMode === "expression"
-                                ? "expression"
-                                : "static"
-                    }
-                    onChange={(e) => {
-                        const nextMode = e.target.value === "number" ? "number" : e.target.value === "expression" ? "expression" : "static";
-                        const firstNumberId = scene.numbers[0]?.id;
-                        updateSelectedTextLabelFields({
-                            contentMode: nextMode,
-                            ...(nextMode === "number" && !selectedTextLabel.numberId && firstNumberId ? { numberId: firstNumberId } : {}),
-                            ...(nextMode !== "number" ? { numberId: undefined } : {}),
-                            ...(nextMode !== "expression" ? { expr: undefined } : {}),
-                        });
-                    }}
-                >
-                    <option value="static">Static Text</option>
-                    <option value="number">Dynamic Number</option>
-                    <option value="expression">Dynamic Expression</option>
-                </select>
-            </div>
+                    <div className="controlRow">
+                        <label className="controlLabel">Content</label>
+                        <select
+                            className="selectInput"
+                            value={
+                                selectedTextLabel.contentMode === "number"
+                                    ? "number"
+                                    : selectedTextLabel.contentMode === "expression"
+                                        ? "expression"
+                                        : "static"
+                            }
+                            onChange={(e) => {
+                                const nextMode = e.target.value === "number" ? "number" : e.target.value === "expression" ? "expression" : "static";
+                                const firstNumberId = scene.numbers[0]?.id;
+                                updateSelectedTextLabelFields({
+                                    contentMode: nextMode,
+                                    ...(nextMode === "number" && !selectedTextLabel.numberId && firstNumberId ? { numberId: firstNumberId } : {}),
+                                    ...(nextMode !== "number" ? { numberId: undefined } : {}),
+                                    ...(nextMode !== "expression" ? { expr: undefined } : {}),
+                                });
+                            }}
+                        >
+                            <option value="static">Static Text</option>
+                            <option value="number">Dynamic Number</option>
+                            <option value="expression">Dynamic Expression</option>
+                        </select>
+                    </div>
+                </>
+            )}
 
-            {selectedTextLabel.contentMode === "number" && (
+            {mode === "object" && selectedTextLabel.contentMode === "number" && (
                 <>
                     <div className="controlRow">
                         <label className="controlLabel">Number</label>
@@ -104,7 +128,7 @@ export function TextLabelStyleSection({
                 </>
             )}
 
-            {selectedTextLabel.contentMode === "expression" && (
+            {mode === "object" && selectedTextLabel.contentMode === "expression" && (
                 <>
                     <div className="fieldBlock">
                         <label className="fieldLabel">Expression</label>
@@ -121,29 +145,57 @@ export function TextLabelStyleSection({
                 </>
             )}
 
-            <label className="checkboxRow">
-                <input
-                    type="checkbox"
-                    checked={selectedTextLabel.style.useTex}
-                    onChange={(e) => updateSelectedTextLabelStyle({ useTex: e.target.checked })}
-                />
-                Render as TeX
-            </label>
+            <div className="controlRow">
+                <label className="controlLabel">Render</label>
+                <select
+                    className="selectInput"
+                    value={renderMode}
+                    onChange={(e) => {
+                        const nextMode = e.target.value === "mixed" ? "mixed" : e.target.value === "plain" ? "plain" : "tex";
+                        updateSelectedTextLabelStyle({
+                            useTex: nextMode === "tex",
+                            textMode: nextMode,
+                        });
+                        updateSelectedTextLabelFields({
+                            toolKind: nextMode === "mixed" ? "textbox" : "label",
+                        });
+                    }}
+                >
+                    <option value="tex">TeX</option>
+                    <option value="plain">Plain Text</option>
+                    <option value="mixed">Textbox</option>
+                </select>
+            </div>
+
+            {renderMode === "mixed" && (
+                <div className="statusText">
+                    Use <code>$...$</code> for inline math and <code>\[...\]</code> for centered display math.
+                </div>
+            )}
+
+            {mode === "object" && (
+                <label className="checkboxRow">
+                    <input
+                        type="checkbox"
+                        checked={selectedTextLabel.visible}
+                        onChange={(e) => updateSelectedTextLabelFields({ visible: e.target.checked })}
+                    />
+                    Visible
+                </label>
+            )}
 
             <label className="checkboxRow">
                 <input
                     type="checkbox"
-                    checked={selectedTextLabel.visible}
-                    onChange={(e) => updateSelectedTextLabelFields({ visible: e.target.checked })}
+                    checked={Boolean(selectedTextLabel.style.labelGlow)}
+                    onChange={(e) => updateSelectedTextLabelStyle({ labelGlow: e.target.checked })}
                 />
-                Visible
+                Label Glow
             </label>
 
             <div className="controlRow">
                 <label className="controlLabel">Text Color</label>
-                <input
-                    className="colorInput"
-                    type="color"
+                <ColorSwatchInput
                     value={selectedTextLabel.style.textColor}
                     onChange={(e) => updateSelectedTextLabelStyle({ textColor: e.target.value })}
                 />
@@ -193,9 +245,27 @@ export function TextLabelStyleSection({
                 />
             </div>
 
-            <button className="deleteButton" onClick={deleteSelectedObject}>
-                Delete
-            </button>
-        </div>
+            <div className="controlRow">
+                <label className="controlLabel">Align</label>
+                <select
+                    className="selectInput"
+                    value={selectedTextLabel.style.textAlign ?? (renderMode === "mixed" ? "left" : "center")}
+                    onChange={(e) => {
+                        const nextAlign = e.target.value === "right" ? "right" : e.target.value === "center" ? "center" : "left";
+                        updateSelectedTextLabelStyle({ textAlign: nextAlign });
+                    }}
+                >
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                </select>
+            </div>
+
+            {mode === "object" && (
+                <button className="deleteButton" onClick={deleteSelectedObject}>
+                    {deleteLabel}
+                </button>
+            )}
+        </>
     );
 }
