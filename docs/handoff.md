@@ -25,6 +25,40 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-24 Live figure sizing in the PDF preview window
+  (owner-reported gap: the Figure Sizing controls existed only in the Export
+  panel, so adjusting Global/Points/Lines/Labels while looking at the compiled
+  PDF meant closing the preview, changing the panel, and reopening it):
+  - The preview is a separate Tauri webview that only received the finished
+    TikZ *string* via the localStorage session, so it had no way to re-size
+    anything. Fixed by capturing the scene + export options into the session
+    and regenerating in-window on scale change.
+  - `buildTikzExportText.ts` (new): the exporter option-assembly, extracted
+    verbatim out of `ExportPanel.buildTikzExport` into a pure function so the
+    panel and the preview produce byte-identical output. `ExportPanel` now
+    delegates to it (dropped its direct `exportTikz*`/calibration imports).
+    Parity confirmed: all 20 export unit tests unchanged and green.
+  - `tikzPreviewSession.ts`: session gains an optional `regen` payload
+    (`= TikzExportParams`, the scale fields double as initial slider values).
+    `isRegenParams` guards load; `createTikzPreviewSession` falls back to a
+    regen-less session if `JSON.stringify` throws (localStorage quota on a huge
+    scene) so the preview still opens read-only.
+  - `ExportPanel.tsx`: `buildTikzExport` also returns the `params` it used,
+    stashed in `lastBuiltParamsRef` so `openPreviewWindow` hands the exact
+    params to the session even when the panel reused cached text.
+  - `TikzPreviewWindow.tsx`: collapsible "Figure Sizing" block (same shell as
+    Optional Preamble) between find/replace and the code editor. Scale change
+    regenerates `tikzCode` immediately via the shared builder and debounces the
+    LaTeX recompile (350ms). Regenerating overwrites editor contents by design
+    (owner chose "regenerate freely", matching the Export panel). Only shown
+    when `regen` is present (desktop launch); web popups stay static.
+  - `App.css`: `.figureSizingSection` / `.previewScaleItem` etc., self-contained
+    in App.css (loaded on the preview route) rather than ExportPanel.css.
+  - Verified: `npm run build` + tsc clean; Node check confirms `scale=` doubles
+    for global 1->2 and every scale changes output (incl. JSON-round-tripped
+    scene); browser check confirmed the block renders in position, expands to 4
+    controls, and Global=2 regenerated the editor to `scale=7.467` with full
+    geometry. PDF recompile itself is desktop-only (unchanged compile path).
 - 2026-07-21 RGB inputs + recently-used colors in `ColorSwatchInput`
   (owner-reported gap: the popover offered presets and an OS custom-color
   picker, but no way to type R/G/B values, and nothing remembered what you'd
