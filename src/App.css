@@ -3880,6 +3880,58 @@ body.preview-split-dragging * {
   resize: vertical;
 }
 
+/* Live figure-sizing block in the PDF preview — same collapsible shell as the
+   optional preamble, sitting between find/replace and the code editor. */
+.figureSizingSection {
+  margin-top: 2px;
+  margin-bottom: 8px;
+  border: 1px solid var(--gd-ui-border-soft, #dbe4ef);
+  border-radius: 10px;
+  background: var(--gd-ui-surface-soft, #f8fafc);
+  padding: 8px;
+}
+
+.previewFigureSizingGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.previewScaleItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  background: var(--gd-ui-surface, #ffffff);
+  border: 1px solid var(--gd-ui-border, #cbd5e1);
+  border-radius: 8px;
+  padding: 4px 8px;
+  color: var(--gd-ui-text-subtle, #64748b);
+}
+
+.previewScaleLabel {
+  font-size: 11px;
+  color: var(--gd-ui-text-muted, #475569);
+  flex-shrink: 0;
+}
+
+.previewScaleInput {
+  width: 100%;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--gd-ui-text, #334155);
+  font-size: 12px;
+  text-align: right;
+  padding: 0;
+  height: 22px;
+}
+
+.previewScaleInput:focus {
+  outline: none;
+}
+
 .previewWindowMissing {
   border: 1px solid var(--gd-ui-border-panel, #d7dfe8);
   border-radius: 12px;

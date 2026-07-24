@@ -21,7 +21,9 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import { buildStandaloneSource, deriveDefaultOptionalPreamble } from "../export/tikz/standaloneDocument";
+import { buildTikzExportText } from "../export/buildTikzExportText";
 import { loadTikzPreviewSession } from "./tikzPreviewSession";
+import { IconGlobe, IconPoint, IconLine, IconType } from "./icons";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -65,6 +67,16 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   const [matchCase, setMatchCase] = useState(false);
   const [findStatus, setFindStatus] = useState("");
   const [codePaneRatio, setCodePaneRatio] = useState(0.55);
+
+  // Live figure sizing: only available when the launcher captured the scene
+  // (desktop app). Web popups fall back to a static, non-resizable preview.
+  const regen = session?.regen ?? null;
+  const [figureSizingOpen, setFigureSizingOpen] = useState(false);
+  const [globalScale, setGlobalScale] = useState(() => (regen ? String(regen.globalScale) : "1"));
+  const [pointScale, setPointScale] = useState(() => (regen ? String(regen.pointScale) : "1"));
+  const [lineScale, setLineScale] = useState(() => (regen ? String(regen.lineScale) : "1"));
+  const [labelScale, setLabelScale] = useState(() => (regen ? String(regen.labelScale) : "1"));
+  const recompileTimerRef = useRef<number | null>(null);
 
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -196,6 +208,44 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     },
     [isTauriRuntime]
   );
+
+  // Rebuild the TikZ from the captured scene with new sizing scales, then
+  // recompile. The code update is instant; the PDF recompile is debounced since
+  // it shells out to LaTeX and the number spinners can fire rapidly.
+  const applyScales = useCallback(
+    (next: { global: string; point: string; line: string; label: string }) => {
+      if (!regen) return;
+      let nextTikz: string;
+      try {
+        nextTikz = buildTikzExportText({
+          ...regen,
+          globalScale: Number(next.global),
+          pointScale: Number(next.point),
+          lineScale: Number(next.line),
+          labelScale: Number(next.label),
+        });
+      } catch {
+        return; // leave the current code untouched if regeneration fails
+      }
+      updateTikzCode(nextTikz, { trackHistory: true });
+      if (recompileTimerRef.current !== null) {
+        window.clearTimeout(recompileTimerRef.current);
+      }
+      recompileTimerRef.current = window.setTimeout(() => {
+        recompileTimerRef.current = null;
+        void compilePdf(nextTikz, optionalPreamble);
+      }, 350);
+    },
+    [regen, updateTikzCode, compilePdf, optionalPreamble]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (recompileTimerRef.current !== null) {
+        window.clearTimeout(recompileTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const nextTikz = session?.tikzPicture ?? "\\begin{tikzpicture}\n\\end{tikzpicture}";
@@ -975,6 +1025,93 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
             </div>
             {findStatus ? <div className="statusText">{findStatus}</div> : null}
           </div>
+          {regen ? (
+            <div className="figureSizingSection previewFigureSizing">
+              <button
+                type="button"
+                className="optionalPreambleToggle"
+                onClick={() => setFigureSizingOpen((prev) => !prev)}
+                aria-expanded={figureSizingOpen}
+              >
+                <span className={figureSizingOpen ? "optionalPreambleChevron open" : "optionalPreambleChevron"}>
+                  {">"}
+                </span>
+                Figure Sizing
+              </button>
+              {figureSizingOpen ? (
+                <div className="previewFigureSizingGrid">
+                  <label className="previewScaleItem">
+                    <IconGlobe size={14} />
+                    <span className="previewScaleLabel">Global</span>
+                    <input
+                      className="previewScaleInput"
+                      type="number"
+                      min={0.1}
+                      max={6}
+                      step={0.05}
+                      value={globalScale}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setGlobalScale(v);
+                        applyScales({ global: v, point: pointScale, line: lineScale, label: labelScale });
+                      }}
+                    />
+                  </label>
+                  <label className="previewScaleItem">
+                    <IconPoint size={14} />
+                    <span className="previewScaleLabel">Points</span>
+                    <input
+                      className="previewScaleInput"
+                      type="number"
+                      min={0.1}
+                      max={4}
+                      step={0.05}
+                      value={pointScale}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setPointScale(v);
+                        applyScales({ global: globalScale, point: v, line: lineScale, label: labelScale });
+                      }}
+                    />
+                  </label>
+                  <label className="previewScaleItem">
+                    <IconLine size={14} />
+                    <span className="previewScaleLabel">Lines</span>
+                    <input
+                      className="previewScaleInput"
+                      type="number"
+                      min={0.1}
+                      max={4}
+                      step={0.05}
+                      value={lineScale}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLineScale(v);
+                        applyScales({ global: globalScale, point: pointScale, line: v, label: labelScale });
+                      }}
+                    />
+                  </label>
+                  <label className="previewScaleItem">
+                    <IconType size={14} />
+                    <span className="previewScaleLabel">Labels</span>
+                    <input
+                      className="previewScaleInput"
+                      type="number"
+                      min={0.1}
+                      max={4}
+                      step={0.05}
+                      value={labelScale}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLabelScale(v);
+                        applyScales({ global: globalScale, point: pointScale, line: lineScale, label: v });
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <textarea
             ref={editorRef}
             className="exportTextarea previewEditorArea"

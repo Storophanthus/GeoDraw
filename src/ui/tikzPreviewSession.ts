@@ -1,22 +1,45 @@
+import type { TikzExportParams } from "../export/buildTikzExportText";
+
 const STORAGE_PREFIX = "gd:tikz-preview:";
 const MAX_SESSION_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Everything the preview window needs to regenerate the figure when a sizing
+ * scale changes. It is exactly the exporter's params — the scale fields double
+ * as the initial slider values.
+ */
+export type TikzPreviewRegenParams = TikzExportParams;
 
 export type TikzPreviewSession = {
   tikzPicture: string;
   createdAt: number;
   uiCssVariables?: Record<string, string>;
+  /** Absent for web popups or legacy sessions; present enables live figure sizing. */
+  regen?: TikzPreviewRegenParams;
 };
 
-export function createTikzPreviewSession(source: string, uiCssVariables?: Record<string, string>): string {
+export function createTikzPreviewSession(
+  source: string,
+  uiCssVariables?: Record<string, string>,
+  regen?: TikzPreviewRegenParams
+): string {
   const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const session: TikzPreviewSession = {
     tikzPicture: extractTikzPicture(source),
     createdAt: Date.now(),
     uiCssVariables: sanitizeUiVariables(uiCssVariables),
+    regen,
   };
   if (typeof window !== "undefined") {
     pruneOldSessions();
-    window.localStorage.setItem(`${STORAGE_PREFIX}${token}`, JSON.stringify(session));
+    try {
+      window.localStorage.setItem(`${STORAGE_PREFIX}${token}`, JSON.stringify(session));
+    } catch {
+      // A very large scene can exceed the localStorage quota. Fall back to a
+      // session without regen params so the preview still opens (read-only sizing).
+      const fallback: TikzPreviewSession = { ...session, regen: undefined };
+      window.localStorage.setItem(`${STORAGE_PREFIX}${token}`, JSON.stringify(fallback));
+    }
   }
   return token;
 }
@@ -33,10 +56,24 @@ export function loadTikzPreviewSession(token: string): TikzPreviewSession | null
       tikzPicture: parsed.tikzPicture,
       createdAt,
       uiCssVariables: sanitizeUiVariables(parsed.uiCssVariables),
+      regen: isRegenParams(parsed.regen) ? parsed.regen : undefined,
     };
   } catch {
     return null;
   }
+}
+
+function isRegenParams(value: unknown): value is TikzPreviewRegenParams {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<TikzExportParams>;
+  return (
+    typeof candidate.scene === "object" &&
+    candidate.scene !== null &&
+    typeof candidate.globalScale === "number" &&
+    typeof candidate.pointScale === "number" &&
+    typeof candidate.lineScale === "number" &&
+    typeof candidate.labelScale === "number"
+  );
 }
 
 function pruneOldSessions(): void {
