@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from "../export/constructionSnapshot";
-import { exportTikzEfficientWithOptions, exportTikzWithOptions } from "../export/tikz";
-import { getPointInnerSepFixedPt, TIKZ_EXPORT_CALIBRATION } from "../export/tikz/calibration";
+import { buildTikzExportText, type TikzExportParams } from "../export/buildTikzExportText";
 import { buildStandaloneSource, deriveDefaultOptionalPreamble } from "../export/tikz/standaloneDocument";
 import { getCanvasColorTheme, getUiCssVariables } from "../state/colorProfiles";
 import { loadStoredExportPreferences, saveStoredExportPreferences } from "../state/appPreferences";
@@ -59,6 +58,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [lastTikzSceneRef, setLastTikzSceneRef] = useState<SceneModel | null>(null);
   const [lastTikzOptionSig, setLastTikzOptionSig] = useState("");
   const [lastTikzGeneratedAt, setLastTikzGeneratedAt] = useState<number | null>(null);
+  const lastBuiltParamsRef = useRef<TikzExportParams | null>(null);
   const [canvasViewportSize, setCanvasViewportSize] = useState<CanvasViewportSize | null>(
     () => readDrawingCanvasSize()
   );
@@ -167,7 +167,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     [lastTikzGeneratedAt, tikzOutdated, tikzText]
   );
 
-  const buildTikzExport = (): { text: string; optionSig: string } => {
+  const buildTikzExport = (): { text: string; optionSig: string; params: TikzExportParams } => {
     const pointScale = Number(exportPointScale);
     const lineScale = Number(exportLineScale);
     const labelScale = Number(exportLabelScale);
@@ -202,42 +202,29 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       exportUseClipSelection && exportClipWorld?.kind === "rect" ? exportClipWorld : undefined;
     const clipPolygon =
       exportUseClipSelection && exportClipWorld?.kind === "polygon" ? exportClipWorld.points : undefined;
-    const useCanvasExactMetrics = exportDrawLayerBackend === "plain";
-    const tikzOptions = {
+    const params: TikzExportParams = {
+      scene,
       viewport,
       clipRectWorld: clipRect,
       clipPolygonWorld: clipPolygon,
-      worldToTikzScale: Number.isFinite(globalScale) ? globalScale : 1,
-      pointScale: Number.isFinite(pointScale) ? pointScale : 1,
-      lineScale:
-        (Number.isFinite(lineScale) ? lineScale : 1) *
-        (useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter),
-      labelScale: Number.isFinite(labelScale) ? labelScale : 1,
       screenPxPerWorld: camera.zoom,
       emitTkzSetup: exportEmitTkzSetup,
       drawLayerBackend: exportDrawLayerBackend,
+      bakeCoordinates: exportBakeCoordinates,
       labelGlow: exportLabelGlow,
-      labelHaloColor: useCanvasExactMetrics ? canvasTheme.backgroundColor : undefined,
-      bakePointCoordinates: exportBakeCoordinates,
-      pointStrokeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
-      pointInnerSepFixedPt: useCanvasExactMetrics ? undefined : getPointInnerSepFixedPt(),
-      pointInnerSepScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
-      segmentMarkSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale,
-      segmentMarkRoundSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkRoundSizeScale,
-      segmentMarkNonRoundSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkNonRoundSizeScale,
-      segmentMarkLineWidthScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale,
-      pathDotMarkSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pathDotMarkSizeScale,
-      angleLabelFontScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
-      angleArcSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.angleArcSizeScale,
-      angleMarkSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.angleMarkSizeScale,
-      rightAngleSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.rightAngleSizeScale,
-      autoScaleToFitCm: {
-        maxWidthCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
-        maxHeightCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,
-      },
-    } as const;
-    const text = exportEfficient ? exportTikzEfficientWithOptions(scene, tikzOptions) : exportTikzWithOptions(scene, tikzOptions);
-    return { text, optionSig };
+      backgroundColor: canvasTheme.backgroundColor,
+      efficient: exportEfficient,
+      globalScale,
+      pointScale,
+      lineScale,
+      labelScale,
+    };
+    const text = buildTikzExportText(params);
+    // Remember what produced this text so opening the preview can hand the same
+    // params to the preview window for live figure sizing, even when the panel
+    // reuses cached text.
+    lastBuiltParamsRef.current = params;
+    return { text, optionSig, params };
   };
 
   const generateTikz = (): string | null => {
@@ -289,7 +276,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       const text = ensureTikzText();
       if (!text) return;
 
-      const token = createTikzPreviewSession(text, uiCssVariables);
+      const token = createTikzPreviewSession(text, uiCssVariables, lastBuiltParamsRef.current ?? undefined);
       if (typeof window === "undefined") return;
       const url = new URL(window.location.href);
       url.searchParams.set("tikzPreview", token);
