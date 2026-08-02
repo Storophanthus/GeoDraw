@@ -263,6 +263,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         pointIds.has(ellipse.throughId) &&
         ellipse.focusAId !== ellipse.focusBId
     );
+    const nextEllipseIds = new Set(nextEllipses.map((ellipse) => ellipse.id));
     const nextAngles = angles.filter(
       (angle) => pointIds.has(angle.aId) && pointIds.has(angle.bId) && pointIds.has(angle.cId)
     );
@@ -386,6 +387,7 @@ export function normalizeSceneIntegrity(scene: SceneModel): SceneModel {
         if (point.kind === "pointOnLine") return nextLineIdsAfter.has(point.lineId);
         if (point.kind === "pointOnSegment") return nextSegmentIds.has(point.segId);
         if (point.kind === "pointOnCircle") return nextCircleIds.has(point.circleId);
+        if (point.kind === "pointOnEllipse") return nextEllipseIds.has(point.ellipseId);
         if (point.kind === "circleCenter") return nextCircleIds.has(point.circleId);
         if (point.kind === "triangleCenter") {
           return pointIds.has(point.aId) && pointIds.has(point.bId) && pointIds.has(point.cId);

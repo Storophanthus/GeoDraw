@@ -224,7 +224,7 @@ function describeSelectedConstruction(
 
   const point = scene.points.find((item) => item.id === selectedObject.id);
   if (!point) return null;
-  return describePointConstruction(point, pointNameById, lineById, segmentById, circleById);
+  return describePointConstruction(point, pointNameById, lineById, segmentById, circleById, ellipseById);
 }
 
 function describeNumberConstruction(
@@ -298,7 +298,8 @@ function describePointConstruction(
   pointNameById: Map<string, string>,
   lineById: Map<string, SceneModel["lines"][number]>,
   segmentById: Map<string, SceneModel["segments"][number]>,
-  circleById: Map<string, SceneModel["circles"][number]>
+  circleById: Map<string, SceneModel["circles"][number]>,
+  ellipseById: Map<string, NonNullable<SceneModel["ellipses"]>[number]>
 ): string {
   if (point.kind === "free") return `Free point ${point.name}.`;
   if (point.kind === "midpointPoints") {
@@ -351,6 +352,14 @@ function describePointConstruction(
     const circle = circleById.get(point.circleId);
     if (!circle) return `Point on circle ${point.circleId}.`;
     return `Point on ${describeCircleRef(circle, pointNameById)}.`;
+  }
+  if (point.kind === "pointOnEllipse") {
+    const ellipse = ellipseById.get(point.ellipseId);
+    if (!ellipse) return `Point on ellipse ${point.ellipseId}.`;
+    return `Point on ellipse with foci ${pointLabel(ellipse.focusAId, pointNameById)} and ${pointLabel(
+      ellipse.focusBId,
+      pointNameById
+    )}, through ${pointLabel(ellipse.throughId, pointNameById)}.`;
   }
   if (point.kind === "circleCenter") {
     const circle = circleById.get(point.circleId);

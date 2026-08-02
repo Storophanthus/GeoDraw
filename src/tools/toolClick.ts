@@ -49,6 +49,7 @@ export type ToolClickIO = {
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number, options?: { sectorArcId?: string }) => string | null;
+  createPointOnEllipse?: (ellipseId: string, t: number) => string | null;
   createPointByRotation: (
     centerId: string,
     basePointId: string,
@@ -180,6 +181,10 @@ export function handleToolClick(
       const created = io.createPointOnCircle(snap.circleId, snap.t);
       if (created) return created;
     }
+    if (snap?.kind === "onEllipse" && snap.ellipseId && typeof snap.t === "number" && io.createPointOnEllipse) {
+      const created = io.createPointOnEllipse(snap.ellipseId, snap.t);
+      if (created) return created;
+    }
     if (snap?.kind === "onSectorArc") {
       const created = createPointFromSectorArcSnap(snap);
       if (created) return created;
@@ -209,6 +214,10 @@ export function handleToolClick(
     }
     if (snap?.kind === "onCircle" && snap.circleId && typeof snap.t === "number") {
       io.createPointOnCircle(snap.circleId, snap.t);
+      return;
+    }
+    if (snap?.kind === "onEllipse" && snap.ellipseId && typeof snap.t === "number" && io.createPointOnEllipse) {
+      io.createPointOnEllipse(snap.ellipseId, snap.t);
       return;
     }
     if (snap?.kind === "onSectorArc") {

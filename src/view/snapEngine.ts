@@ -7,8 +7,10 @@ import {
   projectPointToLine,
   projectPointToSegment,
 } from "../geo/geometry";
+import { projectPointToEllipse } from "../geo/ellipse";
 import {
   getCircleWorldGeometry,
+  getEllipseWorldGeometry,
   getLineWorldAnchors,
   getPointWorldPos,
   type GeometryObjectRef,
@@ -21,7 +23,7 @@ type LineLike = { ref: GeometryObjectRef; a: Vec2; b: Vec2; finite: boolean };
 type CircleLike = { ref: GeometryObjectRef; center: Vec2; radius: number };
 type SectorLike = { ref: GeometryObjectRef; center: Vec2; radius: number; start: number; sweep: number };
 
-type SnapKind = "point" | "intersection" | "onLine" | "onSegment" | "onCircle" | "onSectorArc";
+type SnapKind = "point" | "intersection" | "onLine" | "onSegment" | "onCircle" | "onEllipse" | "onSectorArc";
 const VIS_EPS = 1;
 const HUGE_RADIUS_PICK_PX = 200_000;
 
@@ -33,6 +35,7 @@ export type SnapCandidate = {
   lineId?: string;
   segId?: string;
   circleId?: string;
+  ellipseId?: string;
   s?: number;
   u?: number;
   t?: number;
@@ -158,6 +161,25 @@ export function findBestSnap(
         t: pr.t,
         world: pr.point,
         screenDistPx: Math.hypot(sp.x - screen.x, sp.y - screen.y),
+        priority: 3,
+      });
+    }
+  }
+
+  for (const ellipse of scene.ellipses ?? []) {
+    if (!ellipse.visible) continue;
+    const geom = getEllipseWorldGeometry(ellipse, scene);
+    if (!geom) continue;
+    const projection = projectPointToEllipse(cursorWorld, geom);
+    const sp = camMath.worldToScreen(projection.point, camera, vp);
+    const screenDistPx = Math.hypot(sp.x - screen.x, sp.y - screen.y);
+    if (screenDistPx <= tolerancePx) {
+      candidates.push({
+        kind: "onEllipse",
+        ellipseId: ellipse.id,
+        t: projection.t,
+        world: projection.point,
+        screenDistPx,
         priority: 3,
       });
     }

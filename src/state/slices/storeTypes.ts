@@ -436,6 +436,7 @@ export type GeoActions = {
   createPointOnLine: (lineId: string, s: number) => string | null;
   createPointOnSegment: (segId: string, u: number) => string | null;
   createPointOnCircle: (circleId: string, t: number, options?: { sectorArcId?: string }) => string | null;
+  createPointOnEllipse: (ellipseId: string, t: number) => string | null;
   createPointByRotation: (
     centerId: string,
     basePointId: string,

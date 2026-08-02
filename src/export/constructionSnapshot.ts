@@ -17,6 +17,7 @@ export type SnapshotPointDefinition =
   | { kind: "pointOnLine"; lineId: string; s: number }
   | { kind: "pointOnSegment"; segId: string; u: number }
   | { kind: "pointOnCircle"; circleId: string; t: number }
+  | { kind: "pointOnEllipse"; ellipseId: string; t: number }
   | { kind: "circleCenter"; circleId: string }
   | { kind: "triangleCenter"; centerKind: "incenter" | "orthocenter" | "centroid" | "circumcenter"; aId: string; bId: string; cId: string }
   | { kind: "pointByTranslation"; pointId: string; fromId: string; toId: string; vectorId?: string }
@@ -353,6 +354,9 @@ function pointDefinition(point: ScenePoint): SnapshotPointDefinition {
   if (point.kind === "pointOnCircle") {
     return { kind: "pointOnCircle", circleId: point.circleId, t: point.t };
   }
+  if (point.kind === "pointOnEllipse") {
+    return { kind: "pointOnEllipse", ellipseId: point.ellipseId, t: point.t };
+  }
   if (point.kind === "circleCenter") {
     return { kind: "circleCenter", circleId: point.circleId };
   }
@@ -457,6 +461,7 @@ function pointDependsOn(point: ScenePoint): string[] {
   if (point.kind === "pointOnLine") return [point.lineId];
   if (point.kind === "pointOnSegment") return [point.segId];
   if (point.kind === "pointOnCircle") return [point.circleId];
+  if (point.kind === "pointOnEllipse") return [point.ellipseId];
   if (point.kind === "circleCenter") return [point.circleId];
   if (point.kind === "triangleCenter") return [point.aId, point.bId, point.cId];
   if (point.kind === "pointByTranslation") {

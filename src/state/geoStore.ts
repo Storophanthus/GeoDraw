@@ -20,6 +20,7 @@ import {
   findExistingIntersectionPointId,
   getLineCircleRefs,
   resolveIntersectionBranchIndex,
+  resolveOtherOccupiedIntersectionPointId,
 } from "../domain/intersectionReuse";
 import {
   isValidNumberDefinition,
@@ -196,6 +197,7 @@ const actions: GeoActions = {
     getLineCircleRefs,
     createStableLineCircleIntersectionPoint,
     resolveIntersectionBranchIndex,
+    resolveOtherOccupiedIntersectionPointId,
     isValidNumberDefinition,
     numberPrefixForDefinition,
     nextAvailableNumberName,

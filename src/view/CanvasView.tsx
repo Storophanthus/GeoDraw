@@ -162,6 +162,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const createPointOnLine = useGeoStore((store) => store.createPointOnLine);
   const createPointOnSegment = useGeoStore((store) => store.createPointOnSegment);
   const createPointOnCircle = useGeoStore((store) => store.createPointOnCircle);
+  const createPointOnEllipse = useGeoStore((store) => store.createPointOnEllipse);
   const createPointByTranslation = useGeoStore((store) => store.createPointByTranslation);
   const createPointByRotation = useGeoStore((store) => store.createPointByRotation);
   const createPointByDilation = useGeoStore((store) => store.createPointByDilation);
@@ -280,6 +281,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
         createPointOnLine,
         createPointOnSegment,
         createPointOnCircle,
+        createPointOnEllipse,
         createPointByTranslation,
         createPointByRotation,
         createPointByDilation,
@@ -437,6 +439,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
       createPointOnLine,
       createPointOnSegment,
       createPointOnCircle,
+      createPointOnEllipse,
       createPointByTranslation,
       createPointByRotation,
       createPointByDilation,

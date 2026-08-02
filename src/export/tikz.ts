@@ -1215,6 +1215,18 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         theta: point.t,
       });
       definedPointIds.add(point.id);
+    } else if (point.kind === "pointOnEllipse") {
+      const ellipse = (scene.ellipses ?? []).find((item) => item.id === point.ellipseId);
+      if (!ellipse) throw new Error(`Missing ellipse ${point.ellipseId}`);
+      resolvePoint(ellipse.focusAId);
+      resolvePoint(ellipse.focusBId);
+      resolvePoint(ellipse.throughId);
+      const world = getPointWorldPosCached(scene, point.id);
+      if (!world) throw new Error(`Cannot export undefined point on ellipse: ${point.id}`);
+      // Ellipses are emitted as numeric TikZ paths, so their constrained points
+      // use the matching evaluated coordinate in constructive exports as well.
+      constructions.push({ kind: "DefPoint", name, x: world.x, y: world.y });
+      definedPointIds.add(point.id);
     } else if (point.kind === "pointByRotation") {
       resolvePoint(point.centerId);
       resolvePoint(point.pointId);

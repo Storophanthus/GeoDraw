@@ -1,4 +1,5 @@
 import type { Vec2 } from "../../geo/vec2";
+import { ellipseGeometryFromFociPoint, pointOnEllipse } from "../../geo/ellipse";
 import {
   evalPointByDilation,
   evalPointByProjection,
@@ -26,6 +27,7 @@ import type {
   PointByRotation,
   PointByTranslation,
   PointOnCircle,
+  PointOnEllipse,
   PointOnLine,
   PointOnSegment,
   SceneVector,
@@ -118,6 +120,26 @@ export function evalPointOnCirclePoint(
   const t = clampPointOnSectorArc(point, scene, ctx, ops, center);
   ctx.stats.allocationsEstimate += 1;
   return evalPointOnCircle(center, radius, t);
+}
+
+export function evalPointOnEllipsePoint(
+  point: PointOnEllipse,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: {
+    getPointWorldById: (pointId: string, scene: SceneModel, ctx: SceneEvalContext) => Vec2 | null;
+  }
+): Vec2 | null {
+  const ellipse = (scene.ellipses ?? []).find((item) => item.id === point.ellipseId);
+  if (!ellipse) return null;
+  const focusA = ops.getPointWorldById(ellipse.focusAId, scene, ctx);
+  const focusB = ops.getPointWorldById(ellipse.focusBId, scene, ctx);
+  const through = ops.getPointWorldById(ellipse.throughId, scene, ctx);
+  if (!focusA || !focusB || !through) return null;
+  const geometry = ellipseGeometryFromFociPoint(focusA, focusB, through);
+  if (!geometry) return null;
+  ctx.stats.allocationsEstimate += 1;
+  return pointOnEllipse(geometry, point.t);
 }
 
 function clampPointOnSectorArc(

@@ -34,6 +34,12 @@ type SceneCreationContext = {
     objB: GeometryObjectRef,
     preferredWorld: Vec2
   ) => number | null;
+  resolveOtherOccupiedIntersectionPointId: (
+    scene: SceneModel,
+    objA: GeometryObjectRef,
+    objB: GeometryObjectRef,
+    preferredWorld: Vec2
+  ) => string | undefined;
   isValidNumberDefinition: (def: SceneNumberDefinition, scene: SceneModel) => boolean;
   numberPrefixForDefinition: (def: SceneNumberDefinition) => string;
   nextAvailableNumberName: (usedNames: Set<string>, prefix: string) => string;
@@ -62,6 +68,7 @@ export function createSceneCreationActions(
   | "createPointOnLine"
   | "createPointOnSegment"
   | "createPointOnCircle"
+  | "createPointOnEllipse"
   | "createPointByRotation"
   | "createPointByTranslation"
   | "createPointByDilation"
@@ -455,6 +462,46 @@ export function createSceneCreationActions(
       return createdId;
     },
 
+    createPointOnEllipse(ellipseId, t) {
+      let createdId: string | null = null;
+      ctx.setState((prev) => {
+        const ellipse = (prev.scene.ellipses ?? []).find((item) => item.id === ellipseId);
+        if (!ellipse || !Number.isFinite(t)) return prev;
+        const name = nextUnusedPointName(prev);
+        const id = `p_${prev.nextPointId}`;
+        createdId = id;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            points: [
+              ...prev.scene.points,
+              {
+                id,
+                kind: "pointOnEllipse",
+                name,
+                captionTex: name,
+                visible: true,
+                showLabel: prev.objectLabelDefaults.point,
+                locked: false,
+                auxiliary: false,
+                ellipseId,
+                t,
+                style: {
+                  ...prev.pointDefaults,
+                  labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
+                },
+              },
+            ],
+          },
+          selectedObject: { type: "point", id },
+          recentCreatedObject: { type: "point", id },
+          nextPointId: prev.nextPointId + 1,
+        };
+      });
+      return createdId;
+    },
+
     createPointByRotation(centerId, basePointId, angleDeg, direction, angleExpr) {
       let createdId: string | null = null;
       ctx.setState((prev) => {
@@ -765,6 +812,9 @@ export function createSceneCreationActions(
         const genericBranchIndex = lineCirclePoint
           ? undefined
           : ctx.resolveIntersectionBranchIndex(prev, objA, objB, preferredWorld) ?? undefined;
+        const genericExcludePointId = lineCirclePoint
+          ? undefined
+          : ctx.resolveOtherOccupiedIntersectionPointId(prev.scene, objA, objB, preferredWorld);
         const segmentCircleBranch: 0 | 1 = genericBranchIndex === 1 ? 1 : 0;
         const segmentCirclePoint = !lineCirclePoint && segmentCircle
           ? {
@@ -779,6 +829,7 @@ export function createSceneCreationActions(
               circleId: segmentCircle.circleId,
               segId: segmentCircle.segId,
               branchIndex: segmentCircleBranch,
+              excludePointId: genericExcludePointId,
               style: {
                 ...prev.pointDefaults,
                 labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
@@ -798,6 +849,7 @@ export function createSceneCreationActions(
               circleAId: circleCircle.circleAId,
               circleBId: circleCircle.circleBId,
               branchIndex: segmentCircleBranch,
+              excludePointId: genericExcludePointId,
               style: {
                 ...prev.pointDefaults,
                 labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },
@@ -841,6 +893,7 @@ export function createSceneCreationActions(
                 objA,
                 objB,
                 branchIndex: genericBranchIndex,
+                excludePointId: genericExcludePointId,
                 preferredWorld,
                 style: {
                   ...prev.pointDefaults,

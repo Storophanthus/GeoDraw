@@ -9,7 +9,12 @@ type PointCategory = "free" | "constrained" | "dependent";
 
 function getPointCategory(point: ScenePoint): PointCategory {
   if (point.kind === "free") return "free";
-  if (point.kind === "pointOnLine" || point.kind === "pointOnSegment" || point.kind === "pointOnCircle") {
+  if (
+    point.kind === "pointOnLine" ||
+    point.kind === "pointOnSegment" ||
+    point.kind === "pointOnCircle" ||
+    point.kind === "pointOnEllipse"
+  ) {
     return "constrained";
   }
   return "dependent";

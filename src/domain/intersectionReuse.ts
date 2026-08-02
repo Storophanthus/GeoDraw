@@ -192,6 +192,37 @@ export function resolveIntersectionBranchIndex(
   return resolveIntersectionBranchIndexInScene(state.scene, objA, objB, preferredWorld);
 }
 
+export function resolveOtherOccupiedIntersectionPointId(
+  scene: SceneModel,
+  objA: GeometryObjectRef,
+  objB: GeometryObjectRef,
+  preferredWorld: Vec2
+): string | undefined {
+  const intersections = resolveObjectIntersections(scene, objA, objB);
+  if (intersections.length < 2) return undefined;
+
+  let chosenIndex = 0;
+  let chosenDistance = distance(intersections[0], preferredWorld);
+  for (let i = 1; i < intersections.length; i += 1) {
+    const candidateDistance = distance(intersections[i], preferredWorld);
+    if (candidateDistance < chosenDistance) {
+      chosenIndex = i;
+      chosenDistance = candidateDistance;
+    }
+  }
+
+  const ROOT_EPS = 1e-6;
+  for (let rootIndex = 0; rootIndex < intersections.length; rootIndex += 1) {
+    if (rootIndex === chosenIndex) continue;
+    const root = intersections[rootIndex];
+    for (const point of scene.points) {
+      const world = getPointWorldPos(point, scene);
+      if (world && distance(world, root) <= ROOT_EPS) return point.id;
+    }
+  }
+  return undefined;
+}
+
 export function resolveIntersectionBranchIndexInScene(
   scene: SceneModel,
   objA: GeometryObjectRef,

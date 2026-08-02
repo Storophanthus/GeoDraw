@@ -254,6 +254,12 @@ export function ObjectBrowser({
         return `Circle(${pointLabel(c.centerId)},${pointLabel(c.throughId)})`;
     };
 
+    const ellipseRefText = (id: string): string => {
+        const ellipse = ellipseById.get(id);
+        if (!ellipse) return id;
+        return `Ellipse(${pointLabel(ellipse.focusAId)},${pointLabel(ellipse.focusBId)},${pointLabel(ellipse.throughId)})`;
+    };
+
     const lineLikeText = (ref: { type: "line" | "segment"; id: string }): string => {
         if (ref.type === "segment") {
             const s = segmentById.get(ref.id);
@@ -568,6 +574,8 @@ export function ObjectBrowser({
                                                 )
                                                 : point.kind === "pointOnCircle"
                                                     ? withAliasPrefix("point", point.id, `PointOn(${circleRefText(point.circleId)})`)
+                                                    : point.kind === "pointOnEllipse"
+                                                        ? withAliasPrefix("point", point.id, `PointOn(${ellipseRefText(point.ellipseId)})`)
                                                     : point.kind === "pointOnLine"
                                                         ? withAliasPrefix("point", point.id, `PointOn(${lineLikeText({ type: "line", id: point.lineId })})`)
                                                         : point.kind === "pointOnSegment"

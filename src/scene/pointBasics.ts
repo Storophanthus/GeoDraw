@@ -31,7 +31,8 @@ export function isPointDraggable(point: ScenePoint): boolean {
     point.kind === "free" ||
     point.kind === "pointOnLine" ||
     point.kind === "pointOnSegment" ||
-    point.kind === "pointOnCircle"
+    point.kind === "pointOnCircle" ||
+    point.kind === "pointOnEllipse"
   );
 }
 

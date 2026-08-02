@@ -14,6 +14,7 @@ import type {
   PointByRotation,
   PointByTranslation,
   PointOnCircle,
+  PointOnEllipse,
   PointOnLine,
   PointOnSegment,
   SceneModel,
@@ -41,6 +42,7 @@ import {
   evalPointByRotationPoint,
   evalPointByTranslationPoint,
   evalPointOnCirclePoint,
+  evalPointOnEllipsePoint,
   evalPointOnLinePoint,
   evalPointOnSegmentPoint,
   evalTriangleCenterPointPoint,
@@ -107,6 +109,7 @@ export function evalPointUnchecked(
   if (point.kind === "pointOnLine") return evalPointOnLine(point, scene, ctx, ops);
   if (point.kind === "pointOnSegment") return evalPointOnSegment(point, scene, ctx, ops);
   if (point.kind === "pointOnCircle") return evalPointOnCircle(point, scene, ctx, ops);
+  if (point.kind === "pointOnEllipse") return evalPointOnEllipse(point, scene, ctx, ops);
   if (point.kind === "pointByRotation") return evalPointByRotation(point, scene, ctx, ops);
   if (point.kind === "pointByTranslation") return evalPointByTranslation(point, scene, ctx, ops);
   if (point.kind === "pointByDilation") return evalPointByDilation(point, scene, ctx, ops);
@@ -167,6 +170,17 @@ function evalPointOnCircle(
 ): Vec2 | null {
   return evalPointOnCirclePoint(point, scene, ctx, {
     getCircleWorldGeometryWithCtx: ops.getCircleWorldGeometryById,
+    getPointWorldById: ops.getPointWorldById,
+  });
+}
+
+function evalPointOnEllipse(
+  point: PointOnEllipse,
+  scene: SceneModel,
+  ctx: SceneEvalContext,
+  ops: PointEvalDispatchOps
+): Vec2 | null {
+  return evalPointOnEllipsePoint(point, scene, ctx, {
     getPointWorldById: ops.getPointWorldById,
   });
 }

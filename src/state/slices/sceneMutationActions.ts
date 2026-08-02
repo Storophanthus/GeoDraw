@@ -1,6 +1,7 @@
 import type { Vec2 } from "../../geo/vec2";
 import { projectPointToCircle, projectPointToLine, projectPointToSegment } from "../../geo/geometry";
-import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos, type AngleStyle, type CircleStyle, type LineStyle, type PathArrowMark, type PointStyle, type PolygonStyle, type SceneModel, type SegmentArrowMark } from "../../scene/points";
+import { projectPointToEllipse } from "../../geo/ellipse";
+import { getCircleWorldGeometry, getEllipseWorldGeometry, getLineWorldAnchors, getPointWorldPos, type AngleStyle, type CircleStyle, type LineStyle, type PathArrowMark, type PointStyle, type PolygonStyle, type SceneModel, type SegmentArrowMark } from "../../scene/points";
 import {
   defaultCircleLabelPosWorld,
   defaultCircleLabelText,
@@ -2316,6 +2317,15 @@ function movePointToWorldInScene(
     const pr = projectPointToCircle(world, geom.center, geom.radius);
     const nextT = clampPointOnCircleToSectorArc(pr.t, point, scene, geom.center);
     return { ...point, t: nextT };
+  }
+
+  if (point.kind === "pointOnEllipse") {
+    const ellipse = (scene.ellipses ?? []).find((item) => item.id === point.ellipseId);
+    if (!ellipse) return point;
+    const geometry = getEllipseWorldGeometry(ellipse, scene);
+    if (!geometry) return point;
+    const projection = projectPointToEllipse(world, geometry);
+    return { ...point, t: projection.t };
   }
 
   return point;
