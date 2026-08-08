@@ -1,6 +1,6 @@
 [package]
 name = "geodraw"
-version = "0.1.0"
+version = "0.2.1"
 description = "Interactive geometry construction with TikZ export"
 authors = ["Ajat <ajat.adriansyah@gmail.com>"]
 license = "MIT"

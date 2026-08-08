@@ -80,6 +80,18 @@ export function appendRenderedSetupAndPoints({
       )},ymax=${caps.fmt(setupViewport.ymax)}]`
     );
     out.push(`\\tkzClip[space=${caps.fmt(setupViewport.space)}]`);
+  } else if (drawLayerBackend === "plain" && setupViewport && !clipRect && !clipPolygon) {
+    // The plain backend forces emitTkzSetup off (\tkzInit/\tkzClip are
+    // tkz-euclide macros), which would otherwise drop viewport clipping
+    // entirely and export the whole drawing. Emit the pure-TikZ equivalent so
+    // "Export what I see now" keeps working here. \tkzClip[space=n] grows the
+    // region by n on every side, so match that.
+    const space = setupViewport.space;
+    out.push(
+      `\\clip (${caps.fmt(setupViewport.xmin - space)},${caps.fmt(setupViewport.ymin - space)}) rectangle (${caps.fmt(
+        setupViewport.xmax + space
+      )},${caps.fmt(setupViewport.ymax + space)});`
+    );
   }
   if (drawLayerBackend === "tkz" && emitTkzSetup && setupLine) {
     caps.assertTkzMacro("tkzSetUpLine");

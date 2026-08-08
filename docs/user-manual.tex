@@ -118,14 +118,16 @@ Use \textbf{Fit View} \gdicon{screenshots/icons/fit-view.png} from the top actio
 \gdshot{screenshots/fit-view.png}{0.9\linewidth}{Fit View action and resulting re-centered camera.}
 
 \section{Tool Palette}
+\label{sec:tool-palette}
 Long-press or right-click a group button to open its flyout tools.
 
 \subsection{Move Group}
 \begin{itemize}[leftmargin=1.5em]
   \item \gdicon{screenshots/tools/move.png} \textbf{Move / Select} (\texttt{V}): select and manipulate objects.
-  \item \gdicon{screenshots/tools/export_clip_rect.png} \textbf{Export Clip Rectangle}: create rectangular clip for export.
-  \item \gdicon{screenshots/tools/export_clip.png} \textbf{Export Clip Polygon}: create polygon clip for export (close by clicking near the first vertex).
+  \item \gdicon{screenshots/tools/export_clip_rect.png} \textbf{Crop Area -- Box}: create a rectangular crop area for export.
+  \item \gdicon{screenshots/tools/export_clip.png} \textbf{Crop Area -- Freeform}: create a polygon crop area for export (close by clicking near the first vertex).
 \end{itemize}
+These two tools are also reachable directly from the \textbf{Crop area} block in the Export Tab section below -- that panel is the main way to start a crop, since it walks you through the whole process without needing to hunt for the tool in the palette.
 
 \subsection{Points Group}
 \begin{itemize}[leftmargin=1.5em]
@@ -260,7 +262,7 @@ Marking tools \gdicon{screenshots/icons/marking-controls.png} support both segme
 \gdshot{screenshots/mark-controls.png}{0.78\linewidth}{Segment and angle marking controls in the properties panel.}
 
 \subsection{Tool info panels}
-Special tools (Fixed Angle, Fixed Radius Circle, Export Clip, Copy Style) show context-specific instructions and inputs.
+Special tools (Fixed Angle, Fixed Radius Circle, Crop Area, Copy Style) show context-specific instructions and inputs.
 
 \section{Command Bar}
 Command Bar supports expression evaluation, object creation commands, and assignments.
@@ -305,10 +307,26 @@ Assignment is selective and fail-closed:
 \end{itemize}
 
 \section{Export Tab}
+\subsection{Crop area}
+The \textbf{Crop area} block is the main way to export only part of the figure. When no crop area exists yet, it shows two buttons:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Box}: draw a rectangular crop area (two opposite corners).
+  \item \textbf{Freeform}: draw a polygon crop area (click each corner, then click near the first vertex to close it).
+\end{itemize}
+Clicking either button arms the matching tool and shows an inline step hint (``Now click...'') in the panel so you don't need to leave the Export tab to see what to do next. Once an area is drawn, \textbf{Export only the box/shape I drew} is checked automatically, and the block switches to three pills:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Done}: stop drawing and return to the Move tool.
+  \item \textbf{Redraw}: re-arm the same tool to draw the area again.
+  \item \textbf{Clear}: remove the crop area and go back to exporting the whole figure.
+\end{itemize}
+While an area exists, drag its square handles on the canvas to adjust it, or uncheck \textbf{Export only the box/shape I drew} to temporarily export the full figure without discarding the area you drew.
+
+The same Box and Freeform crops can also be started from the \textbf{Crop Area -- Box} / \textbf{Crop Area -- Freeform} tools in the Move group of the Tool Palette (Section~\ref{sec:tool-palette}); using the panel is recommended since it keeps the step hints and Done/Redraw/Clear controls in one place.
+
 \subsection{TikZ export options}
 \begin{itemize}[leftmargin=1.5em]
   \item \textbf{Use Current View}: export based on current camera viewport.
-  \item \textbf{Use Export Clip selection}: apply clip polygon from Export Clip tool.
+  \item \textbf{Export only the box/shape I drew}: apply the crop area from the Crop area block above.
   \item \textbf{Match canvas size conversion}
   \item \textbf{Label glow}
   \item Scale controls:
@@ -361,8 +379,8 @@ Press \textbf{Preview} \gdicon{screenshots/icons/pdf-preview.png} in Export to o
 \subsection{I cannot select a tool variant}
 Long-press or right-click the group button to open its flyout.
 
-\subsection{Clip export does not apply}
-Ensure you closed the clip polygon (click near first point), then enable \textbf{Use Export Clip selection} in Export tab.
+\subsection{Crop export does not apply}
+If you used the Freeform crop, ensure you closed the polygon (click near the first point). Then check that \textbf{Export only the box/shape I drew} is enabled in the Crop area block of the Export tab -- drawing an area normally enables it automatically, but it can be unchecked afterward.
 
 \subsection{Command reports unknown/ambiguous point}
 \begin{itemize}[leftmargin=1.5em]
@@ -419,11 +437,11 @@ Use this template to insert screenshots consistently.
 % \caption{Command entry and status feedback.}
 % \end{figure}
 
-\subsection*{A.6 Export Panel + Clip}
+\subsection*{A.6 Export Panel + Crop Area}
 % \begin{figure}[h]
 % \centering
 % \includegraphics[width=\linewidth]{screenshots/export-panel.png}
-% \caption{Export options and clip selection workflow.}
+% \caption{Export options and Crop area workflow.}
 % \end{figure}
 
 \subsection*{A.7 TikZ Output}

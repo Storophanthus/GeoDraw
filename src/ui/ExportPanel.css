@@ -89,6 +89,100 @@
     max-height: none !important;
 }
 
+.clipBlock {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--gd-ui-surface-soft, #f8fafc);
+    border: 1px solid var(--gd-ui-border-soft, #e2e8f0);
+    border-radius: 8px;
+}
+
+/* While a clip tool is armed the canvas is waiting for clicks, so the block
+   has to read as "your turn" from the corner of the eye. */
+.clipBlock.clipBlockArmed {
+    border-color: var(--gd-ui-accent, #2563eb);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--gd-ui-accent, #2563eb) 14%, transparent);
+}
+
+.clipBlockHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 20px;
+}
+
+.clipBlockHeader .subSectionTitle {
+    margin-bottom: 0;
+}
+
+.clipBlockActions {
+    display: inline-flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.clipBlockActions .exportRefreshButton {
+    padding: 1px 8px;
+    font-size: 10.5px;
+}
+
+.clipBlockHint {
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--gd-ui-text-subtle, #64748b);
+}
+
+.clipBlockStep {
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.35;
+    font-weight: 600;
+    color: var(--gd-ui-accent-strong, #1d4ed8);
+}
+
+.clipToolRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.clipToolButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--gd-ui-border, #cbd5e1);
+    border-radius: 8px;
+    background: var(--gd-ui-surface, #ffffff);
+    color: var(--gd-ui-text, #334155);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 650;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.clipToolButton:hover {
+    border-color: var(--gd-ui-border-strong, #94a3b8);
+    color: var(--gd-ui-text-strong, #0f172a);
+}
+
+.clipToolButton.active {
+    background: var(--gd-ui-accent-strong, #1d4ed8);
+    border-color: var(--gd-ui-accent-strong, #1d4ed8);
+    color: var(--gd-ui-surface, #ffffff);
+}
+
+.clipToolButton:focus-visible {
+    outline: 2px solid var(--gd-ui-focus-outline, rgba(37, 99, 235, 0.2));
+    outline-offset: 2px;
+}
+
 .scaleBlock {
     margin-top: 12px;
     padding: 10px 12px;
@@ -192,4 +286,140 @@
 
 .scaleGridInput:focus {
     outline: none;
+}
+
+.exportStatusRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.exportRefreshButton {
+    border: 1px solid var(--gd-ui-border, #cbd5e1);
+    border-radius: 999px;
+    background: var(--gd-ui-surface, #ffffff);
+    color: var(--gd-ui-text-muted, #475569);
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.exportRefreshButton:hover,
+.exportRefreshButton:focus-visible {
+    border-color: var(--gd-ui-border-strong, #94a3b8);
+    color: var(--gd-ui-text-strong, #0f172a);
+    outline: none;
+}
+
+.exportAdvancedBlock {
+    margin-top: 8px;
+}
+
+.statusText a {
+    color: var(--gd-ui-accent, #2563eb);
+}
+
+.exportHeaderButton {
+    border: 1px solid var(--gd-ui-border, #cbd5e1);
+    border-radius: 999px;
+    background: var(--gd-ui-surface, #ffffff);
+    color: var(--gd-ui-text, #334155);
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.exportHeaderButton:hover,
+.exportHeaderButton:focus-visible {
+    border-color: var(--gd-ui-border-strong, #94a3b8);
+    color: var(--gd-ui-text-strong, #0f172a);
+    outline: none;
+}
+
+/* The code block: a header (title, status, refresh, copy actions) sitting
+   flush on top of the textarea, so "copy" is visually attached to what it
+   copies instead of living in a separate row at the top of the panel. */
+.exportCodeBlock {
+    margin-top: 10px;
+    border: 1px solid var(--gd-ui-border-panel, #d6dee9);
+    border-radius: 12px;
+    background: var(--gd-ui-surface-muted, #fbfbfc);
+    overflow: hidden;
+}
+
+.exportCodeBlock .exportTextarea {
+    margin-top: 0;
+    border: none;
+    border-radius: 0;
+}
+
+.exportCodeHeader {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 10px;
+    padding: 8px 10px;
+    background: var(--gd-ui-surface, #ffffff);
+    border-bottom: 1px solid var(--gd-ui-border-soft, #e2e8f0);
+}
+
+.exportCodeHeaderLeft {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--gd-ui-text-subtle, #64748b);
+}
+
+.exportCodeTitle {
+    font-weight: 700;
+    color: var(--gd-ui-text-muted, #475569);
+}
+
+.exportCodeActions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.exportCodeCopyButton {
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    border: 1px solid var(--gd-ui-border, #cbd5e1);
+    background: var(--gd-ui-surface, #ffffff);
+    color: var(--gd-ui-text, #334155);
+}
+
+.exportCodeCopyButton.primary {
+    background: var(--gd-ui-accent-strong, #1d4ed8);
+    border-color: var(--gd-ui-accent-strong, #1d4ed8);
+    color: var(--gd-ui-surface, #ffffff);
+}
+
+.exportCodeCopyButton:hover:not(:disabled),
+.exportCodeCopyButton:focus-visible:not(:disabled) {
+    border-color: var(--gd-ui-border-strong, #94a3b8);
+}
+
+.exportCodeCopyButton.primary:hover:not(:disabled),
+.exportCodeCopyButton.primary:focus-visible:not(:disabled) {
+    background: var(--gd-ui-accent-deeper, #1e40af);
+    border-color: var(--gd-ui-accent-deeper, #1e40af);
+}
+
+.exportWebGuidance {
+    padding: 8px 10px 0;
 }

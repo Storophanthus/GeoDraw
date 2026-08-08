@@ -3,6 +3,7 @@ import { useState, type CSSProperties, type PointerEventHandler } from "react";
 import { CanvasView } from "../view/CanvasView";
 import { CommandBar } from "../CommandBar";
 import { DocumentTabs } from "./DocumentTabs";
+import { EmptyCanvasHint } from "./EmptyCanvasHint";
 import { FileControls } from "./FileControls";
 import { HistoryControls } from "./HistoryControls";
 import { RightSidebar } from "./RightSidebar";
@@ -108,6 +109,7 @@ export function WorkspaceShell({
           <HistoryControls canUndo={canUndo} canRedo={canRedo} onUndo={onUndo} onRedo={onRedo} onFitView={onFitView} />
           <UpdateChecker />
           <CanvasView openSnapshotAsDocument={onOpenSnapshotAsDocument} />
+          <EmptyCanvasHint />
         </div>
         <CommandBar />
       </main>

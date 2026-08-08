@@ -25,6 +25,657 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-07-24 Live figure sizing in the PDF preview window
+  (owner-reported gap: the Figure Sizing controls existed only in the Export
+  panel, so adjusting Global/Points/Lines/Labels while looking at the compiled
+  PDF meant closing the preview, changing the panel, and reopening it):
+  - The preview is a separate Tauri webview that only received the finished
+    TikZ *string* via the localStorage session, so it had no way to re-size
+    anything. Fixed by capturing the scene + export options into the session
+    and regenerating in-window on scale change.
+  - `buildTikzExportText.ts` (new): the exporter option-assembly, extracted
+    verbatim out of `ExportPanel.buildTikzExport` into a pure function so the
+    panel and the preview produce byte-identical output. `ExportPanel` now
+    delegates to it (dropped its direct `exportTikz*`/calibration imports).
+    Parity confirmed: all 20 export unit tests unchanged and green.
+  - `tikzPreviewSession.ts`: session gains an optional `regen` payload
+    (`= TikzExportParams`, the scale fields double as initial slider values).
+    `isRegenParams` guards load; `createTikzPreviewSession` falls back to a
+    regen-less session if `JSON.stringify` throws (localStorage quota on a huge
+    scene) so the preview still opens read-only.
+  - `ExportPanel.tsx`: `buildTikzExport` also returns the `params` it used,
+    stashed in `lastBuiltParamsRef` so `openPreviewWindow` hands the exact
+    params to the session even when the panel reused cached text.
+  - `TikzPreviewWindow.tsx`: collapsible "Figure Sizing" block (same shell as
+    Optional Preamble) between find/replace and the code editor. Scale change
+    regenerates `tikzCode` immediately via the shared builder and debounces the
+    LaTeX recompile (350ms). Regenerating overwrites editor contents by design
+    (owner chose "regenerate freely", matching the Export panel). Only shown
+    when `regen` is present (desktop launch); web popups stay static.
+  - `App.css`: `.figureSizingSection` / `.previewScaleItem` etc., self-contained
+    in App.css (loaded on the preview route) rather than ExportPanel.css.
+  - Verified: `npm run build` + tsc clean; Node check confirms `scale=` doubles
+    for global 1->2 and every scale changes output (incl. JSON-round-tripped
+    scene); browser check confirmed the block renders in position, expands to 4
+    controls, and Global=2 regenerated the editor to `scale=7.467` with full
+    geometry. PDF recompile itself is desktop-only (unchanged compile path).
+- 2026-07-21 RGB inputs + recently-used colors in `ColorSwatchInput`
+  (owner-reported gap: the popover offered presets and an OS custom-color
+  picker, but no way to type R/G/B values, and nothing remembered what you'd
+  used before):
+  - `ColorField.tsx`: new "RGB" section at the top of the `variant="panel"`
+    popover — three number inputs (0-255), derived from `pickerValue` via
+    the existing `parseColorToRgb`, committed through the existing
+    `commitValue` path (so recents/persistence apply uniformly regardless of
+    entry method). New "Recent" section renders only when non-empty, reusing
+    the existing `.colorFieldPresetGrid`/`.colorFieldPreset` classes verbatim
+    -- no new swatch styling, just a new data source.
+  - Recording is centralized: a `recordRecentColor` helper is called from
+    `commitValue` (covers RGB inputs AND preset clicks) and separately from
+    the native `<input type="color">`'s `onChange` (which bypasses
+    `commitValue`'s synthetic-event path since it already has a real one).
+    Both paths converge on the same MRU list.
+  - Recent list is intentionally **global**, not per-field-instance: read
+    fresh from `localStorage` whenever a popover opens (`useEffect` on
+    `[open]`), not cached in component state across renders. Verified this
+    live -- a color set via one field (Stroke) appeared in a completely
+    different field's (Fill) Recent section without a page reload.
+  - `appPreferences.ts`: `loadStoredRecentColors`/`saveStoredRecentColors`,
+    same `StoredEnvelope` pattern as every other preference here.
+    `MAX_RECENT_COLORS = 10`. Validation lives in the loader (regex
+    `/^#[0-9a-f]{6}$/`, dedupe, cap) so garbage/oversized/malformed stored
+    data degrades to a shorter valid list instead of the usual all-or-nothing
+    envelope failure -- matches the export-preferences precedent of
+    per-field fallback over whole-envelope invalidation.
+  - `variant="token"` (Preferences dialog's theme-color fields) is
+    unaffected -- the RGB/Recent additions are `variant="panel"` only,
+    matches the plan's existing panel/token split.
+  - Verified live end-to-end, not just built: typing into R/G/B updates the
+    trigger's swatch and hex text immediately; three sequential edits landed
+    in `localStorage` as `["#0a64c8","#0a64f0","#0ae8f0"]` in the correct
+    envelope shape; survived a full page reload; clicking a Recent swatch
+    applies it and moves it to front (dedupe confirmed -- stayed at 3
+    entries, not 4); Dark Mode checked -- legible, though the whole
+    `.colorFieldPopover` (predating this change) is hardcoded cream/beige
+    rather than token-driven, so it does not itself go dark. Flagging for
+    the visual-pass plan's V5 theme sweep rather than fixing here, since
+    fixing it means re-theming presets/borders/shadows that this change
+    didn't touch.
+  - New `src/scene/__tests__/recent-colors.test.ts` (localStorage-stub
+    pattern, matching `export-preferences.test.ts`): round-trip, cap at
+    `MAX_RECENT_COLORS` keeping the front of the list, garbage entries
+    dropped individually rather than invalidating the whole list, duplicate
+    entries deduped on load, malformed JSON and non-array values both
+    degrade to empty rather than throwing. Wired into `test:scene`.
+- 2026-07-21 Visual pass V3: field grid + pilot migration on
+  `PointPropertiesSection.tsx` (approved `sidebar-visual-pass.md` plan,
+  check-in point before V4 propagates the pattern):
+  - Added `.propGrid`/`.propField`/`.propFieldFull`/`.propFieldLabel`/
+    `.propSliderControl`/`.checkboxRowGroup` primitives to `App.css`
+    (label-above-control, 2-col `1fr 1fr`, `min-width: 0` on every grid
+    child). `.controlRow`/`.controlRowWithNumeric` are untouched and stay
+    the active pattern for every panel V4 hasn't reached yet.
+  - Point pairing map implemented: Name+Apply stays a full-width row,
+    structurally unchanged; Caption (TeX) | Show Label paired (Caption is
+    `mode="object"`-only, so Show Label falls back to `.propFieldFull` in
+    tool-default mode rather than stranding a half-empty grid cell);
+    Label Color | Halo Color paired (still gated on
+    `showLabel !== "none"`, unchanged condition); Fix Object + Auxiliary
+    Object grouped into one full-width `.checkboxRowGroup` row rather than
+    two grid cells; Shape stays full-width (its popover needs the room,
+    and has no size-matched partner once the sliders were pulled out);
+    Stroke Color | Fill Color paired -- required reordering Fill Color to
+    sit immediately after Stroke Color (was after Stroke Width/Opacity) so
+    the two colors land in the same grid row, a pure layout reorder with
+    no handler/prop changes; Size, Stroke Width, Stroke Opacity, Fill
+    Opacity all stay full-width slider rows per the plan's own
+    "sliders never pair, to avoid overflow" rule.
+  - Root-caused and fixed a real overflow bug surfaced by the probe:
+    `.colorFieldNativeInput` (the invisible 1x1 `<input type=color>` every
+    `ColorSwatchInput` uses to open the OS picker) had no `top`/`left`
+    anchor, so its browser-computed static position landed past the end of
+    the full-width trigger button, inflating `scrollWidth` by ~6px on
+    every host row. Reproduced the identical 6px overflow on an untouched
+    `.controlRow` (Circle's Stroke Color) before touching anything,
+    confirming this predates V1/V2 and isn't new debt. Fixed with
+    `top: 0; left: 0` in `App.css` -- global, zero visual/behavioral
+    change (element stays `opacity: 0`/`pointer-events: none`), and it
+    de-risks V4's ~9 remaining ColorSwatchInput-in-`.propGrid` migrations.
+  - `StyleSectionHeader.tsx` (header-row layout move + "Set Default"
+    relabel from "Make this default for this object") was already on disk
+    from an interrupted prior session; judgment call was to keep it.
+    Measured live at the sidebar's real width (312px, a few px above the
+    300px documented minimum): header row 269px, "Point Style" title
+    ~70px, leaving 191px for the toggle -- "Set Default" fits at 89px, the
+    original sentence measures 224px and would overflow by ~33px. The
+    plan's own mockup-language section already names "Set Default" as the
+    example text for this control, and two other consumers have longer
+    titles than Point's ("Polygon Style", "Segment Style", 13 chars),
+    making the short label the safer choice everywhere this shared header
+    renders, not just here.
+  - `ObjectBrowser.tsx` needed no markup changes -- the monospace command
+    text and accent-tinted `.active` row state the plan calls for were
+    already fully covered by `App.css` rules already on disk before this
+    commit (`.objectItemLabel` 12px/600, `.objectItemCommand` 11px
+    monospace muted, `.objectItem.active` accent-bg + inset accent ring).
+  - Verified live in Vanilla and Dark Mode via Preferences: build and all
+    three test suites exit 0, console clean. Exercised rename+Apply, shape
+    popover open/select/close, a Stroke Color change through the pill, a
+    Size slider drag, Fix Object/Auxiliary Object toggles, and selecting a
+    different object (Point A -> Point B) -- all reverted after. Overflow
+    probe (`scrollWidth <= clientWidth`) clean on both `.propGrid`
+    instances and `.rightSidebar` at the current width (312px) and at the
+    documented minimum (300px; forced via direct style for the probe,
+    since the resize handle's pointer-capture drag isn't reliably
+    driveable from browser automation).
+- 2026-07-21 Visual pass V2: ColorSwatchInput panel variant becomes a
+  full-width `[swatch][HEX]` pill (`src/ui/ColorField.tsx` + `src/App.css`),
+  one component change reaching all ~30 call sites with zero call-site
+  edits, per the approved `sidebar-visual-pass.md` plan:
+  - Added `resolvedHex`/`displayText`: shows `toColorInputValue(value)`
+    uppercased when it parses as a color, otherwise the raw string
+    (matches non-hex style values like named/`none` colors without
+    forcing them through the hex formatter); `title` is always the raw
+    value.
+  - The trigger's panel-variant class changed from `.colorInput` (a fixed
+    36x28 swatch-only button) to a new `.colorFieldPill` (full-width, 30px,
+    swatch chip + monospace hex text) that reuses the existing shared
+    `.colorFieldTrigger` hover/focus/disabled states, so no new interaction
+    CSS was needed. `.colorInput` had no other consumers, so it was
+    replaced rather than left dead.
+  - `variant="token"` (Preferences, paired with its own text input per
+    `ThemeColorControl`) takes a different branch entirely -- the hex-text
+    span and pill class only render for `variant="panel"` -- so it is
+    byte-for-byte the same JSX/CSS path as before. Verified in the
+    Preferences dialog: swatch still 36x30, no hex text on the swatch
+    itself.
+  - Found one pre-existing outlier while spot-checking every style tab:
+    `src/ui/object-styles/ArrowListControl.tsx:447` pins its
+    `ColorSwatchInput` to an inline `style={{ width: "64px" }}`, which (by
+    design, inline styles beat the class) overrides the new pill's
+    full width, so "Arrow Color" now shows a heavily truncated
+    `#E...`-style pill instead of a hex readout. Not broken --
+    `text-overflow: ellipsis` keeps it inside its box and `title` still
+    carries the full value on hover -- but it's the one place the pill
+    reads worse than before. Left untouched (no call-site edits is the
+    point of V2, and `ArrowListControl` is explicit V4 -- object-styles --
+    territory); flagging here so V4 knows to drop that inline override.
+  - Verified live in Vanilla and Dark Mode: build and all three test
+    suites exit 0, console clean, no `.rightSidebar`/`.styleTabList`
+    overflow, pill checked in Point/Circle/Sector style tabs (Stroke,
+    Fill, Label) and the Preferences token rows.
+- 2026-07-21 Visual pass V1: restyle sidebar control primitives onto the
+  owner's Figma-style mockup language (approved plan
+  `sidebar-visual-pass.md`), CSS-only in `src/App.css`, zero markup edits:
+  - Sliders (`.sizeSlider`/`.numberSliderTrack`): track 7px gradient -> 4px
+    flat (`--gd-ui-border-soft` fill, `--gd-ui-border` hairline); thumb
+    20/18px accent-filled -> 14px surface-filled with a 2px
+    `--gd-ui-text-strong` ring (falls back to a token, not a hardcoded hex,
+    per the plan's dark-contrast note). Firefox's `-moz-range-progress`
+    keeps its accent fill, just flattened to match.
+  - Inputs/selects/number boxes (`renameInput`, `selectInput`,
+    `scaleInputCompact`, `shapeButton`, and the bare `controlRow` number
+    input for consistency) normalized to a shared 30px height / 6px radius
+    and a single merged `:focus-visible` rule -- `selectInput` and
+    `shapeButton` previously fell through to the browser's default focus
+    ring instead of the app's accent outline.
+  - `.deleteButton` gained a hover/focus danger-tint background
+    (`color-mix` with `--gd-ui-danger`); it was already outline-style
+    (red border/text on a neutral fill) but had no interactive state.
+  - `.rightTabs`/`.rightTabButton` (the Objects/Export segmented switch):
+    dropped the gradient tray, gradient active-pill and `translateY` lift
+    for a flat gray tray + white active pill with a hairline shadow,
+    matching the `.objectBrowserTab` pattern already used one panel down.
+  - `.objectBrowserTabs`/`.objectBrowserTab` (the Points/Lines/Circles...
+    filter icons) were declared twice (~2861 and ~3196, known debt from the
+    density pass) with the second silently winning on the properties that
+    conflicted while the first's `overflow-x` leaked through underneath.
+    Consolidated into one declaration each, matching current effective
+    behavior exactly, then deleted the duplicate.
+  - `.sidebarHeaderBar` de-gradiented to a plain surface card; it plus
+    `.sidebarSection` and `.styleControlGroup` moved onto the plan's radius
+    scale (16/18/14px -> 8px "card" tier; controls already normalized above
+    sit at 6px).
+  - `.rightSidebar` gained a styled thin scrollbar (`scrollbar-width: thin`
+    + `::-webkit-scrollbar*`), token-colored, additive only.
+  - Deliberately left untouched: `.sidebarToggleButton` (still gradient --
+    it opens the Quick Help card, which V5 owns alongside a full contrast
+    sweep) and radii outside the right-sidebar/properties-panel surface
+    (left toolbar, document tabs, command bar) -- out of scope per the plan.
+  - Verified live in both Vanilla and Dark Mode via Preferences: build and
+    all three test suites exit 0, console clean, `.rightSidebar`/
+    `.objectBrowserTabs`/`.rightTabs`/`.styleTabList` all report
+    `scrollWidth === clientWidth` (no overflow) at the default sidebar
+    width in both themes.
+- 2026-07-21 Export panel: attach the copy actions to the code they copy
+  (owner-reported: "before, the copy is actually above the code, so it is clear
+  what we are copying"; and the long-labelled buttons looked bad):
+  - The copy buttons sat at the top of the panel, separated from the textarea by
+    the option checkboxes, the Figure sizing card and the status row -- four
+    sections between an action and its object. Copy/Copy full file now live on a
+    header row belonging to the code block itself, flush on top of the textarea,
+    with the status text and Refresh folded into that same row.
+  - `Open PDF Preview` was never a copy action, so it no longer sits with them:
+    it moved to the section header beside the "Export" title as a compact
+    `Open PDF` pill (still desktop-only).
+  - Labels shortened (`Copy Code` -> `Copy`, `Copy Full Document` ->
+    `Copy full file`, `Refresh code` -> `Refresh`) so they fit the sidebar.
+  - The ugly two-line buttons were a CSS bug, not just long text: `.actionButton`
+    sets a fixed `height: 38px` with no `white-space`, so a long label wrapped
+    onto a second line and was then clipped by that height. Its container was
+    `.actionsRowWrap`, which despite the name set `flex-wrap: nowrap`, so the row
+    could not reflow either -- buttons could only squeeze their own text.
+    Added `white-space: nowrap` to the base rule, which also pre-emptively fixes
+    `.findReplaceControls .actionButton` (fixed 32px, "Replace All").
+    `.actionsRowWrap` had no other user and was removed.
+  - Overleaf guidance moved to sit directly under the copy buttons (where the
+    code is about to be pasted from) instead of near the removed PDF button.
+  - Verified live: both buttons render single-line (26px, `nowrap`), the header
+    sits above the textarea, and clicking Copy generates 1599 chars and flips the
+    status to "Up to date". That same check also confirmed the viewport-clip fix
+    end to end -- the generated plain-backend output contains `\clip (`.
+- 2026-07-21 Fix "Export what I see now" in Exact Coordinates, and un-orphan the
+  export unit tests that would have caught it (owner-reported: the exported PDF
+  contained the whole drawing instead of the visible canvas region; correct in
+  Geometric Constructions, wrong in Exact Coordinates):
+  - Root cause: viewport clipping is emitted at exactly one place,
+    `renderSetupAndPoints.ts`, gated on `emitTkzSetup`. `ExportPanel.tsx` sets
+    `exportEmitTkzSetup = exportBakeCoordinates ? false : (...)`, and
+    `exportBakeCoordinates` is true precisely in `visualExact` -- so Exact
+    Coordinates force-disabled the only code path that clips to the viewport.
+    Introduced by `ad383db`, integrated as part of the tkz-independence work.
+    The intent was right (`\tkzInit`/`\tkzClip` ARE tkz-euclide macros and had
+    to go), but no pure-TikZ replacement was put in, so the feature did not get
+    ported -- it disappeared.
+  - Fix: when the plain backend has a viewport and no explicit clip rect/polygon,
+    emit `\clip (xmin,ymin) rectangle (xmax,ymax)` inflated by
+    `setupViewport.space` (matching `\tkzClip[space=n]`, which grows the region
+    by n per side). Deliberately keyed on `drawLayerBackend === "plain"` rather
+    than on `!emitTkzSetup`, so a user who manually unticks the setup-lines
+    option in tkz mode keeps today's behaviour.
+  - The explicit clip tools were never affected: `clipRect`/`clipPolygon` emit a
+    plain `\clip` and are not gated, which is why "Only export the clipped area"
+    kept working in both modes.
+  - **Why nothing caught this:** every file in `src/export/__tests__` was
+    orphaned -- referenced by no npm script and no workflow. (`line-extents`
+    appeared wired but only via `test:export:watch`, a watch helper.)
+    `setup-toggle.test.ts` asserts this exact `\tkzClip` behaviour and never
+    ran; `draw-layer-backend-plain.test.ts`, which the tkz work itself extended
+    with ~148 lines of assertions, never ran either -- that change was never
+    verified by its own tests.
+  - A second regression from the same commit surfaced once they were run:
+    `point-shape-style-export.test.ts` asserted the exact string
+    `\usetikzlibrary{shapes.geometric}`, but libraries are now emitted as one
+    combined declaration (`{shapes.geometric,arrows}`). Bisected to the same
+    commit. The code is fine -- arguably better, since `arrows` is now pulled in
+    for the `>=triangle 45` it already used -- so the stale assertion was
+    converted to a regex, the same way the fixture assertions in
+    `scripts/test-export.ts` already were.
+  - `scripts/test-export-unit.mjs` (new) runs all of them and is chained into
+    `test:export`. It discovers files by scanning the directory rather than
+    listing them: a hand-maintained list is what created this gap, and a new
+    test file would be orphaned again the first time someone forgot to register
+    it. 18 files, all passing.
+  - New `viewport-clip-plain-backend.test.ts` covers the regression: asserts the
+    plain backend emits a `\clip` and no `\tkzClip`/`\tkzInit`, that the
+    rectangle matches the viewport, that it precedes the draw commands, that an
+    explicit clip rect does not produce two clips, and that tkz mode still uses
+    `\tkzClip`. Confirmed it fails with the fix reverted and passes with it.
+- 2026-07-21 Phase 3d: promote Save PDF/SVG/PNG to visible preview-window
+  buttons (last item of the UI-revamp plan; owner confirmed the desktop PDF
+  compile works before this started):
+  - `TikzPreviewWindow.tsx` `previewWindowActions`: added Save PDF/SVG/PNG
+    next to the existing Copy Edited TikZ and Save Full LaTeX (.tex), calling
+    the same `savePreviewPdf`/`savePreviewSvg`/`savePreviewPng` handlers the
+    right-click context menu already used (no new logic). `disabled={!pdfData}`
+    per the plan; Save Full LaTeX stays enabled since it builds from source,
+    not from a compiled PDF. Right-click menu is unchanged -- both surfaces
+    now exist side by side, same pattern as the .tex button already set.
+  - Verified in the browser by seeding a `gd:tikz-preview:<token>` localStorage
+    session and loading `/?tikzPreview=<token>` directly (this window only
+    normally opens via `WebviewWindow`, which needs Tauri) -- confirmed all six
+    header buttons render on one line via the existing `flex-wrap`, and that
+    Save PDF/SVG/PNG are `disabled=true` with no compiled PDF while Copy Edited
+    TikZ and Save Full LaTeX stay enabled. Could not verify the buttons going
+    enabled after a real compile or an actual file write from this session --
+    `pdfData` is internal React state, not something reachable from outside,
+    and the compile path is native/Tauri-only. That needs a real desktop
+    session: confirm the three buttons enable once a PDF exists and each
+    produces a real file.
+- 2026-07-21 Construction/stat cards: label moved onto the value's line.
+  - Two earlier attempts only shaved padding and moved these 44 -> 42px, which
+    was rightly rejected. Padding was never the cost: the card was two *stacked
+    text lines* (an uppercase label row, then the value row), and ~8px of its
+    42px was padding. No amount of padding work reaches that.
+  - `.constructionInfo` and `.toolInfo` are now a two-column grid
+    (`auto minmax(0, 1fr)`) so the label sits beside its value instead of above
+    it. Nothing was removed — label, value and the card itself all remain.
+    Construction 44 -> 26px, sector stat 42 -> 28px.
+  - `.toolInfo .detailRow` keeps `grid-column: 2` so object types with several
+    stats stack correctly down column two rather than spilling into the label
+    column.
+  - `flex-wrap: wrap` on that row is load-bearing, not cosmetic: a circle's
+    equation is too wide to sit beside its "Equation" label, and without wrap
+    it broke mid-expression (`(x+5.25)^2+` / `(y+3.75)^2=12.03^2`). With wrap
+    it drops to its own full-width line and stays unbroken, while short stats
+    like `Sweep  70.35°` still share the line. Verified both live.
+- 2026-07-21 Second sidebar pass, after owner review of the first:
+  - **Style tab strip was clipping labels** ("STROKE" rendered as "KE").
+    Measured cause: `.styleTabButton` is `flex: 0 0 auto` + `min-width:
+    max-content` (tabs never shrink), and a sector shows five of them
+    (Stroke/Fill/Label/Arrow/Mark). scrollWidth 314 vs clientWidth 267 —
+    a 47px overflow that `overflow-x: auto` then hid by scrolling.
+    Fixed by recovering the width: button padding `7px 9px 8px -> 5px 4px 6px`
+    (-10px per tab) and `letter-spacing 0.04em -> 0.02em`. Now scrollWidth ==
+    clientWidth (267), all five labels visible. Strip height 37 -> 31px.
+    Note this was pre-existing, not caused by the first pass — that pass gave
+    the strip 12px *more* room.
+  - Type chooser row 36 -> 32px, and construction card 44 -> 42px. Both hit a
+    floor that padding cannot pass, worth knowing before anyone tries again:
+    the chooser row is a hardcoded icon (`ObjectBrowser.tsx`, `size` prop,
+    now 16) plus 3px padding; the construction card now sums *exactly* to
+    8px padding + 14px title + 2px margin + 16px value + 2px border. Going
+    further needs smaller fonts or a structural change, both ruled out.
+  - Compounding margins are where the remaining gain came from, since the
+    style panel has many rows: `.controlRow`/`.fieldBlock`/`.checkboxRow`
+    margin-top `10 -> 6px`, `.fieldLabel` margin-bottom `6 -> 4px`,
+    `.styleControlTabs` margin-top `10 -> 6px`, `.styleTabPanel` padding
+    `10 -> 8px`.
+  - `.objectBrowserTabs` / `.objectBrowserTab` are ALSO duplicated in App.css
+    (2831 and 3166), same trap as `.objectListScrollArea`. Left in place this
+    time but both copies were edited together; worth consolidating later.
+- 2026-07-21 Right sidebar vertical-space pass (owner-reported: style controls
+  like arrow/stroke sit at the bottom but get under a third of the panel):
+  - Root cause of most of it was a bug, not proportions: `.objectListScrollArea`
+    was declared **twice** in `App.css`, merging to `height: 320px` (rule 1) plus
+    `flex: 1 1 auto` (rule 2). The list reserved 320px regardless of content and
+    then grew into leftover space. Consolidated to one rule: `flex-grow: 0` plus
+    `max-height: min(45vh, 320px)`. Measured empty list 320px -> 34px.
+    The 320px ceiling is deliberate — it matches the old fixed height so a long
+    list is no smaller than before. An earlier draft used `35vh`, which resolved
+    to 252px at a 720px viewport and would have *shrunk* long lists; caught by
+    measuring in the browser rather than trusting the value.
+  - Density pass on the rest, size only. Nothing was moved, merged, hidden, or
+    removed — explicitly out of scope per the owner, who tuned these panels for
+    utility. Only padding/margin/line-height changed; no font sizes.
+    Header 68->54px, tab button 42->34px, object row 50->44px,
+    `.sidebarSection` padding 16->10px.
+  - Note `.sidebarSection` is shared by three panels (Objects, Properties and
+    Export), so the padding change tightens the Export tab too.
+  - `.rightTabButton` min-height went 42->34px. There are no `pointer: coarse`
+    media queries anywhere in `App.css`, so this is unconditional; if touch
+    targets matter later, restore 42px additively inside a coarse-pointer block
+    rather than reverting this.
+  - Verified: `npm run build`, `test:command`, `test:scene`, `test:export` all
+    pass; heights measured live in the browser. Only the light color profile was
+    seen visually — the app uses its own profiles rather than
+    `prefers-color-scheme`, but these changes carry no color values, so geometry
+    is identical across profiles.
+- 2026-07-21 Integrate the tkz-euclide-*independent* export work onto main
+  (branch `codex/text-editor-rewrite` commits `090eda6` + `c2a1618`):
+  - `main` had already moved ahead with the UI-revamp Phase 3 export refactor,
+    which *extracted* `buildStandaloneSource` / `deriveDefaultOptionalPreamble`
+    out of `TikzPreviewWindow.tsx` into `src/export/tikz/standaloneDocument.ts`.
+    Meanwhile `c2a1618` edited those same functions *in place* and added a
+    "Save Full LaTeX (.tex)" feature. Brought the two together via a temp
+    integration branch (cherry-pick onto `main`), NOT by rebasing/force-pushing
+    the shared `codex/text-editor-rewrite` ref — that branch is left untouched;
+    its content is now on `main`, so it can be deleted or rebased later (git
+    will skip the already-applied patches).
+  - Sole conflict: `TikzPreviewWindow.tsx`. Resolved by keeping the extraction
+    and porting their additive features (`savePreviewTex`, the `.tex`
+    save-dialog signatures, header + context-menu buttons, `MENU_HEIGHT`).
+  - Two files git did NOT flag but the fix required, because the functions now
+    live in the extracted module: `standaloneDocument.ts`
+    (`deriveDefaultOptionalPreamble` gained a `tikzCode` param +
+    `containsDvipsNamedColorUsage` so a dvips color name like `Goldenrod`
+    pulls in `\usepackage[dvipsnames]{xcolor}`) and `ExportPanel.tsx`
+    (Copy Full Document call-site updated to the 2-arg signature).
+  - Flag for review (harmless, not a blocker): that added
+    `\usepackage[dvipsnames]{xcolor}` line looks redundant with
+    `REQUIRED_PREAMBLE`'s existing `\PassOptionsToPackage{dvipsnames}{xcolor}`
+    — re-requesting an already-active option is a subset (no clash), so it
+    compiles fine, but it can likely be dropped.
+  - Verified: `npm run build` (tsc), `test:export` (102 fixtures),
+    `test:command`, `test:scene` all pass.
+- 2026-07-21 Unblock the GitHub Pages deploy (cherry-pick of `8a91660`):
+  - The Pages workflow builds with `npm run build` (= `tsc && vite build`),
+    a *full* type-check. A pre-existing error in
+    `src/export/__tests__/draw-layer-backend-plain-constructions.test.ts`
+    (`kind: "free"` widened to `string` because `scene` had no `SceneModel`
+    annotation) failed `tsc`, so the `ad383db` deploy AND the first push of
+    UI-revamp Phases 1–4 both failed to deploy — the live site stayed stale
+    at the last green commit (`52c90be`) with none of the new work visible.
+  - Fix: cherry-picked the owner's own fix commit `8a91660` from
+    `codex/text-editor-rewrite` (adds `import type { SceneModel }` +
+    `const scene: SceneModel`). Self-contained to that one test file;
+    identical content means no conflict when that branch later merges.
+  - Process lesson: verify against `npm run build` (the real deploy command),
+    NOT `npx vite build` (esbuild, skips types) or `tsc --noEmit | grep -v`,
+    both of which masked this error the whole session.
+- 2026-07-21 Minimal empty-canvas onboarding (UI/UX revamp Phase 4 — final
+  phase of the plan):
+  - Zero first-run guidance existed: a brand-new user got a blank canvas,
+    "No objects", and a command-bar placeholder as their only orientation.
+    Added a single dismissible hint card, deliberately not a multi-step tour.
+    - `src/state/appPreferences.ts`: `geodraw.onboarding.v1` envelope
+      (`OnboardingFlags.emptyCanvasHintDismissed`), same per-field-normalize
+      pattern as export preferences.
+    - `src/ui/EmptyCanvasHint.tsx` (new): shows when the active scene is
+      empty *and* the dismissal flag is unset; disappears the moment any
+      object exists (pure derived visibility from `store.scene`, no flag
+      write) and reappears if the scene is emptied again — the flag is only
+      ever set by clicking "Got it", which is a one-time permanent dismiss.
+      One correction to the plan's field list while implementing: the
+      emptiness check covers `scene.vectors` in addition to the 10 fields
+      the plan named — `vectors` is a real, actively-created collection
+      (e.g. from Translate) that the plan's list omitted, and skipping it
+      would have shown the hint over a scene that already has content.
+      Positioned via a `pointer-events: none` wrapper (`inset:0` inside
+      `canvasDocumentArea`, z-index 30 — below the floating top actions at
+      45 and the command bar at 60) with the actual card carrying
+      `pointer-events: auto`, so the canvas, palette, tabs, and command bar
+      all stay fully interactive underneath it.
+    - `src/ui/WorkspaceShell.tsx`: mounted after `CanvasView`.
+    - `src/ui/RightSidebar.tsx`: added a "User manual (PDF)" link to the
+      bottom of the existing Quick Help card (linking to
+      `docs/user-manual.pdf` on GitHub — works from both web and desktop
+      since it's a plain external link, not a Tauri-opener call).
+    - `src/App.css`: `.emptyCanvasHintWrap`/`.emptyCanvasHint` (matching the
+      existing `.sidebarHelpCard` visual language) and
+      `.sidebarHelpManualLink`, all on `--gd-ui-*` tokens.
+  - Validation:
+    - `npx tsc --noEmit` — no new errors (same pre-existing unrelated one)
+    - `npm run test:scene` (19/19), `npm run test:command` (5/5) — green
+      (Phase 4 adds no new automated tests — it's a visibility/persistence
+      component with no algorithmic surface worth unit-testing; covered by
+      the manual pass instead)
+    - Manual browser pass, all via a fresh empty document tab: hint shows
+      on blank scene; typing `Point(1,2)` in the command bar and running it
+      hides the hint immediately; deleting that point brings it back
+      (confirming the flag is genuinely not written until "Got it");
+      clicked "Got it", reloaded the page, hint stayed gone on the still-
+      empty tab (real persistence, not just in-session state); confirmed
+      via `document.elementFromPoint` that clicks in the hint's empty
+      margin land on the actual canvas element, not the wrapper, proving
+      `pointer-events: none` isn't blocking canvas interaction; dark theme
+      clean. One tool-usage note, not a product bug: a raw coordinate click
+      that I expected to hit the Preferences gear instead landed on the
+      canvas and placed a stray point (undone via Cmd+Z) — screenshot-to-
+      viewport coordinate mapping was off in that instance, not an issue
+      with pointer-events or z-index; ref-based clicks were reliable
+      throughout and are what actually verified every behavior above.
+  - This closes out the phases from the approved plan
+    (`~/.claude/plans/rippling-rolling-thunder.md`). Phases 1+2+3+4 are all
+    committed on `codex/ui-refactor`, not yet pushed. Remaining from the
+    plan: push to `main` for the web deploy, then Phase 3d (preview window
+    save buttons) + a desktop compile smoke test before tagging v0.2.0.
+- 2026-07-21 Export tab redesigned for the teacher path (UI/UX revamp Phase 3a-3c):
+  - The Export tab had ~18 flat controls with jargon labels ("Emit tkz setup
+    (Init/Clip/SetUpLine)"), almost no tooltips, and every option reset on
+    remount — nothing persisted. Math teachers just want to copy their
+    figure's code or get a PDF; the TikZ mechanics they never asked for were
+    given equal visual weight. Restructured:
+    - `src/state/appPreferences.ts`: new `geodraw.export-preferences.v1`
+      envelope (`ExportPreferencesState` — 9 fields) following the file's
+      existing `StoredEnvelope` pattern, but **per-field** normalize rather
+      than all-or-nothing like the UI/construction loaders — one bad field
+      falls back to its own default instead of invalidating everything else,
+      since these are independent toggles with no reason to be coupled.
+    - `src/ui/ExportPanel.tsx`: hydrates all persisted options via lazy
+      `useState` initializers, writes them back via one `useEffect`. New
+      layout: action row (**Copy Code** — auto-regenerates via the existing
+      `tikzOutdated` signal, then copies; **Copy Full Document**; desktop-only
+      **Open PDF Preview**) → plain-language simple options with real
+      tooltips → status line with a "Refresh code" button that only appears
+      when outdated → `<details>` "Advanced options" (reusing the
+      `.exportLogDetails` CSS already in `ExportPanel.css`) holding the TikZ
+      mechanics (compact code, tkz setup lines, clip selection, code style) →
+      Model JSON now itself a `<details>` "Scene data (JSON) — advanced".
+      Web build (no Tauri): Preview button hidden, replaced with a plain-link
+      nudge toward pasting the full document into overleaf.com.
+    - `src/export/tikz/standaloneDocument.ts` (new): moved
+      `REQUIRED_PREAMBLE`, `buildStandaloneSource`, `looksLikeFullDocument`,
+      `deriveDefaultOptionalPreamble` out of `TikzPreviewWindow.tsx` — pure
+      code motion, both that file and `ExportPanel`'s new "Copy Full
+      Document" import from here now.
+  - Tests: new `src/scene/__tests__/export-preferences.test.ts` (in-memory
+    `window.localStorage` stub assigned to `globalThis` before a *dynamic*
+    `import()` of `appPreferences.ts`, since static imports are hoisted
+    before the stub would exist) — round-trip, garbage JSON, wrong envelope
+    version, per-field fallback, missing key. Wired into `test:scene`.
+  - Validation:
+    - `npx tsc --noEmit` — no new errors (same pre-existing unrelated one)
+    - `npm run test:scene` (19/19), `npm run test:command` (5/5),
+      `npm run test:export` (all 102 fixtures) — all green
+    - Directly unit-checked the extracted `standaloneDocument.ts` against a
+      sample input (documentclass/begin/end present, idempotent re-wrap,
+      correct hex→RGB conversion for the page-color preamble) rather than
+      relying only on UI clicks, since `TikzPreviewWindow.tsx` has zero
+      existing automated coverage — this was the highest-risk slice of the
+      phase per the plan's own risk register.
+    - Manual browser pass: one-click Copy Code (generate+copy in one
+      action, verified via the "Copied" state and the regenerated code
+      appearing); Copy Full Document confirmed via direct module check
+      (clipboard read is permission-blocked in this environment); changed
+      Halo/Global scale, reloaded the page, confirmed both survived — the
+      generated code text itself correctly did *not* persist (by design);
+      Advanced closed by default; Code style segmented control and its
+      dependent checkbox label both update correctly; dark theme clean.
+  - Deferred to the v0.2.0 desktop batch (3d, per the plan): promoting the
+    preview window's right-click Save PDF/SVG/PNG to visible buttons — can't
+    be verified from a web-only session since PDF preview requires Tauri.
+  - Next: Phase 4 (minimal onboarding — empty-canvas hint card), then the
+    3d + desktop smoke pass before tagging v0.2.0. Plan at
+    `~/.claude/plans/rippling-rolling-thunder.md`.
+  - Risks: none new. Same TikzPreviewWindow-has-no-tests risk noted in the
+    plan — mitigated here by the direct module verification above, but a
+    real desktop compile smoke test is still owed before v0.2.0 ships.
+- 2026-07-20 In-app command reference popup (UI/UX revamp Phase 2):
+  - The only in-app command help was one cryptic placeholder string in the
+    command bar; the real reference (`docs/command-bar-reference.md`) was
+    never surfaced to users. Added a searchable reference dialog:
+    - `src/ui/commandReference/commandReferenceData.ts` (new): pure data
+      module, no React/store/parser imports. `COMMAND_SPECS` — 28 entries,
+      one per parser constructor (aliases folded into `variants`, e.g.
+      `Ortho(A,B,C)` under Orthocenter). `FUNCTION_SPECS` — 29 entries: 25
+      scalar functions from `scalarFunctionRegistry.ts` collapsed to one
+      canonical name per function (case-variants like `Sin`/`sin` merged;
+      `sin`/`sind` kept distinct since they differ in unit), plus the 4
+      constants (`pi`,`e`,`tau`,`ans`) which live outside that registry.
+    - `src/ui/commandReference/CommandReferenceDialog.tsx` (new): search +
+      Commands/Functions tabs, grouped by category, click-to-insert rows.
+      Reuses `PreferencesDialog`'s dismissal logic (Escape + outside
+      mousedown) and its `preferencesOverlay`/`preferencesModal`/
+      `preferencesTabs`/`preferencesTabButton` CSS classes directly, per
+      plan. One correction from the approved plan: the plan said to render
+      the dialog "inside commandBarWrap", but `commandBarWrap` has no `top`
+      offset (it's a slim bottom-pinned bar, not full-bleed), so an
+      `inset:0` overlay nested inside it would be confined to that strip.
+      Rendered it as a sibling of `commandBarWrap` instead (`CommandBar`
+      now returns a Fragment) so the overlay resolves against `.canvasPane`
+      the same way `PreferencesDialog` resolves against `.canvasDocumentArea`.
+    - `src/CommandBar.tsx`: "?" button (CircleHelp icon) between Run and the
+      collapse chevron; insert handler sets the input, closes the dialog,
+      refocuses, and selects the text between the first `(`/last `)` so a
+      teacher can immediately overtype the placeholder args; placeholder
+      text shortened to mention the `?` button.
+    - `src/App.css`: `.commandBarExpanded` grid gained a 4th column for the
+      new button; added `.commandRef*` styles (search input, grouped list,
+      signature/description rows) — all on `--gd-ui-*` tokens.
+  - Content fix found while building the registry: `docs/command-bar-reference.md`
+    was missing `Ellipse(F1,F2,P)`, which the parser has supported all along
+    (`CommandParser.ts` "Ellipse" branch). Added it to both the human doc
+    and the new registry.
+  - Tests: new `src/scene/__tests__/command-reference-registry.test.ts`,
+    wired into `test:command`. A synthetic `ParseContext` fixture (points
+    A,B,C,D,O,P,V,X,F1,F2; aliases s/l/c/poly; scalar r_1; ans=1) parses
+    every `COMMAND_SPECS` example and every variant that's a full call form
+    — this caught 3 variant strings that used descriptive placeholders
+    (`Circle(O,r)`, `Line(x1,y1,x2,y2)`, `Homothety(P,O,k)`) instead of real
+    values, which would have inserted broken templates into the command bar.
+    Also asserts every non-constant `FUNCTION_SPECS` name is a real
+    registry key, and every registry function (case-collapsed) has a
+    `FUNCTION_SPECS` entry — verified this reverse-coverage check actually
+    fires by temporarily deleting an entry and confirming the test failed,
+    then restored.
+  - Validation:
+    - `npx tsc --noEmit` — no new errors (same single pre-existing error
+      from `main` noted in the Phase 1 entry below, in an unrelated file)
+    - `npm run test:command` (includes the new drift test) — green
+    - Manual browser pass: opened the dialog, searched ("circle" correctly
+      matches across name/description/category), switched Commands ↔
+      Functions & Math tabs (search persists across tabs), clicked
+      Circle(x,y,r) → input filled with "Circle(0,0,5)", dialog closed,
+      input focused with "0,0,5" pre-selected, Run created a real circle
+      (verified via the equation shown in Properties) — full loop works.
+      Confirmed the Phase 1 `[role="dialog"]` guard protects this dialog
+      too, for free (P/Delete inert while focus is inside it). Dark theme
+      pass: all `--gd-ui-*` tokens resolved correctly, nothing hardcoded.
+      Zero console errors throughout.
+  - Next: Phase 3 (export tab redesign for the teacher path) and Phase 4
+    (minimal onboarding). Plan at `~/.claude/plans/rippling-rolling-thunder.md`.
+  - Risks: the drift test is one-way — a new parser command added without a
+    matching `COMMAND_SPECS` entry is not caught. Flagged as a review
+    checklist item, not automated.
+- 2026-07-20 Tool shortcuts now match their tooltips (UI/UX revamp Phase 1):
+  - Tool tooltips have long advertised single-key shortcuts (V/P/S/L/M/O/C) that no
+    handler implemented; pressing them did nothing. Implemented them:
+    - `src/ui/toolHotkeyState.ts`: new `TOOL_KEY_SHORTCUTS` map (pure data,
+      v→move, p→point, s→segment, l→line2p, m→midpoint, o→circle_cp, c→copyStyle).
+    - `src/ui/useGlobalCanvasHotkeys.ts`: letter-key handler inserted after the
+      Shift+F block, before Delete/Backspace, gated on no modifier keys.
+    - Added a `[role="dialog"]` closest-ancestor guard alongside the existing
+      text-input guard — this also fixes a latent bug where Delete/Backspace
+      (and now the new letters) could reach the canvas while a modal
+      (e.g. Preferences) had focus.
+    - `src/ui/RightSidebar.tsx`: Quick Help card (`HELP_ROWS`) documents the
+      two new shortcut rows.
+  - Tests: extended `src/ui/__tests__/tool-hotkey-state.test.ts` (shortcut set is
+    exactly the 7 advertised tools, single lowercase letters, no collision with
+    reserved keys) and wired it into the `test:command` npm script — it
+    previously existed on disk but ran in no chain.
+  - Validation:
+    - `npx tsc --noEmit` — one pre-existing error in
+      `src/export/__tests__/draw-layer-backend-plain-constructions.test.ts`
+      (from an unrelated TikZ export commit already on `main`); confirmed via
+      `git stash` that it exists independent of this change. No errors in any
+      file this entry touches.
+    - `npx vite build` (bundle-only, since the pre-existing tsc error blocks
+      the full `npm run build` gate)
+    - `npm run test:command`, `npm run test:scene` — all green
+    - Manual browser pass: all 7 letters switch tools; typing "value slope" in
+      the command bar does not trigger any tool switch; P and Delete are inert
+      while the Preferences dialog has focus; Quick Help card renders the new
+      rows; Esc still returns to Move; no console errors.
+  - Next: this is Phase 1 of a 4-phase UI/UX revamp (plan at
+    `~/.claude/plans/rippling-rolling-thunder.md`) — Phase 2 (in-app command
+    reference popup) is next, then Phase 3 (export tab redesign) and Phase 4
+    (minimal onboarding).
+  - Risks: none identified for this change in isolation. The pre-existing tsc
+    error above blocks a clean `npm run build` for anyone working in this
+    worktree until it's fixed (out of scope for this entry — it's in TikZ
+    export test fixtures, unrelated to tool hotkeys).
 - 2026-05-03 Multiple canvas tab shell wired:
   - Added visible canvas tabs above the drawing area using the existing document runtime capture/restore path.
   - Each tab now keeps its own:

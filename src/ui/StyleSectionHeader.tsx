@@ -12,23 +12,26 @@ export function StyleSectionHeader({
   mode = "object",
 }: StyleSectionHeaderProps) {
   return (
-    <div className="styleSectionHeader">
-      <div className="subSectionTitle">{title}</div>
-      {mode === "toolDefault" ? (
+    <>
+      <div className="styleSectionHeader">
+        <div className="subSectionTitle">{title}</div>
+        {mode === "object" && (
+          <label className="checkboxRow defaultStyleToggle">
+            <input
+              type="checkbox"
+              checked={selectedStyleAsDefault}
+              onChange={(e) => onMakeStyleDefaultChange?.(e.target.checked)}
+            />
+            Set Default
+          </label>
+        )}
+      </div>
+      {mode === "toolDefault" && (
         <div className="toolDefaultNotice">
           <strong>Editing tool defaults</strong>
           <span>New objects use these settings. Switch to Move and select an object to edit an existing one.</span>
         </div>
-      ) : (
-        <label className="checkboxRow defaultStyleToggle">
-          <input
-            type="checkbox"
-            checked={selectedStyleAsDefault}
-            onChange={(e) => onMakeStyleDefaultChange?.(e.target.checked)}
-          />
-          Make this default for this object
-        </label>
       )}
-    </div>
+    </>
   );
 }

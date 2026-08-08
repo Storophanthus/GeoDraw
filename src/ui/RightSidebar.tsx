@@ -22,6 +22,8 @@ type SelectedObjectRef = Exclude<SelectedObject, null>;
 const HELP_ROWS = [
   { combo: "Esc", description: "Back to Select / Move" },
   { combo: "Tab", description: "Toggle Select and recent tool" },
+  { combo: "V / P / S / L", description: "Move, Point, Segment, Line tools" },
+  { combo: "M / O / C", description: "Midpoint, Circle, Copy Style tools" },
   { combo: "Delete", description: "Delete selection" },
   { combo: "Cmd/Ctrl + Z", description: "Undo" },
   { combo: "Cmd/Ctrl + Y", description: "Redo" },
@@ -178,6 +180,14 @@ export function RightSidebar({
                   </div>
                 ))}
               </div>
+              <a
+                className="sidebarHelpManualLink"
+                href="https://github.com/Storophanthus/GeoDraw/blob/main/docs/user-manual.pdf"
+                target="_blank"
+                rel="noreferrer"
+              >
+                User manual (PDF)
+              </a>
             </section>
           )}
 
