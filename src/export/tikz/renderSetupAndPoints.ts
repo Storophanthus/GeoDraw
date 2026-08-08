@@ -35,11 +35,11 @@ export function appendRenderedSetupAndPoints({
   pointDefs,
 }: SetupAndPointsRendererArgs): void {
   const out = ctx.out;
-  const { scale, hasGlowLabels, emitTkzSetup, drawLayerBackend } = ctx.options;
+  const { scale, usesLabelGlowMacro, emitTkzSetup, drawLayerBackend } = ctx.options;
   const caps = ctx.capabilities;
 
   out.push(`\\begin{tikzpicture}[scale=${caps.fmt(scale)},line cap=round,line join=round,>=triangle 45]`);
-  if (hasGlowLabels) {
+  if (usesLabelGlowMacro) {
     // Reusable text halo macro using contour stroke (page-color aware).
     out.push(
       "\\newcommand{\\gdLabelGlow}[1]{\\begingroup\\ifcsname contour\\endcsname\\contourlength{0.42pt}\\ifcsname thepagecolor\\endcsname\\contour{\\thepagecolor}{#1}\\else\\contour{white}{#1}\\fi\\else#1\\fi\\endgroup}"

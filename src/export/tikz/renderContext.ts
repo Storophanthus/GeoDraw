@@ -4,7 +4,7 @@ export type DrawLayerBackendKind = "tkz" | "plain";
 
 export type TikzRendererOptions = {
   scale: number;
-  hasGlowLabels: boolean;
+  usesLabelGlowMacro: boolean;
   emitTkzSetup: boolean;
   labelScale: number | null;
   groupMarkAngles: boolean;

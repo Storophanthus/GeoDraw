@@ -3171,12 +3171,22 @@ export function renderTikz(
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint" || c.kind === "LabelAt");
   const drawPointLabels = drawLabels.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
   const drawOtherLabels = drawLabels.filter((c) => c.kind === "LabelAt");
-  const hasGlowLabels =
-    drawLabels.some((c) => (c.kind === "LabelPoint" || c.kind === "LabelAt") && Boolean(c.useGlow)) ||
-    drawAngleLabels.some((c) => Boolean(c.useGlow));
   const emitTkzSetup = options.emitTkzSetup ?? true;
   const groupMarkAngles = options.groupMarkAngles ?? false;
   const drawLayerBackend = options.drawLayerBackend ?? "tkz";
+  const usesLabelGlowMacro =
+    drawLayerBackend === "plain"
+      ? drawLabels.some(
+          (c) =>
+            (c.kind === "LabelPoint" || c.kind === "LabelAt") &&
+            Boolean(c.useGlow) &&
+            !c.plainGlow
+        )
+      : drawLabels.some(
+          (c) =>
+            (c.kind === "LabelPoint" || c.kind === "LabelAt") &&
+            Boolean(c.useGlow)
+        ) || drawAngleLabels.some((c) => Boolean(c.useGlow));
 
   const out: string[] = [];
   const pushSectionHeader = (title: string) => {
@@ -3199,7 +3209,7 @@ export function renderTikz(
   };
   const renderCtx = createTikzRendererContext(out, pushSectionHeader, {
     scale,
-    hasGlowLabels,
+    usesLabelGlowMacro,
     emitTkzSetup,
     labelScale: setupLabelScale?.scale ?? null,
     groupMarkAngles,

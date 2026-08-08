@@ -186,6 +186,21 @@ if (globallyDisabledTikz.includes("\\gdLabelGlow")) {
   throw new Error("Expected global labelGlow=false to suppress all glow wrappers.");
 }
 
+const pointGlowScene = makeBaseScene();
+pointGlowScene.points[0].showLabel = "name";
+const pointGlowPlainTikz = exportTikzWithOptions(pointGlowScene, {
+  drawLayerBackend: "plain",
+  bakePointCoordinates: true,
+  viewport: { xmin: -1, xmax: 3, ymin: -1, ymax: 3 },
+  screenPxPerWorld: 80,
+});
+if (!pointGlowPlainTikz.includes("\\contour{")) {
+  throw new Error("Expected a Visual Exact point label to retain its inline halo.");
+}
+if (pointGlowPlainTikz.includes("\\gdLabelGlow")) {
+  throw new Error("Expected a Visual Exact point label not to emit an unused glow helper.");
+}
+
 const multilineGlowScene = makeBaseScene();
 multilineGlowScene.textLabels = [
   {
@@ -213,6 +228,9 @@ const multilinePlainTikz = exportTikzWithOptions(multilineGlowScene, {
 });
 if (!multilinePlainTikz.includes("\\contour{")) {
   throw new Error("Expected Visual Exact multiline labels to retain their halo.");
+}
+if (multilinePlainTikz.includes("\\gdLabelGlow")) {
+  throw new Error("Expected Visual Exact inline halos not to emit an unused glow helper.");
 }
 await compileTikzSnippet("visual-exact-multiline-glow", multilinePlainTikz);
 
