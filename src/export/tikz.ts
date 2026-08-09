@@ -1,7 +1,12 @@
 import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
 import { resolveAngleRightStatus, type AngleRightStatus } from "../domain/rightAngleProvenance";
 import { normalizeSceneIntegrity } from "../domain/sceneIntegrity";
-import { exportFriendlyColorNameByRgbKey, parseColorToRgb, resolveExportFriendlyColorName } from "../exportFriendlyColors";
+import {
+  exportFriendlyColorNameByRgbKey,
+  parseColorToRgb,
+  resolveExportFriendlyColorName,
+  resolveNearestDvipsColorName,
+} from "../exportFriendlyColors";
 import {
   collectAngleMarkPositions,
   collectSegmentMarkPositions,
@@ -64,9 +69,18 @@ export type TikzExportOptions = {
   pointScale?: number;
   lineScale?: number;
   labelScale?: number;
+  trueGlobalScale?: number;
+  /** Canvas True Zoom already represented by the outer scalebox wrapper. */
+  canvasTrueZoom?: number;
   worldToTikzScale?: number;
   screenPxPerWorld?: number;
   labelGlow?: boolean;
+  /** Multiplies every exported label contour width. */
+  labelHaloScale?: number;
+  /** Rounds generated numeric literals to two decimal places. */
+  roundNumbersToTwoDecimals?: boolean;
+  /** Maps every exported color to the nearest xcolor/dvipsnames color. */
+  preferDvipsNames?: boolean;
   // Canvas-wide halo used by angle/object/free-text overlays. Point labels keep
   // their own per-point halo color.
   labelHaloColor?: string;
@@ -99,10 +113,14 @@ type ResolvedTikzExportOptions = TikzExportOptions & {
   // Derived after viewport auto-fit. This is intentionally internal: callers
   // provide canvas density, while the exporter resolves the final PDF metric.
   resolvedCanvasPxToTikzPt?: number;
+  // Canvas-style sizes (labels in particular) must be calibrated against the
+  // auto-fit scale before the user-facing coordinate-only Global multiplier.
+  // This keeps Global from silently changing a label's physical font size.
+  resolvedCanvasStylePxToTikzPt?: number;
 };
 
 export type TikzCommand =
-  | { kind: "SetupUnits"; scale: number }
+  | { kind: "SetupUnits"; scale: number; trueGlobalScale?: number; labelHaloScale?: number }
   | { kind: "SetupLabelScale"; scale: number }
   | { kind: "SetupViewport"; xmin: number; xmax: number; ymin: number; ymax: number; space: number }
   | { kind: "ClipRect"; xmin: number; xmax: number; ymin: number; ymax: number }
@@ -174,8 +192,10 @@ export type TikzCommand =
     name: string;
     text: string;
     options?: string;
+    renderAsNode?: boolean;
     useGlow?: boolean;
     plainGlow?: { widthPt: number; color?: string };
+    plainGlowCommand?: string;
   }
   | {
     kind: "LabelAt";
@@ -186,6 +206,7 @@ export type TikzCommand =
     useGlow?: boolean;
     textMode?: "math" | "raw";
     plainGlow?: { widthPt: number; color?: string };
+    plainGlowCommand?: string;
   };
 
 const TEXT_LABEL_CANVAS_SIZE_SCALE = 1.8;
@@ -245,6 +266,33 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const geometryBundles = new Map<string, TikzCommand[]>();
   const drawPointsLayer: TikzCommand[] = [];
   const drawLabelsLayer: TikzCommand[] = [];
+  let multiArrowStyleIndex = 0;
+  const multiArrowStyleNames = new Map<string, string>();
+  const resolveMultiArrowStyleName = (signature: string): string => {
+    const existing = multiArrowStyleNames.get(signature);
+    if (existing) return existing;
+    multiArrowStyleIndex += 1;
+    const name = multiArrowStyleIndex === 1
+      ? "gdMultiArrow"
+      : `gdMultiArrow${multiArrowStyleIndex}`;
+    multiArrowStyleNames.set(signature, name);
+    return name;
+  };
+  let multiMarkStyleIndex = 0;
+  const nextMultiMarkStyleName = (mark: SegmentMarkSymbol): string => {
+    multiMarkStyleIndex += 1;
+    const baseName =
+      mark === "|"
+        ? "gdMultiTick"
+        : mark === "||"
+          ? "gdMultiDoubleTick"
+          : mark === "|||"
+            ? "gdMultiTripleTick"
+            : "gdMultiMark";
+    return multiMarkStyleIndex === 1
+      ? baseName
+      : `${baseName}${multiMarkStyleIndex}`;
+  };
   const definedPointIds = new Set<string>();
   const polygonOwnedEdgePresence = new Set<string>();
   for (const segment of scene.segments) {
@@ -267,9 +315,13 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   };
 
   const exportPxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
+  const canvasTrueZoom = clampPositive(options.canvasTrueZoom ?? 1, 0.05, 20);
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
+  const hasExplicitCanvasViewport = options.viewport !== undefined;
   const viewport = options.viewport ?? computeExportViewport(scene, exportPxPerWorld);
   let coordScale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
+  const trueGlobalScale = clampPositive(options.trueGlobalScale ?? 1, 0.05, 10);
+  const labelHaloScale = clampPositive(options.labelHaloScale ?? 1, 0.05, 10);
   const labelScale = clampPositive(options.labelScale ?? 1, 0.1, 10);
   // Auto-fit viewport for document embedding. Fit both down and up so exported
   // framing matches the current canvas view density.
@@ -291,8 +343,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   options = {
     ...options,
     resolvedCanvasPxToTikzPt: canvasPxToTikzPt,
+    resolvedCanvasStylePxToTikzPt: hasExplicitCanvasViewport
+      ? (fitScale * TIKZ_PT_PER_CM) / (exportPxPerWorld * canvasTrueZoom)
+      : undefined,
   } as ResolvedTikzExportOptions;
-  defs.push({ kind: "SetupUnits", scale: coordScale });
+  defs.push({ kind: "SetupUnits", scale: coordScale, trueGlobalScale, labelHaloScale });
   defs.push({ kind: "SetupLabelScale", scale: labelScale });
   defs.push({
     kind: "SetupViewport",
@@ -1985,6 +2040,20 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   for (const seg of scene.segments) {
     if (!seg.visible) continue;
+    const aWorld = getPointWorldPosCached(scene, seg.aId);
+    const bWorld = getPointWorldPosCached(scene, seg.bId);
+    if (
+      aWorld &&
+      bWorld &&
+      !finiteSegmentIntersectsRect(
+        aWorld,
+        bWorld,
+        plainLineDrawClipBounds,
+        64 / exportPxPerWorld
+      )
+    ) {
+      continue;
+    }
     resolvePoint(seg.aId);
     resolvePoint(seg.bId);
     if (!definedPointIds.has(seg.aId) || !definedPointIds.has(seg.bId)) {
@@ -2003,8 +2072,6 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         style: segmentStyleToTikz(seg.style, options, hasEnabledEndpointSegmentArrow(segmentArrows)),
       });
     }
-    const aWorld = getPointWorldPosCached(scene, seg.aId);
-    const bWorld = getPointWorldPosCached(scene, seg.bId);
     const markCommands = segmentMarksToTikz(
       seg.style,
       seg.style.strokeColor,
@@ -2014,7 +2081,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       aName,
       bName,
       aWorld ?? undefined,
-      bWorld ?? undefined
+      bWorld ?? undefined,
+      nextMultiMarkStyleName
     );
     segmentBundle.push(...markCommands);
     const segmentLengthWorld = aWorld && bWorld ? distance(aWorld, bWorld) : undefined;
@@ -2036,7 +2104,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         canvasExact: options.drawLayerBackend === "plain",
       },
       options.pathDotMarkSizeScale,
-      options.drawLayerBackend === "plain"
+      options.drawLayerBackend === "plain",
+      resolveMultiArrowStyleName
     );
     if (arrowOverlay) {
       if (arrowOverlay.kind === "tkz") {
@@ -2255,13 +2324,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       if (circle.kind === "fixedRadius") {
         throw new Error(`Missing symbolic export path for fixed-radius circle ${circle.id}`);
       }
-      if (!definedPointIds.has(circle.throughId)) {
-        throw new Error(`Cannot export undefined circle geometry: ${circle.id}`);
-      }
-      const through = mustName(pointName, circle.throughId);
       if (shouldExportPlainCirclesAsRadius && !Number.isFinite(circleRadiusForPlain ?? Number.NaN)) {
         throw new Error(`Unsupported construction: Circle plain export missing finite radius for ${circle.id}`);
       }
+      // Visual Exact already has the evaluated radius, so it must not require
+      // (or emit) a hidden construction point merely because that point was
+      // used to define the circle. Reconstructible mode does need the named
+      // through point and therefore resolves that dependency on demand.
+      const through = shouldExportPlainCirclesAsRadius
+        ? null
+        : ensureCircleThroughName(circle.id);
       if (fillStyle) {
         if (shouldExportPlainCirclesAsRadius) {
           circleBundle.push({
@@ -2274,7 +2346,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           circleBundle.push({
             kind: "FillCircle",
             o: centerName,
-            x: through,
+            x: through as string,
             style: fillStyle,
           });
         }
@@ -2290,7 +2362,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         circleBundle.push({
           kind: "DrawCircle",
           o: centerName,
-          x: through,
+          x: through as string,
           style: strokeStyle,
         });
       }
@@ -2313,7 +2385,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       },
       undefined, // arcDef undefined -> Use markings (Decoration)
       { bend: true }, // Circle arrows use bend
-      options.pathDotMarkSizeScale
+      options.pathDotMarkSizeScale,
+      resolveMultiArrowStyleName
     );
     if (circleArrowOverlay) {
       circleBundle.push({ kind: "DrawRaw", tex: circleArrowOverlay });
@@ -2454,7 +2527,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           sweepRad: theta,
         },
         { flex: true }, // Keep angle arrows using flex
-        options.pathDotMarkSizeScale
+        options.pathDotMarkSizeScale,
+        resolveMultiArrowStyleName
       );
       if (sectorArrowOverlay) {
         if (options.drawLayerBackend !== "plain") {
@@ -2527,7 +2601,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           cWorld,
           theta,
           rightStatus,
-          options
+          options,
+          resolveMultiArrowStyleName
         )
       );
       pushGeometryCommands({ type: "angle", id: angle.id }, angleBundle);
@@ -2598,7 +2673,8 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           sweepRad: theta,
         },
         { flex: true }, // Keep angle arrows using flex
-        options.pathDotMarkSizeScale
+        options.pathDotMarkSizeScale,
+        resolveMultiArrowStyleName
       );
       if (arcArrowOverlay) {
         angleBundle.push({ kind: "DrawRaw", tex: arcArrowOverlay });
@@ -2631,7 +2707,13 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   }
 
   const labelPlacementById = computeLabelPlacementMap(scene, options);
-  const labels: Array<{ name: string; text: string; options?: string; useGlow?: boolean }> = [];
+  const labels: Array<{
+    name: string;
+    text: string;
+    options?: string;
+    renderAsNode?: boolean;
+    useGlow?: boolean;
+  }> = [];
   const objectLabels: Array<{
     type: "segment" | "line" | "circle" | "ellipse" | "polygon";
     id: string;
@@ -2653,9 +2735,6 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const labelGlowEnabled = options.labelGlow ?? true;
     const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
     if (plainPxToPt !== null) {
-      const pointWorld = getPointWorldPosCached(scene, point.id);
-      if (!pointWorld) continue;
-      const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
       const offsetXPx = placement?.offsetXPx ?? point.style.labelOffsetPx.x;
       const offsetYPx = placement?.offsetYPx ?? point.style.labelOffsetPx.y;
       const canvasKatexScale =
@@ -2665,33 +2744,51 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         point.style.labelFontPx * canvasKatexScale * plainPxToPt
       );
       const baselinePt = Math.max(fontPt, fontPt * 1.2);
+      const labelText =
+        point.showLabel === "name"
+          ? point.name || name
+          : point.captionTex || point.name || name;
       drawLabelsLayer.push({
-        kind: "LabelAt",
-        x: pointWorld.x + offsetXPx / pxPerWorld,
-        y: pointWorld.y - offsetYPx / pxPerWorld,
-        text: point.showLabel === "name" ? point.name || name : point.captionTex || point.name || name,
+        kind: "LabelPoint",
+        name,
+        text: labelText,
         options: [
-          point.showLabel === "caption" ? "anchor=north west" : "anchor=west",
+          semanticPointLabelPositionOption(
+            labelText,
+            offsetXPx,
+            offsetYPx,
+            point.style.labelFontPx * canvasKatexScale,
+            point.showLabel === "caption" ? "top-left" : "baseline-left"
+          ),
           "inner sep=0pt",
           `text=${rgbColorExpr(point.style.labelColor)}`,
           `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`,
         ].join(", "),
         useGlow: labelGlowEnabled && point.style.labelHaloWidthPx > 0,
         plainGlow: {
-          widthPt: point.style.labelHaloWidthPx * plainPxToPt,
-          color: rgbColorExpr(
-            options.labelHaloColor ?? point.style.labelHaloColor
-          ),
+          widthPt:
+            point.style.labelHaloWidthPx *
+            plainPxToPt *
+            trueGlobalScale *
+            labelHaloScale,
+          // No export override deliberately means "use the page color". The
+          // glow macro resolves it through \thepagecolor, with a white fallback
+          // when the host document has no pagecolor support.
+          color: options.labelHaloColor
+            ? rgbColorExpr(options.labelHaloColor)
+            : undefined,
         },
       });
       continue;
     }
     const labelOptions = pointLabelOptionsToTikz(point, placement, options);
+    const renderAsNode = resolvedReconstructibleCanvasStylePxToTikzPt(options) !== null;
     if (point.showLabel === "name") {
       labels.push({
         name,
         text: point.name || name,
         options: [labelOptions, `text=${rgbColorExpr(point.style.labelColor)}`].join(", "),
+        renderAsNode,
         useGlow: labelGlowEnabled && point.style.labelHaloWidthPx > 0,
       });
     } else {
@@ -2699,6 +2796,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         name,
         text: point.captionTex || point.name || name,
         options: [labelOptions, `text=${rgbColorExpr(point.style.labelColor)}`].join(", "),
+        renderAsNode,
         useGlow: labelGlowEnabled && point.style.labelHaloWidthPx > 0,
       });
     }
@@ -2809,15 +2907,17 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           ? buildMixedTextLabelNodeText(displayText)
           : buildPlainTextLabelNodeText(displayText);
     const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    const reconstructiblePxToPt = resolvedReconstructibleCanvasStylePxToTikzPt(options);
+    const canvasStylePxToPt = plainPxToPt ?? reconstructiblePxToPt;
     const fontPt =
-      plainPxToPt === null
+      canvasStylePxToPt === null
         ? Math.max(1, Math.min(72, label.style.textSize + 0.19))
         : Math.max(
-            1,
+            0.5,
             Math.max(8, label.style.textSize) *
               TEXT_LABEL_CANVAS_SIZE_SCALE *
               (renderMode === "tex" ? 0.95 : 1) *
-              plainPxToPt
+              canvasStylePxToPt
           );
     const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
     const rotationDeg =
@@ -2874,7 +2974,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         ? {}
         : {
             plainGlow: {
-              widthPt: 3.5 * plainPxToPt,
+              widthPt: 3.5 * plainPxToPt * trueGlobalScale * labelHaloScale,
               color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
             },
           }),
@@ -2885,14 +2985,16 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     if (!node.visible) continue;
     const text = buildRichTextNodeText(node.document);
     const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    const reconstructiblePxToPt = resolvedReconstructibleCanvasStylePxToTikzPt(options);
+    const canvasStylePxToPt = plainPxToPt ?? reconstructiblePxToPt;
     const fontPt =
-      plainPxToPt === null
+      canvasStylePxToPt === null
         ? Math.max(1, Math.min(72, node.style.textSize + 0.19))
         : Math.max(
-            1,
+            0.5,
             Math.max(8, node.style.textSize) *
               TEXT_LABEL_CANVAS_SIZE_SCALE *
-              plainPxToPt
+              canvasStylePxToPt
           );
     const baselinePt = Math.max(fontPt + 1, fontPt * 1.2);
     const rotationDeg =
@@ -2919,7 +3021,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         ? {}
         : {
             plainGlow: {
-              widthPt: 3.5 * plainPxToPt,
+              widthPt: 3.5 * plainPxToPt * trueGlobalScale * labelHaloScale,
               color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
             },
           }),
@@ -2928,7 +3030,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   labels.sort((a, b) => a.name.localeCompare(b.name));
   for (const item of labels) {
-    drawLabelsLayer.push({ kind: "LabelPoint", name: item.name, text: item.text, options: item.options, useGlow: item.useGlow });
+    drawLabelsLayer.push({
+      kind: "LabelPoint",
+      name: item.name,
+      text: item.text,
+      options: item.options,
+      renderAsNode: item.renderAsNode,
+      useGlow: item.useGlow,
+    });
   }
   objectLabels.sort((a, b) => {
     const typeOrder = (type: "segment" | "line" | "circle" | "ellipse" | "polygon") =>
@@ -2939,12 +3048,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   });
   for (const item of objectLabels) {
     const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+    const reconstructiblePxToPt = resolvedReconstructibleCanvasStylePxToTikzPt(options);
+    const canvasStylePxToPt = plainPxToPt ?? reconstructiblePxToPt;
     const fontOptions =
-      plainPxToPt === null
+      canvasStylePxToPt === null
         ? []
         : [
-            `font=\\fontsize{${fmt(16 * 0.95 * plainPxToPt)}pt}{${fmt(
-              19.2 * 0.95 * plainPxToPt
+            `font=\\fontsize{${fmt(16 * 0.95 * canvasStylePxToPt)}pt}{${fmt(
+              19.2 * 0.95 * canvasStylePxToPt
             )}pt}\\selectfont`,
           ];
     drawLabelsLayer.push({
@@ -2963,7 +3074,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         ? {}
         : {
             plainGlow: {
-              widthPt: 3.5 * plainPxToPt,
+              widthPt: 3.5 * plainPxToPt * trueGlobalScale * labelHaloScale,
               color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
             },
           }),
@@ -3113,7 +3224,7 @@ function buildGroupedMarkAngleTex(
 
 export function renderTikz(
   cmds: TikzCommand[],
-  options: Pick<TikzExportOptions, "emitTkzSetup" | "drawLayerBackend"> & { groupMarkAngles?: boolean } = {}
+  options: Pick<TikzExportOptions, "emitTkzSetup" | "drawLayerBackend" | "preferDvipsNames"> & { groupMarkAngles?: boolean } = {}
 ): string {
   const setupUnits = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupUnits" }> => c.kind === "SetupUnits");
   const setupLabelScale = cmds.find((c): c is Extract<TikzCommand, { kind: "SetupLabelScale" }> => c.kind === "SetupLabelScale");
@@ -3171,6 +3282,10 @@ export function renderTikz(
   const drawLabels = cmds.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint" || c.kind === "LabelAt");
   const drawPointLabels = drawLabels.filter((c) => c.kind === "LabelPoints" || c.kind === "LabelPoint");
   const drawOtherLabels = drawLabels.filter((c) => c.kind === "LabelAt");
+  const precomputedSegmentMarkStyleNames = drawObjects.flatMap((command) => {
+    if (command.kind !== "DrawRaw") return [];
+    return [...command.tex.matchAll(/\\path\[(gdMark[A-Za-z]+)=/gu)].map((match) => match[1]);
+  });
   const emitTkzSetup = options.emitTkzSetup ?? true;
   const groupMarkAngles = options.groupMarkAngles ?? false;
   const drawLayerBackend = options.drawLayerBackend ?? "tkz";
@@ -3179,8 +3294,7 @@ export function renderTikz(
       ? drawLabels.some(
           (c) =>
             (c.kind === "LabelPoint" || c.kind === "LabelAt") &&
-            Boolean(c.useGlow) &&
-            !c.plainGlow
+            Boolean(c.useGlow)
         )
       : drawLabels.some(
           (c) =>
@@ -3195,8 +3309,11 @@ export function renderTikz(
     out.push("");
   };
   const scale = setupUnits?.scale ?? 1;
+  const trueGlobalScale = setupUnits?.trueGlobalScale ?? 1;
+  const labelHaloScale = setupUnits?.labelHaloScale ?? 1;
   const capabilities: TikzRendererCapabilities = {
     fmt,
+    fmtGeometry,
     escapeTikzText,
     buildGroupedMarkAngleTex,
     assertTkzMacro,
@@ -3209,6 +3326,8 @@ export function renderTikz(
   };
   const renderCtx = createTikzRendererContext(out, pushSectionHeader, {
     scale,
+    trueGlobalScale,
+    labelHaloScale,
     usesLabelGlowMacro,
     emitTkzSetup,
     labelScale: setupLabelScale?.scale ?? null,
@@ -3218,6 +3337,7 @@ export function renderTikz(
 
   appendRenderedSetupAndPoints({
     ctx: renderCtx,
+    precomputedSegmentMarkStyleNames,
     setupViewport,
     setupLine,
     clipRect,
@@ -3239,7 +3359,12 @@ export function renderTikz(
   });
 
   out.push("\\end{tikzpicture}");
-  const withNamedColors = hoistNamedColors(out, renderCtx.options.drawLayerBackend !== "plain");
+  const withHoistedDefinitions = hoistGeneratedDefinitions(out);
+  const withNamedColors = hoistNamedColors(
+    withHoistedDefinitions,
+    renderCtx.options.drawLayerBackend !== "plain",
+    options.preferDvipsNames === true
+  );
   const withOptionalLibraries = injectOptionalTikzLibraries(
     withNamedColors,
     renderCtx.options.drawLayerBackend === "plain"
@@ -3268,34 +3393,40 @@ export function exportTikzEfficient(scene: SceneModel): string {
 }
 
 export function exportTikzEfficientWithOptions(scene: SceneModel, options: TikzExportOptions): string {
-  const normalizedScene = normalizeSceneIntegrity(scene);
-  pointByIdCache.delete(normalizedScene);
-  pointWorldCache.delete(normalizedScene);
-  const standard = renderTikz(buildTikzIR(normalizedScene, options), {
-    emitTkzSetup: options.emitTkzSetup,
-    drawLayerBackend: options.drawLayerBackend,
-    groupMarkAngles: true,
+  return withTikzNumberPrecision(options.roundNumbersToTwoDecimals === true, () => {
+    const normalizedScene = normalizeSceneIntegrity(scene);
+    pointByIdCache.delete(normalizedScene);
+    pointWorldCache.delete(normalizedScene);
+    const standard = renderTikz(buildTikzIR(normalizedScene, options), {
+      emitTkzSetup: options.emitTkzSetup,
+      drawLayerBackend: options.drawLayerBackend,
+      preferDvipsNames: options.preferDvipsNames,
+      groupMarkAngles: true,
+    });
+    assertNoUnknownTkzMacro(standard);
+    return makeEfficientTikz(
+      standard,
+      options.drawLayerBackend === "plain" && options.bakePointCoordinates
+        ? { preserveGeometry: true }
+        : undefined
+    );
   });
-  assertNoUnknownTkzMacro(standard);
-  return makeEfficientTikz(
-    standard,
-    options.drawLayerBackend === "plain" && options.bakePointCoordinates
-      ? { preserveGeometry: true }
-      : undefined
-  );
 }
 
 export function exportTikzWithOptions(scene: SceneModel, options: TikzExportOptions): string {
-  const normalizedScene = normalizeSceneIntegrity(scene);
-  // Scene can be updated frequently; reset per-scene memoized lookups before each export.
-  pointByIdCache.delete(normalizedScene);
-  pointWorldCache.delete(normalizedScene);
-  const tex = renderTikz(buildTikzIR(normalizedScene, options), {
-    emitTkzSetup: options.emitTkzSetup,
-    drawLayerBackend: options.drawLayerBackend,
+  return withTikzNumberPrecision(options.roundNumbersToTwoDecimals === true, () => {
+    const normalizedScene = normalizeSceneIntegrity(scene);
+    // Scene can be updated frequently; reset per-scene memoized lookups before each export.
+    pointByIdCache.delete(normalizedScene);
+    pointWorldCache.delete(normalizedScene);
+    const tex = renderTikz(buildTikzIR(normalizedScene, options), {
+      emitTkzSetup: options.emitTkzSetup,
+      drawLayerBackend: options.drawLayerBackend,
+      preferDvipsNames: options.preferDvipsNames,
+    });
+    assertNoUnknownTkzMacro(tex);
+    return tex;
   });
-  assertNoUnknownTkzMacro(tex);
-  return tex;
 }
 
 export const exportTikZ = (scene: unknown): string => exportTikz(scene as SceneModel);
@@ -3315,7 +3446,28 @@ function mustName(names: Map<string, string>, pointId: string): string {
   return v;
 }
 
+let activeTikzDecimalPlaces: number | null = null;
+
+function withTikzNumberPrecision<T>(roundToTwoDecimals: boolean, build: () => T): T {
+  const previous = activeTikzDecimalPlaces;
+  activeTikzDecimalPlaces = roundToTwoDecimals ? 2 : null;
+  try {
+    return build();
+  } finally {
+    activeTikzDecimalPlaces = previous;
+  }
+}
+
 function fmt(v: number): string {
+  if (!Number.isFinite(v)) return "0";
+  if (activeTikzDecimalPlaces !== null) {
+    const rounded = Number(v.toFixed(activeTikzDecimalPlaces));
+    return Object.is(rounded, -0) ? "0" : rounded.toString();
+  }
+  return fmtGeometry(v);
+}
+
+function fmtGeometry(v: number): string {
   if (!Number.isFinite(v)) return "0";
   return Number(v.toPrecision(15)).toString();
 }
@@ -3787,14 +3939,12 @@ function lineCircleRootMatchIndex(
 }
 
 // Whether a point lies on `circle` by construction (not merely by numeric
-// coincidence). Only such points are safe to pass to tkz-euclide's `common=`:
-// that option matches the shared point against the freshly computed intersections
-// using an absolute tolerance, so when the picture is scaled it silently fails for
-// points that sit on the circle only approximately (e.g. an incenter that lies on
-// the circle by a theorem, or a free point dropped onto it). On that failure tkz
-// falls back to plain geometric ordering, which swaps the two `\tkzGetPoints`
-// slots relative to what `common=` promises. Genuine on-circle points match
-// robustly at any scale, so we keep `common=` only for them.
+// coincidence). Such a point can be used as a known-root anchor. For line-circle
+// export the renderer deliberately uses `near` from that anchor instead of
+// tkz-euclide's `common=`: the latter compares transformed dimensions with an
+// absolute tolerance and can swap result slots at a picture-scale threshold.
+// Coincidental/theorem-only points are not safe anchors because the independently
+// reconstructed circle need not pass through them exactly.
 function isPointConstructedOnCircle(pointId: string, circle: SceneCircle, scene: SceneModel): boolean {
   if (circle.kind === "threePoint") {
     if (pointId === circle.aId || pointId === circle.bId || pointId === circle.cId) return true;
@@ -4004,6 +4154,42 @@ function normalizeViewportRect(rect: TikzExportViewport): TikzExportViewport {
     ymin: Math.min(rect.ymin, rect.ymax),
     ymax: Math.max(rect.ymin, rect.ymax),
   };
+}
+
+function finiteSegmentIntersectsRect(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  rect: TikzExportViewport,
+  padding = 0
+): boolean {
+  const pad = Math.max(0, padding);
+  const bounds = {
+    xmin: rect.xmin - pad,
+    xmax: rect.xmax + pad,
+    ymin: rect.ymin - pad,
+    ymax: rect.ymax + pad,
+  };
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let tMin = 0;
+  let tMax = 1;
+  const constraints = [
+    { p: -dx, q: a.x - bounds.xmin },
+    { p: dx, q: bounds.xmax - a.x },
+    { p: -dy, q: a.y - bounds.ymin },
+    { p: dy, q: bounds.ymax - a.y },
+  ];
+  for (const { p, q } of constraints) {
+    if (Math.abs(p) <= 1e-12) {
+      if (q < 0) return false;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) tMin = Math.max(tMin, t);
+    else tMax = Math.min(tMax, t);
+    if (tMin > tMax) return false;
+  }
+  return true;
 }
 
 function boundsForPoints(points: Array<{ x: number; y: number }>): TikzExportViewport {
@@ -4387,10 +4573,14 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   const draw = rgbColorExpr(s.strokeColor);
   const fill = rgbColorExpr(s.fillColor);
   const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
+  const trueGlobalScale = clampPositive(options.trueGlobalScale ?? 1, 0.05, 10);
   const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
   if (plainPxToPt !== null) {
     const radiusPx = Math.max(1.5, s.sizePx * pointScale);
-    const strokeWidthPt = Math.max(0.1, s.strokeWidth * pointScale * plainPxToPt);
+    const strokeWidthPt = Math.max(
+      0.1,
+      s.strokeWidth * pointScale * plainPxToPt * trueGlobalScale
+    );
     const radiusPt = radiusPx * plainPxToPt;
     if (shape.kind === "dot") {
       const diameterPt = Math.max(1.2, radiusPx * 0.4) * 2 * plainPxToPt;
@@ -4577,7 +4767,8 @@ function segmentMarksToTikz(
   aName: string,
   bName: string,
   aWorld?: { x: number; y: number },
-  bWorld?: { x: number; y: number }
+  bWorld?: { x: number; y: number },
+  nextMultiMarkStyleName?: (mark: SegmentMarkSymbol) => string
 ): TikzCommand[] {
   const marks = resolveSegmentMarks(style);
   if (marks.length === 0) return [];
@@ -4586,6 +4777,27 @@ function segmentMarksToTikz(
     if (!aWorld || !bWorld) return out;
     for (const mark of marks) {
       const positions = collectSegmentMarkPositions(mark, 0.5);
+      if (
+        (mark.distribution ?? "single") === "multi" &&
+        positions.length > 1 &&
+        nextMultiMarkStyleName
+      ) {
+        const tex = multiSegmentMarkToTikz(
+          mark,
+          positions,
+          aName,
+          bName,
+          segmentStrokeColor,
+          segmentStrokeWidth,
+          segmentOpacity,
+          options,
+          nextMultiMarkStyleName(mark.mark)
+        );
+        if (tex) {
+          out.push({ kind: "DrawRaw", tex });
+          continue;
+        }
+      }
       for (const pos of positions) {
         const tex = plainSegmentMarkToTikz(
           mark,
@@ -4596,6 +4808,49 @@ function segmentMarksToTikz(
           segmentStrokeWidth,
           segmentOpacity,
           options
+        );
+        if (tex) out.push({ kind: "DrawRaw", tex });
+      }
+    }
+    return out;
+  }
+  const reconstructibleStylePxToPt = resolvedReconstructibleCanvasStylePxToTikzPt(options);
+  if (reconstructibleStylePxToPt !== null) {
+    for (const mark of marks) {
+      const positions = collectSegmentMarkPositions(mark, 0.5);
+      if (
+        (mark.distribution ?? "single") === "multi" &&
+        positions.length > 1 &&
+        nextMultiMarkStyleName
+      ) {
+        const tex = multiSegmentMarkToTikz(
+          mark,
+          positions,
+          aName,
+          bName,
+          segmentStrokeColor,
+          segmentStrokeWidth,
+          segmentOpacity,
+          options,
+          nextMultiMarkStyleName(mark.mark),
+          reconstructibleStylePxToPt
+        );
+        if (tex) {
+          out.push({ kind: "DrawRaw", tex });
+          continue;
+        }
+      }
+      for (const pos of positions) {
+        const tex = precomputedTkzSegmentMarkToTikz(
+          mark,
+          pos,
+          aName,
+          bName,
+          segmentStrokeColor,
+          segmentStrokeWidth,
+          segmentOpacity,
+          options,
+          reconstructibleStylePxToPt
         );
         if (tex) out.push({ kind: "DrawRaw", tex });
       }
@@ -4627,6 +4882,111 @@ function segmentMarksToTikz(
     }
   }
   return out;
+}
+
+function precomputedTkzSegmentMarkToTikz(
+  mark: NonNullable<SceneModel["segments"][number]["style"]["segmentMark"]>,
+  posRaw: number,
+  aName: string,
+  bName: string,
+  segmentStrokeColor: string,
+  segmentStrokeWidth: number,
+  segmentOpacity: number,
+  options: TikzExportOptions,
+  stylePxToPt: number
+): string | null {
+  if (!mark.enabled || mark.mark === "none") return null;
+  const pos = clamp01(Number.isFinite(posRaw) ? posRaw : 0.5);
+  const sizePx = Math.max(1, mark.sizePt);
+  const sizePt = sizePx * stylePxToPt;
+  const tickHalfPt = sizePx * 2.2 * stylePxToPt;
+  const gapPt = Math.max(2, sizePx * 0.85) * stylePxToPt;
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const lineWidthPt = Math.max(
+    0.1,
+    Math.max(0.5, mark.lineWidthPt ?? segmentStrokeWidth) * lineScale * stylePxToPt
+  );
+  const color = rgbColorExpr(mark.color ?? segmentStrokeColor);
+  const opacity = normalizedOpacity(segmentOpacity);
+  const drawOpts = [
+    `color=${color}`,
+    `line width=${fmt(lineWidthPt)}pt`,
+  ];
+  if (opacity < 0.999) drawOpts.push(`opacity=${fmt(opacity)}`);
+  const dim = (value: number): string => `${fmt(value)}pt`;
+  const useStyle = (style: string, args: string[], styleOptions: string[]): string => {
+    const values = [...args, styleOptions.join(", ")].map((value) => `{${value}}`).join("");
+    return `\\path[${style}=${values}] (${aName}) -- (${bName}); % Segment mark ${aName}--${bName}`;
+  };
+
+  let markPath: string | null = null;
+  if (mark.mark === "|") {
+    markPath = useStyle("gdMarkTick", [fmt(pos), dim(tickHalfPt)], drawOpts);
+  } else if (mark.mark === "||") {
+    markPath = useStyle(
+      "gdMarkDoubleTick",
+      [fmt(pos), dim(tickHalfPt), dim(gapPt * 0.5)],
+      drawOpts
+    );
+  } else if (mark.mark === "|||") {
+    markPath = useStyle(
+      "gdMarkTripleTick",
+      [fmt(pos), dim(tickHalfPt), dim(gapPt)],
+      drawOpts
+    );
+  } else if (mark.mark === "s") {
+    markPath = useStyle(
+      "gdMarkSlash",
+      [fmt(pos), dim(tickHalfPt), dim(tickHalfPt * 0.55)],
+      drawOpts
+    );
+  } else if (mark.mark === "s|") {
+    markPath = useStyle(
+      "gdMarkSlashTick",
+      [fmt(pos), dim(tickHalfPt), dim(tickHalfPt * 0.55), dim(gapPt * 0.5), dim(tickHalfPt)],
+      drawOpts
+    );
+  } else if (mark.mark === "s||") {
+    markPath = useStyle(
+      "gdMarkSlashDoubleTick",
+      [fmt(pos), dim(tickHalfPt), dim(tickHalfPt * 0.55), dim(gapPt), dim(tickHalfPt)],
+      drawOpts
+    );
+  } else if (mark.mark === "x") {
+    markPath = useStyle(
+      "gdMarkCross",
+      [fmt(pos), dim(sizePt * 0.6), dim(sizePt)],
+      drawOpts
+    );
+  } else if (mark.mark === "o") {
+    const radiusPt = Math.max(1.2, sizePx * 0.6) * stylePxToPt;
+    markPath = useStyle("gdMarkCircle", [fmt(pos), dim(radiusPt)], drawOpts);
+  } else if (mark.mark === "oo") {
+    const radiusPt = Math.max(1.2, sizePx * 0.55) * stylePxToPt;
+    markPath = useStyle(
+      "gdMarkDoubleCircle",
+      [fmt(pos), dim(radiusPt), dim(gapPt * 0.55)],
+      drawOpts
+    );
+  } else if (mark.mark === "dot") {
+    const radiusPt = Math.max(1.2, sizePx * 0.58) * stylePxToPt;
+    const fillOpts = [`fill=${color}`];
+    if (opacity < 0.999) fillOpts.push(`fill opacity=${fmt(opacity)}`);
+    markPath = useStyle("gdMarkDot", [fmt(pos), dim(radiusPt)], fillOpts);
+  } else if (mark.mark === "z") {
+    markPath = useStyle(
+      "gdMarkZigzag",
+      [fmt(pos), dim(gapPt), dim(sizePt * 0.8), dim(sizePt * 0.2)],
+      drawOpts
+    );
+  }
+  if (!markPath) return null;
+
+  // The named tikzset style keeps each exported mark easy to customize while
+  // preserving a live anchor/orientation on the named segment. Its dimensions
+  // remain independent, unlike tkz-euclide's built-in ||/||| plot marks whose
+  // bar gap is derived from \pgflinewidth.
+  return markPath;
 }
 
 function plainSegmentMarkToTikz(
@@ -4748,6 +5108,121 @@ function plainSegmentMarkToTikz(
   return null;
 }
 
+function multiSegmentMarkToTikz(
+  mark: NonNullable<SceneModel["segments"][number]["style"]["segmentMark"]>,
+  positions: number[],
+  aName: string,
+  bName: string,
+  segmentStrokeColor: string,
+  segmentStrokeWidth: number,
+  segmentOpacity: number,
+  options: TikzExportOptions,
+  styleName: string,
+  explicitStylePxToPt?: number
+): string | null {
+  if (!mark.enabled || mark.mark === "none" || positions.length < 2) return null;
+  const stylePxToPt =
+    explicitStylePxToPt ??
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    FALLBACK_CANVAS_PX_TO_TIKZ_PT;
+  const sizePx = Math.max(1, mark.sizePt);
+  const sizePt = sizePx * stylePxToPt;
+  const tickHalfPt = sizePx * 2.2 * stylePxToPt;
+  const gapPt = Math.max(2, sizePx * 0.85) * stylePxToPt;
+  const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const lineWidthPt = Math.max(
+    0.1,
+    Math.max(0.5, mark.lineWidthPt ?? segmentStrokeWidth) *
+      lineScale *
+      stylePxToPt
+  );
+  const color = rgbColorExpr(mark.color ?? segmentStrokeColor);
+  const opacity = normalizedOpacity(segmentOpacity);
+  const drawOptions = [
+    `color=${color}`,
+    `line width=${fmt(lineWidthPt)}pt`,
+    "line cap=round",
+    "line join=round",
+  ];
+  if (opacity < 0.999) drawOptions.push(`opacity=${fmt(opacity)}`);
+  const fillOptions = [`fill=${color}`];
+  if (opacity < 0.999) fillOptions.push(`fill opacity=${fmt(opacity)}`);
+  const dim = (value: number): string => `${fmt(value)}pt`;
+  const draw = (path: string, extraOptions: string[] = []): string =>
+    `\\draw[${[...drawOptions, ...extraOptions].join(", ")}] ${path};`;
+  const fill = (path: string): string =>
+    `\\fill[${fillOptions.join(", ")}] ${path};`;
+  const tick = (offset = 0): string =>
+    draw(
+      `(0pt,-${dim(tickHalfPt)}) -- (0pt,${dim(tickHalfPt)})`,
+      Math.abs(offset) > 1e-12 ? [`xshift=${dim(offset)}`] : []
+    );
+  const slash = (offset = 0): string =>
+    draw(
+      `(-${dim(tickHalfPt)},-${dim(tickHalfPt * 0.55)}) -- (${dim(tickHalfPt)},${dim(tickHalfPt * 0.55)})`,
+      Math.abs(offset) > 1e-12 ? [`xshift=${dim(offset)}`] : []
+    );
+
+  let markerCommands: string[];
+  if (mark.mark === "|") {
+    markerCommands = [tick()];
+  } else if (mark.mark === "||") {
+    markerCommands = [tick(-gapPt * 0.5), tick(gapPt * 0.5)];
+  } else if (mark.mark === "|||") {
+    markerCommands = [tick(-gapPt), tick(), tick(gapPt)];
+  } else if (mark.mark === "s") {
+    markerCommands = [slash()];
+  } else if (mark.mark === "s|") {
+    markerCommands = [slash(-gapPt * 0.5), tick(gapPt * 0.5)];
+  } else if (mark.mark === "s||") {
+    markerCommands = [slash(-gapPt), tick(), tick(gapPt)];
+  } else if (mark.mark === "x") {
+    markerCommands = [
+      draw(`(-${dim(sizePt * 0.6)},-${dim(sizePt)}) -- (${dim(sizePt * 0.6)},${dim(sizePt)})`),
+      draw(`(-${dim(sizePt * 0.6)},${dim(sizePt)}) -- (${dim(sizePt * 0.6)},-${dim(sizePt)})`),
+    ];
+  } else if (mark.mark === "o") {
+    const radiusPt = Math.max(1.2, sizePx * 0.6) * stylePxToPt;
+    markerCommands = [draw(`(0pt,0pt) circle[radius=${dim(radiusPt)}]`)];
+  } else if (mark.mark === "oo") {
+    const radiusPt = Math.max(1.2, sizePx * 0.55) * stylePxToPt;
+    markerCommands = [
+      draw(`(0pt,0pt) circle[radius=${dim(radiusPt)}]`, [`xshift=-${dim(gapPt * 0.55)}`]),
+      draw(`(0pt,0pt) circle[radius=${dim(radiusPt)}]`, [`xshift=${dim(gapPt * 0.55)}`]),
+    ];
+  } else if (mark.mark === "dot") {
+    const radiusPt = Math.max(1.2, sizePx * 0.58) * stylePxToPt;
+    markerCommands = [fill(`(0pt,0pt) circle[radius=${dim(radiusPt)}]`)];
+  } else if (mark.mark === "z") {
+    markerCommands = [
+      draw(
+        `(-${dim(gapPt)},-${dim(sizePt * 0.8)}) -- (${dim(gapPt)},-${dim(sizePt * 0.2)}) -- (-${dim(gapPt)},${dim(sizePt * 0.8)}) -- (${dim(gapPt)},${dim(sizePt * 0.2)})`
+      ),
+    ];
+  } else {
+    return null;
+  }
+
+  const start = positions[0];
+  const end = positions[positions.length - 1];
+  const step = Math.max(0.001, Math.abs(positions[1] - positions[0]));
+  return [
+    "% Distributed segment mark: edit this style to customize the whole group.",
+    "\\tikzset{",
+    `  ${styleName}/.style={`,
+    "    postaction=decorate,",
+    "    decoration={",
+    "      markings,",
+    `      mark=between positions ${fmt(start)} and ${fmt(end)} step ${fmt(step)} with {`,
+    ...markerCommands.map((command) => `        ${command}`),
+    "      }",
+    "    }",
+    "  }",
+    "}",
+    `\\path[${styleName}] (${aName}) -- (${bName}); % Segment mark ${aName}--${bName}`,
+  ].join("\n");
+}
+
 function segmentArrowsToTikz(
   styleArrows: SegmentArrowMark | SegmentArrowMark[] | undefined,
   aName: string,
@@ -4761,7 +5236,8 @@ function segmentArrowsToTikz(
   },
   metrics?: PathArrowExportMetrics,
   dotSizeScale?: number,
-  plainBackend = false
+  plainBackend = false,
+  resolveMultiArrowStyleName?: (signature: string) => string
 ): { kind: "tkz"; style: string } | { kind: "raw"; tex: string } | null {
   const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
   if (arrows.length === 0) return null;
@@ -4809,7 +5285,8 @@ function segmentArrowsToTikz(
         metrics,
         undefined,
         undefined,
-        dotSizeScale
+        dotSizeScale,
+        resolveMultiArrowStyleName
       );
       if (midOverlay) {
         rawTexs.push(midOverlay);
@@ -5163,7 +5640,8 @@ function pathArrowOverlayToTikz(
   metrics?: PathArrowExportMetrics,
   _arcDef?: { center: { x: number; y: number }; radius: number; startRad: number; sweepRad: number },
   _arrowTipOptions?: { bend?: boolean; flex?: boolean },
-  dotSizeScale?: number
+  dotSizeScale?: number,
+  resolveMultiArrowStyleName?: (signature: string) => string
 ): string | null {
   const arrows = Array.isArray(styleArrows) ? styleArrows : styleArrows ? [styleArrows] : [];
   const results: string[] = [];
@@ -5184,6 +5662,7 @@ function pathArrowOverlayToTikz(
     let markerCmd = "";
     let forwardCmd = "";
     let reverseCmd = "";
+    let arrowTipSpec = "";
 
     if (isDotTip) {
       const dotMetrics = resolvePathDotMarkMetricsPx(
@@ -5212,6 +5691,12 @@ function pathArrowOverlayToTikz(
         "PathArrowMark",
         arrow.arrowLength
       );
+      arrowTipSpec = resolveArrowTipSpec(
+        tip,
+        tipMetrics.lengthPx * canvasPxToTikzPt,
+        tipMetrics.widthPx * canvasPxToTikzPt,
+        opacity < 0.999 ? { opacity } : undefined
+      );
       forwardCmd = pathArrowGlyphCommandToTikz(tip, arrowColor, opacity, tipMetrics, canvasPxToTikzPt, false);
       reverseCmd = pathArrowGlyphCommandToTikz(tip, arrowColor, opacity, tipMetrics, canvasPxToTikzPt, true);
       pairDelta = computePathArrowPairDelta(
@@ -5222,6 +5707,38 @@ function pathArrowOverlayToTikz(
       );
     }
     const positions = collectPathArrowPositions(arrow, fallbackPos);
+
+    if (
+      resolveMultiArrowStyleName &&
+      !isDotTip &&
+      positions.length > 1 &&
+      (arrow.direction === "->" || arrow.direction === "<-")
+    ) {
+      const start = positions[0];
+      const end = positions[positions.length - 1];
+      const step = Math.max(0.001, Math.min(1, arrow.step ?? 0.05));
+      const arrowCommand = arrow.direction === "->" ? "\\arrow" : "\\arrowreversed";
+      const multiStyleName = resolveMultiArrowStyleName(
+        [arrow.direction, arrowColor, fmt(start), fmt(end), fmt(step)].join("|")
+      );
+      results.push(
+        [
+          "\\tikzset{",
+          `  ${multiStyleName}/.style={`,
+          "    postaction=decorate,",
+          "    decoration={",
+          "      markings,",
+          `      mark=between positions ${fmt(start)} and ${fmt(end)} step ${fmt(step)} with {`,
+          `        ${arrowCommand}[color=${arrowColor}]{#1}`,
+          "      }",
+          "    }",
+          "  }",
+          "}",
+          `\\path[${multiStyleName}={${arrowTipSpec}}] ${pathExpr};`,
+        ].join("\n")
+      );
+      continue;
+    }
 
     const addMark = (pos: number, command: string) => {
       marks.push(`mark=at position ${fmt(clamp01(pos))} with {${command}}`);
@@ -5891,7 +6408,8 @@ function plainNonSectorAngleCommands(
   cWorld: { x: number; y: number },
   theta: number,
   rightStatus: AngleRightStatus,
-  options: TikzExportOptions
+  options: TikzExportOptions,
+  resolveMultiArrowStyleName?: (signature: string) => string
 ): TikzCommand[] {
   const style = angle.style;
   const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
@@ -6073,7 +6591,8 @@ function plainNonSectorAngleCommands(
         sweepRad: theta,
       },
       { flex: true },
-      options.pathDotMarkSizeScale
+      options.pathDotMarkSizeScale,
+      resolveMultiArrowStyleName
     );
     if (arrowOverlay) {
       commands.push({ kind: "DrawRaw", tex: arrowOverlay });
@@ -6117,7 +6636,11 @@ function plainAngleLabelCommand(
     useGlow:
       (options.labelGlow ?? true) && Boolean(angle.style.labelGlow),
     plainGlow: {
-      widthPt: LABEL_GLOW_WIDTH_PX * plainPxToPt,
+      widthPt:
+        LABEL_GLOW_WIDTH_PX *
+        plainPxToPt *
+        clampPositive(options.trueGlobalScale ?? 1, 0.05, 10) *
+        clampPositive(options.labelHaloScale ?? 1, 0.05, 10),
       color: options.labelHaloColor
         ? rgbColorExpr(options.labelHaloColor)
         : undefined,
@@ -6199,7 +6722,16 @@ function angleLabelStyleToTikz(
   }
   const angleDeg = (angleRad * 180) / Math.PI;
   const labelFontScale = clampPositive(options.angleLabelFontScale ?? 1, 0.01, 100);
-  const fontPt = Math.max(6, Math.min(72, angle.style.textSize * labelFontScale));
+  const reconstructiblePxToPt = resolvedReconstructibleCanvasStylePxToTikzPt(options);
+  const fontPt = reconstructiblePxToPt === null
+    ? Math.max(6, Math.min(72, angle.style.textSize * labelFontScale))
+    : Math.max(
+        0.5,
+        Math.max(8, angle.style.textSize * (25 / 16)) *
+          0.95 *
+          reconstructiblePxToPt *
+          labelFontScale
+      );
   // Keep angle-label baseline spacing at 3/4 of the previous "original" export
   // profile (12pt -> 16.2pt), so 9pt maps to 12.15pt.
   const lineHeightPt = Math.max(6, fontPt * 1.35);
@@ -6342,6 +6874,12 @@ function resolvedPlainCanvasPxToTikzPt(options: TikzExportOptions): number | nul
   return Number.isFinite(value) && (value as number) > 0 ? (value as number) : null;
 }
 
+function resolvedReconstructibleCanvasStylePxToTikzPt(options: TikzExportOptions): number | null {
+  if (options.drawLayerBackend === "plain") return null;
+  const value = (options as ResolvedTikzExportOptions).resolvedCanvasStylePxToTikzPt;
+  return Number.isFinite(value) && (value as number) > 0 ? (value as number) : null;
+}
+
 function crossPlusOverlayPathPicture(draw: string, lineWidthPt: number, strokeOpacity: number): string {
   const drawOpts = [
     `draw=${draw}`,
@@ -6386,15 +6924,34 @@ function mapPointShape(shape: ScenePoint["style"]["shape"]):
   }
 }
 
-function pointLabelOptionsToTikz(_point: ScenePoint, placement: LabelPlacement | null, _exportOptions: TikzExportOptions): string {
+function pointLabelOptionsToTikz(point: ScenePoint, placement: LabelPlacement | null, exportOptions: TikzExportOptions): string {
   const opts: string[] = [];
   const xShiftPt = placement?.xShiftPt ?? 12;
   const yShiftPt = placement?.yShiftPt ?? 12;
   const rawXShiftPt = placement?.rawXShiftPt ?? xShiftPt;
   const rawYShiftPt = placement?.rawYShiftPt ?? yShiftPt;
-  // Keep quadrant stable from user drag offset, so labels don't flip due to
-  // collision-spread/min-clear post-processing.
-  opts.push(directionOptionFromShift(rawXShiftPt, rawYShiftPt));
+  const canvasStylePxToPt = resolvedReconstructibleCanvasStylePxToTikzPt(exportOptions);
+  if (canvasStylePxToPt !== null) {
+    const offsetXPx = placement?.offsetXPx ?? point.style.labelOffsetPx.x;
+    const offsetYPx = placement?.offsetYPx ?? point.style.labelOffsetPx.y;
+    opts.push(point.showLabel === "caption" ? "anchor=north west" : "anchor=base west");
+    opts.push("inner sep=0pt");
+    opts.push(`xshift=${fmt(offsetXPx * canvasStylePxToPt)}pt`);
+    opts.push(`yshift=${fmt(-offsetYPx * canvasStylePxToPt)}pt`);
+    const canvasKatexScale = point.showLabel === "caption" ? 0.95 : 1;
+    const fontPt = Math.max(
+      0.5,
+      point.style.labelFontPx * canvasKatexScale * canvasStylePxToPt
+    );
+    const baselinePt = Math.max(fontPt, fontPt * 1.2);
+    opts.push(
+      `font=\\fontsize{${fmt(fontPt)}pt}{${fmt(baselinePt)}pt}\\selectfont`
+    );
+  } else {
+    // Keep quadrant stable from user drag offset, so labels don't flip due to
+    // collision-spread/min-clear post-processing.
+    opts.push(directionOptionFromShift(rawXShiftPt, rawYShiftPt));
+  }
   return opts.join(", ");
 }
 
@@ -6409,6 +6966,70 @@ function directionOptionFromShift(xShiftPt: number, yShiftPt: number): string {
   if (xShiftPt < 0 && yShiftPt >= 0) return "above left";
   if (xShiftPt >= 0 && yShiftPt < 0) return "below right";
   return "below left";
+}
+
+function semanticLabelPositionOptionForDirection(
+  direction: string,
+  horizontalEm: number,
+  verticalEm: number
+): string {
+  const horizontal = `${fmt(horizontalEm)}em`;
+  const vertical = `${fmt(verticalEm)}em`;
+  if (direction === "above" || direction === "below") {
+    return `${direction}=${vertical}`;
+  }
+  if (direction === "left" || direction === "right") {
+    return `${direction}=${horizontal}`;
+  }
+  // TikZ positioning treats an unbraced `distance and distance` value as a
+  // single PGF math expression, where `and` becomes an unknown operator.
+  return `${direction}={${vertical} and ${horizontal}}`;
+}
+
+/**
+ * Canvas point names use a baseline-left text origin; KaTeX captions use a
+ * top-left DOM origin. TikZ positioning distances instead measure the empty gap
+ * from the point to the nearest edge of the node. Convert between those
+ * meanings so the label's own width or height is not counted as whitespace.
+ */
+function semanticPointLabelPositionOption(
+  text: string,
+  offsetXPx: number,
+  offsetYPx: number,
+  labelFontPx: number,
+  canvasOrigin: "baseline-left" | "top-left"
+): string {
+  const fontPx = Math.max(1, labelFontPx);
+  const direction = directionOptionFromShift(offsetXPx, -offsetYPx);
+  const metrics = estimateCanvasLabelTextBoxPx(text, fontPx);
+
+  let horizontalGapPx = Math.abs(offsetXPx);
+  let verticalGapPx = Math.abs(offsetYPx);
+
+  if (direction.includes("left")) {
+    horizontalGapPx = Math.max(0, -offsetXPx - metrics.widthPx);
+  } else if (direction.includes("right")) {
+    horizontalGapPx = Math.max(0, offsetXPx);
+  }
+
+  if (direction.includes("above")) {
+    verticalGapPx = Math.max(
+      0,
+      -offsetYPx -
+        (canvasOrigin === "baseline-left" ? metrics.descentPx : metrics.heightPx)
+    );
+  } else if (direction.includes("below")) {
+    verticalGapPx = Math.max(
+      0,
+      offsetYPx - (canvasOrigin === "baseline-left" ? metrics.ascentPx : 0)
+    );
+  }
+
+  return semanticLabelPositionOptionForDirection(
+    direction,
+    horizontalGapPx / fontPx,
+    verticalGapPx / fontPx
+  );
 }
 
 function normalize2(v: { x: number; y: number }): { x: number; y: number } {
@@ -6512,12 +7133,28 @@ function isCoreTikzColorName(rawColor: string): boolean {
   return TIKZ_CORE_COLOR_NAMES.has(normalized);
 }
 
-function computeLabelBubbleRadiusPx(text: string, labelFontPx: number, haloWidthPx: number): number {
-  const fontPx = Math.max(6, Math.min(48, labelFontPx));
+function estimateCanvasLabelTextBoxPx(
+  text: string,
+  labelFontPx: number
+): { widthPx: number; heightPx: number; ascentPx: number; descentPx: number } {
+  const fontPx = Math.max(1, labelFontPx);
   const content = (text && text.length > 0 ? text : "X").replace(/\\[a-zA-Z]+|[{}$]/g, "");
   const textLen = Math.max(1, content.length);
   const widthPx = Math.max(fontPx * 0.62, textLen * fontPx * 0.5);
   const heightPx = fontPx * 0.92;
+  return {
+    widthPx,
+    heightPx,
+    ascentPx: fontPx * 0.78,
+    descentPx: fontPx * 0.14,
+  };
+}
+
+function computeLabelBubbleRadiusPx(text: string, labelFontPx: number, haloWidthPx: number): number {
+  const { widthPx, heightPx } = estimateCanvasLabelTextBoxPx(
+    text,
+    Math.max(6, Math.min(48, labelFontPx))
+  );
   const baseRadius = Math.max(widthPx, heightPx) * 0.5;
   const haloPad = Math.max(0.8, haloWidthPx * 0.25);
   return baseRadius + haloPad;
@@ -6533,7 +7170,73 @@ function rgbColorExpr(rawColor: string): string {
   return `{rgb,255:red,${r};green,${g};blue,${b}}`;
 }
 
-function hoistNamedColors(lines: string[], preferNamed: boolean): string[] {
+function hoistGeneratedDefinitions(lines: string[]): string[] {
+  const flattenedLines = lines.flatMap((line) => line.split("\n"));
+  const beginIndex = flattenedLines.findIndex((line) =>
+    line.trim().startsWith("\\begin{tikzpicture}")
+  );
+  if (beginIndex < 0) return flattenedLines;
+
+  const remaining: string[] = [];
+  const definitions: string[] = [];
+  const sectionHeader = /^% (?:Points|Constructions|Draw objects|Draw points|Labels)$/u;
+  const takeAttachedComments = (): string[] => {
+    const comments: string[] = [];
+    while (remaining.length > 0) {
+      const candidate = remaining[remaining.length - 1].trim();
+      if (!candidate.startsWith("%") || sectionHeader.test(candidate)) break;
+      comments.unshift(remaining.pop() as string);
+    }
+    return comments;
+  };
+  const braceDelta = (line: string): number => {
+    let delta = 0;
+    for (let index = 0; index < line.length; index += 1) {
+      if (line[index] === "\\") {
+        index += 1;
+        continue;
+      }
+      if (line[index] === "{") delta += 1;
+      else if (line[index] === "}") delta -= 1;
+    }
+    return delta;
+  };
+
+  for (let index = 0; index < flattenedLines.length; index += 1) {
+    const line = flattenedLines[index];
+    const trimmed = line.trim();
+    const isTikzset = trimmed.startsWith("\\tikzset{");
+    const isGdCommand = trimmed.startsWith("\\newcommand{\\gd");
+    if (!isTikzset && !isGdCommand) {
+      remaining.push(line);
+      continue;
+    }
+
+    definitions.push(...takeAttachedComments());
+    definitions.push(line);
+    if (isTikzset) {
+      let depth = braceDelta(line);
+      while (depth > 0 && index + 1 < flattenedLines.length) {
+        index += 1;
+        definitions.push(flattenedLines[index]);
+        depth += braceDelta(flattenedLines[index]);
+      }
+    }
+  }
+
+  if (definitions.length === 0) return flattenedLines;
+  const remainingBeginIndex = remaining.findIndex((line) =>
+    line.trim().startsWith("\\begin{tikzpicture}")
+  );
+  remaining.splice(remainingBeginIndex + 1, 0, ...definitions, "");
+  return remaining;
+}
+
+function hoistNamedColors(
+  lines: string[],
+  preferNamed: boolean,
+  forceDvipsNames: boolean
+): string[] {
   const rgbPattern = /\{rgb,255:red,(\d+);green,(\d+);blue,(\d+)\}/g;
   const colorMap = new Map<string, string>();
   const colorDefs: string[] = [];
@@ -6553,14 +7256,19 @@ function hoistNamedColors(lines: string[], preferNamed: boolean): string[] {
       const key = `${r},${g},${b}`;
       let name = colorMap.get(key);
       if (!name) {
-      const mapped = exportFriendlyColorNameByRgbKey[key];
-      const isCore = mapped && isCoreTikzColorName(mapped);
-      const useMapped = mapped !== undefined;
-      name = useMapped ? mapped : toName(r, g, b);
-      colorMap.set(key, name);
-      if (mapped === undefined || (!isCore && !preferNamed)) {
-        colorDefs.push(`\\definecolor{${name}}{RGB}{${r},${g},${b}}`);
-      }
+        if (forceDvipsNames) {
+          name = resolveNearestDvipsColorName(`rgb(${r},${g},${b})`) ?? "black";
+          colorMap.set(key, name);
+        } else {
+          const mapped = exportFriendlyColorNameByRgbKey[key];
+          const isCore = mapped && isCoreTikzColorName(mapped);
+          const useMapped = mapped !== undefined;
+          name = useMapped ? mapped : toName(r, g, b);
+          colorMap.set(key, name);
+          if (mapped === undefined || (!isCore && !preferNamed)) {
+            colorDefs.push(`\\definecolor{${name}}{RGB}{${r},${g},${b}}`);
+          }
+        }
       }
       return name;
     })
@@ -6589,16 +7297,19 @@ function injectOptionalTikzLibraries(lines: string[], defaultLibs: boolean): str
   let needsShapesGeometric = false;
   let needsShapesMisc = false;
   let needsCalc = false;
+  let needsPositioning = false;
   const patternRegex = /pattern\s*=|pattern color\s*=/;
   const patternMetaRegex = /pattern\s*=\s*\{/;
   const decorationRegex = /postaction\s*=\s*decorate|decoration\s*=\s*\{markings/i;
   const arrowTipRegex =
     /-\{(?:Stealth|Latex|Triangle)\[[^\]]*\]|\\arrow(?:reversed)?\[[^\]]*\]\{(?:Stealth|Latex|Triangle)(?:\[[^\]]*\])?\}/;
+  const parameterizedArrowRegex = /\\arrow(?:reversed)?(?:\[[^\]]*\])?\{/;
   const arrowStyleRegex = />=\s*triangle|triangle\s+45/i;
   const geometricShapeRegex = /shape\s*=\s*diamond|regular polygon(?:\s|,|$)/;
   const miscShapeRegex = /shape\s*=\s*cross out(?:\s|,|$)/;
   const throughRegex = /through=/i;
   const calcCoordinateRegex = /\(\$\s*\(/;
+  const positioningRegex = /\b(?:above|below)\s+(?:left|right)\s*=|\b(?:above|below|left|right)\s*=[^,\]]*(?:em|pt|cm|mm)/i;
   for (const line of lines) {
     if (patternMetaRegex.test(line)) {
       needsPatternsMeta = true;
@@ -6607,12 +7318,13 @@ function injectOptionalTikzLibraries(lines: string[], defaultLibs: boolean): str
       needsPatterns = true;
     }
     if (decorationRegex.test(line)) needsDecorationsMarkings = true;
-  if (arrowTipRegex.test(line)) needsArrowsMeta = true;
-  if (arrowStyleRegex.test(line)) needsArrowsLibrary = true;
-  if (throughRegex.test(line)) needsThroughLibrary = true;
-  if (geometricShapeRegex.test(line)) needsShapesGeometric = true;
-  if (miscShapeRegex.test(line)) needsShapesMisc = true;
-  if (calcCoordinateRegex.test(line)) needsCalc = true;
+    if (arrowTipRegex.test(line) || parameterizedArrowRegex.test(line)) needsArrowsMeta = true;
+    if (arrowStyleRegex.test(line)) needsArrowsLibrary = true;
+    if (throughRegex.test(line)) needsThroughLibrary = true;
+    if (geometricShapeRegex.test(line)) needsShapesGeometric = true;
+    if (miscShapeRegex.test(line)) needsShapesMisc = true;
+    if (calcCoordinateRegex.test(line)) needsCalc = true;
+    if (positioningRegex.test(line)) needsPositioning = true;
   }
 
   const requestedLibs: string[] = defaultLibs ? ["patterns", "through", "arrows"] : [];
@@ -6623,6 +7335,7 @@ function injectOptionalTikzLibraries(lines: string[], defaultLibs: boolean): str
   if (needsThroughLibrary) requestedLibs.push("through");
   if (needsDecorationsMarkings) requestedLibs.push("decorations.markings");
   if (defaultLibs && needsCalc) requestedLibs.push("calc");
+  if (needsPositioning) requestedLibs.push("positioning");
   if (needsArrowsLibrary || needsArrowsMeta) requestedLibs.push("arrows");
   if (needsArrowsMeta) {
     requestedLibs.push("arrows.meta");

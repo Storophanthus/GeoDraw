@@ -76,15 +76,15 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
   const {
     canvas,
     scene,
-    camera,
-    vp,
+    camera: viewCamera,
+    vp: viewViewport,
     dpr,
     gridSettings,
     canvasTheme,
     activeTool,
     pendingSelection,
     cursorWorld,
-    hoverScreen,
+    hoverScreen: viewHoverScreen,
     hoverSnap,
     hoveredHit,
     hoveredTargetValid,
@@ -105,15 +105,23 @@ export function renderCanvasFrame(args: RenderFrameArgs): void {
     getAngleStrokeRenderWidth,
   } = args;
 
+  const renderSpace = camMath.trueZoomRenderSpace(viewCamera, viewViewport);
+  const camera = renderSpace.camera;
+  const vp = renderSpace.viewport;
+  const renderScale = renderSpace.scale;
+  const hoverScreen = viewHoverScreen
+    ? { x: viewHoverScreen.x / renderScale, y: viewHoverScreen.y / renderScale }
+    : null;
+
   beginSceneEvalTick(scene);
   try {
-    canvas.width = Math.max(1, Math.floor(vp.widthPx * dpr));
-    canvas.height = Math.max(1, Math.floor(vp.heightPx * dpr));
+    canvas.width = Math.max(1, Math.floor(viewViewport.widthPx * dpr));
+    canvas.height = Math.max(1, Math.floor(viewViewport.heightPx * dpr));
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(dpr * renderScale, 0, 0, dpr * renderScale, 0, 0);
     ctx.clearRect(0, 0, vp.widthPx, vp.heightPx);
     ctx.fillStyle = canvasTheme.backgroundColor;
     ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);

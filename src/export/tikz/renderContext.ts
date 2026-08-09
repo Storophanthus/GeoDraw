@@ -4,6 +4,8 @@ export type DrawLayerBackendKind = "tkz" | "plain";
 
 export type TikzRendererOptions = {
   scale: number;
+  trueGlobalScale: number;
+  labelHaloScale: number;
   usesLabelGlowMacro: boolean;
   emitTkzSetup: boolean;
   labelScale: number | null;

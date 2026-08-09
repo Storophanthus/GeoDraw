@@ -10,6 +10,7 @@ type InteractionContext = {
   cameraMath: {
     panByScreenDelta: (camera: Camera, delta: Vec2) => Camera;
     zoomAtScreenPoint: (camera: Camera, vp: Viewport, pScreen: Vec2, zoomFactor: number) => Camera;
+    trueZoomAtScreenPoint: (camera: Camera, vp: Viewport, pScreen: Vec2, zoomFactor: number) => Camera;
   };
 };
 
@@ -25,6 +26,7 @@ export function createInteractionActions(
   | "clearPendingSelection"
   | "panByScreenDelta"
   | "zoomAtScreenPoint"
+  | "trueZoomAtScreenPoint"
   | "fitViewToScene"
 > {
   return {
@@ -102,6 +104,13 @@ export function createInteractionActions(
       }));
     },
 
+    trueZoomAtScreenPoint(vp, pScreen, zoomFactor) {
+      ctx.setState((prev) => ({
+        ...prev,
+        camera: ctx.cameraMath.trueZoomAtScreenPoint(prev.camera, vp, pScreen, zoomFactor),
+      }));
+    },
+
     fitViewToScene(vp) {
       ctx.setState((prev) => {
         const bounds = computeSceneBounds(prev.scene);
@@ -123,6 +132,7 @@ export function createInteractionActions(
             pos: { x: (xmin + xmax) * 0.5, y: (ymin + ymax) * 0.5 },
             zoom,
             logZoom: Math.log(zoom),
+            trueZoom: 1,
           },
         };
       });

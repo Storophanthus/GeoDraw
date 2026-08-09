@@ -124,6 +124,18 @@ runTest("hoists shared gdLabelGlow wrapper outside grouped foreach tuples", () =
     assertOk(!output.includes("A/above left/{\\gdLabelGlow{$A$}}"), "Expected tuple payload to avoid repeated gdLabelGlow wrapper.");
 });
 
+runTest("keeps calibrated font labels explicit", () => {
+    const input = `
+\\tkzLabelPoint[above, font=\\fontsize{6pt}{7.2pt}\\selectfont, text=black](A){\\gdLabelGlow{$A$}}
+\\tkzLabelPoint[below, font=\\fontsize{6pt}{7.2pt}\\selectfont, text=black](B){\\gdLabelGlow{$B$}}
+    `.trim();
+    const output = makeEfficientTikz(input);
+
+    assertOk(!output.includes("\\foreach"), "Calibrated font labels must not be rewritten as a foreach loop.");
+    assertOk(output.includes("\\tkzLabelPoint[above, font=\\fontsize{6pt}{7.2pt}\\selectfont, text=black](A)"));
+    assertOk(output.includes("\\tkzLabelPoint[below, font=\\fontsize{6pt}{7.2pt}\\selectfont, text=black](B)"));
+});
+
 runTest("preserves construction angles while rounding label options", () => {
     const input = `
 \\tkzDefPointOnCircle[through = center O angle -150.161929357818 point tkzCircleR_1]

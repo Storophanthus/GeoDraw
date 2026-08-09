@@ -1,4 +1,4 @@
-import { exportTikzWithOptions } from "../tikz.ts";
+import { exportTikzWithOptions, renderTikz } from "../tikz.ts";
 import type { AngleStyle, PointStyle, SceneModel } from "../../scene/points.ts";
 import { compileTikzSnippet } from "../../../scripts/compile-tex.mjs";
 
@@ -194,11 +194,133 @@ const pointGlowPlainTikz = exportTikzWithOptions(pointGlowScene, {
   viewport: { xmin: -1, xmax: 3, ymin: -1, ymax: 3 },
   screenPxPerWorld: 80,
 });
-if (!pointGlowPlainTikz.includes("\\contour{")) {
-  throw new Error("Expected a Visual Exact point label to retain its inline halo.");
+if (!pointGlowPlainTikz.includes("\\newcommand{\\gdLabelGlow}[3]")) {
+  throw new Error("Expected a Visual Exact point label to emit the reusable glow helper.");
 }
-if (pointGlowPlainTikz.includes("\\gdLabelGlow")) {
-  throw new Error("Expected a Visual Exact point label not to emit an unused glow helper.");
+if (!pointGlowPlainTikz.includes("\\gdLabelGlow{")) {
+  throw new Error("Expected a Visual Exact point label to call the reusable glow helper.");
+}
+if (!/\\gdLabelGlow\{[^{}]+pt\}\{\\thepagecolor\}\{\$A\$\}/u.test(pointGlowPlainTikz)) {
+  throw new Error("Expected a Visual Exact point label glow to defer to \\thepagecolor.");
+}
+if (/\\gdLabelGlow\{[^{}]+pt\}\{c\d+\}\{\$A\$\}/u.test(pointGlowPlainTikz)) {
+  throw new Error("Expected a Visual Exact point label glow not to bake a generated halo color.");
+}
+
+const repeatedPointLabelsScene = makeBaseScene();
+repeatedPointLabelsScene.points = repeatedPointLabelsScene.points.map((point) => ({
+  ...point,
+  showLabel: "name" as const,
+}));
+const repeatedPointLabelsTikz = exportTikzWithOptions(repeatedPointLabelsScene, {
+  drawLayerBackend: "plain",
+  bakePointCoordinates: true,
+  viewport: { xmin: -1, xmax: 3, ymin: -1, ymax: 3 },
+  screenPxPerWorld: 80,
+});
+if (!repeatedPointLabelsTikz.includes("gdLabel/.style={")) {
+  throw new Error("Expected repeated Visual Exact node options to use one editable gdLabel style.");
+}
+if (!repeatedPointLabelsTikz.includes("\\newcommand{\\gdLabelText}[1]")) {
+  throw new Error("Expected repeated Visual Exact halo settings to use one editable gdLabelText preset.");
+}
+for (const pointName of ["A", "B", "C"]) {
+  if (!repeatedPointLabelsTikz.includes(`{\\gdLabelText{$${pointName}$}}`)) {
+    throw new Error(`Expected point ${pointName} to use the compact shared label text preset.`);
+  }
+}
+if (repeatedPointLabelsTikz.includes("\\node[anchor=west, inner sep=0pt")) {
+  throw new Error("Expected repeated point-label node options not to remain expanded inline.");
+}
+await compileTikzSnippet("visual-exact-shared-label-style", repeatedPointLabelsTikz);
+
+const reconstructibleRepeatedPointLabelsScene = makeBaseScene();
+reconstructibleRepeatedPointLabelsScene.points = reconstructibleRepeatedPointLabelsScene.points.map(
+  (point, index) => ({
+    ...point,
+    showLabel: "name" as const,
+    style: {
+      ...point.style,
+      labelOffsetPx:
+        index === 0
+          ? { x: 8, y: -8 }
+          : index === 1
+            ? { x: -10, y: -6 }
+            : { x: 6, y: 9 },
+    },
+  })
+);
+const reconstructibleRepeatedPointLabelsTikz = exportTikzWithOptions(
+  reconstructibleRepeatedPointLabelsScene,
+  {
+    drawLayerBackend: "tkz",
+    bakePointCoordinates: false,
+    viewport: { xmin: -1, xmax: 3, ymin: -1, ymax: 3 },
+    screenPxPerWorld: 80,
+  }
+);
+if (!reconstructibleRepeatedPointLabelsTikz.includes("gdLabel/.style={")) {
+  throw new Error("Expected repeated Geometric Construction node options to use one editable gdLabel style.");
+}
+if ((reconstructibleRepeatedPointLabelsTikz.match(/\\fontsize\{/gu) ?? []).length !== 1) {
+  throw new Error("Expected the shared Geometric Construction point font size to be defined only once.");
+}
+if (!reconstructibleRepeatedPointLabelsTikz.includes("\\node[gdLabel, anchor=base west,")) {
+  throw new Error("Expected Geometric Construction labels to retain their individual named-point offsets.");
+}
+if (reconstructibleRepeatedPointLabelsTikz.includes("\\newcommand{\\gdLabelText}")) {
+  throw new Error("Geometric Construction must retain its one-argument gdLabelGlow helper without a plain-backend wrapper.");
+}
+await compileTikzSnippet(
+  "geometric-construction-shared-label-style",
+  reconstructibleRepeatedPointLabelsTikz
+);
+
+const mixedAnchorLabelsTikz = renderTikz(
+  [
+    { kind: "SetupUnits", scale: 1 },
+    {
+      kind: "LabelAt",
+      x: 0,
+      y: 0,
+      text: "A",
+      options: "anchor=west, inner sep=0pt, text=black",
+    },
+    {
+      kind: "LabelAt",
+      x: 1,
+      y: 1,
+      text: "B",
+      options: "anchor=north west, inner sep=0pt, text=black",
+    },
+  ],
+  { drawLayerBackend: "plain", emitTkzSetup: false }
+);
+if (/gdLabel\/\.style=\{[^}]*anchor=/u.test(mixedAnchorLabelsTikz)) {
+  throw new Error("Expected mixed label anchors to remain per-node placement overrides.");
+}
+if (!mixedAnchorLabelsTikz.includes("\\node[gdLabel, anchor=west]")) {
+  throw new Error("Expected west anchor to remain on its compact node.");
+}
+if (!mixedAnchorLabelsTikz.includes("\\node[gdLabel, anchor=north west]")) {
+  throw new Error("Expected north-west anchor to remain on its compact node.");
+}
+
+const doubledPointGlowTikz = exportTikzWithOptions(pointGlowScene, {
+  drawLayerBackend: "plain",
+  bakePointCoordinates: true,
+  viewport: { xmin: -1, xmax: 3, ymin: -1, ymax: 3 },
+  screenPxPerWorld: 80,
+  labelHaloScale: 2,
+});
+const baseGlowWidth = Number(
+  pointGlowPlainTikz.match(/\\gdLabelGlow\{([^{}]+)pt\}\{\\thepagecolor\}\{\$A\$\}/u)?.[1]
+);
+const doubledGlowWidth = Number(
+  doubledPointGlowTikz.match(/\\gdLabelGlow\{([^{}]+)pt\}\{\\thepagecolor\}\{\$A\$\}/u)?.[1]
+);
+if (!Number.isFinite(baseGlowWidth) || Math.abs(doubledGlowWidth - baseGlowWidth * 2) > 1e-9) {
+  throw new Error("Expected labelHaloScale to multiply the exported contour spread.");
 }
 
 const multilineGlowScene = makeBaseScene();
@@ -226,11 +348,9 @@ const multilinePlainTikz = exportTikzWithOptions(multilineGlowScene, {
   screenPxPerWorld: 80,
   labelHaloColor: "#fffaf0",
 });
-if (!multilinePlainTikz.includes("\\contour{")) {
-  throw new Error("Expected Visual Exact multiline labels to retain their halo.");
-}
-if (multilinePlainTikz.includes("\\gdLabelGlow")) {
-  throw new Error("Expected Visual Exact inline halos not to emit an unused glow helper.");
+const multilineGlowCalls = multilinePlainTikz.match(/\\gdLabelGlow\{/gu) ?? [];
+if (multilineGlowCalls.length !== 2) {
+  throw new Error("Expected each Visual Exact text line to call the reusable glow helper once.");
 }
 await compileTikzSnippet("visual-exact-multiline-glow", multilinePlainTikz);
 

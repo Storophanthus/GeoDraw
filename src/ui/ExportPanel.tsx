@@ -4,12 +4,15 @@ import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from 
 import { buildTikzExportText, type TikzExportParams } from "../export/buildTikzExportText";
 import { buildStandaloneSource, deriveDefaultOptionalPreamble } from "../export/tikz/standaloneDocument";
 import { getCanvasColorTheme, getUiCssVariables } from "../state/colorProfiles";
-import { loadStoredExportPreferences, saveStoredExportPreferences } from "../state/appPreferences";
+import {
+  EXPORT_PREFERENCES_KEY,
+  loadStoredExportPreferences,
+  saveStoredExportPreferences,
+} from "../state/appPreferences";
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
-import type { Camera } from "../view/camera";
+import { getCameraTrueZoom, type Camera } from "../view/camera";
 import { createTikzPreviewSession } from "./tikzPreviewSession";
-import { IconGlobe, IconPoint, IconLine, IconType } from "./icons";
 import { Crop, Scissors } from "lucide-react";
 import "./ExportPanel.css";
 
@@ -51,10 +54,25 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   });
   const [exportLabelGlow, setExportLabelGlow] = useState(() => loadStoredExportPreferences().labelGlow);
   const [tikzExportMode, setTikzExportMode] = useState<TikzExportMode>(() => loadStoredExportPreferences().tikzExportMode);
+  const [exportScaleboxScale, setExportScaleboxScale] = useState(
+    () => loadStoredExportPreferences().scaleboxScale
+  );
+  const [exportTrueGlobalScale, setExportTrueGlobalScale] = useState(
+    () => loadStoredExportPreferences().trueGlobalScale
+  );
   const [exportGlobalScale, setExportGlobalScale] = useState(() => loadStoredExportPreferences().globalScale);
   const [exportPointScale, setExportPointScale] = useState(() => loadStoredExportPreferences().pointScale);
   const [exportLineScale, setExportLineScale] = useState(() => loadStoredExportPreferences().lineScale);
   const [exportLabelScale, setExportLabelScale] = useState(() => loadStoredExportPreferences().labelScale);
+  const [exportLabelHaloScale, setExportLabelHaloScale] = useState(
+    () => loadStoredExportPreferences().labelHaloScale
+  );
+  const [exportRoundNumbersToTwoDecimals, setExportRoundNumbersToTwoDecimals] = useState(
+    () => loadStoredExportPreferences().roundNumbersToTwoDecimals
+  );
+  const [exportPreferDvipsNames, setExportPreferDvipsNames] = useState(
+    () => loadStoredExportPreferences().preferDvipsNames
+  );
   const [lastTikzSceneRef, setLastTikzSceneRef] = useState<SceneModel | null>(null);
   const [lastTikzOptionSig, setLastTikzOptionSig] = useState("");
   const [lastTikzGeneratedAt, setLastTikzGeneratedAt] = useState<number | null>(null);
@@ -92,10 +110,15 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       emitTkzSetup: exportEmitTkzSetupManual === null ? "auto" : exportEmitTkzSetupManual ? "on" : "off",
       labelGlow: exportLabelGlow,
       tikzExportMode,
+      scaleboxScale: exportScaleboxScale,
+      trueGlobalScale: exportTrueGlobalScale,
       globalScale: exportGlobalScale,
       pointScale: exportPointScale,
       lineScale: exportLineScale,
       labelScale: exportLabelScale,
+      labelHaloScale: exportLabelHaloScale,
+      roundNumbersToTwoDecimals: exportRoundNumbersToTwoDecimals,
+      preferDvipsNames: exportPreferDvipsNames,
     });
   }, [
     exportUseCurrentView,
@@ -103,11 +126,34 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     exportEmitTkzSetupManual,
     exportLabelGlow,
     tikzExportMode,
+    exportScaleboxScale,
+    exportTrueGlobalScale,
     exportGlobalScale,
     exportPointScale,
     exportLineScale,
     exportLabelScale,
+    exportLabelHaloScale,
+    exportRoundNumbersToTwoDecimals,
+    exportPreferDvipsNames,
   ]);
+
+  useEffect(() => {
+    const syncPreviewDefaults = (event: StorageEvent) => {
+      if (event.key !== EXPORT_PREFERENCES_KEY) return;
+      const stored = loadStoredExportPreferences();
+      setExportScaleboxScale(stored.scaleboxScale);
+      setExportTrueGlobalScale(stored.trueGlobalScale);
+      setExportGlobalScale(stored.globalScale);
+      setExportPointScale(stored.pointScale);
+      setExportLineScale(stored.lineScale);
+      setExportLabelScale(stored.labelScale);
+      setExportLabelHaloScale(stored.labelHaloScale);
+      setExportRoundNumbersToTwoDecimals(stored.roundNumbersToTwoDecimals);
+      setExportPreferDvipsNames(stored.preferDvipsNames);
+    };
+    window.addEventListener("storage", syncPreviewDefaults);
+    return () => window.removeEventListener("storage", syncPreviewDefaults);
+  }, []);
 
   // Drawing a clip area is a deliberate act, so honour it right away instead of
   // making the user find a second checkbox. Clearing the area turns it back off.
@@ -154,7 +200,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       : "canvas-unavailable"
     : "reconstructible-legacy-viewport";
   const tikzOptionSigForCanvas = (canvasSig: string) =>
-    `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${tikzExportMode}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${canvasSig}|${exportBakeCoordinates ? canvasTheme.backgroundColor : "reconstructible-label-halo"}|${clipSig}`;
+    `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${tikzExportMode}|${exportScaleboxScale}|${exportTrueGlobalScale}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${exportLabelHaloScale}|${exportRoundNumbersToTwoDecimals}|${exportPreferDvipsNames}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${getCameraTrueZoom(camera)}|${canvasSig}|${exportBakeCoordinates ? canvasTheme.backgroundColor : "reconstructible-label-halo"}|${clipSig}`;
   const currentTikzOptionSig = tikzOptionSigForCanvas(canvasViewportSig);
   const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
   const tikzStatusText = useMemo(
@@ -171,7 +217,12 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     const pointScale = Number(exportPointScale);
     const lineScale = Number(exportLineScale);
     const labelScale = Number(exportLabelScale);
-    const globalScale = Number(exportGlobalScale);
+    const labelHaloScale = Number(exportLabelHaloScale);
+    const manualScaleboxScale = Number(exportScaleboxScale);
+    const trueGlobalScale = Number(exportTrueGlobalScale);
+    const canvasTrueZoom = exportUseCurrentView ? getCameraTrueZoom(camera) : 1;
+    const scaleboxScale = manualScaleboxScale * canvasTrueZoom;
+    const globalScale = Number(exportGlobalScale) / canvasTrueZoom;
     const exportCanvasViewportSize = exportBakeCoordinates
       ? readDrawingCanvasSize() ?? canvasViewportSize
       : null;
@@ -207,17 +258,23 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       viewport,
       clipRectWorld: clipRect,
       clipPolygonWorld: clipPolygon,
-      screenPxPerWorld: camera.zoom,
+      screenPxPerWorld: camera.zoom / canvasTrueZoom,
+      canvasTrueZoom,
       emitTkzSetup: exportEmitTkzSetup,
       drawLayerBackend: exportDrawLayerBackend,
       bakeCoordinates: exportBakeCoordinates,
       labelGlow: exportLabelGlow,
       backgroundColor: canvasTheme.backgroundColor,
       efficient: exportEfficient,
+      scaleboxScale,
+      trueGlobalScale,
       globalScale,
       pointScale,
       lineScale,
       labelScale,
+      labelHaloScale,
+      roundNumbersToTwoDecimals: exportRoundNumbersToTwoDecimals,
+      preferDvipsNames: exportPreferDvipsNames,
     };
     const text = buildTikzExportText(params);
     // Remember what produced this text so opening the preview can hand the same
@@ -244,7 +301,10 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     }
   };
 
-  const ensureTikzText = (): string | null => (!tikzText || tikzOutdated ? generateTikz() : tikzText);
+  const ensureTikzText = (): string | null =>
+    !tikzText || tikzOutdated || tikzText.trimStart().startsWith("% Export failed:")
+      ? generateTikz()
+      : tikzText;
 
   const copyCode = async () => {
     const text = ensureTikzText();
@@ -261,7 +321,12 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const copyFullDocument = async () => {
     const text = ensureTikzText();
     if (!text) return;
-    const fullDocument = buildStandaloneSource(text, deriveDefaultOptionalPreamble(text, uiCssVariables));
+    const fullDocument = buildStandaloneSource(
+      text,
+      deriveDefaultOptionalPreamble(text, uiCssVariables, {
+        preferDvipsNames: exportPreferDvipsNames,
+      })
+    );
     try {
       await navigator.clipboard.writeText(fullDocument);
       setFullDocumentCopied(true);
@@ -304,8 +369,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown exporter error";
-      setTikzText(`% Export failed: ${message}`);
-      setTikzCopied(false);
+      alert(`Failed to open TikZ preview: ${message}`);
     }
   };
 
@@ -343,7 +407,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
               type="button"
               className="exportHeaderButton"
               onClick={openPreviewWindow}
-              title="Compile this figure and open it as a PDF"
+              title="Open the PDF preview and adjust figure sizing"
             >
               Open PDF
             </button>
@@ -471,86 +535,11 @@ export function ExportPanel({ visible }: ExportPanelProps) {
           )}
         </div>
 
-        <div className="scaleBlock">
-          <div className="subSectionTitle">Figure sizing</div>
-          <div className="compactScaleGrid">
-            <div className="scaleGridItem">
-              <div className="scaleGridIcon">
-                <IconGlobe size={14} />
-              </div>
-              <span className="scaleGridLabel">Global</span>
-              <input
-                className="scaleGridInput"
-                type="number"
-                min={0.1}
-                max={6}
-                step={0.05}
-                value={exportGlobalScale}
-                onChange={(e) => setExportGlobalScale(e.target.value)}
-                title="Multiplies every size in the exported figure"
-              />
-            </div>
-            <div className="scaleGridItem">
-              <div className="scaleGridIcon">
-                <IconPoint size={14} />
-              </div>
-              <span className="scaleGridLabel">Points</span>
-              <input
-                className="scaleGridInput"
-                type="number"
-                min={0.1}
-                max={4}
-                step={0.05}
-                value={exportPointScale}
-                onChange={(e) => setExportPointScale(e.target.value)}
-                title="Multiplies point marker size"
-              />
-            </div>
-            <div className="scaleGridItem">
-              <div className="scaleGridIcon">
-                <IconLine size={14} />
-              </div>
-              <span className="scaleGridLabel">Lines</span>
-              <input
-                className="scaleGridInput"
-                type="number"
-                min={0.1}
-                max={4}
-                step={0.05}
-                value={exportLineScale}
-                onChange={(e) => setExportLineScale(e.target.value)}
-                title="Multiplies line and segment thickness"
-              />
-            </div>
-            <div className="scaleGridItem">
-              <div className="scaleGridIcon">
-                <IconType size={14} />
-              </div>
-              <span className="scaleGridLabel">Labels</span>
-              <input
-                className="scaleGridInput"
-                type="number"
-                min={0.1}
-                max={4}
-                step={0.05}
-                value={exportLabelScale}
-                onChange={(e) => setExportLabelScale(e.target.value)}
-                title="Multiplies label text size"
-              />
-            </div>
-          </div>
-        </div>
-
         <div className="exportCodeBlock">
           <div className="exportCodeHeader">
             <div className="exportCodeHeaderLeft">
               <span className="exportCodeTitle">TikZ code</span>
               <span>{tikzStatusText}</span>
-              {tikzOutdated && (
-                <button type="button" className="exportRefreshButton" onClick={() => generateTikz()}>
-                  Refresh
-                </button>
-              )}
             </div>
             <div className="exportCodeActions">
               <button
@@ -569,6 +558,15 @@ export function ExportPanel({ visible }: ExportPanelProps) {
               >
                 {fullDocumentCopied ? "Copied" : "Copy full file"}
               </button>
+              {tikzOutdated && (
+                <button
+                  type="button"
+                  className="exportCodeCopyButton"
+                  onClick={() => generateTikz()}
+                >
+                  Refresh
+                </button>
+              )}
             </div>
           </div>
           {!isTauriRuntime && (
@@ -599,6 +597,28 @@ export function ExportPanel({ visible }: ExportPanelProps) {
                 onChange={(e) => setExportEfficient(e.target.checked)}
               />
               Compact code
+            </label>
+            <label
+              className="checkboxRow"
+              title="Rounds generated coordinates and visual measurements to at most two decimal places."
+            >
+              <input
+                type="checkbox"
+                checked={exportRoundNumbersToTwoDecimals}
+                onChange={(e) => setExportRoundNumbersToTwoDecimals(e.target.checked)}
+              />
+              Use two decimal places
+            </label>
+            <label
+              className="checkboxRow"
+              title="Approximates every color with the nearest xcolor/dvipsnames color and emits no custom color definitions."
+            >
+              <input
+                type="checkbox"
+                checked={exportPreferDvipsNames}
+                onChange={(e) => setExportPreferDvipsNames(e.target.checked)}
+              />
+              Use xcolor/dvipsnames only
             </label>
             <label
               className="checkboxRow"

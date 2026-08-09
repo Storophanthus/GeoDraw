@@ -22,7 +22,16 @@ import {
 } from "react";
 import { buildStandaloneSource, deriveDefaultOptionalPreamble } from "../export/tikz/standaloneDocument";
 import { buildTikzExportText } from "../export/buildTikzExportText";
+import type { SceneModel } from "../scene/points";
+import { loadStoredExportPreferences, saveStoredExportPreferences } from "../state/appPreferences";
 import { loadTikzPreviewSession } from "./tikzPreviewSession";
+import {
+  listPreviewLabelTargets,
+  nudgePreviewLabel,
+  resetPreviewLabel,
+  type PreviewLabelTarget,
+} from "./tikzPreviewLabels";
+import { getCanvasCaptureFigureSizing } from "./tikzPreviewSizing";
 import { IconGlobe, IconPoint, IconLine, IconType } from "./icons";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -30,6 +39,8 @@ GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 type TikzPreviewWindowProps = {
   token: string;
 };
+
+type CodeToolTab = "sizing" | "labels" | "find" | "preamble";
 
 type CompileTikzPreviewResult = {
   pdf_base64: string;
@@ -44,6 +55,123 @@ const MAX_TIKZ_EDITOR_HISTORY = 250;
 const MIN_PDF_ZOOM = 0.4;
 const MAX_PDF_ZOOM = 4;
 const PDF_CANVAS_PADDING = 18;
+
+function formatPreviewScale(raw: string, twoDecimals: boolean): string {
+  if (!twoDecimals) return raw;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return raw;
+  return String(Number(value.toFixed(2)));
+}
+
+function compactPreviewLabelText(raw: string): string {
+  const greek: Record<string, string> = {
+    "\\alpha": "α",
+    "\\beta": "β",
+    "\\gamma": "γ",
+    "\\delta": "δ",
+    "\\theta": "θ",
+    "\\lambda": "λ",
+    "\\mu": "μ",
+    "\\pi": "π",
+    "\\sigma": "σ",
+    "\\phi": "φ",
+    "\\omega": "ω",
+  };
+  let text = raw
+    .replace(/\^\{\\prime\}/gu, "′")
+    .replace(/\^\\prime/gu, "′")
+    .replace(/\$+/gu, "");
+  for (const [tex, glyph] of Object.entries(greek)) {
+    text = text.split(tex).join(glyph);
+  }
+  const subscriptDigits: Record<string, string> = {
+    "0": "₀",
+    "1": "₁",
+    "2": "₂",
+    "3": "₃",
+    "4": "₄",
+    "5": "₅",
+    "6": "₆",
+    "7": "₇",
+    "8": "₈",
+    "9": "₉",
+  };
+  text = text.replace(/_\{?([0-9]+)\}?/gu, (_match, digits: string) =>
+    [...digits].map((digit) => subscriptDigits[digit] ?? digit).join("")
+  );
+  return text.replace(/[{}]/gu, "").trim() || raw;
+}
+
+function PrecisionLabelTile({
+  target,
+  onNudge,
+  onReset,
+}: {
+  target: PreviewLabelTarget;
+  onNudge: (target: PreviewLabelTarget, dx: number, dy: number, coarse: boolean) => void;
+  onReset: (target: PreviewLabelTarget) => void;
+}) {
+  const nudge = (dx: number, dy: number) => (event: ReactMouseEvent<HTMLButtonElement>) => {
+    onNudge(target, dx, dy, event.shiftKey);
+  };
+  const title = `${target.kindLabel}: ${target.text}`;
+  return (
+    <div className="previewLabelPrecisionTile" title={title}>
+      <div className="previewLabelPrecisionIdentity">
+        <span className="previewLabelPrecisionName">{compactPreviewLabelText(target.text)}</span>
+        <span className="previewLabelPrecisionKind">{target.kindLabel}</span>
+      </div>
+      <div className="previewLabelJoystick" aria-label={`Move ${target.text}`}>
+        <button
+          type="button"
+          className="previewLabelJoystickButton up"
+          onClick={nudge(0, -1)}
+          aria-label={`Move ${target.text} up`}
+          title="Up 1 px · Shift-click 5 px"
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          className="previewLabelJoystickButton left"
+          onClick={nudge(-1, 0)}
+          aria-label={`Move ${target.text} left`}
+          title="Left 1 px · Shift-click 5 px"
+        >
+          ←
+        </button>
+        <button
+          type="button"
+          className="previewLabelJoystickButton reset"
+          onClick={() => onReset(target)}
+          aria-label={`Reset ${target.text} position`}
+          title="Reset this label"
+        >
+          ↺
+        </button>
+        <button
+          type="button"
+          className="previewLabelJoystickButton right"
+          onClick={nudge(1, 0)}
+          aria-label={`Move ${target.text} right`}
+          title="Right 1 px · Shift-click 5 px"
+        >
+          →
+        </button>
+        <button
+          type="button"
+          className="previewLabelJoystickButton down"
+          onClick={nudge(0, 1)}
+          aria-label={`Move ${target.text} down`}
+          title="Down 1 px · Shift-click 5 px"
+        >
+          ↓
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   const session = useMemo(() => loadTikzPreviewSession(token), [token]);
   const isTauriRuntime = useMemo(
@@ -52,7 +180,6 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   );
   const [tikzCode, setTikzCode] = useState(session?.tikzPicture ?? "\\begin{tikzpicture}\n\\end{tikzpicture}");
   const [optionalPreamble, setOptionalPreamble] = useState("");
-  const [optionalPreambleOpen, setOptionalPreambleOpen] = useState(false);
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
   const [pdfZoom, setPdfZoom] = useState(1);
   const [pdfRenderError, setPdfRenderError] = useState("");
@@ -71,12 +198,50 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   // Live figure sizing: only available when the launcher captured the scene
   // (desktop app). Web popups fall back to a static, non-resizable preview.
   const regen = session?.regen ?? null;
-  const [figureSizingOpen, setFigureSizingOpen] = useState(false);
-  const [globalScale, setGlobalScale] = useState(() => (regen ? String(regen.globalScale) : "1"));
-  const [pointScale, setPointScale] = useState(() => (regen ? String(regen.pointScale) : "1"));
-  const [lineScale, setLineScale] = useState(() => (regen ? String(regen.lineScale) : "1"));
-  const [labelScale, setLabelScale] = useState(() => (regen ? String(regen.labelScale) : "1"));
+  const previewSceneRef = useRef<SceneModel | null>(regen?.scene ?? null);
+  const [codeToolTab, setCodeToolTab] = useState<CodeToolTab>(() =>
+    regen ? "sizing" : "find"
+  );
+  const initialTwoDecimalPrecision = regen?.roundNumbersToTwoDecimals === true;
+  const [scaleboxScale, setScaleboxScale] = useState(
+    () => formatPreviewScale(regen ? String(regen.scaleboxScale ?? 1) : "1", initialTwoDecimalPrecision)
+  );
+  const [trueGlobalScale, setTrueGlobalScale] = useState(
+    () => formatPreviewScale(regen ? String(regen.trueGlobalScale ?? 1) : "1", initialTwoDecimalPrecision)
+  );
+  const [globalScale, setGlobalScale] = useState(() =>
+    formatPreviewScale(regen ? String(regen.globalScale) : "1", initialTwoDecimalPrecision)
+  );
+  const [pointScale, setPointScale] = useState(() =>
+    formatPreviewScale(regen ? String(regen.pointScale) : "1", initialTwoDecimalPrecision)
+  );
+  const [lineScale, setLineScale] = useState(() =>
+    formatPreviewScale(regen ? String(regen.lineScale) : "1", initialTwoDecimalPrecision)
+  );
+  const [labelScale, setLabelScale] = useState(() =>
+    formatPreviewScale(regen ? String(regen.labelScale) : "1", initialTwoDecimalPrecision)
+  );
+  const [labelHaloScale, setLabelHaloScale] = useState(() =>
+    formatPreviewScale(regen ? String(regen.labelHaloScale ?? 1) : "1", initialTwoDecimalPrecision)
+  );
+  const [roundNumbersToTwoDecimals, setRoundNumbersToTwoDecimals] = useState(initialTwoDecimalPrecision);
+  const [preferDvipsNames, setPreferDvipsNames] = useState(regen?.preferDvipsNames === true);
+  const [figureSizingDefaultSaved, setFigureSizingDefaultSaved] = useState(false);
   const recompileTimerRef = useRef<number | null>(null);
+  const automaticPreambleRef = useRef("");
+
+  const precisionLabelTargets = useMemo(
+    () =>
+      regen
+        ? listPreviewLabelTargets(regen.scene, {
+            viewport: regen.viewport,
+            clipRectWorld: regen.clipRectWorld,
+            clipPolygonWorld: regen.clipPolygonWorld,
+            screenPxPerWorld: regen.screenPxPerWorld,
+          })
+        : [],
+    [regen]
+  );
 
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -213,19 +378,108 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   // recompile. The code update is instant; the PDF recompile is debounced since
   // it shells out to LaTeX and the number spinners can fire rapidly.
   const applyScales = useCallback(
-    (next: { global: string; point: string; line: string; label: string }) => {
+    (next: Partial<{
+      scalebox: string;
+      trueGlobal: string;
+      global: string;
+      point: string;
+      line: string;
+      label: string;
+      labelHalo: string;
+      twoDecimals: boolean;
+      dvipsNames: boolean;
+    }>) => {
+      if (!regen) return;
+      setFigureSizingDefaultSaved(false);
+      const resolved = {
+        scalebox: next.scalebox ?? scaleboxScale,
+        trueGlobal: next.trueGlobal ?? trueGlobalScale,
+        global: next.global ?? globalScale,
+        point: next.point ?? pointScale,
+        line: next.line ?? lineScale,
+        label: next.label ?? labelScale,
+        labelHalo: next.labelHalo ?? labelHaloScale,
+        twoDecimals: next.twoDecimals ?? roundNumbersToTwoDecimals,
+        dvipsNames: next.dvipsNames ?? preferDvipsNames,
+      };
+      let nextTikz: string;
+      try {
+        nextTikz = buildTikzExportText({
+          ...regen,
+          scene: previewSceneRef.current ?? regen.scene,
+          scaleboxScale: Number(resolved.scalebox),
+          trueGlobalScale: Number(resolved.trueGlobal),
+          globalScale: Number(resolved.global),
+          pointScale: Number(resolved.point),
+          lineScale: Number(resolved.line),
+          labelScale: Number(resolved.label),
+          labelHaloScale: Number(resolved.labelHalo),
+          roundNumbersToTwoDecimals: resolved.twoDecimals,
+          preferDvipsNames: resolved.dvipsNames,
+        });
+      } catch {
+        return; // leave the current code untouched if regeneration fails
+      }
+      let nextPreamble = optionalPreamble;
+      if (next.dvipsNames !== undefined) {
+        const automaticPreamble = deriveDefaultOptionalPreamble(
+          nextTikz,
+          session?.uiCssVariables,
+          { preferDvipsNames: resolved.dvipsNames }
+        );
+        if (optionalPreamble === automaticPreambleRef.current) {
+          nextPreamble = automaticPreamble;
+          setOptionalPreamble(automaticPreamble);
+        }
+        automaticPreambleRef.current = automaticPreamble;
+      }
+      updateTikzCode(nextTikz, { trackHistory: true });
+      if (recompileTimerRef.current !== null) {
+        window.clearTimeout(recompileTimerRef.current);
+      }
+      recompileTimerRef.current = window.setTimeout(() => {
+        recompileTimerRef.current = null;
+        void compilePdf(nextTikz, nextPreamble);
+      }, 350);
+    },
+    [
+      regen,
+      scaleboxScale,
+      trueGlobalScale,
+      globalScale,
+      pointScale,
+      lineScale,
+      labelScale,
+      labelHaloScale,
+      roundNumbersToTwoDecimals,
+      preferDvipsNames,
+      session?.uiCssVariables,
+      updateTikzCode,
+      compilePdf,
+      optionalPreamble,
+    ]
+  );
+
+  const regenerateWithScene = useCallback(
+    (nextScene: SceneModel) => {
       if (!regen) return;
       let nextTikz: string;
       try {
         nextTikz = buildTikzExportText({
           ...regen,
-          globalScale: Number(next.global),
-          pointScale: Number(next.point),
-          lineScale: Number(next.line),
-          labelScale: Number(next.label),
+          scene: nextScene,
+          scaleboxScale: Number(scaleboxScale),
+          trueGlobalScale: Number(trueGlobalScale),
+          globalScale: Number(globalScale),
+          pointScale: Number(pointScale),
+          lineScale: Number(lineScale),
+          labelScale: Number(labelScale),
+          labelHaloScale: Number(labelHaloScale),
+          roundNumbersToTwoDecimals,
+          preferDvipsNames,
         });
       } catch {
-        return; // leave the current code untouched if regeneration fails
+        return;
       }
       updateTikzCode(nextTikz, { trackHistory: true });
       if (recompileTimerRef.current !== null) {
@@ -236,8 +490,98 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
         void compilePdf(nextTikz, optionalPreamble);
       }, 350);
     },
-    [regen, updateTikzCode, compilePdf, optionalPreamble]
+    [
+      regen,
+      scaleboxScale,
+      trueGlobalScale,
+      globalScale,
+      pointScale,
+      lineScale,
+      labelScale,
+      labelHaloScale,
+      roundNumbersToTwoDecimals,
+      preferDvipsNames,
+      updateTikzCode,
+      compilePdf,
+      optionalPreamble,
+    ]
   );
+
+  const nudgePrecisionLabel = useCallback(
+    (target: PreviewLabelTarget, deltaX: number, deltaY: number, coarse: boolean) => {
+      if (!regen) return;
+      const currentScene = previewSceneRef.current ?? regen.scene;
+      const amount = coarse ? 5 : 1;
+      const nextScene = nudgePreviewLabel(
+        currentScene,
+        target,
+        { x: deltaX * amount, y: deltaY * amount },
+        regen.screenPxPerWorld
+      );
+      previewSceneRef.current = nextScene;
+      regenerateWithScene(nextScene);
+    },
+    [regen, regenerateWithScene]
+  );
+
+  const resetPrecisionLabel = useCallback(
+    (target: PreviewLabelTarget) => {
+      if (!regen) return;
+      const currentScene = previewSceneRef.current ?? regen.scene;
+      const nextScene = resetPreviewLabel(currentScene, regen.scene, target);
+      previewSceneRef.current = nextScene;
+      regenerateWithScene(nextScene);
+    },
+    [regen, regenerateWithScene]
+  );
+
+  const saveFigureSizingAsDefault = () => {
+    if (!regen) return;
+    const stored = loadStoredExportPreferences();
+    const canvasTrueZoom =
+      typeof regen.canvasTrueZoom === "number" && Number.isFinite(regen.canvasTrueZoom)
+        ? Math.max(0.05, regen.canvasTrueZoom)
+        : 1;
+    const normalized = (raw: string, fallback: string, multiplier = 1): string => {
+      const value = Number(raw) * multiplier;
+      if (!Number.isFinite(value)) return fallback;
+      return roundNumbersToTwoDecimals
+        ? String(Number(value.toFixed(2)))
+        : String(Number(value.toPrecision(15)));
+    };
+    const saved = saveStoredExportPreferences({
+      ...stored,
+      // The preview displays scales after Canvas True Zoom compensation. Save
+      // the underlying manual values so a future export does not apply it twice.
+      scaleboxScale: normalized(scaleboxScale, stored.scaleboxScale, 1 / canvasTrueZoom),
+      trueGlobalScale: normalized(trueGlobalScale, stored.trueGlobalScale),
+      globalScale: normalized(globalScale, stored.globalScale, canvasTrueZoom),
+      pointScale: normalized(pointScale, stored.pointScale),
+      lineScale: normalized(lineScale, stored.lineScale),
+      labelScale: normalized(labelScale, stored.labelScale),
+      labelHaloScale: normalized(labelHaloScale, stored.labelHaloScale),
+      roundNumbersToTwoDecimals,
+      preferDvipsNames,
+    });
+    setFigureSizingDefaultSaved(saved);
+  };
+
+  const useCanvasCaptureSizing = () => {
+    if (!regen) return;
+    const captured = getCanvasCaptureFigureSizing(regen.canvasTrueZoom, roundNumbersToTwoDecimals);
+
+    setScaleboxScale(captured.scalebox);
+    setTrueGlobalScale(captured.trueGlobal);
+    setGlobalScale(captured.global);
+    setPointScale(captured.point);
+    setLineScale(captured.line);
+    setLabelScale(captured.label);
+    setLabelHaloScale(captured.labelHalo);
+    setFigureSizingDefaultSaved(false);
+    applyScales({
+      ...captured,
+    });
+  };
 
   useEffect(() => {
     return () => {
@@ -249,17 +593,21 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
 
   useEffect(() => {
     const nextTikz = session?.tikzPicture ?? "\\begin{tikzpicture}\n\\end{tikzpicture}";
+    previewSceneRef.current = regen?.scene ?? null;
     updateTikzCode(nextTikz, {
       trackHistory: false,
       resetHistory: true,
     });
-    const defaultPreamble = deriveDefaultOptionalPreamble(nextTikz, session?.uiCssVariables);
+    const defaultPreamble = deriveDefaultOptionalPreamble(nextTikz, session?.uiCssVariables, {
+      preferDvipsNames: regen?.preferDvipsNames === true,
+    });
+    automaticPreambleRef.current = defaultPreamble;
     setOptionalPreamble(defaultPreamble);
-    setOptionalPreambleOpen(Boolean(defaultPreamble));
+    setCodeToolTab(regen ? "sizing" : defaultPreamble ? "preamble" : "find");
     if (session) {
       void compilePdf(nextTikz, defaultPreamble);
     }
-  }, [session, updateTikzCode, compilePdf]);
+  }, [session, regen, updateTikzCode, compilePdf]);
 
   useEffect(() => {
     return () => {
@@ -962,19 +1310,92 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
 
         <section className="previewPane previewCodePane" style={{ width: `${codePaneRatio * 100}%` }}>
           <div className="sectionTitle">TikZ Code</div>
-          <div className="optionalPreambleSection">
-            <button
-              type="button"
-              className="optionalPreambleToggle"
-              onClick={() => setOptionalPreambleOpen((prev) => !prev)}
-              aria-expanded={optionalPreambleOpen}
-            >
-              <span className={optionalPreambleOpen ? "optionalPreambleChevron open" : "optionalPreambleChevron"}>
-                {">"}
-              </span>
-              Optional Preamble
-            </button>
-            {optionalPreambleOpen ? (
+          <div className="previewCodeTools">
+            <div className="previewCodeToolTabs" role="tablist" aria-label="TikZ code tools">
+              {regen ? (
+                <>
+                  <button
+                    type="button"
+                    id="preview-tool-tab-sizing"
+                    className={codeToolTab === "sizing" ? "previewCodeToolTab active" : "previewCodeToolTab"}
+                    role="tab"
+                    aria-selected={codeToolTab === "sizing"}
+                    aria-controls="preview-tool-panel-sizing"
+                    onClick={() => setCodeToolTab("sizing")}
+                  >
+                    Figure Sizing
+                    <span className="previewCodeToolBadge">Live</span>
+                  </button>
+                  <button
+                    type="button"
+                    id="preview-tool-tab-labels"
+                    className={codeToolTab === "labels" ? "previewCodeToolTab active" : "previewCodeToolTab"}
+                    role="tab"
+                    aria-selected={codeToolTab === "labels"}
+                    aria-controls="preview-tool-panel-labels"
+                    onClick={() => setCodeToolTab("labels")}
+                  >
+                    Label precision
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                id="preview-tool-tab-find"
+                className={codeToolTab === "find" ? "previewCodeToolTab active" : "previewCodeToolTab"}
+                role="tab"
+                aria-selected={codeToolTab === "find"}
+                aria-controls="preview-tool-panel-find"
+                onClick={() => setCodeToolTab("find")}
+              >
+                Find &amp; Replace
+              </button>
+              <button
+                type="button"
+                id="preview-tool-tab-preamble"
+                className={codeToolTab === "preamble" ? "previewCodeToolTab active" : "previewCodeToolTab"}
+                role="tab"
+                aria-selected={codeToolTab === "preamble"}
+                aria-controls="preview-tool-panel-preamble"
+                onClick={() => setCodeToolTab("preamble")}
+              >
+                Preamble
+              </button>
+            </div>
+            {regen && codeToolTab === "labels" ? (
+              <div
+                id="preview-tool-panel-labels"
+                className="previewCodeToolPanel previewLabelPrecision"
+                role="tabpanel"
+                aria-labelledby="preview-tool-tab-labels"
+              >
+                <div className="previewLabelPrecisionHeader">
+                  <span>Nudge a label by 1 px.</span>
+                  <span>Shift-click: 5 px</span>
+                </div>
+                {precisionLabelTargets.length > 0 ? (
+                  <div className="previewLabelPrecisionGrid">
+                    {precisionLabelTargets.map((target) => (
+                      <PrecisionLabelTile
+                        key={target.key}
+                        target={target}
+                        onNudge={nudgePrecisionLabel}
+                        onReset={resetPrecisionLabel}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="previewLabelPrecisionEmpty">No visible labels in this export.</div>
+                )}
+              </div>
+            ) : null}
+            {codeToolTab === "preamble" ? (
+              <div
+                id="preview-tool-panel-preamble"
+                className="previewCodeToolPanel"
+                role="tabpanel"
+                aria-labelledby="preview-tool-tab-preamble"
+              >
               <textarea
                 className="exportTextarea exportTextareaCompact optionalPreambleEditor"
                 value={optionalPreamble}
@@ -982,67 +1403,115 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
                 placeholder="Example: \\pagecolor{black}"
                 spellCheck={false}
               />
+              </div>
             ) : null}
-          </div>
-          <div className="findReplacePanel previewFindReplace">
-            <div className="findReplaceRow">
-              <input
-                className="findReplaceInput"
-                value={findText}
-                onChange={(e) => setFindText(e.target.value)}
-                placeholder="Find"
-                spellCheck={false}
-              />
-              <input
-                className="findReplaceInput"
-                value={replaceText}
-                onChange={(e) => setReplaceText(e.target.value)}
-                placeholder="Replace"
-                spellCheck={false}
-              />
-            </div>
-            <div className="findReplaceRow findReplaceControls">
-              <label className="checkboxRow findReplaceCheckbox">
-                <input
-                  type="checkbox"
-                  checked={matchCase}
-                  onChange={(e) => setMatchCase(e.target.checked)}
-                />
-                Match case
-              </label>
-              <button className="actionButton secondary" onClick={() => findNext(true)}>
-                Prev
-              </button>
-              <button className="actionButton secondary" onClick={() => findNext(false)}>
-                Next
-              </button>
-              <button className="actionButton secondary" onClick={replaceCurrent}>
-                Replace
-              </button>
-              <button className="actionButton secondary" onClick={replaceAll}>
-                Replace All
-              </button>
-            </div>
-            {findStatus ? <div className="statusText">{findStatus}</div> : null}
-          </div>
-          {regen ? (
-            <div className="figureSizingSection previewFigureSizing">
-              <button
-                type="button"
-                className="optionalPreambleToggle"
-                onClick={() => setFigureSizingOpen((prev) => !prev)}
-                aria-expanded={figureSizingOpen}
+            {codeToolTab === "find" ? (
+              <div
+                id="preview-tool-panel-find"
+                className="previewCodeToolPanel findReplacePanel previewFindReplace"
+                role="tabpanel"
+                aria-labelledby="preview-tool-tab-find"
               >
-                <span className={figureSizingOpen ? "optionalPreambleChevron open" : "optionalPreambleChevron"}>
-                  {">"}
-                </span>
-                Figure Sizing
-              </button>
-              {figureSizingOpen ? (
-                <div className="previewFigureSizingGrid">
+                <div className="findReplaceRow">
+                  <input
+                    className="findReplaceInput"
+                    value={findText}
+                    onChange={(e) => setFindText(e.target.value)}
+                    placeholder="Find"
+                    spellCheck={false}
+                  />
+                  <input
+                    className="findReplaceInput"
+                    value={replaceText}
+                    onChange={(e) => setReplaceText(e.target.value)}
+                    placeholder="Replace"
+                    spellCheck={false}
+                  />
+                </div>
+                <div className="findReplaceRow findReplaceControls">
+                  <label className="checkboxRow findReplaceCheckbox">
+                    <input
+                      type="checkbox"
+                      checked={matchCase}
+                      onChange={(e) => setMatchCase(e.target.checked)}
+                    />
+                    Match case
+                  </label>
+                  <button className="actionButton secondary" onClick={() => findNext(true)}>
+                    Prev
+                  </button>
+                  <button className="actionButton secondary" onClick={() => findNext(false)}>
+                    Next
+                  </button>
+                  <button className="actionButton secondary" onClick={replaceCurrent}>
+                    Replace
+                  </button>
+                  <button className="actionButton secondary" onClick={replaceAll}>
+                    Replace All
+                  </button>
+                </div>
+                {findStatus ? <div className="statusText">{findStatus}</div> : null}
+              </div>
+            ) : null}
+            {regen && codeToolTab === "sizing" ? (
+            <div
+              id="preview-tool-panel-sizing"
+              className="previewCodeToolPanel previewFigureSizing"
+              role="tabpanel"
+              aria-labelledby="preview-tool-tab-sizing"
+            >
+              <div className="previewFigureSizingHeader">
+                <div className="previewFigureSizingHint">
+                  Scale the complete figure or tune points, lines, and labels independently.
+                </div>
+                <div className="previewFigureSizingActions">
+                  <button
+                    type="button"
+                    className="previewSizingDefaultButton"
+                    onClick={useCanvasCaptureSizing}
+                    title="Match the captured canvas zoom and reset manual sizing multipliers"
+                  >
+                    Canvas capture
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      figureSizingDefaultSaved
+                        ? "previewSizingDefaultButton saved"
+                        : "previewSizingDefaultButton"
+                    }
+                    onClick={saveFigureSizingAsDefault}
+                    title="Use these figure-sizing and formatting values for future exports"
+                  >
+                    {figureSizingDefaultSaved ? "Default saved" : "Set as default"}
+                  </button>
+                </div>
+              </div>
+              <div className="previewFigureSizingGrid">
+                  <label className="previewScaleItem previewScaleItemWide">
+                    <IconGlobe size={14} />
+                    <span className="previewScaleLabel">Global scale</span>
+                    <span className="previewScaleDescription">
+                      Final size in your LaTeX document; this standalone preview automatically fits it to the window.
+                    </span>
+                    <input
+                      className="previewScaleInput"
+                      type="number"
+                      min={0.1}
+                      max={6}
+                      step={0.05}
+                      value={scaleboxScale}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setScaleboxScale(v);
+                        applyScales({ scalebox: v, trueGlobal: trueGlobalScale, global: globalScale, point: pointScale, line: lineScale, label: labelScale });
+                      }}
+                      title="Scales the complete figure with a simple LaTeX scalebox"
+                    />
+                  </label>
                   <label className="previewScaleItem">
                     <IconGlobe size={14} />
-                    <span className="previewScaleLabel">Global</span>
+                    <span className="previewScaleLabel">TikZ scale</span>
                     <input
                       className="previewScaleInput"
                       type="number"
@@ -1053,9 +1522,13 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
                       onChange={(e) => {
                         const v = e.target.value;
                         setGlobalScale(v);
-                        applyScales({ global: v, point: pointScale, line: lineScale, label: labelScale });
+                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: v, point: pointScale, line: lineScale, label: labelScale });
                       }}
+                      aria-describedby="preview-tikz-scale-help"
                     />
+                    <span id="preview-tikz-scale-help" className="previewScaleTooltip" role="tooltip">
+                      Changes TikZ coordinate spacing and figure extent. Point, line, and label sizes remain independently adjustable.
+                    </span>
                   </label>
                   <label className="previewScaleItem">
                     <IconPoint size={14} />
@@ -1070,7 +1543,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
                       onChange={(e) => {
                         const v = e.target.value;
                         setPointScale(v);
-                        applyScales({ global: globalScale, point: v, line: lineScale, label: labelScale });
+                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: globalScale, point: v, line: lineScale, label: labelScale });
                       }}
                     />
                   </label>
@@ -1087,7 +1560,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
                       onChange={(e) => {
                         const v = e.target.value;
                         setLineScale(v);
-                        applyScales({ global: globalScale, point: pointScale, line: v, label: labelScale });
+                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: globalScale, point: pointScale, line: v, label: labelScale });
                       }}
                     />
                   </label>
@@ -1104,14 +1577,102 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
                       onChange={(e) => {
                         const v = e.target.value;
                         setLabelScale(v);
-                        applyScales({ global: globalScale, point: pointScale, line: lineScale, label: v });
+                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: globalScale, point: pointScale, line: lineScale, label: v });
                       }}
                     />
                   </label>
+                  <label className="previewScaleItem">
+                    <IconType size={14} />
+                    <span className="previewScaleLabel">Halo spread</span>
+                    <input
+                      className="previewScaleInput"
+                      type="number"
+                      min={0.1}
+                      max={4}
+                      step={0.05}
+                      value={labelHaloScale}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLabelHaloScale(v);
+                        applyScales({ labelHalo: v });
+                      }}
+                      title="Multiplies the contour spread behind every label"
+                    />
+                  </label>
+                  <div className="previewSizingOptions">
+                    <label className="checkboxRow previewSizingCheckbox">
+                      <input
+                        type="checkbox"
+                        checked={roundNumbersToTwoDecimals}
+                        onChange={(e) => {
+                          const enabled = e.target.checked;
+                          const nextScalebox = formatPreviewScale(scaleboxScale, enabled);
+                          const nextTrueGlobal = formatPreviewScale(trueGlobalScale, enabled);
+                          const nextGlobal = formatPreviewScale(globalScale, enabled);
+                          const nextPoint = formatPreviewScale(pointScale, enabled);
+                          const nextLine = formatPreviewScale(lineScale, enabled);
+                          const nextLabel = formatPreviewScale(labelScale, enabled);
+                          const nextHalo = formatPreviewScale(labelHaloScale, enabled);
+                          setRoundNumbersToTwoDecimals(enabled);
+                          setScaleboxScale(nextScalebox);
+                          setTrueGlobalScale(nextTrueGlobal);
+                          setGlobalScale(nextGlobal);
+                          setPointScale(nextPoint);
+                          setLineScale(nextLine);
+                          setLabelScale(nextLabel);
+                          setLabelHaloScale(nextHalo);
+                          applyScales({
+                            scalebox: nextScalebox,
+                            trueGlobal: nextTrueGlobal,
+                            global: nextGlobal,
+                            point: nextPoint,
+                            line: nextLine,
+                            label: nextLabel,
+                            labelHalo: nextHalo,
+                            twoDecimals: enabled,
+                          });
+                        }}
+                      />
+                      Two decimal places
+                    </label>
+                    <label className="checkboxRow previewSizingCheckbox">
+                      <input
+                        type="checkbox"
+                        checked={preferDvipsNames}
+                        onChange={(e) => {
+                          const enabled = e.target.checked;
+                          setPreferDvipsNames(enabled);
+                          applyScales({ dvipsNames: enabled });
+                        }}
+                      />
+                      xcolor/dvipsnames only
+                    </label>
+                  </div>
+                  <details className="previewAdvancedScale">
+                    <summary>Advanced transform scale</summary>
+                    <label className="previewScaleItem previewScaleItemWide">
+                      <IconGlobe size={14} />
+                      <span className="previewScaleLabel">Transform shape</span>
+                      <input
+                        className="previewScaleInput"
+                        type="number"
+                        min={0.1}
+                        max={6}
+                        step={0.05}
+                        value={trueGlobalScale}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setTrueGlobalScale(v);
+                          applyScales({ scalebox: scaleboxScale, trueGlobal: v, global: globalScale, point: pointScale, line: lineScale, label: labelScale });
+                        }}
+                        title="Advanced TikZ scale with transform shape and explicit stroke and mark corrections"
+                      />
+                    </label>
+                  </details>
                 </div>
-              ) : null}
             </div>
-          ) : null}
+            ) : null}
+          </div>
           <textarea
             ref={editorRef}
             className="exportTextarea previewEditorArea"

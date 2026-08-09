@@ -463,6 +463,16 @@ function applyLabelGrouping(tex: string): string {
             const cleanPoint = point.trim();
             const cleanBody = body; // don't trim body, spaces might matter inside latex? usually ok to keep as is
 
+            // Calibrated construction labels carry executable font commands in
+            // their options. Keep those commands explicit instead of moving
+            // them into a foreach template: this avoids TeX/clipboard layers
+            // turning loop variables and font commands into doubled slashes.
+            if (cleanOpts.includes("font=\\fontsize")) {
+                flushBuffer();
+                newLines.push(line);
+                continue;
+            }
+
             if (buffer.length > 0) {
                 if (isCompatible(buffer[0], cleanOpts, cleanPoint, cleanBody)) {
                     buffer.push({ options: cleanOpts, point: cleanPoint, body: cleanBody, originalLine });

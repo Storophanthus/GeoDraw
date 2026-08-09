@@ -3,6 +3,9 @@ import { createDrawLayerBackendEmitter } from "./renderDrawBackend";
 import type { TikzRendererContext } from "./renderContext";
 
 type MarkAngleCommand = Extract<TikzCommand, { kind: "MarkAngle" }>;
+type LabelPointCommand = Extract<TikzCommand, { kind: "LabelPoint" }>;
+type LabelAtCommand = Extract<TikzCommand, { kind: "LabelAt" }>;
+type AliasableLabelCommand = LabelPointCommand | LabelAtCommand;
 type StyleAliasableDrawCommand = Extract<
   TikzCommand,
   | { kind: "DrawSegment" }
@@ -16,6 +19,13 @@ type StyleAliasableDrawCommand = Extract<
 >;
 
 const DRAW_STYLE_ALIAS_MIN_USAGE = 3;
+const LABEL_ALIAS_MIN_USAGE = 2;
+
+type RepeatedLabelAliases = {
+  optionAliases: Map<string, string>;
+  optionDefinitions: Array<{ name: string; options: string }>;
+  glowAliases: Map<string, { name: string; width: string; color: string }>;
+};
 
 type DrawLayerRendererArgs = {
   ctx: TikzRendererContext;
@@ -71,12 +81,181 @@ function withDrawStyleAlias<T extends StyleAliasableDrawCommand>(cmd: T, aliases
   return { ...cmd, style };
 }
 
+function aliasableLabels(commands: TikzCommand[]): AliasableLabelCommand[] {
+  return commands.filter(
+    (command): command is AliasableLabelCommand =>
+      command.kind === "LabelPoint" || command.kind === "LabelAt"
+  );
+}
+
+function collectRepeatedLabelAliases(
+  ctx: TikzRendererContext,
+  commands: AliasableLabelCommand[],
+  aliasOptions: { includeGlowAliases: boolean } = { includeGlowAliases: true }
+): RepeatedLabelAliases {
+  const optionGroups = new Map<
+    string,
+    {
+      count: number;
+      commonOptions: string;
+      variants: Map<string, string | null>;
+    }
+  >();
+  const glowCounts = new Map<string, { count: number; width: string; color: string }>();
+
+  for (const command of commands) {
+    const options = command.options?.trim();
+    if (options) {
+      const parts = splitTopLevelOptions(options);
+      const placementOptions = parts.filter((part) =>
+        /^(?:anchor|xshift|yshift|above|below|left|right|above left|above right|below left|below right)\s*=/u.test(part)
+      );
+      const commonOptions = parts
+        .filter((part) => !/^(?:anchor|xshift|yshift|above|below|left|right|above left|above right|below left|below right)\s*=/u.test(part))
+        .join(", ");
+      // Anchor and shifts are placement choices, not visual styling. Group
+      // labels by everything else so each node can keep a small relative
+      // placement such as `anchor=west, xshift=.2em, yshift=.3em`.
+      // If placement is the only option, keep exact variants separate because an
+      // empty shared style would make the output longer rather than shorter.
+      const groupKey = commonOptions || `__exact__${options}`;
+      const group = optionGroups.get(groupKey) ?? {
+        count: 0,
+        commonOptions,
+        variants: new Map<string, string | null>(),
+      };
+      group.count += 1;
+      group.variants.set(options, placementOptions.join(", ") || null);
+      optionGroups.set(groupKey, group);
+    }
+    if (!aliasOptions.includeGlowAliases || !command.useGlow) continue;
+    const widthPt = Math.max(
+      0,
+      command.plainGlow?.widthPt ??
+        0.42 * ctx.options.trueGlobalScale * ctx.options.labelHaloScale
+    );
+    const width = `${ctx.capabilities.fmt(widthPt)}pt`;
+    const color = command.plainGlow?.color?.trim() || "\\thepagecolor";
+    const key = `${width}\u0000${color}`;
+    const current = glowCounts.get(key);
+    glowCounts.set(key, { count: (current?.count ?? 0) + 1, width, color });
+  }
+
+  const repeatedOptions = [...optionGroups.values()].filter(
+    (group) => group.count >= LABEL_ALIAS_MIN_USAGE
+  );
+  const optionAliases = new Map<string, string>();
+  const optionDefinitions: Array<{ name: string; options: string }> = [];
+  repeatedOptions.forEach((group, index) => {
+    const name = repeatedOptions.length === 1 ? "gdLabel" : `gdLabel${index + 1}`;
+    const placements = new Set(group.variants.values());
+    const sharedPlacement = placements.size === 1 ? [...placements][0] : null;
+    const definitionOptions = [sharedPlacement, group.commonOptions]
+      .filter((part): part is string => Boolean(part))
+      .join(", ");
+    optionDefinitions.push({ name, options: definitionOptions });
+    for (const [fullOptions, placement] of group.variants) {
+      optionAliases.set(
+        fullOptions,
+        [name, placements.size > 1 ? placement : null]
+          .filter((part): part is string => Boolean(part))
+          .join(", ")
+      );
+    }
+  });
+
+  const repeatedGlows = [...glowCounts].filter(([, value]) => value.count >= LABEL_ALIAS_MIN_USAGE);
+  const glowAliases = new Map<string, { name: string; width: string; color: string }>();
+  repeatedGlows.forEach(([key, value], index) => {
+    glowAliases.set(key, {
+      name: repeatedGlows.length === 1 ? "gdLabelText" : `gdLabelText${index + 1}`,
+      width: value.width,
+      color: value.color,
+    });
+  });
+
+  return { optionAliases, optionDefinitions, glowAliases };
+}
+
+function splitTopLevelOptions(options: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const char of options) {
+    if (char === "{" || char === "[" || char === "(") depth += 1;
+    else if (char === "}" || char === "]" || char === ")") depth = Math.max(0, depth - 1);
+    if (char === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function appendRepeatedLabelDefinitions(
+  out: string[],
+  aliases: RepeatedLabelAliases
+): void {
+  if (aliases.optionDefinitions.length > 0) {
+    out.push("% Shared label styles: edit here to update every matching label.");
+    out.push("\\tikzset{");
+    aliases.optionDefinitions.forEach(({ options, name }, styleIndex) => {
+      out.push(`  ${name}/.style={`);
+      const parts = splitTopLevelOptions(options);
+      parts.forEach((part, partIndex) => {
+        out.push(`    ${part}${partIndex < parts.length - 1 ? "," : ""}`);
+      });
+      out.push(`  }${styleIndex < aliases.optionDefinitions.length - 1 ? "," : ""}`);
+    });
+    out.push("}");
+  }
+  if (aliases.glowAliases.size > 0) {
+    out.push("% Shared label halo presets: edit once to update every matching label.");
+    for (const { name, width, color } of aliases.glowAliases.values()) {
+      out.push(
+        `\\newcommand{\\${name}}[1]{\\gdLabelGlow{${width}}{${color}}{#1}}`
+      );
+    }
+  }
+}
+
+function withRepeatedLabelAliases<T extends AliasableLabelCommand>(
+  ctx: TikzRendererContext,
+  command: T,
+  aliases: RepeatedLabelAliases
+): T {
+  const options = command.options?.trim();
+  const optionAlias = options ? aliases.optionAliases.get(options) : undefined;
+  let plainGlowCommand = command.plainGlowCommand;
+  if (command.useGlow) {
+    const widthPt = Math.max(
+      0,
+      command.plainGlow?.widthPt ??
+        0.42 * ctx.options.trueGlobalScale * ctx.options.labelHaloScale
+    );
+    const width = `${ctx.capabilities.fmt(widthPt)}pt`;
+    const color = command.plainGlow?.color?.trim() || "\\thepagecolor";
+    plainGlowCommand = aliases.glowAliases.get(`${width}\u0000${color}`)?.name;
+  }
+  if (!optionAlias && plainGlowCommand === command.plainGlowCommand) return command;
+  return {
+    ...command,
+    ...(optionAlias ? { options: optionAlias } : {}),
+    ...(plainGlowCommand ? { plainGlowCommand } : {}),
+  };
+}
+
 function circleRadiusArg(
   ctx: TikzRendererContext,
   cmd: Extract<TikzCommand, { kind: "DrawCircleRadius" | "FillCircleRadius" }>,
   prefix: string
 ): string {
-  if (!cmd.radiusExpr) return ctx.capabilities.fmt(cmd.radius);
+  if (!cmd.radiusExpr) {
+    return ctx.capabilities.fmtGeometry(cmd.radius);
+  }
   const macro = `gd${prefix}Radius`;
   ctx.out.push(`\\pgfmathsetmacro{\\${macro}}{${cmd.radiusExpr}}`);
   return `\\${macro}`;
@@ -202,6 +381,25 @@ export function appendRenderedDrawLayers({
   }
 
   ctx.pushSectionHeader("% Labels");
+  const repeatedLabelCandidates =
+    ctx.options.drawLayerBackend === "plain"
+      ? [
+          ...aliasableLabels(drawPointLabels),
+          ...aliasableLabels(drawOtherLabels),
+        ]
+      : [
+          ...drawPointLabels.filter(
+            (command): command is LabelPointCommand =>
+              command.kind === "LabelPoint" && command.renderAsNode === true
+          ),
+          ...aliasableLabels(drawOtherLabels),
+        ];
+  const repeatedLabelAliases = collectRepeatedLabelAliases(
+    ctx,
+    repeatedLabelCandidates,
+    { includeGlowAliases: ctx.options.drawLayerBackend === "plain" }
+  );
+  appendRepeatedLabelDefinitions(out, repeatedLabelAliases);
   const labelScale = ctx.options.labelScale;
   const shouldScaleLabels = typeof labelScale === "number" && Math.abs(labelScale - 1) > 1e-9;
   if (shouldScaleLabels) {
@@ -221,7 +419,7 @@ export function appendRenderedDrawLayers({
       continue;
     }
     if (cmd.kind !== "LabelPoint") continue;
-    out.push(...backend.emitLabelPoint(cmd));
+    out.push(...backend.emitLabelPoint(withRepeatedLabelAliases(ctx, cmd, repeatedLabelAliases)));
   }
 
   for (const cmd of drawAngleLabels) {
@@ -236,7 +434,7 @@ export function appendRenderedDrawLayers({
   }
   for (const cmd of drawOtherLabels) {
     if (cmd.kind !== "LabelAt") continue;
-    out.push(...backend.emitLabelAt(cmd));
+    out.push(...backend.emitLabelAt(withRepeatedLabelAliases(ctx, cmd, repeatedLabelAliases)));
   }
   if (shouldScaleLabels) {
     out.push("\\end{scope}");

@@ -590,7 +590,7 @@ const COLOR_PROFILES: readonly ColorProfile[] = [
   },
   {
     id: "image_palette_vanilla_thin",
-    label: "Image Palette (Vanilla Thin)",
+    label: "Vanilla Standard",
     palette: {
       backgroundColor: "#fefefe",
       gridMinorColor: "#ece5d9",
@@ -640,10 +640,12 @@ const COLOR_PROFILES: readonly ColorProfile[] = [
   },
 ] as const;
 
-export const COLOR_PROFILE_OPTIONS: ReadonlyArray<{ id: ColorProfileId; label: string }> = COLOR_PROFILES.map((profile) => ({
-  id: profile.id,
-  label: profile.label,
-}));
+export const COLOR_PROFILE_OPTIONS: ReadonlyArray<{ id: ColorProfileId; label: string }> = COLOR_PROFILES
+  .filter((profile) => profile.id !== "image_palette")
+  .map((profile) => ({
+    id: profile.id,
+    label: profile.label,
+  }));
 
 export function getColorProfile(profileId: ColorProfileId): ColorProfile {
   const found = COLOR_PROFILES.find((profile) => profile.id === profileId);

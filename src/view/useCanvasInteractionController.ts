@@ -96,6 +96,7 @@ type InteractionActions = {
   beginRichTextEditing?: (id: string) => boolean;
   clearPendingSelection: () => void;
   zoomAtScreenPoint: (vp: Viewport, screen: Vec2, zoomFactor: number) => void;
+  onWheelZoom?: (zoomFactor: number) => void;
   openContextMenu?: (payload: {
     clientX: number;
     clientY: number;
@@ -347,6 +348,7 @@ export function useCanvasInteractionController(deps: InteractionDeps) {
       setCursorWorldNull: () => actions.setCursorWorld(null),
       setHoveredHit: actions.setHoveredHit,
       zoomAtScreenPoint: (screen, zoomFactor) => actions.zoomAtScreenPoint(vp, screen, zoomFactor),
+      onWheelZoom: actions.onWheelZoom,
     });
 
     const onDoubleClick = (e: MouseEvent) => {

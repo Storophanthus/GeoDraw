@@ -44,10 +44,15 @@ const custom = {
   emitTkzSetup: "on" as const,
   labelGlow: false,
   tikzExportMode: "reconstructible" as const,
+  scaleboxScale: "0.75",
+  trueGlobalScale: "1.25",
   globalScale: "1.5",
   pointScale: "0.8",
   lineScale: "2",
   labelScale: "1.2",
+  labelHaloScale: "1.4",
+  roundNumbersToTwoDecimals: true,
+  preferDvipsNames: true,
 };
 assert(saveStoredExportPreferences(custom), "save should report success when localStorage is available");
 assert(
@@ -80,10 +85,15 @@ memoryStorage.setItem(
       emitTkzSetup: "bogus",
       labelGlow: true,
       tikzExportMode: "reconstructible",
+      scaleboxScale: "1.8",
+      trueGlobalScale: "2",
       globalScale: "999",
       pointScale: "0.5",
       lineScale: "not-a-number",
       labelScale: "1",
+      labelHaloScale: "0.75",
+      roundNumbersToTwoDecimals: true,
+      preferDvipsNames: true,
     },
   })
 );
@@ -93,10 +103,15 @@ assert(partial.compactCode === false, "valid compactCode should be preserved");
 assert(partial.emitTkzSetup === "auto", "invalid emitTkzSetup should fall back to auto");
 assert(partial.labelGlow === true, "valid labelGlow should be preserved");
 assert(partial.tikzExportMode === "reconstructible", "valid tikzExportMode should be preserved");
+assert(partial.scaleboxScale === "1.8", "valid scaleboxScale should be preserved");
+assert(partial.trueGlobalScale === "2", "valid trueGlobalScale should be preserved");
 assert(partial.globalScale === DEFAULT_EXPORT_PREFERENCES.globalScale, "out-of-range globalScale should fall back to default");
 assert(partial.pointScale === "0.5", "valid pointScale should be preserved");
 assert(partial.lineScale === DEFAULT_EXPORT_PREFERENCES.lineScale, "non-numeric lineScale should fall back to default");
 assert(partial.labelScale === "1", "valid labelScale should be preserved");
+assert(partial.labelHaloScale === "0.75", "valid labelHaloScale should be preserved");
+assert(partial.roundNumbersToTwoDecimals === true, "valid numeric precision preference should be preserved");
+assert(partial.preferDvipsNames === true, "valid dvipsnames preference should be preserved");
 
 // Missing key entirely
 memoryStorage.removeItem(STORAGE_KEY);

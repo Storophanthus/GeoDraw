@@ -63,7 +63,7 @@ function splitTopLevelTexLines(content: string): string[] {
 
 function renderPlainLabelText(
   ctx: TikzRendererContext,
-  cmd: Pick<LabelPointCommand | LabelAtCommand, "text" | "useGlow" | "plainGlow"> & {
+  cmd: Pick<LabelPointCommand | LabelAtCommand, "text" | "useGlow" | "plainGlow" | "plainGlowCommand"> & {
     textMode?: "math" | "raw";
   }
 ): string {
@@ -71,22 +71,20 @@ function renderPlainLabelText(
   if (!cmd.useGlow) return content;
   const lines =
     cmd.textMode === "raw" ? splitTopLevelTexLines(content) : [content];
-  if (!cmd.plainGlow) {
-    // The legacy glow helper uses contour, whose argument is LR-mode and
-    // cannot contain a node-level line break.
-    return lines.length > 1 ? content : `\\gdLabelGlow{${content}}`;
-  }
-  const widthPt = Math.max(0, cmd.plainGlow.widthPt);
-  const contourColor = cmd.plainGlow.color;
+  const widthPt = Math.max(
+    0,
+    cmd.plainGlow?.widthPt ??
+      0.42 * ctx.options.trueGlobalScale * ctx.options.labelHaloScale
+  );
+  const contourColor = cmd.plainGlow?.color?.trim() || "\\thepagecolor";
   const contourLine = (line: string): string => {
     const lineContent = line.trim().length > 0 ? line : "\\mbox{}";
-    const contour = contourColor && contourColor.trim()
-      ? `\\contour{${contourColor}}{${lineContent}}`
-      : `\\ifcsname thepagecolor\\endcsname\\contour{\\thepagecolor}{${lineContent}}\\else\\contour{white}{${lineContent}}\\fi`;
-    // TikZ's align implementation ends the current TeX group at each `\\`.
-    // Keep the contour setup inside each individual line instead of spanning
-    // the node-level line break.
-    return `\\begingroup\\ifcsname contour\\endcsname\\contourlength{${ctx.capabilities.fmt(widthPt)}pt}${contour}\\else ${lineContent}\\fi\\endgroup`;
+    if (cmd.plainGlowCommand) {
+      return `\\${cmd.plainGlowCommand}{${lineContent}}`;
+    }
+    // TikZ's align implementation ends the current TeX group at each `\\`, so
+    // invoke the reusable helper separately for every line.
+    return `\\gdLabelGlow{${ctx.capabilities.fmt(widthPt)}pt}{${contourColor}}{${lineContent}}`;
   };
   return lines.map(contourLine).join("\\\\");
 }
@@ -106,7 +104,7 @@ function createTkzDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayerBa
     emitDrawLine: (cmd) => {
       if (cmd.finiteFallback) {
         const { ax, ay, bx, by } = cmd.finiteFallback;
-        return [`\\draw${styleOptions(cmd.style)} (${caps.fmt(ax)},${caps.fmt(ay)}) -- (${caps.fmt(bx)},${caps.fmt(by)});`];
+        return [`\\draw${styleOptions(cmd.style)} (${caps.fmtGeometry(ax)},${caps.fmtGeometry(ay)}) -- (${caps.fmtGeometry(bx)},${caps.fmtGeometry(by)});`];
       }
       caps.assertTkzMacro("tkzDrawLine");
       return [`\\tkzDrawLine${styleOptions(cmd.style)}(${cmd.a},${cmd.b})`];
@@ -123,13 +121,16 @@ function createTkzDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayerBa
       return [`\\tkzDrawPoints[${cmd.style}](${cmd.points.join(",")})`];
     },
     emitLabelPoint: (cmd) => {
-      caps.assertTkzMacro("tkzLabelPoint");
       const opts = cmd.options ? `[${cmd.options}]` : "";
+      if (cmd.renderAsNode) {
+        return [`\\node${opts} at (${cmd.name}){${renderLabelText(ctx, cmd.text, cmd.useGlow)}};`];
+      }
+      caps.assertTkzMacro("tkzLabelPoint");
       return [`\\tkzLabelPoint${opts}(${cmd.name}){${renderLabelText(ctx, cmd.text, cmd.useGlow)}}`];
     },
     emitLabelAt: (cmd) => {
       const opts = cmd.options ? `[${cmd.options}]` : "";
-      return [`\\node${opts} at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${renderLabelText(ctx, cmd.text, cmd.useGlow, cmd.textMode)}};`];
+      return [`\\node${opts} at (${caps.fmtGeometry(cmd.x)},${caps.fmtGeometry(cmd.y)}){${renderLabelText(ctx, cmd.text, cmd.useGlow, cmd.textMode)}};`];
     },
   };
 }
@@ -148,7 +149,7 @@ function createPlainDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayer
         const { ax, ay, bx, by } = cmd.finiteFallback;
         return [
           `% gd plain draw backend: DrawLine exported as finite viewport segment (${cmd.a},${cmd.b})`,
-          `\\draw${styleOptions(cmd.style)} (${caps.fmt(ax)},${caps.fmt(ay)}) -- (${caps.fmt(bx)},${caps.fmt(by)});`,
+          `\\draw${styleOptions(cmd.style)} (${caps.fmtGeometry(ax)},${caps.fmtGeometry(ay)}) -- (${caps.fmtGeometry(bx)},${caps.fmtGeometry(by)});`,
         ];
       }
       return [
@@ -169,7 +170,7 @@ function createPlainDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayer
     },
     emitLabelAt: (cmd) => {
       const opts = cmd.options ? `[${cmd.options}]` : "";
-      return [`\\node${opts} at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${renderPlainLabelText(ctx, cmd)}};`];
+      return [`\\node${opts} at (${caps.fmtGeometry(cmd.x)},${caps.fmtGeometry(cmd.y)}){${renderPlainLabelText(ctx, cmd)}};`];
     },
   };
 }

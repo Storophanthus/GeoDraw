@@ -110,6 +110,7 @@ function sanitizeCamera(raw: unknown): GeoDocumentRuntimeState["camera"] {
   const y = raw.pos.y;
   const zoom = raw.zoom;
   const logZoom = raw.logZoom;
+  const trueZoom = raw.trueZoom;
   if (
     typeof x !== "number" ||
     typeof y !== "number" ||
@@ -122,7 +123,15 @@ function sanitizeCamera(raw: unknown): GeoDocumentRuntimeState["camera"] {
   ) {
     return fallback;
   }
-  return { pos: { x, y }, zoom, logZoom };
+  return {
+    pos: { x, y },
+    zoom,
+    logZoom,
+    trueZoom:
+      typeof trueZoom === "number" && Number.isFinite(trueZoom)
+        ? Math.max(0.25, Math.min(4, trueZoom))
+        : 1,
+  };
 }
 
 function sanitizeRuntime(raw: unknown): GeoDocumentRuntimeState | null {

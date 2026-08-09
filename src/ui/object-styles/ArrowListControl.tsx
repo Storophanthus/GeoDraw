@@ -53,6 +53,24 @@ export function parseArrowWidthUi(raw: string): number {
     return clampArrowWidthUi(Number(raw));
 }
 
+function arrowValueToSliderPosition(value: number, min: number, max: number): number {
+    const safeValue = Math.max(min, Math.min(max, Number.isFinite(value) ? value : 1));
+    return (Math.log(safeValue / min) / Math.log(max / min)) * 100;
+}
+
+function arrowSliderPositionToValue(
+    position: number,
+    min: number,
+    max: number,
+    step: number
+): number {
+    const safePosition = Math.max(0, Math.min(100, Number.isFinite(position) ? position : 0));
+    const rawValue = min * Math.pow(max / min, safePosition / 100);
+    const snapped = min + Math.round((rawValue - min) / step) * step;
+    const decimalPlaces = Math.max(0, (String(step).split(".")[1] ?? "").length);
+    return Number(Math.max(min, Math.min(max, snapped)).toFixed(decimalPlaces));
+}
+
 export type ArrowListControlProps<T extends PathArrowMark> = {
     arrows: T[] | undefined;
     onChange: (arrows: T[]) => void;
@@ -453,20 +471,27 @@ export function ArrowListControl<T extends PathArrowMark>({
                                 <input
                                     className="sizeSlider"
                                     type="range"
-                                    min={0.2}
-                                    max={12}
-                                    step={0.05}
-                                    value={(selectedArrow.lineWidthPt ?? DEFAULT_PATH_ARROW_LINE_WIDTH_PT) / SEGMENT_ARROW_WIDTH_UI_FACTOR}
+                                    min={0}
+                                    max={100}
+                                    step={0.1}
+                                    value={arrowValueToSliderPosition(
+                                        (selectedArrow.lineWidthPt ?? DEFAULT_PATH_ARROW_LINE_WIDTH_PT) / SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                                        0.2,
+                                        12
+                                    )}
                                     onChange={(e) =>
                                         updateSelectedArrow({
-                                            lineWidthPt: parseArrowWidthUi(e.target.value) * SEGMENT_ARROW_WIDTH_UI_FACTOR,
+                                            lineWidthPt:
+                                                arrowSliderPositionToValue(Number(e.target.value), 0.2, 12, 0.05) *
+                                                SEGMENT_ARROW_WIDTH_UI_FACTOR,
                                         })
                                     }
+                                    aria-label="Arrow width"
                                 />
                                 <input
                                     className="scaleInputCompact"
                                     type="number"
-                                    min={0}
+                                    min={0.2}
                                     max={12}
                                     step={0.05}
                                     value={(selectedArrow.lineWidthPt ?? DEFAULT_PATH_ARROW_LINE_WIDTH_PT) / SEGMENT_ARROW_WIDTH_UI_FACTOR}
@@ -483,11 +508,20 @@ export function ArrowListControl<T extends PathArrowMark>({
                                 <input
                                     className="sizeSlider"
                                     type="range"
-                                    min={0.2}
-                                    max={8}
+                                    min={0}
+                                    max={100}
                                     step={0.1}
-                                    value={selectedArrow.sizeScale ?? DEFAULT_PATH_ARROW_UI}
-                                    onChange={(e) => updateSelectedArrow({ sizeScale: Number(e.target.value) })}
+                                    value={arrowValueToSliderPosition(
+                                        selectedArrow.sizeScale ?? DEFAULT_PATH_ARROW_UI,
+                                        0.2,
+                                        8
+                                    )}
+                                    onChange={(e) =>
+                                        updateSelectedArrow({
+                                            sizeScale: arrowSliderPositionToValue(Number(e.target.value), 0.2, 8, 0.1),
+                                        })
+                                    }
+                                    aria-label="Arrow size"
                                 />
                                 <input
                                     className="scaleInputCompact"
@@ -505,11 +539,16 @@ export function ArrowListControl<T extends PathArrowMark>({
                                 <input
                                     className="sizeSlider"
                                     type="range"
-                                    min={0.2}
-                                    max={4}
+                                    min={0}
+                                    max={100}
                                     step={0.1}
-                                    value={selectedArrow.arrowLength ?? 1.0}
-                                    onChange={(e) => updateSelectedArrow({ arrowLength: Number(e.target.value) })}
+                                    value={arrowValueToSliderPosition(selectedArrow.arrowLength ?? 1.0, 0.2, 4)}
+                                    onChange={(e) =>
+                                        updateSelectedArrow({
+                                            arrowLength: arrowSliderPositionToValue(Number(e.target.value), 0.2, 4, 0.1),
+                                        })
+                                    }
+                                    aria-label="Arrow length"
                                 />
                                 <input
                                     className="scaleInputCompact"

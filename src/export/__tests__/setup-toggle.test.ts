@@ -108,7 +108,10 @@ if (!plainViewport.includes("\\path[use as bounding box] (-5,-3) rectangle (7,4)
 if (!plainViewport.includes("\\clip (-5,-3) rectangle (7,4);")) {
   throw new Error("Expected plain export to clip drawing to SetupViewport.");
 }
-if (!plainViewport.includes(">=triangle 45") || !plainViewport.includes("\\usetikzlibrary{patterns,through,arrows}")) {
+if (
+  !plainViewport.includes(">=triangle 45") ||
+  !/\\usetikzlibrary\{[^}]*\barrows\b[^}]*\}/u.test(plainViewport)
+) {
   throw new Error("Expected plain export to retain triangle 45 and load its arrows library.");
 }
 if (

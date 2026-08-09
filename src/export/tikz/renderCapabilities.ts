@@ -4,6 +4,11 @@ type MarkAngleCommand = Extract<TikzCommand, { kind: "MarkAngle" }>;
 
 export type TikzRendererCapabilities = {
   fmt: (value: number) => string;
+  /**
+   * Format inputs that participate in reconstructible geometry. These values
+   * must remain precise even when presentation numbers are shortened.
+   */
+  fmtGeometry: (value: number) => string;
   escapeTikzText: (value: string) => string;
   buildGroupedMarkAngleTex: (run: MarkAngleCommand[]) => string | null;
   assertTkzMacro: (name: string) => void;

@@ -5,6 +5,7 @@ import {
   type TikzExportViewport,
 } from "../tikz.ts";
 import type { AngleStyle, LineStyle, PointStyle, SceneModel } from "../../scene/points.ts";
+import { compileTikzSnippet } from "../../../scripts/compile-tex.mjs";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -366,16 +367,9 @@ const pointLabelLine = visualLines.find(
   (line) => line.startsWith("\\node") && line.includes("{$A$}")
 );
 assert(pointLabelLine, `Visual Exact must emit point A's label as a direct TikZ node.\n\n${visualExact}`);
-const pointLabelCoordinates = numericPathCoordinates(pointLabelLine);
-assert(pointLabelCoordinates.length === 1, `Could not parse point-label position: ${pointLabelLine}`);
-const expectedPointLabelPosition = {
-  x: -1.2345678901234 + pointStyle.labelOffsetPx.x / 100,
-  y: 0.375123456789012 - pointStyle.labelOffsetPx.y / 100,
-};
 assert(
-  Math.abs(pointLabelCoordinates[0].x - expectedPointLabelPosition.x) <= 1e-12 &&
-    Math.abs(pointLabelCoordinates[0].y - expectedPointLabelPosition.y) <= 1e-12,
-  `Point label offset must match the canvas pixel offset exactly: ${pointLabelLine}`
+  pointLabelLine.includes("at (A)") && numericPathCoordinates(pointLabelLine).length === 0,
+  `Visual Exact may bake point A itself, but its label must remain relative to named point A.\n\n${pointLabelLine}`
 );
 const pointLabelFontPt = Number(
   pointLabelLine.match(/\\fontsize\{([-+\d.eE]+)pt\}/u)?.[1] ?? Number.NaN
@@ -389,6 +383,111 @@ assert(
   Number.isFinite(pointLabelFontPt) &&
     Math.abs(pointLabelFontPt - expectedPointLabelFontPt) <= 1e-12,
   `Point label font must use the final canvas-pixel-to-TikZ-point metric: ${pointLabelLine}`
+);
+const semanticPointPlacement = pointLabelLine.match(
+  /above right=\{([-+\d.eE]+)em and ([-+\d.eE]+)em\}/u
+);
+const pointLabelYShiftEm = Number(semanticPointPlacement?.[1] ?? Number.NaN);
+const pointLabelXShiftEm = Number(semanticPointPlacement?.[2] ?? Number.NaN);
+const expectedPointLabelDescentPx = pointStyle.labelFontPx * 0.14;
+assert(
+  Number.isFinite(pointLabelXShiftEm) &&
+    Number.isFinite(pointLabelYShiftEm) &&
+    Math.abs(pointLabelXShiftEm - (pointStyle.labelOffsetPx.x * expectedCanvasPxToTikzPt) / expectedPointLabelFontPt) <= 1e-12 &&
+    Math.abs(
+      pointLabelYShiftEm -
+        Math.max(0, -pointStyle.labelOffsetPx.y - expectedPointLabelDescentPx) /
+          pointStyle.labelFontPx
+    ) <= 1e-12,
+  `Visual Exact point-label displacement must convert the canvas baseline origin into editable semantic edge gaps.\n\n${pointLabelLine}`
+);
+for (const [label, output] of [
+  ["Visual Exact", visualExact],
+  ["Efficient Visual Exact", efficientVisualExact],
+] as const) {
+  const labelLine = output
+    .split("\n")
+    .find((line) => line.startsWith("\\node") && line.includes("{$A$}"));
+  assert(
+    labelLine?.includes("at (A)"),
+    `${label} must never replace a named point-label anchor with a calculated coordinate.\n\n${output}`
+  );
+}
+
+const semanticPointBase = scene.points[0];
+assert(
+  semanticPointBase?.kind === "free",
+  "Visual Exact semantic edge-gap fixture requires a free point base."
+);
+const semanticEdgeGapScene: SceneModel = {
+  ...scene,
+  points: [
+    {
+      ...semanticPointBase,
+      id: "left-label",
+      name: "A",
+      captionTex: "A",
+      position: { x: -1, y: 0 },
+      style: {
+        ...pointStyle,
+        labelFontPx: 18,
+        labelOffsetPx: { x: -23.7109375, y: 1.44140625 },
+      },
+    },
+    {
+      ...semanticPointBase,
+      id: "below-label",
+      name: "I",
+      captionTex: "I",
+      position: { x: 1, y: 0 },
+      style: {
+        ...pointStyle,
+        labelFontPx: 18,
+        labelOffsetPx: { x: 2.73828125, y: 22.4765625 },
+      },
+    },
+    {
+      ...semanticPointBase,
+      id: "caption-label",
+      name: "P",
+      captionTex: "P^{\\prime}",
+      showLabel: "caption",
+      position: { x: 3, y: 0 },
+      style: {
+        ...pointStyle,
+        labelFontPx: 18,
+        labelOffsetPx: { x: -4.950981614086016, y: -30.511649574899497 },
+      },
+    },
+  ],
+  lines: [],
+  segments: [],
+  angles: [],
+};
+const semanticEdgeGapExport = exportTikzWithOptions(
+  semanticEdgeGapScene,
+  visualExactOptions
+);
+const semanticEdgeGapLines = semanticEdgeGapExport.split("\n");
+const leftEdgeGapLine = semanticEdgeGapLines.find((line) => line.includes("{$A$}"));
+const belowEdgeGapLine = semanticEdgeGapLines.find((line) => line.includes("{$I$}"));
+const captionEdgeGapLine = semanticEdgeGapLines.find((line) =>
+  line.includes("{$P^{\\prime}$}")
+);
+assertIncludes(
+  leftEdgeGapLine ?? "",
+  "left=0.697274305555556em",
+  "A left-positioned label must subtract its own estimated width from the canvas baseline-origin offset."
+);
+assertIncludes(
+  belowEdgeGapLine ?? "",
+  "below=0.468697916666667em",
+  "A below-positioned label must subtract its ascent from the canvas baseline-origin offset."
+);
+assertIncludes(
+  captionEdgeGapLine ?? "",
+  "above=0.864306992684181em",
+  "An above-positioned KaTeX caption must subtract its rendered height from the canvas top-left offset."
 );
 
 const infiniteLineCommentIndex = visualLines.findIndex((line) =>
@@ -459,8 +558,20 @@ const directMarkLines = visualLines.filter((line) => {
   );
 });
 assert(
-  directMarkLines.length === 6,
-  `Visual Exact must materialize all three distributed double-tick marks as six direct TikZ strokes.\n\n${visualExact}`
+  directMarkLines.length === 0,
+  `Visual Exact must not bake distributed segment marks into anonymous numeric strokes.\n\n${visualExact}`
+);
+assert(
+  visualExact.includes("gdMultiDoubleTick/.style={") &&
+    visualExact.includes("mark=between positions 0.25 and 0.75 step 0.25 with {") &&
+    visualExact.includes("\\path[gdMultiDoubleTick] (C) -- (D); % Segment mark C--D"),
+  `Visual Exact must keep distributed segment marks as one readable named-path decoration.\n\n${visualExact}`
+);
+const definitionsIndex = visualExact.indexOf("gdMultiDoubleTick/.style={");
+const pointsSectionIndex = visualExact.indexOf("% Points");
+assert(
+  definitionsIndex > 0 && definitionsIndex < pointsSectionIndex,
+  `Generated style definitions must be grouped near the beginning, before geometry sections.\n\n${visualExact}`
 );
 
 const reconstructible = exportTikzWithOptions(scene, {
@@ -473,15 +584,45 @@ const reconstructible = exportTikzWithOptions(scene, {
 
 assertIncludes(reconstructible, "\\tkzDefPoints{", "Reconstructible export must retain tkz point definitions.");
 assertIncludes(reconstructible, "\\tkzDrawLine", "Reconstructible export must retain tkz infinite-line semantics.");
-assertIncludes(reconstructible, "\\tkzMarkSegment", "Reconstructible export must retain tkz segment-mark semantics.");
+const reconstructibleMarkLines = reconstructible
+  .split("\n")
+  .filter((line) => line.includes("\\path[gdMultiDoubleTick]") && line.includes("(C) -- (D)"));
+assert(
+  reconstructibleMarkLines.length === 1,
+  `Reconstructible export must keep the distributed mark as one readable decoration attached to the named segment.\n\n${reconstructible}`
+);
+assert(
+  reconstructible.includes("gdMultiDoubleTick/.style={") &&
+    reconstructible.includes("mark=between positions 0.25 and 0.75 step 0.25 with {"),
+  `Reconstructed distributed double ticks must use one reusable, customizable TikZ style.\n\n${reconstructible}`
+);
+assert(
+  !reconstructible.includes("gdMarkDoubleTick/.style") &&
+    !reconstructible.includes("gdMarkTripleTick/.style") &&
+    !reconstructible.includes("gdMarkCircle/.style"),
+  `The export must not include segment-mark styles that this figure does not use.\n\n${reconstructible}`
+);
+assert(
+  reconstructibleMarkLines.every((line) => line.includes("% Segment mark C--D")),
+  `The compact segment-mark use must identify its owning segment.\n\n${reconstructible}`
+);
+assert(
+  !reconstructible.includes("\\tkzMarkSegment"),
+  "Canvas-calibrated reconstructible export must not couple double-tick spacing to tkz-euclide's plot-mark line width."
+);
 assertIncludes(reconstructible, "\\tkzDrawSector", "Reconstructible export must retain tkz sector semantics.");
 assertIncludes(reconstructible, "\\tkzMarkAngle", "Reconstructible export must retain tkz ordinary-angle semantics.");
 assertIncludes(reconstructible, "\\tkzLabelAngle", "Reconstructible export must retain tkz angle-label semantics.");
-assertIncludes(reconstructible, "\\tkzLabelPoint", "Reconstructible export must retain tkz point-label semantics.");
+assert(
+  /\\node\[[^\]]*xshift=[^\]]*\]\s+at\s+\(A\)/u.test(reconstructible),
+  `Reconstructible export must keep point labels attached to named construction points while preserving their dragged offsets.\n\n${reconstructible}`
+);
 assertIncludes(
   reconstructible,
   "\\tkzMarkRightAngles",
   "Reconstructible export must retain tkz right-angle semantics."
 );
+
+await compileTikzSnippet("visual-exact-contract", visualExact);
 
 console.log("✓ Visual Exact plain/baked contract and reconstructible isolation test passed");

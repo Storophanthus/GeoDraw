@@ -61,7 +61,7 @@ export type UiSliceState = {
 export function createUiSliceState(): UiSliceState {
   const initialZoom = 80;
   return {
-    camera: { pos: { x: 0, y: 0 }, zoom: initialZoom, logZoom: Math.log(initialZoom) },
+    camera: { pos: { x: 0, y: 0 }, zoom: initialZoom, logZoom: Math.log(initialZoom), trueZoom: 1 },
     colorProfileId: DEFAULT_COLOR_PROFILE_ID,
     canvasThemeOverrides: {},
     uiColorProfileId: DEFAULT_UI_COLOR_PROFILE_ID,

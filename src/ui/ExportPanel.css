@@ -183,20 +183,6 @@
     outline-offset: 2px;
 }
 
-.scaleBlock {
-    margin-top: 12px;
-    padding: 10px 12px;
-    background: var(--gd-ui-surface-soft, #f8fafc);
-    border: 1px solid var(--gd-ui-border-soft, #e2e8f0);
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-}
-
-.scaleBlock .subSectionTitle {
-    margin-bottom: 4px;
-}
-
 .exportModeBlock {
     display: flex;
     flex-direction: column;
@@ -242,50 +228,6 @@
 .compactScaleBlock {
     margin-top: 8px;
     padding-top: 6px;
-}
-
-.compactScaleGrid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 4px;
-}
-
-.scaleGridItem {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--gd-ui-surface, #ffffff);
-    border: 1px solid var(--gd-ui-border, #cbd5e1);
-    border-radius: 8px;
-    padding: 4px 6px;
-}
-
-.scaleGridIcon {
-    color: var(--gd-ui-text-subtle, #64748b);
-    display: flex;
-}
-
-.scaleGridLabel {
-    font-size: 11px;
-    color: var(--gd-ui-text-muted, #475569);
-    flex-shrink: 0;
-}
-
-.scaleGridInput {
-    width: 100%;
-    min-width: 0;
-    border: none;
-    background: transparent;
-    color: var(--gd-ui-text, #334155);
-    font-size: 12px;
-    text-align: right;
-    padding: 0;
-    height: 20px;
-}
-
-.scaleGridInput:focus {
-    outline: none;
 }
 
 .exportStatusRow {

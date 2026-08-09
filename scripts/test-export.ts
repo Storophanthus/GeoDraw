@@ -660,10 +660,10 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     }
     const definesBFirst =
       /\\tkzInterLC\[near\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{B\}\{(?:Bp|tkzInterLC_\d+_other)\}/.test(tikz) &&
-      /\\tkzInterLC\[common=B\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{Bp\}\{B\}/.test(tikz);
+      /\\tkzInterLC\[near\]\(B,(?:M|tkzPerp_1)\)\(O,A\)\s+\\tkzGetPoints\{tkzInterLC_\d+_other\}\{Bp\}/.test(tikz);
     const definesBpFirst =
       /\\tkzInterLC\[near\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{(?:Bp|tkzInterLC_\d+_other)\}\{(?:Bp|tkzInterLC_\d+_other)\}/.test(tikz) &&
-      /\\tkzInterLC\[common=Bp\]\((?:M,tkzPerp_1|tkzPerp_1,M)\)\(O,A\)\s+\\tkzGetPoints\{B\}\{Bp\}/.test(tikz);
+      /\\tkzInterLC\[near\]\(Bp,(?:M|tkzPerp_1)\)\(O,A\)\s+\\tkzGetPoints\{tkzInterLC_\d+_other\}\{B\}/.test(tikz);
     if (!definesBFirst && !definesBpFirst) {
       throw new Error("Expected korea14 fixture to export the sibling line-circle pair without any forward common reference.");
     }
@@ -687,8 +687,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "circle-line-exclude.json") {
     if (exportError) throw exportError;
-    if (!/\\tkzInterLC\[common=C\]\((?:C,D|D,C)\)\(A,B\)\s+\\tkzGetPoints\{F\}\{C\}/.test(tikz)) {
-      throw new Error("Expected dedicated circle-line exclude fixture to export F using common=C.");
+    if (!/\\tkzInterLC\[near\]\(C,D\)\(A,B\)\s+\\tkzGetPoints\{tkzInterLC_\d+_other\}\{F\}/.test(tikz)) {
+      throw new Error("Expected dedicated circle-line exclude fixture to export F as the root away from C without redefining C.");
     }
   }
 
@@ -736,11 +736,11 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "line-circle-derived-common-not-on-target-circle.json") {
     if (exportError) throw exportError;
-    // I is intentionally constructed on omega, so using common=I for L is safe.
-    // The same I lies on gamma only by geometric coincidence/theorem, so using
-    // common=I for M can make tkz-euclide collapse M back onto I.
-    if (!/\\tkzInterLC\[common=I\]\(I,G\)\(tkzCircum_\d+,I\)\s+\\tkzGetPoints\{L\}\{I\}/.test(tikz)) {
-      throw new Error("Expected L to keep the safe common=I export on its source circle.");
+    // I is intentionally constructed on omega, so it can anchor a near/far
+    // selection for L. The known I root is stored only in a disposable helper;
+    // intersection export must never redefine the existing I identity.
+    if (!/\\tkzInterLC\[near\]\(I,G\)\(tkzCircum_\d+,I\)\s+\\tkzGetPoints\{tkzInterLC_\d+_other\}\{L\}/.test(tikz)) {
+      throw new Error("Expected L to use I as a stable near-root anchor on its source circle.");
     }
     if (/\\tkzInterLC\[common=I\]\(I,L\)\(tkzCircum_\d+,B\)\s+\\tkzGetPoints\{M\}\{I\}/.test(tikz)) {
       throw new Error("Regression: M must not export with common=I when I is not constructed on the target circle.");
@@ -752,15 +752,15 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "generic-line-circle-exclude-common.json") {
     if (exportError) throw exportError;
-    if (!/\\tkzInterLC\[common=A\]\((?:A,O|O,A)\)\(O,A\)\s+\\tkzGetPoints\{Ap\}\{A\}/.test(tikz)) {
-      throw new Error("Expected generic line-circle exclude fixture to export Ap using common=A.");
+    if (!/\\tkzInterLC\[near\]\(A,O\)\(O,A\)\s+\\tkzGetPoints\{tkzInterLC_\d+_other\}\{Ap\}/.test(tikz)) {
+      throw new Error("Expected generic line-circle exclude fixture to export Ap away from A without redefining A.");
     }
   }
 
   if (fileName === "generic-circle-segment-exclude-common-swapped.json") {
     if (exportError) throw exportError;
-    if (!/\\tkzInterLC\[common=A\]\((?:A,B|B,A)\)\(O,A\)\s+\\tkzGetPoints\{Ap\}\{A\}/.test(tikz)) {
-      throw new Error("Expected generic swapped circle-segment exclude fixture to export Ap using common=A.");
+    if (!/\\tkzInterLC\[near\]\(A,B\)\(O,A\)\s+\\tkzGetPoints\{tkzInterLC_\d+_other\}\{Ap\}/.test(tikz)) {
+      throw new Error("Expected generic swapped circle-segment exclude fixture to export Ap away from A without redefining A.");
     }
   }
 
@@ -776,8 +776,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "generic-circle-circle-exclude-common-swapped.json") {
     if (exportError) throw exportError;
-    if (!/\\tkzInterCC\[common=A\]\((?:K,A|A,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints\{Ap\}\{A\}/.test(tikz)) {
-      throw new Error("Expected generic swapped circle-circle exclude fixture to export Ap using common=A.");
+    if (!/\\tkzInterCC\[common=A\]\((?:K,A|A,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints\{Ap\}\{tkzInterCC_\d+_other\}/.test(tikz)) {
+      throw new Error("Expected generic swapped circle-circle exclude fixture to export Ap using common=A without redefining A.");
     }
   }
 
@@ -786,8 +786,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!/\\tkzInterCC(?:\[[^\]]*\])?\((?:O,A|A,O)\)\((?:K,B|B,K)\)\s+\\tkzGetPoints(?:\{P\}\{tkzInterCC_\d+_other\}|\{tkzInterCC_\d+_other\}\{P\})/.test(tikz)) {
       throw new Error("Expected near-tangent generic circle-circle fixture to export the first intersection.");
     }
-    if (!/\\tkzInterCC\[common=P\]\((?:O,A|A,O)\)\((?:K,B|B,K)\)\s+\\tkzGetPoints\{Q\}\{P\}/.test(tikz)) {
-      throw new Error("Expected near-tangent generic circle-circle fixture to reuse P as common for Q.");
+    if (!/\\tkzInterCC\[common=P\]\((?:O,A|A,O)\)\((?:K,B|B,K)\)\s+\\tkzGetPoints\{Q\}\{tkzInterCC_\d+_other\}/.test(tikz)) {
+      throw new Error("Expected near-tangent generic circle-circle fixture to use P as common for Q without redefining P.");
     }
   }
 
@@ -796,8 +796,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!/\\tkzInterCC(?:\[[^\]]*\])?\((?:K,B|B,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints(?:\{P\}\{tkzInterCC_\d+_other\}|\{tkzInterCC_\d+_other\}\{P\})/.test(tikz)) {
       throw new Error("Expected swapped near-tangent generic circle-circle fixture to export the first intersection with reversed circle order.");
     }
-    if (!/\\tkzInterCC\[common=P\]\((?:K,B|B,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints\{Q\}\{P\}/.test(tikz)) {
-      throw new Error("Expected swapped near-tangent generic circle-circle fixture to reuse P as common for Q with reversed circle order.");
+    if (!/\\tkzInterCC\[common=P\]\((?:K,B|B,K)\)\((?:O,A|A,O)\)\s+\\tkzGetPoints\{Q\}\{tkzInterCC_\d+_other\}/.test(tikz)) {
+      throw new Error("Expected swapped near-tangent generic circle-circle fixture to use P as common for Q without redefining P.");
     }
   }
 
@@ -1684,15 +1684,17 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
 
   if (fileName === "segment-mark-arrow-mid-multi.json") {
     if (exportError) throw exportError;
-    if (!tikz.includes("postaction=decorate")) {
-      throw new Error("Expected segment multi mid-arrow fixture to emit decoration-based draw.");
+    if (!tikz.includes("gdMultiArrow/.style={")) {
+      throw new Error("Expected segment multi mid-arrow fixture to emit a named, editable style.");
     }
-    if (!tikz.includes("mark=at position")) {
-      throw new Error("Expected segment multi mid-arrow fixture to emit per-position marks.");
+    if (!tikz.includes("mark=between positions 0.45 and 0.55 step 0.05 with")) {
+      throw new Error("Expected segment multi mid-arrow fixture to keep its range human-readable.");
     }
-    const markCount = (tikz.match(/mark=at position/g) ?? []).length;
-    if (markCount < 3) {
-      throw new Error("Expected segment multi mid-arrow fixture to emit multiple mark entries.");
+    if (!tikz.includes("\\path[gdMultiArrow={Stealth[")) {
+      throw new Error("Expected segment multi mid-arrow fixture to apply a normal TikZ arrow tip.");
+    }
+    if (tikz.includes("mark=at position")) {
+      throw new Error("Expected a regular multi-arrow range not to expand into repeated mark commands.");
     }
   }
 

@@ -1,17 +1,22 @@
 import { type SceneModel } from "../points";
-import { applyProfileColorsToDefaults, buildDefaultStylesForProfile, recolorSceneForProfile } from "../../state/colorProfiles";
+import {
+  COLOR_PROFILE_OPTIONS,
+  applyProfileColorsToDefaults,
+  buildDefaultStylesForProfile,
+  recolorSceneForProfile,
+} from "../../state/colorProfiles";
 import {
   defaultAngleStyle,
-    defaultCircleStyle,
-    defaultEllipseStyle,
-    defaultLabelToolStyle,
-    defaultLineStyle,
-    defaultPointStyle,
-    defaultPolygonStyle,
-    defaultRichTextToolStyle,
-    defaultSegmentStyle,
-    defaultTextboxToolStyle,
-  } from "../../state/slices/sceneSlice";
+  defaultCircleStyle,
+  defaultEllipseStyle,
+  defaultLabelToolStyle,
+  defaultLineStyle,
+  defaultPointStyle,
+  defaultPolygonStyle,
+  defaultRichTextToolStyle,
+  defaultSegmentStyle,
+  defaultTextboxToolStyle,
+} from "../../state/slices/sceneSlice";
 
 function fail(message: string): never {
   throw new Error(message);
@@ -46,6 +51,16 @@ assert(defaults.angleDefaults.strokeWidth === defaultAngleStyle.strokeWidth, "pr
 assert(defaults.textboxToolDefaults.boxWidthPx === 220, "profile should preserve default textbox width");
 const thinDefaults = buildDefaultStylesForProfile("image_palette_vanilla_thin");
 const imageDefaults = buildDefaultStylesForProfile("image_palette");
+assert(
+  !COLOR_PROFILE_OPTIONS.some((profile) => profile.id === "image_palette"),
+  "legacy Image Palette must not be offered as a selectable construction profile"
+);
+assert(
+  COLOR_PROFILE_OPTIONS.some(
+    (profile) => profile.id === "image_palette_vanilla_thin" && profile.label === "Vanilla Standard"
+  ),
+  "the retained image-palette construction profile must be labeled Vanilla Standard"
+);
 assert(thinDefaults.segmentDefaults.strokeWidth < imageDefaults.segmentDefaults.strokeWidth, "thin vanilla profile should reduce segment stroke");
 assert(thinDefaults.lineDefaults.strokeWidth < imageDefaults.lineDefaults.strokeWidth, "thin vanilla profile should reduce line stroke");
 assert(thinDefaults.circleDefaults.strokeWidth < imageDefaults.circleDefaults.strokeWidth, "thin vanilla profile should reduce circle stroke");

@@ -406,6 +406,7 @@ export type GeoActions = {
   clearPendingSelection: () => void;
   panByScreenDelta: (delta: Vec2) => void;
   zoomAtScreenPoint: (vp: Viewport, pScreen: Vec2, zoomFactor: number) => void;
+  trueZoomAtScreenPoint: (vp: Viewport, pScreen: Vec2, zoomFactor: number) => void;
   fitViewToScene: (vp: Viewport) => void;
 
   createFreePoint: (world: Vec2) => string;

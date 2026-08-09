@@ -12,7 +12,7 @@ import {
 import { useGeoStore } from "../state/geoStore";
 import type { HistorySnapshot } from "../state/slices/historySlice";
 import { getCanvasColorTheme, getUiCssVariables } from "../state/colorProfiles";
-import type { Viewport } from "./camera";
+import { camera as cameraMath, getCameraTrueZoom, type Viewport } from "./camera";
 import type { ConstructClickIo } from "./constructClickAdapter";
 import { findBestSnap, type SnapCandidate } from "./snapEngine";
 import {
@@ -43,6 +43,7 @@ import {
 } from "../tools/objectTransforms";
 import { snapWorldToRectGrid } from "../render/rectGrid";
 import type { PendingPreviewTheme } from "./previews/pendingPreview";
+import { ScanSearch } from "lucide-react";
 
 const POINT_HIT_TOLERANCE_PX = 12;
 const SEGMENT_HIT_TOLERANCE_PX = 10;
@@ -106,6 +107,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const dragPointScreenRef = useRef<Vec2 | null>(null);
   const dragPointIdRef = useRef<string | null>(null);
   const dragAngleLabelScreenRef = useRef<Vec2 | null>(null);
+  const trueZoomNoticeTimerRef = useRef<number | null>(null);
 
   const camera = useGeoStore((store) => store.camera);
   const activeTool = useGeoStore((store) => store.activeTool);
@@ -137,6 +139,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const clearPendingSelection = useGeoStore((store) => store.clearPendingSelection);
   const panByScreenDelta = useGeoStore((store) => store.panByScreenDelta);
   const zoomAtScreenPoint = useGeoStore((store) => store.zoomAtScreenPoint);
+  const trueZoomAtScreenPoint = useGeoStore((store) => store.trueZoomAtScreenPoint);
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
   const createTextLabel = useGeoStore((store) => store.createTextLabel);
   const createRichTextNode = useGeoStore((store) => store.createRichTextNode);
@@ -202,6 +205,13 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const [snapDisabled, setSnapDisabled] = useState(false);
   const [dropTargetActive, setDropTargetActive] = useState(false);
   const [contextMenu, setContextMenu] = useState<GeoContextMenuState | null>(null);
+  const [trueZoomMode, setTrueZoomMode] = useState(false);
+  const [trueZoomNotice, setTrueZoomNotice] = useState<string | null>(null);
+  const trueZoomScale = getCameraTrueZoom(camera);
+  const trueZoomRenderSpace = useMemo(
+    () => cameraMath.trueZoomRenderSpace(camera, vp),
+    [camera, vp]
+  );
   const isTauriRuntime = useMemo(
     () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as object),
     []
@@ -481,24 +491,24 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const resolvedAngles = useMemo(() => resolveAngles(scene), [scene]);
 
   const labelOverlays = useMemo(
-    () => createPointLabelOverlays(resolvedPoints, camera, vp, canvasTheme.backgroundColor),
-    [resolvedPoints, camera, vp, canvasTheme.backgroundColor]
+    () => createPointLabelOverlays(resolvedPoints, trueZoomRenderSpace.camera, trueZoomRenderSpace.viewport, canvasTheme.backgroundColor),
+    [resolvedPoints, trueZoomRenderSpace, canvasTheme.backgroundColor]
   );
   const angleLabelOverlays = useMemo(
-    () => createAngleLabelOverlays(resolvedAngles, camera, vp, canvasTheme.backgroundColor),
-    [resolvedAngles, camera, vp, canvasTheme.backgroundColor]
+    () => createAngleLabelOverlays(resolvedAngles, trueZoomRenderSpace.camera, trueZoomRenderSpace.viewport, canvasTheme.backgroundColor),
+    [resolvedAngles, trueZoomRenderSpace, canvasTheme.backgroundColor]
   );
   const objectLabelOverlays = useMemo(
-    () => createObjectLabelOverlays(scene, camera, vp, canvasTheme.backgroundColor),
-    [scene, camera, vp, canvasTheme.backgroundColor]
+    () => createObjectLabelOverlays(scene, trueZoomRenderSpace.camera, trueZoomRenderSpace.viewport, canvasTheme.backgroundColor),
+    [scene, trueZoomRenderSpace, canvasTheme.backgroundColor]
   );
   const textLabelOverlays = useMemo(
-    () => createTextLabelOverlays(scene, camera, vp, canvasTheme.backgroundColor),
-    [scene, camera, vp, canvasTheme.backgroundColor]
+    () => createTextLabelOverlays(scene, trueZoomRenderSpace.camera, trueZoomRenderSpace.viewport, canvasTheme.backgroundColor),
+    [scene, trueZoomRenderSpace, canvasTheme.backgroundColor]
   );
   const richTextOverlays = useMemo(
-    () => createRichTextOverlays(scene, camera, vp, canvasTheme.backgroundColor),
-    [scene, camera, vp, canvasTheme.backgroundColor]
+    () => createRichTextOverlays(scene, trueZoomRenderSpace.camera, trueZoomRenderSpace.viewport, canvasTheme.backgroundColor),
+    [scene, trueZoomRenderSpace, canvasTheme.backgroundColor]
   );
   const textboxTool = useTextboxToolController({
     activeTool,
@@ -514,8 +524,8 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const richTextTool = useRichTextToolController({
     activeTool,
     scene,
-    camera,
-    vp,
+    camera: trueZoomRenderSpace.camera,
+    vp: trueZoomRenderSpace.viewport,
     recentCreatedObject,
     richTextOverlays,
     setSelectedObject,
@@ -534,6 +544,47 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
     }
     clearTextEditRequest(textEditRequest.requestId);
   }, [clearTextEditRequest, richTextTool, textboxTool, textEditRequest]);
+
+  const showTrueZoomNotice = useCallback((message: string) => {
+    setTrueZoomNotice(message);
+    if (trueZoomNoticeTimerRef.current !== null) {
+      window.clearTimeout(trueZoomNoticeTimerRef.current);
+    }
+    trueZoomNoticeTimerRef.current = window.setTimeout(() => {
+      trueZoomNoticeTimerRef.current = null;
+      setTrueZoomNotice(null);
+    }, 1800);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (trueZoomNoticeTimerRef.current !== null) {
+        window.clearTimeout(trueZoomNoticeTimerRef.current);
+      }
+    },
+    []
+  );
+
+  const toggleTrueZoomMode = useCallback(() => {
+    setTrueZoomMode((current) => {
+      const next = !current;
+      showTrueZoomNotice(
+        next
+          ? `True zoom on · scroll scales the whole figure · ${Math.round(trueZoomScale * 100)}%`
+          : "Regular zoom on · scroll changes geometry only"
+      );
+      return next;
+    });
+  }, [showTrueZoomNotice, trueZoomScale]);
+
+  const handleWheelZoomFeedback = useCallback(
+    (zoomFactor: number) => {
+      if (!trueZoomMode) return;
+      const next = Math.max(0.25, Math.min(4, trueZoomScale * zoomFactor));
+      showTrueZoomNotice(`True zoom · ${Math.round(next * 100)}%`);
+    },
+    [showTrueZoomNotice, trueZoomMode, trueZoomScale]
+  );
 
   useEffect(() => {
     const legacyTextboxLabels = (scene.textLabels ?? []).filter((label) => resolveTextLabelToolKind(label) === "textbox");
@@ -690,7 +741,11 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
       panByScreenDelta,
       movePointTo,
       movePolygonByWorldDelta,
-      movePointLabelBy,
+      movePointLabelBy: (id, deltaScreenPx) =>
+        movePointLabelBy(id, {
+          x: deltaScreenPx.x / trueZoomScale,
+          y: deltaScreenPx.y / trueZoomScale,
+        }),
       moveAngleLabelTo,
       moveObjectLabelTo,
       moveTextLabelTo,
@@ -705,7 +760,8 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
       beginTextLabelEditing: textboxTool.beginTextLabelEditing,
       beginRichTextEditing: richTextTool.beginRichTextEditing,
       clearPendingSelection,
-      zoomAtScreenPoint,
+      zoomAtScreenPoint: trueZoomMode ? trueZoomAtScreenPoint : zoomAtScreenPoint,
+      onWheelZoom: handleWheelZoomFeedback,
       openContextMenu: ({ clientX, clientY, target, world }) =>
         setContextMenu({
           x: clientX,
@@ -846,42 +902,67 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
       onDrop={(event) => void handleCanvasDrop(event)}
     >
       <canvas ref={canvasRef} className="drawingCanvas" />
-      <CanvasLabelsLayer
-        labelsLayerRef={labelsLayerRef}
-        labelOverlays={labelOverlays}
-        angleLabelOverlays={angleLabelOverlays}
-        objectLabelOverlays={objectLabelOverlays}
-        textLabelOverlays={textboxTool.visibleTextLabelOverlays}
-        richTextOverlays={richTextTool.visibleRichTextOverlays}
-        selectedTextLabelId={selectedObject?.type === "textLabel" ? selectedObject.id : null}
-      />
-      {textboxTool.editorSession && (
-        <CanvasTextEditor
-          sessionKey={textboxTool.editorSession.id}
-          editorRef={textboxTool.editorRef}
-          value={textboxTool.editorSession.value}
-          editorKind={textboxTool.editorSession.editorKind}
-          textColor={textboxTool.editorSession.overlay.textColor}
-          fontSizePx={Math.max(8, textboxTool.editorSession.overlay.textSize)}
-          shouldIgnoreBlur={textboxTool.editorSession.shouldIgnoreBlur}
-          sourceStyle={textboxTool.editorSession.sourceStyle}
-          onChangeValue={textboxTool.editorSession.setValue}
-          onCommit={textboxTool.editorSession.commit}
-          onCancel={textboxTool.editorSession.cancel}
-          shellStyle={textboxTool.editorSession.shellStyle}
+      <div
+        className="canvasTrueZoomLayer"
+        style={{
+          width: `${100 / trueZoomScale}%`,
+          height: `${100 / trueZoomScale}%`,
+          transform: `scale(${trueZoomScale})`,
+        }}
+      >
+        <CanvasLabelsLayer
+          labelsLayerRef={labelsLayerRef}
+          labelOverlays={labelOverlays}
+          angleLabelOverlays={angleLabelOverlays}
+          objectLabelOverlays={objectLabelOverlays}
+          textLabelOverlays={textboxTool.visibleTextLabelOverlays}
+          richTextOverlays={richTextTool.visibleRichTextOverlays}
+          selectedTextLabelId={selectedObject?.type === "textLabel" ? selectedObject.id : null}
         />
-      )}
-      {richTextTool.editorSession && (
-        <RichTextCanvasEditor
-          sessionKey={richTextTool.editorSession.id}
-          document={richTextTool.editorSession.document}
-          style={richTextTool.editorSession.style}
-          shellStyle={richTextTool.editorSession.shellStyle}
-          onChangeDocument={richTextTool.editorSession.setDocument}
-          onMeasure={richTextTool.editorSession.setMeasuredBounds}
-          onCommit={richTextTool.editorSession.commit}
-          onCancel={richTextTool.editorSession.cancel}
-        />
+        {textboxTool.editorSession && (
+          <CanvasTextEditor
+            sessionKey={textboxTool.editorSession.id}
+            editorRef={textboxTool.editorRef}
+            value={textboxTool.editorSession.value}
+            editorKind={textboxTool.editorSession.editorKind}
+            textColor={textboxTool.editorSession.overlay.textColor}
+            fontSizePx={Math.max(8, textboxTool.editorSession.overlay.textSize)}
+            shouldIgnoreBlur={textboxTool.editorSession.shouldIgnoreBlur}
+            sourceStyle={textboxTool.editorSession.sourceStyle}
+            onChangeValue={textboxTool.editorSession.setValue}
+            onCommit={textboxTool.editorSession.commit}
+            onCancel={textboxTool.editorSession.cancel}
+            shellStyle={textboxTool.editorSession.shellStyle}
+          />
+        )}
+        {richTextTool.editorSession && (
+          <RichTextCanvasEditor
+            sessionKey={richTextTool.editorSession.id}
+            document={richTextTool.editorSession.document}
+            style={richTextTool.editorSession.style}
+            shellStyle={richTextTool.editorSession.shellStyle}
+            onChangeDocument={richTextTool.editorSession.setDocument}
+            onMeasure={richTextTool.editorSession.setMeasuredBounds}
+            onCommit={richTextTool.editorSession.commit}
+            onCancel={richTextTool.editorSession.cancel}
+          />
+        )}
+      </div>
+      <button
+        type="button"
+        className={trueZoomMode ? "trueZoomModeButton active" : "trueZoomModeButton"}
+        aria-pressed={trueZoomMode}
+        onClick={toggleTrueZoomMode}
+        title="When active, the scroll wheel scales geometry, strokes, points, and labels together"
+      >
+        <ScanSearch size={14} />
+        <span>True zoom</span>
+        <span className="trueZoomModeValue">{Math.round(trueZoomScale * 100)}%</span>
+      </button>
+      {trueZoomNotice && (
+        <div key={trueZoomNotice} className="trueZoomNotice" role="status">
+          {trueZoomNotice}
+        </div>
       )}
       <GeoContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
     </div>

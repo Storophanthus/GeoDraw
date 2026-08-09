@@ -20,7 +20,7 @@ export function appendRenderedPointConstruction(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tRaw = (cmd as any).t;
     const t = typeof tRaw === "number" && Number.isFinite(tRaw) ? tRaw : 0.5;
-    out.push(`\\tkzDefPointBy[homothety=center ${cmd.a} ratio ${caps.fmt(t)}](${cmd.b}) \\tkzGetPoint{${cmd.name}}`);
+    out.push(`\\tkzDefPointBy[homothety=center ${cmd.a} ratio ${caps.fmtGeometry(t)}](${cmd.b}) \\tkzGetPoint{${cmd.name}}`);
     return true;
   }
   if (cmd.kind === "DefPointByRotation") {
@@ -31,7 +31,7 @@ export function appendRenderedPointConstruction(
     }
     const signedAngle = cmd.direction === "CW" ? -Math.abs(cmd.angleDeg) : Math.abs(cmd.angleDeg);
     out.push(
-      `\\tkzDefPointBy[rotation=center ${cmd.center} angle ${caps.fmt(signedAngle)}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`
+      `\\tkzDefPointBy[rotation=center ${cmd.center} angle ${caps.fmtGeometry(signedAngle)}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`
     );
     return true;
   }
@@ -45,7 +45,7 @@ export function appendRenderedPointConstruction(
     caps.assertTkzMacro("tkzDefPointBy");
     caps.assertTkzMacro("tkzGetPoint");
     out.push(
-      `\\tkzDefPointBy[homothety=center ${cmd.center} ratio ${caps.fmt(cmd.factor)}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`
+      `\\tkzDefPointBy[homothety=center ${cmd.center} ratio ${caps.fmtGeometry(cmd.factor)}](${cmd.point}) \\tkzGetPoint{${cmd.name}}`
     );
     return true;
   }
@@ -92,7 +92,7 @@ export function appendRenderedPointConstruction(
     caps.assertTkzMacro("tkzDefPointOnCircle");
     caps.assertTkzMacro("tkzGetPoint");
     const deg = (cmd.theta * 180) / Math.PI;
-    out.push(`\\tkzDefPointOnCircle[through = center ${cmd.center} angle ${caps.fmt(deg)} point ${cmd.through}]`);
+    out.push(`\\tkzDefPointOnCircle[through = center ${cmd.center} angle ${caps.fmtGeometry(deg)} point ${cmd.through}]`);
     out.push(`\\tkzGetPoint{${cmd.name}}`);
     return true;
   }

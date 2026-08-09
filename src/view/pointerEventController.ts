@@ -295,6 +295,7 @@ type CreateCanvasAuxHandlersDeps = {
   setCursorWorldNull: () => void;
   setHoveredHit: (hit: { type: "point" | "angle" | "segment" | "line2p" | "circle" | "ellipse" | "polygon"; id: string } | null) => void;
   zoomAtScreenPoint: (screen: Vec2, zoomFactor: number) => void;
+  onWheelZoom?: (zoomFactor: number) => void;
 };
 
 export function createCanvasAuxHandlers(deps: CreateCanvasAuxHandlersDeps) {
@@ -310,6 +311,7 @@ export function createCanvasAuxHandlers(deps: CreateCanvasAuxHandlersDeps) {
     wheelFactor = 1;
     wheelScreen = null;
     deps.zoomAtScreenPoint(screen, factor);
+    deps.onWheelZoom?.(factor);
   };
 
   const onWheel = (e: WheelEvent) => {

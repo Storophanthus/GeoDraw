@@ -219,6 +219,30 @@ export function resolveExportFriendlyColorName(raw: string): string | null {
   return exportFriendlyNameByHex.get(hex) ?? null;
 }
 
+/**
+ * Returns the closest color already provided by xcolor/dvipsnames. This is an
+ * intentionally lossy export mode for users who prefer portable named colors
+ * and no generated \definecolor declarations.
+ */
+export function resolveNearestDvipsColorName(raw: string): string | null {
+  const rgb = parseColorToRgb(raw);
+  if (!rgb) return null;
+
+  let bestName: string | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const preset of EXPORT_FRIENDLY_COLOR_PRESETS) {
+    const candidate = hexToRgb(preset.hex);
+    const dr = rgb.r - candidate.r;
+    const dg = rgb.g - candidate.g;
+    const db = rgb.b - candidate.b;
+    const distance = dr * dr + dg * dg + db * db;
+    if (distance >= bestDistance) continue;
+    bestDistance = distance;
+    bestName = preset.exportName;
+  }
+  return bestName;
+}
+
 export function hexToRgbKey(hex: string): string {
   const rgb = hexToRgb(hex);
   return `${rgb.r},${rgb.g},${rgb.b}`;

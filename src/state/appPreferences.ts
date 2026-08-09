@@ -275,13 +275,18 @@ export type ExportPreferencesState = {
   emitTkzSetup: ExportEmitTkzSetupMode;
   labelGlow: boolean;
   tikzExportMode: ExportTikzMode;
+  scaleboxScale: string;
+  trueGlobalScale: string;
   globalScale: string;
   pointScale: string;
   lineScale: string;
   labelScale: string;
+  labelHaloScale: string;
+  roundNumbersToTwoDecimals: boolean;
+  preferDvipsNames: boolean;
 };
 
-const EXPORT_PREFERENCES_KEY = "geodraw.export-preferences.v1";
+export const EXPORT_PREFERENCES_KEY = "geodraw.export-preferences.v1";
 
 export const DEFAULT_EXPORT_PREFERENCES: ExportPreferencesState = {
   useCurrentView: true,
@@ -289,10 +294,15 @@ export const DEFAULT_EXPORT_PREFERENCES: ExportPreferencesState = {
   emitTkzSetup: "auto",
   labelGlow: true,
   tikzExportMode: "visualExact",
+  scaleboxScale: "1",
+  trueGlobalScale: "1",
   globalScale: "1",
   pointScale: "1",
   lineScale: "1",
   labelScale: "1",
+  labelHaloScale: "1",
+  roundNumbersToTwoDecimals: false,
+  preferDvipsNames: false,
 };
 
 function normalizeBoolean(raw: unknown, fallback: boolean): boolean {
@@ -324,10 +334,18 @@ export function loadStoredExportPreferences(): ExportPreferencesState {
     emitTkzSetup: normalizeEmitTkzSetup(raw.emitTkzSetup),
     labelGlow: normalizeBoolean(raw.labelGlow, DEFAULT_EXPORT_PREFERENCES.labelGlow),
     tikzExportMode: normalizeTikzExportMode(raw.tikzExportMode),
+    scaleboxScale: normalizeScaleString(raw.scaleboxScale, DEFAULT_EXPORT_PREFERENCES.scaleboxScale),
+    trueGlobalScale: normalizeScaleString(raw.trueGlobalScale, DEFAULT_EXPORT_PREFERENCES.trueGlobalScale),
     globalScale: normalizeScaleString(raw.globalScale, DEFAULT_EXPORT_PREFERENCES.globalScale),
     pointScale: normalizeScaleString(raw.pointScale, DEFAULT_EXPORT_PREFERENCES.pointScale),
     lineScale: normalizeScaleString(raw.lineScale, DEFAULT_EXPORT_PREFERENCES.lineScale),
     labelScale: normalizeScaleString(raw.labelScale, DEFAULT_EXPORT_PREFERENCES.labelScale),
+    labelHaloScale: normalizeScaleString(raw.labelHaloScale, DEFAULT_EXPORT_PREFERENCES.labelHaloScale),
+    roundNumbersToTwoDecimals: normalizeBoolean(
+      raw.roundNumbersToTwoDecimals,
+      DEFAULT_EXPORT_PREFERENCES.roundNumbersToTwoDecimals
+    ),
+    preferDvipsNames: normalizeBoolean(raw.preferDvipsNames, DEFAULT_EXPORT_PREFERENCES.preferDvipsNames),
   };
 }
 

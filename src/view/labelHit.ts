@@ -1,6 +1,6 @@
 import type { Vec2 } from "../geo/vec2";
 import type { SceneModel, ScenePoint } from "../scene/points";
-import { camera as camMath, type Camera, type Viewport } from "./camera";
+import { camera as camMath, getCameraTrueZoom, type Camera, type Viewport } from "./camera";
 
 export type ResolvedPoint = { point: ScenePoint; world: Vec2 };
 export type ResolvedAngle = { angle: SceneModel["angles"][number]; a: Vec2; b: Vec2; c: Vec2; theta: number };
@@ -13,6 +13,7 @@ export function hitTestPointLabel(
   vp: Viewport,
   defaultOffset: Vec2
 ): string | null {
+  const trueZoom = getCameraTrueZoom(camera);
   for (let i = points.length - 1; i >= 0; i -= 1) {
     const { point, world } = points[i];
     if (!point.visible || point.showLabel === "none") continue;
@@ -21,10 +22,13 @@ export function hitTestPointLabel(
     const labelText = point.showLabel === "name" ? point.name : point.captionTex;
     if (!labelText) continue;
     const fontPx = point.style.labelFontPx ?? 16;
-    const x = p.x + labelOffset.x - 2;
-    const y = p.y + labelOffset.y - fontPx * 0.65;
-    const w = Math.max(18, labelText.length * (fontPx * 0.58) + 8);
-    const h = Math.max(16, fontPx * 1.2);
+    // Point-name labels are painted in the logical True Zoom render space and
+    // then scaled with the entire canvas. Their offset, font metrics, and hit
+    // box therefore all need the accumulated visual scale here as well.
+    const x = p.x + (labelOffset.x - 2) * trueZoom;
+    const y = p.y + (labelOffset.y - fontPx * 0.65) * trueZoom;
+    const w = Math.max(18, labelText.length * (fontPx * 0.58) + 8) * trueZoom;
+    const h = Math.max(16, fontPx * 1.2) * trueZoom;
     if (screenPoint.x >= x && screenPoint.x <= x + w && screenPoint.y >= y && screenPoint.y <= y + h) {
       return point.id;
     }
@@ -39,11 +43,12 @@ export function hitTestAngleLabelHandle(
   vp: Viewport,
   toRenderTextSize: (rawTextSize: number) => number
 ): string | null {
+  const trueZoom = getCameraTrueZoom(camera);
   for (let i = resolvedAngles.length - 1; i >= 0; i -= 1) {
     const entry = resolvedAngles[i];
     if (!entry.angle.visible) continue;
     const labelScreen = camMath.worldToScreen(entry.angle.style.labelPosWorld, camera, vp);
-    const grabRadius = Math.max(16, toRenderTextSize(entry.angle.style.textSize) * 0.8);
+    const grabRadius = Math.max(16, toRenderTextSize(entry.angle.style.textSize) * trueZoom * 0.8);
     const d = Math.hypot(screenPoint.x - labelScreen.x, screenPoint.y - labelScreen.y);
     if (d <= grabRadius) return entry.angle.id;
   }

@@ -7,20 +7,29 @@ export async function compileTikzSnippet(name, tikzCode) {
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), "geodraw-tikz-"));
   const texPath = path.join(tmpDir, `${name}.tex`);
   const logPath = path.join(tmpDir, `${name}.log`);
+  const isFullDocument = /\\documentclass\b/u.test(tikzCode) || /\\begin\{document\}/u.test(tikzCode);
   const hasExplicitCanvasBounds = /\\path\s*\[[^\]]*\buse as bounding box\b[^\]]*\]/u.test(tikzCode);
   const usesTkzEuclide = /\\tkz[A-Za-z@]+/u.test(tikzCode);
+  const usesScalebox = tikzCode.includes("\\scalebox");
+  const border = hasExplicitCanvasBounds ? "0pt" : "2pt";
 
-  const tex = [
-    "\\PassOptionsToPackage{dvipsnames}{xcolor}",
-    `\\documentclass[tikz,border=${hasExplicitCanvasBounds ? "0pt" : "2pt"}]{standalone}`,
-    ...(usesTkzEuclide ? ["\\usepackage{tkz-euclide}"] : []),
-    "\\usepackage{xfp}",
-    "\\usepackage{contour}",
-    "\\begin{document}",
-    tikzCode,
-    "\\end{document}",
-    "",
-  ].join("\n");
+  const tex = isFullDocument
+    ? tikzCode
+    : [
+        "\\PassOptionsToPackage{dvipsnames}{xcolor}",
+        usesScalebox
+          ? `\\documentclass[border=${border}]{standalone}`
+          : `\\documentclass[tikz,border=${border}]{standalone}`,
+        ...(usesScalebox ? ["\\usepackage{tikz}"] : []),
+        ...(usesTkzEuclide ? ["\\usepackage{tkz-euclide}"] : []),
+        ...(usesScalebox ? ["\\usepackage{graphicx}"] : []),
+        "\\usepackage{xfp}",
+        "\\usepackage{contour}",
+        "\\begin{document}",
+        tikzCode,
+        "\\end{document}",
+        "",
+      ].join("\n");
 
   await writeFile(texPath, tex, "utf8");
 

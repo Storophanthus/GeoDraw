@@ -1,6 +1,6 @@
 const REQUIRED_PREAMBLE_PREFIX = "\\PassOptionsToPackage{dvipsnames}{xcolor}";
 const REQUIRED_TIKZ_LIBRARIES =
-  "\\usetikzlibrary{arrows,arrows.meta,bending,calc,decorations.markings,patterns,patterns.meta,shapes.geometric,shapes.misc,through}";
+  "\\usetikzlibrary{arrows,arrows.meta,bending,calc,decorations.markings,patterns,patterns.meta,positioning,shapes.geometric,shapes.misc,through}";
 
 const DVIPS_XCOLOR_PREAMBLE_LINE = "\\usepackage[dvipsnames]{xcolor}";
 
@@ -20,10 +20,16 @@ export function buildStandaloneSource(tikzCode: string, optionalPreamble: string
 export function buildRequiredPreamble(tikzCode: string): string {
   const hasExplicitCanvasBounds = /\\path\s*\[[^\]]*\buse as bounding box\b[^\]]*\]/u.test(tikzCode);
   const usesTkzEuclide = /\\tkz[A-Za-z@]+/u.test(tikzCode);
+  const usesScalebox = /\\scalebox\s*\{/u.test(tikzCode);
+  const border = hasExplicitCanvasBounds ? "0pt" : "2pt";
   return [
     REQUIRED_PREAMBLE_PREFIX,
-    `\\documentclass[tikz,border=${hasExplicitCanvasBounds ? "0pt" : "2pt"}]{standalone}`,
+    usesScalebox
+      ? `\\documentclass[border=${border}]{standalone}`
+      : `\\documentclass[tikz,border=${border}]{standalone}`,
+    ...(usesScalebox ? ["\\usepackage{tikz}"] : []),
     ...(usesTkzEuclide ? ["\\usepackage{tkz-euclide}"] : []),
+    ...(usesScalebox ? ["\\usepackage{graphicx}"] : []),
     "\\usepackage{xfp}",
     "\\usepackage{contour}",
     REQUIRED_TIKZ_LIBRARIES,
@@ -61,7 +67,8 @@ function hexToRgbTriplet(hex: string): [number, number, number] | null {
 
 export function deriveDefaultOptionalPreamble(
   tikzCode: string,
-  uiCssVariables: Record<string, string> | undefined
+  uiCssVariables: Record<string, string> | undefined,
+  options: { preferDvipsNames?: boolean } = {}
 ): string {
   const shouldIncludeDvipsXcolor = containsDvipsNamedColorUsage(tikzCode);
   const normalizedHex = normalizeSceneBgHex(uiCssVariables?.["--gd-scene-bg"]);
@@ -75,8 +82,13 @@ export function deriveDefaultOptionalPreamble(
   if (shouldIncludeDvipsXcolor) lines.push(DVIPS_XCOLOR_PREAMBLE_LINE);
   if (hasNonWhiteBg) {
     lines.push("\\usepackage{pagecolor}");
-    lines.push(`\\definecolor{gdPageColor}{RGB}{${rgb.join(",")}}`);
-    lines.push("\\pagecolor{gdPageColor}");
+    if (options.preferDvipsNames) {
+      const pageColorName = resolveNearestDvipsColorName(`rgb(${rgb.join(",")})`) ?? "white";
+      lines.push(`\\pagecolor{${pageColorName}}`);
+    } else {
+      lines.push(`\\definecolor{gdPageColor}{RGB}{${rgb.join(",")}}`);
+      lines.push("\\pagecolor{gdPageColor}");
+    }
   }
   return lines.join("\n");
 }
@@ -98,3 +110,4 @@ function containsDvipsNamedColorUsage(tikzCode: string): boolean {
 
   return false;
 }
+import { resolveNearestDvipsColorName } from "../../exportFriendlyColors";
