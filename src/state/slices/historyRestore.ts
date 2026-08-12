@@ -3,9 +3,10 @@ import { resolveIntersectionBranchIndexInScene } from "../../domain/intersection
 import type { GeoState } from "./storeTypes";
 import type { HistorySnapshot } from "./historySlice";
 import {
+  buildDefaultStylesForProfile,
   DEFAULT_COLOR_PROFILE_ID,
-  normalizeLabelColorForProfile,
   normalizeSceneLabelColors,
+  normalizeStyleDefaultsForProfile,
 } from "../colorProfiles";
 import { createSceneSliceState } from "./sceneSlice";
 import { createUiSliceState } from "./uiSlice";
@@ -15,6 +16,22 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
   const fallbackUiState = createUiSliceState();
   const normalizedScene = normalizeSceneIntegrity(snapshot.scene);
   const colorProfileId = snapshot.colorProfileId ?? DEFAULT_COLOR_PROFILE_ID;
+  const profileDefaults = buildDefaultStylesForProfile(colorProfileId);
+  const restoredDefaults = normalizeStyleDefaultsForProfile(
+    {
+      pointDefaults: snapshot.pointDefaults ?? profileDefaults.pointDefaults,
+      segmentDefaults: snapshot.segmentDefaults ?? profileDefaults.segmentDefaults,
+      lineDefaults: snapshot.lineDefaults ?? profileDefaults.lineDefaults,
+      circleDefaults: snapshot.circleDefaults ?? profileDefaults.circleDefaults,
+      ellipseDefaults: snapshot.ellipseDefaults ?? profileDefaults.ellipseDefaults,
+      polygonDefaults: snapshot.polygonDefaults ?? profileDefaults.polygonDefaults,
+      angleDefaults: snapshot.angleDefaults ?? profileDefaults.angleDefaults,
+      labelToolDefaults: snapshot.labelToolDefaults ?? profileDefaults.labelToolDefaults,
+      textboxToolDefaults: snapshot.textboxToolDefaults ?? profileDefaults.textboxToolDefaults,
+      richTextToolDefaults: snapshot.richTextToolDefaults ?? profileDefaults.richTextToolDefaults,
+    },
+    colorProfileId
+  );
   const sceneWithBranches = normalizeSceneLabelColors({
     ...normalizedScene,
     points: normalizedScene.points.map((point) => {
@@ -140,43 +157,22 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     nextVectorId: snapshot.nextVectorId ?? fallbackSceneState.nextVectorId,
     nextTextLabelId: snapshot.nextTextLabelId ?? Math.max(fallbackSceneState.nextTextLabelId, inferredNextTextLabelId),
     nextRichTextId: snapshot.nextRichTextId ?? Math.max(fallbackSceneState.nextRichTextId, inferredNextRichTextId),
-    pointDefaults: normalizePointDefaults(snapshot.pointDefaults ?? fallbackSceneState.pointDefaults, colorProfileId),
-    segmentDefaults: snapshot.segmentDefaults ?? fallbackSceneState.segmentDefaults,
-    lineDefaults: snapshot.lineDefaults ?? fallbackSceneState.lineDefaults,
-    circleDefaults: snapshot.circleDefaults ?? fallbackSceneState.circleDefaults,
-    ellipseDefaults: snapshot.ellipseDefaults ?? fallbackSceneState.ellipseDefaults,
-    polygonDefaults: snapshot.polygonDefaults ?? fallbackSceneState.polygonDefaults,
-    angleDefaults: normalizeAngleDefaults(snapshot.angleDefaults ?? fallbackSceneState.angleDefaults, colorProfileId),
+    pointDefaults: restoredDefaults.pointDefaults,
+    segmentDefaults: restoredDefaults.segmentDefaults,
+    lineDefaults: restoredDefaults.lineDefaults,
+    circleDefaults: restoredDefaults.circleDefaults,
+    ellipseDefaults: restoredDefaults.ellipseDefaults,
+    polygonDefaults: restoredDefaults.polygonDefaults,
+    angleDefaults: restoredDefaults.angleDefaults,
     objectLabelDefaults: snapshot.objectLabelDefaults ?? fallbackSceneState.objectLabelDefaults,
-    labelToolDefaults: normalizeTextDefaults(snapshot.labelToolDefaults ?? fallbackSceneState.labelToolDefaults, colorProfileId),
-    textboxToolDefaults: normalizeTextDefaults(snapshot.textboxToolDefaults ?? fallbackSceneState.textboxToolDefaults, colorProfileId),
-    richTextToolDefaults: normalizeTextDefaults(snapshot.richTextToolDefaults ?? fallbackSceneState.richTextToolDefaults, colorProfileId),
+    labelToolDefaults: restoredDefaults.labelToolDefaults,
+    textboxToolDefaults: restoredDefaults.textboxToolDefaults,
+    richTextToolDefaults: restoredDefaults.richTextToolDefaults,
     angleFixedTool: snapshot.angleFixedTool ?? fallbackUiState.angleFixedTool,
     circleFixedTool: snapshot.circleFixedTool ?? fallbackUiState.circleFixedTool,
     transformTool: snapshot.transformTool ?? fallbackUiState.transformTool,
     exportClipWorld: snapshot.exportClipWorld ?? null,
     copyStyle: snapshot.copyStyle ?? fallbackUiState.copyStyle,
-  };
-}
-
-function normalizePointDefaults<T extends { labelColor: string }>(defaults: T, profileId: GeoState["colorProfileId"]): T {
-  return {
-    ...defaults,
-    labelColor: normalizeLabelColorForProfile(defaults.labelColor, profileId),
-  };
-}
-
-function normalizeAngleDefaults<T extends { textColor: string }>(defaults: T, profileId: GeoState["colorProfileId"]): T {
-  return {
-    ...defaults,
-    textColor: normalizeLabelColorForProfile(defaults.textColor, profileId),
-  };
-}
-
-function normalizeTextDefaults<T extends { textColor: string }>(defaults: T, profileId: GeoState["colorProfileId"]): T {
-  return {
-    ...defaults,
-    textColor: normalizeLabelColorForProfile(defaults.textColor, profileId),
   };
 }
 

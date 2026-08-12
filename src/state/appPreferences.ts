@@ -2,7 +2,7 @@ import type { AppPreferencesState } from "./slices/storeTypes";
 import {
   UI_CSS_VARIABLE_KEYS,
   buildDefaultStylesForProfile,
-  normalizeLabelColorForProfile,
+  normalizeStyleDefaultsForProfile,
   type UiCssVariableName,
 } from "./colorProfiles";
 import {
@@ -257,38 +257,38 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
   const labelToolDefaults = (value.labelToolDefaults ?? profileDefaults.labelToolDefaults) as ConstructionPreferencesState["labelToolDefaults"];
   const textboxToolDefaults = (value.textboxToolDefaults ?? profileDefaults.textboxToolDefaults) as ConstructionPreferencesState["textboxToolDefaults"];
   const richTextToolDefaults = (value.richTextToolDefaults ?? profileDefaults.richTextToolDefaults) as ConstructionPreferencesState["richTextToolDefaults"];
+  const normalizedDefaults = normalizeStyleDefaultsForProfile(
+    {
+      pointDefaults,
+      segmentDefaults: value.segmentDefaults as ConstructionPreferencesState["segmentDefaults"],
+      lineDefaults: value.lineDefaults as ConstructionPreferencesState["lineDefaults"],
+      circleDefaults: value.circleDefaults as ConstructionPreferencesState["circleDefaults"],
+      ellipseDefaults: (value.ellipseDefaults ?? value.circleDefaults) as ConstructionPreferencesState["ellipseDefaults"],
+      polygonDefaults: value.polygonDefaults as ConstructionPreferencesState["polygonDefaults"],
+      angleDefaults,
+      labelToolDefaults,
+      textboxToolDefaults,
+      richTextToolDefaults,
+    },
+    colorProfileId
+  );
   return {
     colorProfileId,
     canvasThemeOverrides: normalizeCanvasThemeOverrides(value.canvasThemeOverrides),
     gridEnabled: value.gridEnabled,
     axesEnabled: value.axesEnabled,
     gridSnapEnabled: value.gridSnapEnabled,
-    pointDefaults: {
-      ...pointDefaults,
-      labelColor: normalizeLabelColorForProfile(pointDefaults.labelColor, colorProfileId),
-    },
-    segmentDefaults: value.segmentDefaults as ConstructionPreferencesState["segmentDefaults"],
-    lineDefaults: value.lineDefaults as ConstructionPreferencesState["lineDefaults"],
-    circleDefaults: value.circleDefaults as ConstructionPreferencesState["circleDefaults"],
-    ellipseDefaults: (value.ellipseDefaults ?? value.circleDefaults) as ConstructionPreferencesState["ellipseDefaults"],
-    polygonDefaults: value.polygonDefaults as ConstructionPreferencesState["polygonDefaults"],
-    angleDefaults: {
-      ...angleDefaults,
-      textColor: normalizeLabelColorForProfile(angleDefaults.textColor, colorProfileId),
-    },
+    pointDefaults: normalizedDefaults.pointDefaults,
+    segmentDefaults: normalizedDefaults.segmentDefaults,
+    lineDefaults: normalizedDefaults.lineDefaults,
+    circleDefaults: normalizedDefaults.circleDefaults,
+    ellipseDefaults: normalizedDefaults.ellipseDefaults,
+    polygonDefaults: normalizedDefaults.polygonDefaults,
+    angleDefaults: normalizedDefaults.angleDefaults,
     objectLabelDefaults: normalizeObjectLabelDefaults(value.objectLabelDefaults),
-    labelToolDefaults: {
-      ...labelToolDefaults,
-      textColor: normalizeLabelColorForProfile(labelToolDefaults.textColor, colorProfileId),
-    },
-    textboxToolDefaults: {
-      ...textboxToolDefaults,
-      textColor: normalizeLabelColorForProfile(textboxToolDefaults.textColor, colorProfileId),
-    },
-    richTextToolDefaults: {
-      ...richTextToolDefaults,
-      textColor: normalizeLabelColorForProfile(richTextToolDefaults.textColor, colorProfileId),
-    },
+    labelToolDefaults: normalizedDefaults.labelToolDefaults,
+    textboxToolDefaults: normalizedDefaults.textboxToolDefaults,
+    richTextToolDefaults: normalizedDefaults.richTextToolDefaults,
     angleFixedTool: value.angleFixedTool as ConstructionPreferencesState["angleFixedTool"],
     circleFixedTool: value.circleFixedTool as ConstructionPreferencesState["circleFixedTool"],
     regularPolygonTool: value.regularPolygonTool as ConstructionPreferencesState["regularPolygonTool"],

@@ -25,6 +25,11 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-08-12 Vanilla Standard monochrome construction palette:
+  - Geometry strokes, axes, grid lines, angle marks, arrows, and segment markings now use black.
+  - Points use a black fill with a white circular outline; the point outline is the intentional exception to the black-stroke rule.
+  - Saved defaults and restored scenes that still use the legacy image-palette colors migrate to the corrected Vanilla Standard colors, while custom colors remain unchanged.
+  - Regression coverage verifies the new palette, legacy migration, and custom-color preservation.
 - 2026-08-10 Named homothety/inversion maps in the Command Bar:
   - Direct point commands now include `Homothety(P,O,k)` and `Inversion(P,c)` / `Invert(P,c)`.
   - Noun forms define reusable maps: `f=Homothety(O,k)`, `g=Inversion(c)`, plus translation, rotation, and reflection map constructors.

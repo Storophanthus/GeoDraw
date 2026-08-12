@@ -600,24 +600,24 @@ const COLOR_PROFILES: readonly ColorProfile[] = [
     label: "Vanilla Standard",
     palette: {
       backgroundColor: "#fefefe",
-      gridMinorColor: "#ece5d9",
-      gridMajorColor: "#7a5f9a",
-      axisColor: "#d51315",
-      pointStroke: "#fefefe",
-      pointFill: "#0d0d0d",
-      pointLabel: "#2a1b56",
+      gridMinorColor: "#000000",
+      gridMajorColor: "#000000",
+      axisColor: "#000000",
+      pointStroke: "#ffffff",
+      pointFill: "#000000",
+      pointLabel: "#000000",
       pointLabelHalo: "#ffffff",
-      segmentStroke: "#403963",
-      lineStroke: "#4b3f6d",
-      circleStroke: "#403963",
-      polygonStroke: "#2c1e58",
+      segmentStroke: "#000000",
+      lineStroke: "#000000",
+      circleStroke: "#000000",
+      polygonStroke: "#000000",
       polygonFill: "#e8a295",
-      angleStroke: "#2c1e58",
-      angleText: "#2a1b56",
+      angleStroke: "#000000",
+      angleText: "#000000",
       angleFill: "#e8a295",
-      angleMark: "#2c1e58",
-      arrow: "#403963",
-      marking: "#403963",
+      angleMark: "#000000",
+      arrow: "#000000",
+      marking: "#000000",
     },
   },
   {
@@ -976,12 +976,126 @@ export function applyProfileColorsToDefaults(defaults: SceneStyleDefaults, profi
   return recolored;
 }
 
+/**
+ * Migrates saved Vanilla Standard defaults that still carry the legacy image
+ * palette. Exact palette matches are updated; user-chosen custom colors remain
+ * untouched.
+ */
+export function normalizeStyleDefaultsForProfile(
+  defaults: SceneStyleDefaults,
+  profileId: ColorProfileId
+): SceneStyleDefaults {
+  if (profileId !== VANILLA_THIN_PROFILE_ID) return defaults;
+  const colorMap = getLegacyVanillaColorMap();
+  return {
+    pointDefaults: {
+      ...defaults.pointDefaults,
+      strokeColor: remapColor(defaults.pointDefaults.strokeColor, colorMap),
+      fillColor: remapColor(defaults.pointDefaults.fillColor, colorMap),
+      labelColor: normalizeLabelColorForProfile(
+        remapColor(defaults.pointDefaults.labelColor, colorMap),
+        profileId
+      ),
+      labelHaloColor: remapColor(defaults.pointDefaults.labelHaloColor, colorMap),
+      labelOffsetPx: { ...defaults.pointDefaults.labelOffsetPx },
+    },
+    segmentDefaults: {
+      ...defaults.segmentDefaults,
+      strokeColor: remapColor(defaults.segmentDefaults.strokeColor, colorMap),
+      segmentMark: defaults.segmentDefaults.segmentMark
+        ? {
+            ...defaults.segmentDefaults.segmentMark,
+            color: remapOptionalColor(defaults.segmentDefaults.segmentMark.color, colorMap),
+          }
+        : defaults.segmentDefaults.segmentMark,
+      segmentMarks: defaults.segmentDefaults.segmentMarks?.map((mark) => ({
+        ...mark,
+        color: remapOptionalColor(mark.color, colorMap),
+      })),
+      segmentArrowMark: remapArrowMark(defaults.segmentDefaults.segmentArrowMark, colorMap),
+      segmentArrowMarks: defaults.segmentDefaults.segmentArrowMarks?.map((arrow) =>
+        remapArrowMark(arrow, colorMap)
+      ),
+    },
+    lineDefaults: {
+      ...defaults.lineDefaults,
+      strokeColor: remapColor(defaults.lineDefaults.strokeColor, colorMap),
+    },
+    circleDefaults: {
+      ...defaults.circleDefaults,
+      strokeColor: remapColor(defaults.circleDefaults.strokeColor, colorMap),
+      fillColor: remapOptionalColor(defaults.circleDefaults.fillColor, colorMap),
+      patternColor: remapOptionalColor(defaults.circleDefaults.patternColor, colorMap),
+      arrowMark: remapArrowMark(defaults.circleDefaults.arrowMark, colorMap),
+      arrowMarks: defaults.circleDefaults.arrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+    },
+    ellipseDefaults: {
+      ...defaults.ellipseDefaults,
+      strokeColor: remapColor(defaults.ellipseDefaults.strokeColor, colorMap),
+      fillColor: remapOptionalColor(defaults.ellipseDefaults.fillColor, colorMap),
+      patternColor: remapOptionalColor(defaults.ellipseDefaults.patternColor, colorMap),
+      arrowMark: remapArrowMark(defaults.ellipseDefaults.arrowMark, colorMap),
+      arrowMarks: defaults.ellipseDefaults.arrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+    },
+    polygonDefaults: {
+      ...defaults.polygonDefaults,
+      strokeColor: remapColor(defaults.polygonDefaults.strokeColor, colorMap),
+      fillColor: remapOptionalColor(defaults.polygonDefaults.fillColor, colorMap),
+      patternColor: remapOptionalColor(defaults.polygonDefaults.patternColor, colorMap),
+      arrowMark: remapArrowMark(defaults.polygonDefaults.arrowMark, colorMap),
+    },
+    angleDefaults: {
+      ...defaults.angleDefaults,
+      strokeColor: remapColor(defaults.angleDefaults.strokeColor, colorMap),
+      textColor: normalizeLabelColorForProfile(
+        remapColor(defaults.angleDefaults.textColor, colorMap),
+        profileId
+      ),
+      fillColor: remapColor(defaults.angleDefaults.fillColor, colorMap),
+      patternColor: remapOptionalColor(defaults.angleDefaults.patternColor, colorMap),
+      markColor: remapColor(defaults.angleDefaults.markColor, colorMap),
+      angleMarks: defaults.angleDefaults.angleMarks?.map((mark) => ({
+        ...mark,
+        markColor: remapOptionalColor(mark.markColor, colorMap),
+      })),
+      labelPosWorld: { ...defaults.angleDefaults.labelPosWorld },
+      arcArrowMark: remapArrowMark(defaults.angleDefaults.arcArrowMark, colorMap),
+      arcArrowMarks: defaults.angleDefaults.arcArrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+    },
+    labelToolDefaults: {
+      ...defaults.labelToolDefaults,
+      textColor: normalizeLabelColorForProfile(
+        remapColor(defaults.labelToolDefaults.textColor, colorMap),
+        profileId
+      ),
+    },
+    textboxToolDefaults: {
+      ...defaults.textboxToolDefaults,
+      textColor: normalizeLabelColorForProfile(
+        remapColor(defaults.textboxToolDefaults.textColor, colorMap),
+        profileId
+      ),
+    },
+    richTextToolDefaults: {
+      ...defaults.richTextToolDefaults,
+      textColor: normalizeLabelColorForProfile(
+        remapColor(defaults.richTextToolDefaults.textColor, colorMap),
+        profileId
+      ),
+    },
+  };
+}
+
 export function recolorSceneForProfile(scene: SceneModel, fromProfileId: ColorProfileId, toProfileId: ColorProfileId): SceneModel {
   if (fromProfileId === toProfileId) return normalizeSceneLabelColors(scene, toProfileId);
   const fromPalette = getColorProfile(fromProfileId).palette;
   const toPalette = getColorProfile(toProfileId).palette;
   const colorMap = buildColorRemap(fromPalette, toPalette);
 
+  return normalizeSceneLabelColors(remapSceneColors(scene, colorMap), toProfileId);
+}
+
+function remapSceneColors(scene: SceneModel, colorMap: Map<string, string>): SceneModel {
   const recolored: SceneModel = {
     ...scene,
     points: scene.points.map((point) => ({
@@ -1081,14 +1195,15 @@ export function recolorSceneForProfile(scene: SceneModel, fromProfileId: ColorPr
     numbers: [...scene.numbers],
     vectors: scene.vectors ? [...scene.vectors] : undefined,
   };
-  return normalizeSceneLabelColors(recolored, toProfileId);
+  return recolored;
 }
 
 export function normalizeSceneLabelColors(scene: SceneModel, profileId: ColorProfileId): SceneModel {
   if (profileId !== VANILLA_THIN_PROFILE_ID) return scene;
+  const recolored = remapSceneColors(scene, getLegacyVanillaColorMap());
   return {
-    ...scene,
-    points: scene.points.map((point) => ({
+    ...recolored,
+    points: recolored.points.map((point) => ({
       ...point,
       style: {
         ...point.style,
@@ -1096,7 +1211,7 @@ export function normalizeSceneLabelColors(scene: SceneModel, profileId: ColorPro
         labelOffsetPx: { ...point.style.labelOffsetPx },
       },
     })),
-    angles: scene.angles.map((angle) => ({
+    angles: recolored.angles.map((angle) => ({
       ...angle,
       style: {
         ...angle.style,
@@ -1104,14 +1219,14 @@ export function normalizeSceneLabelColors(scene: SceneModel, profileId: ColorPro
         labelPosWorld: { ...angle.style.labelPosWorld },
       },
     })),
-    textLabels: (scene.textLabels ?? []).map((label) => ({
+    textLabels: (recolored.textLabels ?? []).map((label) => ({
       ...label,
       style: {
         ...label.style,
         textColor: normalizeLabelColorForProfile(label.style.textColor, profileId),
       },
     })),
-    richTextNodes: (scene.richTextNodes ?? []).map((node) => ({
+    richTextNodes: (recolored.richTextNodes ?? []).map((node) => ({
       ...node,
       style: {
         ...node.style,
@@ -1119,6 +1234,13 @@ export function normalizeSceneLabelColors(scene: SceneModel, profileId: ColorPro
       },
     })),
   };
+}
+
+function getLegacyVanillaColorMap(): Map<string, string> {
+  return buildColorRemap(
+    getColorProfile("image_palette").palette,
+    getColorProfile(VANILLA_THIN_PROFILE_ID).palette
+  );
 }
 
 function remapArrowMark<T extends PathArrowMark | undefined>(arrow: T, colorMap: Map<string, string>): T {

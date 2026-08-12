@@ -5,6 +5,7 @@ import {
   buildDefaultStylesForProfile,
   normalizeLabelColorForProfile,
   normalizeSceneLabelColors,
+  normalizeStyleDefaultsForProfile,
   recolorSceneForProfile,
 } from "../../state/colorProfiles";
 import {
@@ -68,6 +69,25 @@ assert(thinDefaults.lineDefaults.strokeWidth < imageDefaults.lineDefaults.stroke
 assert(thinDefaults.circleDefaults.strokeWidth < imageDefaults.circleDefaults.strokeWidth, "thin vanilla profile should reduce circle stroke");
 assert(thinDefaults.angleDefaults.strokeWidth < imageDefaults.angleDefaults.strokeWidth, "thin vanilla profile should reduce angle stroke");
 assert(thinDefaults.angleDefaults.markSize < imageDefaults.angleDefaults.markSize, "thin vanilla profile should reduce angle mark size");
+assert(thinDefaults.pointDefaults.strokeColor === "#ffffff", "Vanilla Standard should keep a white point outline");
+assert(thinDefaults.pointDefaults.fillColor === "#000000", "Vanilla Standard should use a black point fill");
+assert(thinDefaults.segmentDefaults.strokeColor === "#000000", "Vanilla Standard segments should be black");
+assert(thinDefaults.lineDefaults.strokeColor === "#000000", "Vanilla Standard lines should be black");
+assert(thinDefaults.circleDefaults.strokeColor === "#000000", "Vanilla Standard circles should be black");
+assert(thinDefaults.polygonDefaults.strokeColor === "#000000", "Vanilla Standard polygon edges should be black");
+assert(thinDefaults.angleDefaults.strokeColor === "#000000", "Vanilla Standard angle arcs should be black");
+const migratedLegacyDefaults = normalizeStyleDefaultsForProfile(imageDefaults, "image_palette_vanilla_thin");
+assert(migratedLegacyDefaults.pointDefaults.strokeColor === "#ffffff", "legacy Vanilla point outlines should migrate to white");
+assert(migratedLegacyDefaults.pointDefaults.fillColor === "#000000", "legacy Vanilla point fills should migrate to black");
+assert(migratedLegacyDefaults.lineDefaults.strokeColor === "#000000", "legacy Vanilla line defaults should migrate to black");
+const customLegacyDefaults = normalizeStyleDefaultsForProfile(
+  {
+    ...imageDefaults,
+    lineDefaults: { ...imageDefaults.lineDefaults, strokeColor: "#123456" },
+  },
+  "image_palette_vanilla_thin"
+);
+assert(customLegacyDefaults.lineDefaults.strokeColor === "#123456", "Vanilla migration should preserve custom line colors");
 assert(
   normalizeLabelColorForProfile("#ffffff", "image_palette_vanilla_thin") === thinDefaults.pointDefaults.labelColor,
   "Vanilla Standard should replace white labels with its readable profile color"
@@ -163,6 +183,26 @@ assert(
   normalizedVanillaScene.points[0].style.labelColor === thinDefaults.pointDefaults.labelColor,
   "restoring a Vanilla Standard scene should keep point labels visible on the light canvas"
 );
+
+const legacyVanillaScene = structuredClone(scene);
+legacyVanillaScene.points[0].style = {
+  ...imageDefaults.pointDefaults,
+  labelOffsetPx: { ...imageDefaults.pointDefaults.labelOffsetPx },
+};
+legacyVanillaScene.segments[0].style = { ...imageDefaults.segmentDefaults };
+legacyVanillaScene.lines[0].style = { ...imageDefaults.lineDefaults };
+legacyVanillaScene.circles[0].style = { ...imageDefaults.circleDefaults };
+legacyVanillaScene.polygons[0].style = { ...imageDefaults.polygonDefaults };
+legacyVanillaScene.angles[0].style = {
+  ...imageDefaults.angleDefaults,
+  labelPosWorld: { ...imageDefaults.angleDefaults.labelPosWorld },
+};
+const migratedLegacyScene = normalizeSceneLabelColors(legacyVanillaScene, "image_palette_vanilla_thin");
+assert(migratedLegacyScene.points[0].style.strokeColor === "#ffffff", "legacy scene point outlines should migrate to white");
+assert(migratedLegacyScene.points[0].style.fillColor === "#000000", "legacy scene point fills should migrate to black");
+assert(migratedLegacyScene.segments[0].style.strokeColor === "#000000", "legacy scene segments should migrate to black");
+assert(migratedLegacyScene.lines[0].style.strokeColor === "#000000", "legacy scene lines should migrate to black");
+assert(migratedLegacyScene.circles[0].style.strokeColor === "#000000", "legacy scene circles should migrate to black");
 
 const recolored = recolorSceneForProfile(scene, "classic", "grayscale_white_dot");
 
