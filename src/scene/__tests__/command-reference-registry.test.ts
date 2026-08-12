@@ -59,6 +59,10 @@ const ctx: ParseContext = {
     ["poly", { type: "polygon", id: "poly1" }],
   ]),
   objectNames: new Set(["s", "l", "c", "poly"]),
+  transformationMaps: new Map([
+    ["f", { steps: [{ kind: "homothety", centerId: "pO", factorExpr: "2" }] }],
+    ["g", { steps: [{ kind: "inversion", circleId: "c1" }] }],
+  ]),
   ans: 1,
 };
 

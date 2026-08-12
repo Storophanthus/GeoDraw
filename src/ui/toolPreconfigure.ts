@@ -21,6 +21,7 @@ export function getToolDefaultKind(activeTool: ActiveTool): ToolDefaultKind | nu
     case "segment":
       return "segment";
 
+    case "ray":
     case "line2p":
     case "perp_line":
     case "parallel_line":

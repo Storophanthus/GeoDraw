@@ -1,5 +1,14 @@
 import type { AppPreferencesState } from "./slices/storeTypes";
-import { UI_CSS_VARIABLE_KEYS, type UiCssVariableName } from "./colorProfiles";
+import {
+  UI_CSS_VARIABLE_KEYS,
+  buildDefaultStylesForProfile,
+  normalizeLabelColorForProfile,
+  type UiCssVariableName,
+} from "./colorProfiles";
+import {
+  normalizeFigureTreatmentMode,
+  type FigureTreatmentMode,
+} from "../export/figureTreatment";
 
 type UiPreferencesState = Pick<AppPreferencesState, "uiColorProfileId" | "uiCssOverrides">;
 type ConstructionPreferencesState = Pick<
@@ -241,23 +250,45 @@ export function loadStoredConstructionPreferences(): ConstructionPreferencesStat
     return null;
   }
 
+  const colorProfileId = value.colorProfileId;
+  const profileDefaults = buildDefaultStylesForProfile(colorProfileId);
+  const pointDefaults = value.pointDefaults as ConstructionPreferencesState["pointDefaults"];
+  const angleDefaults = value.angleDefaults as ConstructionPreferencesState["angleDefaults"];
+  const labelToolDefaults = (value.labelToolDefaults ?? profileDefaults.labelToolDefaults) as ConstructionPreferencesState["labelToolDefaults"];
+  const textboxToolDefaults = (value.textboxToolDefaults ?? profileDefaults.textboxToolDefaults) as ConstructionPreferencesState["textboxToolDefaults"];
+  const richTextToolDefaults = (value.richTextToolDefaults ?? profileDefaults.richTextToolDefaults) as ConstructionPreferencesState["richTextToolDefaults"];
   return {
-    colorProfileId: value.colorProfileId,
+    colorProfileId,
     canvasThemeOverrides: normalizeCanvasThemeOverrides(value.canvasThemeOverrides),
     gridEnabled: value.gridEnabled,
     axesEnabled: value.axesEnabled,
     gridSnapEnabled: value.gridSnapEnabled,
-    pointDefaults: value.pointDefaults as ConstructionPreferencesState["pointDefaults"],
+    pointDefaults: {
+      ...pointDefaults,
+      labelColor: normalizeLabelColorForProfile(pointDefaults.labelColor, colorProfileId),
+    },
     segmentDefaults: value.segmentDefaults as ConstructionPreferencesState["segmentDefaults"],
     lineDefaults: value.lineDefaults as ConstructionPreferencesState["lineDefaults"],
     circleDefaults: value.circleDefaults as ConstructionPreferencesState["circleDefaults"],
     ellipseDefaults: (value.ellipseDefaults ?? value.circleDefaults) as ConstructionPreferencesState["ellipseDefaults"],
     polygonDefaults: value.polygonDefaults as ConstructionPreferencesState["polygonDefaults"],
-    angleDefaults: value.angleDefaults as ConstructionPreferencesState["angleDefaults"],
+    angleDefaults: {
+      ...angleDefaults,
+      textColor: normalizeLabelColorForProfile(angleDefaults.textColor, colorProfileId),
+    },
     objectLabelDefaults: normalizeObjectLabelDefaults(value.objectLabelDefaults),
-    labelToolDefaults: value.labelToolDefaults as ConstructionPreferencesState["labelToolDefaults"],
-    textboxToolDefaults: value.textboxToolDefaults as ConstructionPreferencesState["textboxToolDefaults"],
-    richTextToolDefaults: value.richTextToolDefaults as ConstructionPreferencesState["richTextToolDefaults"],
+    labelToolDefaults: {
+      ...labelToolDefaults,
+      textColor: normalizeLabelColorForProfile(labelToolDefaults.textColor, colorProfileId),
+    },
+    textboxToolDefaults: {
+      ...textboxToolDefaults,
+      textColor: normalizeLabelColorForProfile(textboxToolDefaults.textColor, colorProfileId),
+    },
+    richTextToolDefaults: {
+      ...richTextToolDefaults,
+      textColor: normalizeLabelColorForProfile(richTextToolDefaults.textColor, colorProfileId),
+    },
     angleFixedTool: value.angleFixedTool as ConstructionPreferencesState["angleFixedTool"],
     circleFixedTool: value.circleFixedTool as ConstructionPreferencesState["circleFixedTool"],
     regularPolygonTool: value.regularPolygonTool as ConstructionPreferencesState["regularPolygonTool"],
@@ -275,6 +306,7 @@ export type ExportPreferencesState = {
   emitTkzSetup: ExportEmitTkzSetupMode;
   labelGlow: boolean;
   tikzExportMode: ExportTikzMode;
+  figureTreatment: FigureTreatmentMode;
   scaleboxScale: string;
   trueGlobalScale: string;
   globalScale: string;
@@ -294,6 +326,7 @@ export const DEFAULT_EXPORT_PREFERENCES: ExportPreferencesState = {
   emitTkzSetup: "auto",
   labelGlow: true,
   tikzExportMode: "visualExact",
+  figureTreatment: "canvas",
   scaleboxScale: "1",
   trueGlobalScale: "1",
   globalScale: "1",
@@ -334,6 +367,7 @@ export function loadStoredExportPreferences(): ExportPreferencesState {
     emitTkzSetup: normalizeEmitTkzSetup(raw.emitTkzSetup),
     labelGlow: normalizeBoolean(raw.labelGlow, DEFAULT_EXPORT_PREFERENCES.labelGlow),
     tikzExportMode: normalizeTikzExportMode(raw.tikzExportMode),
+    figureTreatment: normalizeFigureTreatmentMode(raw.figureTreatment),
     scaleboxScale: normalizeScaleString(raw.scaleboxScale, DEFAULT_EXPORT_PREFERENCES.scaleboxScale),
     trueGlobalScale: normalizeScaleString(raw.trueGlobalScale, DEFAULT_EXPORT_PREFERENCES.trueGlobalScale),
     globalScale: normalizeScaleString(raw.globalScale, DEFAULT_EXPORT_PREFERENCES.globalScale),

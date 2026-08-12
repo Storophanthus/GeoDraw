@@ -25,6 +25,13 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-08-10 Named homothety/inversion maps in the Command Bar:
+  - Direct point commands now include `Homothety(P,O,k)` and `Inversion(P,c)` / `Invert(P,c)`.
+  - Noun forms define reusable maps: `f=Homothety(O,k)`, `g=Inversion(c)`, plus translation, rotation, and reflection map constructors.
+  - `h=Compose(f,g)` follows mathematical order (`g` first, then `f`); `fi=Inverse(f)` reverses/inverts primitive steps; `Q=f(P)` and `Apply(f,P)` create live dependent point images.
+  - Named maps are stored per open document/tab, reserve their names against scalar/object collisions, and are pruned when geometric dependencies disappear.
+  - Composition reuses existing transformation scene nodes; intermediate points are hidden/auxiliary, so no new evaluator or TikZ construction kind was introduced.
+  - Regression coverage: parser algebra/order/zero-factor inverse checks plus store-level live homothety→inversion composition, inverse application, direct inversion, and hidden-intermediate checks.
 - 2026-07-24 Live figure sizing in the PDF preview window
   (owner-reported gap: the Figure Sizing controls existed only in the Export
   panel, so adjusting Global/Points/Lines/Labels while looking at the compiled

@@ -2,6 +2,12 @@ import type { SceneModel } from "../scene/points";
 import type { Vec2 } from "../geo/vec2";
 import { exportTikzEfficientWithOptions, exportTikzWithOptions } from "./tikz";
 import { getPointInnerSepFixedPt, TIKZ_EXPORT_CALIBRATION } from "./tikz/calibration";
+import {
+  getFigureTreatmentHaloCompensation,
+  getFigureTreatmentLabelCompensation,
+  getFigureTreatmentMarkCompensation,
+  getFigureTreatmentPointCompensation,
+} from "./figureTreatment";
 
 export type TikzViewportRect = { xmin: number; xmax: number; ymin: number; ymax: number };
 
@@ -23,6 +29,8 @@ export type TikzExportParams = {
   screenPxPerWorld: number;
   /** Canvas True Zoom folded into scalebox/globalScale; preview-only metadata. */
   canvasTrueZoom?: number;
+  /** Resolved Canvas/General/Very-close-up visual treatment factor. */
+  figureTreatmentFactor?: number;
   emitTkzSetup: boolean;
   drawLayerBackend: "plain" | "tkz";
   bakeCoordinates: boolean;
@@ -69,10 +77,41 @@ export function buildTikzExportText(params: TikzExportParams): string {
     Math.min(100, scaleboxScale * reconstructiblePostScale)
   );
   const globalScale = safeScale(params.globalScale);
-  const pointScale = safeScale(params.pointScale);
   const lineScale = safeScale(params.lineScale);
-  const labelScale = safeScale(params.labelScale);
-  const labelHaloScale = Math.max(0.05, Math.min(10, safeScale(params.labelHaloScale)));
+  const figureTreatmentFactor = Math.max(
+    0.05,
+    Math.min(20, safeScale(params.figureTreatmentFactor))
+  );
+  const pointScale =
+    safeScale(params.pointScale) *
+    getFigureTreatmentPointCompensation(figureTreatmentFactor);
+  const labelScale =
+    safeScale(params.labelScale) *
+    getFigureTreatmentLabelCompensation(figureTreatmentFactor);
+  const labelHaloScale = Math.max(
+    0.05,
+    Math.min(
+      10,
+      safeScale(params.labelHaloScale) *
+        getFigureTreatmentHaloCompensation(figureTreatmentFactor)
+    )
+  );
+  const segmentMarkTreatmentCompensation =
+    getFigureTreatmentMarkCompensation(figureTreatmentFactor);
+  // Construction exports retain their compact legacy defaults for General,
+  // but a named close-up must match the canvas-calibrated visual treatment.
+  // This affects only styling; tkz-euclide still owns all construction math.
+  const useTreatmentMatchedMetrics =
+    useCanvasExactMetrics || figureTreatmentFactor > 1 + 1e-9;
+  const useConstructionCloseupCalibration =
+    params.drawLayerBackend === "tkz" && figureTreatmentFactor > 1 + 1e-9;
+  const constructionCloseup = TIKZ_EXPORT_CALIBRATION.constructionCloseup;
+  const constructionPointScale = useConstructionCloseupCalibration
+    ? constructionCloseup.pointMetricScale
+    : 1;
+  const constructionLineScale = useConstructionCloseupCalibration
+    ? constructionCloseup.lineMetricScale
+    : 1;
 
   const tikzOptions = {
     viewport: params.viewport,
@@ -80,12 +119,14 @@ export function buildTikzExportText(params: TikzExportParams): string {
     clipPolygonWorld: params.clipPolygonWorld,
     trueGlobalScale: innerTrueGlobalScale,
     canvasTrueZoom: params.canvasTrueZoom,
+    visualTreatmentFactor: figureTreatmentFactor,
     worldToTikzScale: globalScale,
-    pointScale,
+    pointScale: pointScale * constructionPointScale,
     lineScale:
       lineScale *
       innerTrueGlobalScale *
-      (useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter),
+      constructionLineScale *
+      (useTreatmentMatchedMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.uiLineScaleToExporter),
     labelScale,
     screenPxPerWorld: params.screenPxPerWorld,
     emitTkzSetup: params.emitTkzSetup,
@@ -99,29 +140,40 @@ export function buildTikzExportText(params: TikzExportParams): string {
     // background into a generated color such as c0.
     labelHaloColor: undefined,
     bakePointCoordinates: params.bakeCoordinates,
-    pointStrokeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
-    pointInnerSepFixedPt: useCanvasExactMetrics ? undefined : getPointInnerSepFixedPt(),
-    pointInnerSepScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
-    segmentMarkSizeScale: useCanvasExactMetrics
+    pointStrokeScale: useTreatmentMatchedMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pointStrokeScale,
+    pointInnerSepFixedPt: useTreatmentMatchedMetrics ? undefined : getPointInnerSepFixedPt(),
+    pointInnerSepScale: useTreatmentMatchedMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pointInnerSepScale,
+    segmentMarkSizeScale: useTreatmentMatchedMetrics
       ? 1
       : TIKZ_EXPORT_CALIBRATION.segmentMarkSizeScale * innerTrueGlobalScale,
-    segmentMarkRoundSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkRoundSizeScale,
-    segmentMarkNonRoundSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkNonRoundSizeScale,
+    segmentMarkTreatmentScale:
+      segmentMarkTreatmentCompensation *
+      (useConstructionCloseupCalibration
+        ? constructionCloseup.segmentMarkSizeScale
+        : 1),
+    segmentMarkRoundSizeScale: useTreatmentMatchedMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkRoundSizeScale,
+    segmentMarkNonRoundSizeScale: useTreatmentMatchedMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkNonRoundSizeScale,
     segmentMarkLineWidthScale:
-      (useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale) *
+      (useTreatmentMatchedMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.segmentMarkLineWidthScale) *
       innerTrueGlobalScale,
+    segmentMarkTreatmentStrokeScale: useConstructionCloseupCalibration
+      ? constructionCloseup.segmentMarkStrokeScale
+      : 1,
+    pointLabelOffsetScale: useConstructionCloseupCalibration
+      ? constructionCloseup.labelOffsetScale
+      : 1,
     pathDotMarkSizeScale:
-      (useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pathDotMarkSizeScale) *
+      (useTreatmentMatchedMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.pathDotMarkSizeScale) *
       innerTrueGlobalScale,
-    angleLabelFontScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
+    angleLabelFontScale: useTreatmentMatchedMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.angleLabelFontScale,
     // tkz angle/right-angle radii are coordinate-space lengths, so the
     // tikzpicture scale already transforms them. Only the fixed-size plot mark
     // (mksize) needs the explicit true-global correction.
-    angleArcSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.angleArcSizeScale,
-    angleMarkSizeScale: useCanvasExactMetrics
+    angleArcSizeScale: useTreatmentMatchedMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.angleArcSizeScale,
+    angleMarkSizeScale: useTreatmentMatchedMetrics
       ? 1
       : TIKZ_EXPORT_CALIBRATION.angleMarkSizeScale * innerTrueGlobalScale,
-    rightAngleSizeScale: useCanvasExactMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.rightAngleSizeScale,
+    rightAngleSizeScale: useTreatmentMatchedMetrics ? 1 : TIKZ_EXPORT_CALIBRATION.rightAngleSizeScale,
     autoScaleToFitCm: {
       maxWidthCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxWidthCm,
       maxHeightCm: TIKZ_EXPORT_CALIBRATION.autoScaleToFitCm.maxHeightCm,

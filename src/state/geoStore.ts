@@ -48,6 +48,13 @@ import { isNameUnique } from "../scene/pointBasics";
 import { rebuildRightAngleProvenance, registerSegmentPair } from "../domain/rightAngleProvenance";
 import type { Command } from "../CommandParser";
 import { planAliasRedefine, type CommandAliasTarget } from "../domain/redefinePlanner";
+import {
+  MAX_TRANSFORMATION_MAP_STEPS,
+  cloneTransformationMap,
+  transformationMapIsAlive,
+  type TransformationMapDefinition,
+} from "../domain/transformationMaps";
+import { applyTransformationMapToPoint as applyPointMap } from "../tools/pointTransformationMaps";
 
 export type {
   ActiveTool,
@@ -72,6 +79,7 @@ const commandBarObjectAliases = new Map<
   string,
   { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }
 >();
+const commandBarTransformationMaps = new Map<string, TransformationMapDefinition>();
 
 export type GeoDocumentRuntimeState = {
   snapshot: HistorySnapshot;
@@ -81,6 +89,7 @@ export type GeoDocumentRuntimeState = {
   redoStack: HistorySnapshot[];
   lastHistoryActionKey: string | null;
   commandAliases: Array<[string, CommandAliasTarget]>;
+  transformationMaps: Array<[string, TransformationMapDefinition]>;
 };
 
 function edgeKey(aId: string, bId: string): string {
@@ -101,6 +110,11 @@ function pruneStaleCommandAliases(scene: GeoState["scene"]): void {
   for (const [name, target] of commandBarObjectAliases.entries()) {
     if (!isAliasTargetAlive(scene, target)) {
       commandBarObjectAliases.delete(name);
+    }
+  }
+  for (const [name, definition] of commandBarTransformationMaps.entries()) {
+    if (!transformationMapIsAlive(scene, definition)) {
+      commandBarTransformationMaps.delete(name);
     }
   }
 }
@@ -210,12 +224,31 @@ const actions: GeoActions = {
   }),
 };
 
+function applyTransformationMapToPoint(
+  pointId: string,
+  definition: TransformationMapDefinition
+): string | null {
+  return applyPointMap(pointId, definition, {
+    get scene() {
+      return runtime.getState().scene;
+    },
+    createPointByTranslation: actions.createPointByTranslation,
+    createPointByRotation: actions.createPointByRotation,
+    createPointByDilation: actions.createPointByDilation,
+    createPointByReflection: actions.createPointByReflection,
+    createCircleCenterPoint: actions.createCircleCenterPoint,
+    setPointVisibility: (id, visible) => actions.setObjectVisibility({ type: "point", id }, visible),
+    hideIntermediatePoint: hideHelperPoint,
+  });
+}
+
 function canUseCommandObjectLabel(nameRaw: string): boolean {
   const name = nameRaw.trim();
   if (!name) return false;
   const state = runtime.getState();
   pruneStaleCommandAliases(state.scene);
   if (commandBarObjectAliases.has(name)) return false;
+  if (commandBarTransformationMaps.has(name)) return false;
   if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return false;
   if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return false;
   return true;
@@ -232,6 +265,45 @@ export const commandBarApi = {
       if (typeof v === "number" && Number.isFinite(v)) out[n.name] = v;
     }
     return out;
+  },
+  getTransformationMaps(): Record<string, TransformationMapDefinition> {
+    const scene = runtime.getState().scene;
+    pruneStaleCommandAliases(scene);
+    return Object.fromEntries(
+      Array.from(commandBarTransformationMaps.entries(), ([name, definition]) => [
+        name,
+        cloneTransformationMap(definition),
+      ])
+    );
+  },
+  setTransformationMap(
+    name: string,
+    definition: TransformationMapDefinition
+  ): { ok: true; mode: "created" | "updated" } | { ok: false; error: string } {
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false as const, error: "Map name is empty" };
+    if (definition.steps.length === 0 || definition.steps.length > MAX_TRANSFORMATION_MAP_STEPS) {
+      return { ok: false as const, error: `A transformation map must contain 1 to ${MAX_TRANSFORMATION_MAP_STEPS} steps` };
+    }
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (!transformationMapIsAlive(state.scene, definition)) {
+      return { ok: false as const, error: "Transformation map has a missing geometric dependency" };
+    }
+    if (commandBarObjectAliases.has(trimmed)) return { ok: false as const, error: `Name already used: ${trimmed}` };
+    if (state.scene.numbers.some((number) => number.name === trimmed)) {
+      return { ok: false as const, error: `Name already used: ${trimmed}` };
+    }
+    if (state.scene.points.some((point) => point.name === trimmed)) {
+      return { ok: false as const, error: `Name already used: ${trimmed}` };
+    }
+    const mode = commandBarTransformationMaps.has(trimmed) ? "updated" : "created";
+    commandBarTransformationMaps.set(trimmed, cloneTransformationMap(definition));
+    // Named maps live beside command aliases rather than inside the scene.
+    // Emit a history-free store update so document-tab persistence captures
+    // a definition even before the map is applied to any point.
+    setState((prev) => ({ ...prev }), { history: "skip" });
+    return { ok: true as const, mode };
   },
   setScalarVar(
     name: string,
@@ -267,7 +339,9 @@ export const commandBarApi = {
     if (!isNameUnique(trimmed, state.scene.points.map((p) => p.name))) {
       return { ok: false as const, error: `Name already used: ${trimmed}` };
     }
-    if (commandBarObjectAliases.has(trimmed)) return { ok: false as const, error: `Name already used: ${trimmed}` };
+    if (commandBarObjectAliases.has(trimmed) || commandBarTransformationMaps.has(trimmed)) {
+      return { ok: false as const, error: `Name already used: ${trimmed}` };
+    }
     const id = actions.createNumber(nextDefinition.definition, trimmed);
     if (!id) return { ok: false as const, error: `Name already used: ${trimmed}` };
     return { ok: true as const, mode: "created" };
@@ -278,6 +352,7 @@ export const commandBarApi = {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return { ok: false as const, error: "Point coordinates must be finite" };
     const state = runtime.getState();
     pruneStaleCommandAliases(state.scene);
+    if (commandBarTransformationMaps.has(trimmed)) return { ok: false as const, error: `Name already used: ${trimmed}` };
     const existingPoints = state.scene.points.filter((p) => p.name === trimmed);
     if (existingPoints.length > 1) return { ok: false as const, error: `Ambiguous point name: ${trimmed}` };
     if (existingPoints.length === 1) {
@@ -303,6 +378,32 @@ export const commandBarApi = {
   getCommandObjectAliases(): Record<string, { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }> {
     pruneStaleCommandAliases(runtime.getState().scene);
     return Object.fromEntries(commandBarObjectAliases.entries());
+  },
+  createPointByInversion(pointId: string, circleId: string): string | null {
+    return applyTransformationMapToPoint(pointId, { steps: [{ kind: "inversion", circleId }] });
+  },
+  createPointByTransformationMap(pointId: string, definition: TransformationMapDefinition): string | null {
+    return applyTransformationMapToPoint(pointId, definition);
+  },
+  createPointByInversionWithLabel(pointId: string, circleId: string, label: string): string | null {
+    return commandBarApi.createPointByTransformationMapWithLabel(
+      pointId,
+      { steps: [{ kind: "inversion", circleId }] },
+      label
+    );
+  },
+  createPointByTransformationMapWithLabel(
+    pointId: string,
+    definition: TransformationMapDefinition,
+    label: string
+  ): string | null {
+    const name = label.trim();
+    if (!canUseCommandObjectLabel(name)) return null;
+    const createdId = applyTransformationMapToPoint(pointId, definition);
+    if (!createdId) return null;
+    applyAssignedPointLabel(createdId, name);
+    commandBarObjectAliases.set(name, { type: "point", id: createdId });
+    return createdId;
   },
   createPerpendicularBisector(aId: string, bId: string): string | null {
     const helperSegmentId = actions.createSegment(aId, bId);
@@ -345,6 +446,9 @@ export const commandBarApi = {
     if (!label) return { ok: false as const, error: "Assignment name is empty" };
     const scene = runtime.getState().scene;
     pruneStaleCommandAliases(scene);
+    if (commandBarTransformationMaps.has(label)) {
+      return { ok: false as const, error: `Name already used: ${label}` };
+    }
     const existing = commandBarObjectAliases.get(label);
     if (!existing) {
       if (cmd.type === "CreatePointXY") {
@@ -356,6 +460,11 @@ export const commandBarApi = {
       }
       if (cmd.type === "CreateLineByPoints") {
         const id = commandBarApi.createLineThroughPointsWithLabel(cmd.aId, cmd.bId, label);
+        if (!id) return { ok: false as const, error: `Name already used: ${label}` };
+        return { ok: true as const, mode: "created", objectType: "line", id };
+      }
+      if (cmd.type === "CreateRayByPoints") {
+        const id = commandBarApi.createRayThroughPointsWithLabel(cmd.originId, cmd.throughId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
         return { ok: true as const, mode: "created", objectType: "line", id };
       }
@@ -481,6 +590,18 @@ export const commandBarApi = {
         applyAssignedPointLabel(id, label);
         return { ok: true as const, mode: "created", objectType: "point", id };
       }
+      if (cmd.type === "CreatePointByInversion") {
+        const id = commandBarApi.createPointByInversionWithLabel(cmd.pointId, cmd.circleId, label);
+        if (!id) return { ok: false as const, error: `Cannot construct inverted point ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
+      if (cmd.type === "ApplyPointTransformationMap") {
+        const id = commandBarApi.createPointByTransformationMapWithLabel(cmd.pointId, cmd.definition, label);
+        if (!id) return { ok: false as const, error: `Cannot apply transformation map for ${label}` };
+        applyAssignedPointLabel(id, label);
+        return { ok: true as const, mode: "created", objectType: "point", id };
+      }
       if (cmd.type === "CreatePointByProjection") {
         const id = commandBarApi.createPointByProjectionWithLabel(cmd.pointId, cmd.axisAId, cmd.axisBId, label);
         if (!id) return { ok: false as const, error: `Name already used: ${label}` };
@@ -532,6 +653,8 @@ export const commandBarApi = {
         let nextLine: typeof oldLine | null = null;
         if (cmd.type === "CreateLineByPoints" && hasPoint(cmd.aId) && hasPoint(cmd.bId)) {
           nextLine = { id: oldLine.id, kind: "twoPoint", aId: cmd.aId, bId: cmd.bId, visible: oldLine.visible, style: { ...oldLine.style } };
+        } else if (cmd.type === "CreateRayByPoints" && hasPoint(cmd.originId) && hasPoint(cmd.throughId) && cmd.originId !== cmd.throughId) {
+          nextLine = { id: oldLine.id, kind: "ray", aId: cmd.originId, bId: cmd.throughId, visible: oldLine.visible, style: { ...oldLine.style } };
         } else if (cmd.type === "CreatePerpendicularLine" && hasPoint(cmd.throughId) && hasBase(cmd.base)) {
           nextLine = {
             id: oldLine.id,
@@ -948,6 +1071,19 @@ export const commandBarApi = {
     if (!lineId) return null;
     commandBarObjectAliases.set(name, { type: "line", id: lineId });
     return lineId;
+  },
+  createRayThroughPointsWithLabel(originId: string, throughId: string, label: string): string | null {
+    const name = label.trim();
+    if (!name) return null;
+    const state = runtime.getState();
+    pruneStaleCommandAliases(state.scene);
+    if (commandBarObjectAliases.has(name)) return null;
+    if (!isNameUnique(name, state.scene.numbers.map((n) => n.name))) return null;
+    if (!isNameUnique(name, state.scene.points.map((p) => p.name))) return null;
+    const rayId = actions.createRay(originId, throughId);
+    if (!rayId) return null;
+    commandBarObjectAliases.set(name, { type: "line", id: rayId });
+    return rayId;
   },
   createPerpendicularLineWithLabel(
     throughId: string,
@@ -1388,6 +1524,10 @@ export function captureGeoDocumentRuntimeState(): GeoDocumentRuntimeState {
     redoStack: runtime.history.redoStack.map(cloneHistorySnapshot),
     lastHistoryActionKey: runtime.history.getLastHistoryActionKey(),
     commandAliases: Array.from(commandBarObjectAliases.entries()).map(([name, target]) => [name, { ...target }]),
+    transformationMaps: Array.from(commandBarTransformationMaps.entries()).map(([name, definition]) => [
+      name,
+      cloneTransformationMap(definition),
+    ]),
   };
 }
 
@@ -1401,6 +1541,10 @@ export function restoreGeoDocumentRuntimeState(documentState: GeoDocumentRuntime
   commandBarObjectAliases.clear();
   for (const [name, target] of documentState.commandAliases) {
     commandBarObjectAliases.set(name, { ...target });
+  }
+  commandBarTransformationMaps.clear();
+  for (const [name, definition] of documentState.transformationMaps ?? []) {
+    commandBarTransformationMaps.set(name, cloneTransformationMap(definition));
   }
 
   runtime.history.setIsRestoringHistory(true);

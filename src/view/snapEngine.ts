@@ -5,7 +5,9 @@ import {
   lineLineIntersection,
   projectPointToCircle,
   projectPointToLine,
+  projectPointToRay,
   projectPointToSegment,
+  pointWithinRayDomain,
 } from "../geo/geometry";
 import { projectPointToEllipse } from "../geo/ellipse";
 import {
@@ -19,7 +21,7 @@ import {
 import type { Camera, Viewport } from "./camera";
 import { camera as camMath } from "./camera";
 
-type LineLike = { ref: GeometryObjectRef; a: Vec2; b: Vec2; finite: boolean };
+type LineLike = { ref: GeometryObjectRef; a: Vec2; b: Vec2; finite: boolean; ray?: boolean };
 type CircleLike = { ref: GeometryObjectRef; center: Vec2; radius: number };
 type SectorLike = { ref: GeometryObjectRef; center: Vec2; radius: number; start: number; sweep: number };
 
@@ -98,10 +100,10 @@ export function findBestSnap(
     if (!a || !b) continue;
     const ap = camMath.worldToScreen(a, camera, vp);
     const bp = camMath.worldToScreen(b, camera, vp);
-    const pr = projectPointToLine(screen, ap, bp);
+    const pr = line.kind === "ray" ? projectPointToRay(screen, ap, bp) : projectPointToLine(screen, ap, bp);
     if (pr.distance <= tolerancePx) {
-      nearLines.push({ ref: { type: "line", id: line.id }, a, b, finite: false });
-      const wpr = projectPointToLine(cursorWorld, a, b);
+      nearLines.push({ ref: { type: "line", id: line.id }, a, b, finite: false, ray: line.kind === "ray" });
+      const wpr = line.kind === "ray" ? projectPointToRay(cursorWorld, a, b) : projectPointToLine(cursorWorld, a, b);
       const sp = camMath.worldToScreen(wpr.point, camera, vp);
       candidates.push({
         kind: "onLine",
@@ -335,6 +337,7 @@ function getPointWorld(scene: SceneModel, pointId: string): Vec2 | null {
 }
 
 function lineLikeContainsPoint(line: LineLike, p: Vec2): boolean {
+  if (line.ray) return pointWithinRayDomain(p, line.a, line.b);
   if (!line.finite) return true;
   return pointWithinSegmentDomain(p, line.a, line.b);
 }

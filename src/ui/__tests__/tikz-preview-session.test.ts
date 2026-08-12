@@ -49,7 +49,11 @@ Object.defineProperty(globalThis, "window", {
   value: { localStorage, sessionStorage },
 });
 
-const { createTikzPreviewSession, loadTikzPreviewSession } = await import("../tikzPreviewSession.ts");
+const {
+  createTikzPreviewSession,
+  loadTikzPreviewSession,
+  loadTikzPreviewSessionWithDesktopFallback,
+} = await import("../tikzPreviewSession.ts");
 
 const scene: SceneModel = {
   points: [],
@@ -81,8 +85,13 @@ const params: TikzExportParams = {
   labelScale: 1,
 };
 const tikz = buildTikzExportText(params);
+const treatment = {
+  mode: "veryCloseup" as const,
+  baseScaleboxScale: 0.9,
+  baseGlobalScale: 1.1,
+};
 
-const token = createTikzPreviewSession(tikz, { "--gd-bg": "#fff" }, params);
+const token = await createTikzPreviewSession(tikz, { "--gd-bg": "#fff" }, params, treatment);
 const firstKey = localStorage.key(0);
 assert(firstKey !== null && firstKey.endsWith(token), "Expected the preview session in localStorage.");
 const compactRaw = localStorage.getItem(firstKey);
@@ -95,9 +104,20 @@ assert(
 const loaded = loadTikzPreviewSession(token);
 assert(loaded?.tikzPicture.includes("\\begin{tikzpicture}"), "The compact session must rebuild its TikZ.");
 assert(loaded?.regen !== undefined, "The compact session must retain live figure sizing.");
-assert(localStorage.length === 0, "A consumed preview must be removed from shared localStorage.");
-assert(sessionStorage.length === 1, "A consumed preview must move into window-local sessionStorage.");
-assert(loadTikzPreviewSession(token)?.regen !== undefined, "The moved preview session must survive reload.");
+assert(loaded?.treatment?.mode === "veryCloseup", "The preview must retain its named treatment.");
+assert(
+  loaded?.treatment?.baseScaleboxScale === 0.9 && loaded.treatment.baseGlobalScale === 1.1,
+  "The preview must retain its uncompensated sizing baseline."
+);
+assert(localStorage.length === 1, "A loaded preview must retain a shared recovery copy.");
+assert(sessionStorage.length === 1, "A loaded preview must copy into window-local sessionStorage.");
+assert(loadTikzPreviewSession(token)?.regen !== undefined, "The window-local preview session must survive reload.");
+
+sessionStorage.clear();
+assert(
+  loadTikzPreviewSession(token)?.regen !== undefined,
+  "The shared recovery copy must survive a recreated WebView with empty sessionStorage."
+);
 
 sessionStorage.clear();
 localStorage.clear();
@@ -114,7 +134,7 @@ localStorage.maxUnits =
   unrelatedKey.length + unrelatedValue.length + oldPreviewKey.length + oldPreviewValue.length +
   Math.max(1, compactRaw.length - 1);
 
-const replacementToken = createTikzPreviewSession(tikz, undefined, params);
+const replacementToken = await createTikzPreviewSession(tikz, undefined, params, treatment);
 assert(
   localStorage.getItem(oldPreviewKey) === null,
   "Quota recovery must evict an older preview session."
@@ -129,5 +149,40 @@ assert(
     .some((key) => key?.endsWith(replacementToken)),
   "Quota recovery must store the replacement preview session."
 );
+
+// Reproduce the native WKWebView race: the launcher successfully stores the
+// session in the Tauri process, while the newly-created preview WebView sees
+// neither the launcher's localStorage nor its sessionStorage yet.
+localStorage.maxUnits = Number.POSITIVE_INFINITY;
+localStorage.clear();
+sessionStorage.clear();
+const desktopSessions = new Map<string, string>();
+Object.assign(window, {
+  __TAURI_INTERNALS__: {
+    invoke: async (command: string, args: Record<string, unknown>) => {
+      if (command === "store_tikz_preview_session") {
+        desktopSessions.set(String(args.token), String(args.session));
+        return null;
+      }
+      if (command === "load_tikz_preview_session") {
+        return desktopSessions.get(String(args.token)) ?? null;
+      }
+      throw new Error(`Unexpected Tauri command: ${command}`);
+    },
+  },
+});
+const desktopToken = await createTikzPreviewSession(tikz, undefined, params, treatment);
+localStorage.clear();
+sessionStorage.clear();
+assert(
+  loadTikzPreviewSession(desktopToken) === null,
+  "The native-race fixture must begin without browser-visible storage."
+);
+const desktopLoaded = await loadTikzPreviewSessionWithDesktopFallback(desktopToken);
+assert(
+  desktopLoaded?.regen !== undefined && desktopLoaded.treatment?.mode === "veryCloseup",
+  "The preview must recover its complete live session from the Tauri process."
+);
+assert(sessionStorage.length === 1, "The recovered desktop session must seed the preview WebView.");
 
 console.log("✓ TikZ preview quota recovery test passed");

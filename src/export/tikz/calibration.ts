@@ -20,6 +20,16 @@ export const TIKZ_EXPORT_CALIBRATION = {
   segmentMarkLineWidthScale: 1 / 2.2,
   // Dot/OpenDot path marks (circle/arc overlays) were exporting too large.
   pathDotMarkSizeScale: 0.5,
+  // Publication close-up tuning for the reconstructible tkz-euclide backend.
+  // These are relative to the canvas-matched metrics used by named treatments,
+  // so they remain proportional when the scene/style values change.
+  constructionCloseup: {
+    pointMetricScale: 0.8,
+    lineMetricScale: 0.5,
+    segmentMarkSizeScale: 0.7725,
+    segmentMarkStrokeScale: 0.82,
+    labelOffsetScale: 0.947,
+  },
   // Angle export calibration.
   angleLabelFontScale: 9 / 16,
   angleArcSizeScale: 1,

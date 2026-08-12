@@ -40,6 +40,7 @@ export type ActiveTool =
   | "textbox"
   | "midpoint"
   | "segment"
+  | "ray"
   | "line2p"
   | "circle_cp"
   | "circle_3p"
@@ -151,7 +152,7 @@ export type PendingSelection =
     second: { type: "point"; id: string };
   }
   | {
-    tool: "segment" | "line2p" | "circle_cp" | "midpoint";
+    tool: "segment" | "ray" | "line2p" | "circle_cp" | "midpoint";
     step: 2;
     first: { type: "point"; id: string };
   }
@@ -413,6 +414,7 @@ export type GeoActions = {
   createMidpointFromPoints: (aId: string, bId: string) => string | null;
   createMidpointFromSegment: (segId: string) => string | null;
   createSegment: (aId: string, bId: string) => string | null;
+  createRay: (originId: string, throughId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
   createPerpendicularLine: (throughId: string, base: LineLikeObjectRef) => string | null;
   createParallelLine: (throughId: string, base: LineLikeObjectRef) => string | null;

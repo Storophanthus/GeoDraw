@@ -67,8 +67,8 @@ const withSetupDefault = exportTikz(scene);
 if (!withSetupDefault.includes("\\tkzInit[")) {
   throw new Error("Expected default export to include \\tkzInit.");
 }
-if (!withSetupDefault.includes("\\tkzClip[space=")) {
-  throw new Error("Expected default export to include \\tkzClip.");
+if (withSetupDefault.includes("\\tkzClip[space=")) {
+  throw new Error("Automatic complete-scene fitting must not emit \\tkzClip.");
 }
 if (!withSetupDefault.includes("\\tkzSetUpLine[")) {
   throw new Error("Expected default export to include \\tkzSetUpLine.");
@@ -91,6 +91,53 @@ if (!withoutSetup.includes("\\tkzDrawSegment")) {
 const withSetupExplicit = exportTikzWithOptions(scene, { emitTkzSetup: true });
 if (!withSetupExplicit.includes("\\tkzInit[")) {
   throw new Error("Expected export with emitTkzSetup=true to include \\tkzInit.");
+}
+if (withSetupExplicit.includes("\\tkzClip[space=")) {
+  throw new Error("Enabling tkz setup alone must not turn automatic fitting into a crop.");
+}
+
+const reconstructibleViewport = exportTikzWithOptions(scene, {
+  emitTkzSetup: true,
+  viewport: { xmin: -5, xmax: 7, ymin: -3, ymax: 4 },
+});
+if (!reconstructibleViewport.includes("\\tkzClip[space=")) {
+  throw new Error("An explicit canvas viewport must retain reconstructible \\tkzClip output.");
+}
+
+const plainAuto = exportTikzWithOptions(scene, {
+  drawLayerBackend: "plain",
+  bakePointCoordinates: true,
+  emitTkzSetup: true,
+});
+if (plainAuto.includes("\\clip ") || plainAuto.includes("use as bounding box")) {
+  throw new Error("Automatic complete-scene fitting must not emit a hard clip or bounding box.");
+}
+
+const sceneWithHiddenRemotePoint: SceneModel = {
+  ...scene,
+  points: [
+    ...scene.points,
+    {
+      id: "hidden-remote",
+      kind: "free",
+      name: "Hidden",
+      captionTex: "Hidden",
+      visible: false,
+      showLabel: "none",
+      position: { x: 10000, y: -10000 },
+      style: pointStyle,
+    },
+  ],
+};
+const plainAutoWithHiddenRemotePoint = exportTikzWithOptions(sceneWithHiddenRemotePoint, {
+  drawLayerBackend: "plain",
+  bakePointCoordinates: true,
+  emitTkzSetup: true,
+});
+const readPictureScale = (source: string): string | undefined =>
+  source.match(/\\begin\{tikzpicture\}\[scale=([^,\]]+)/u)?.[1];
+if (readPictureScale(plainAutoWithHiddenRemotePoint) !== readPictureScale(plainAuto)) {
+  throw new Error("Hidden orphan construction points must not change automatic figure fitting.");
 }
 
 const plainViewport = exportTikzWithOptions(scene, {

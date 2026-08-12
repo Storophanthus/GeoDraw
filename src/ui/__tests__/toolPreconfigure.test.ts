@@ -18,6 +18,7 @@ const expected: Array<[ActiveTool, ReturnType<typeof getToolDefaultKind>]> = [
   ["point", "point"],
   ["midpoint", "point"],
   ["segment", "segment"],
+  ["ray", "line"],
   ["line2p", "line"],
   ["perp_line", "line"],
   ["parallel_line", "line"],

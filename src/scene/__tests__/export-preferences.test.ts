@@ -44,6 +44,7 @@ const custom = {
   emitTkzSetup: "on" as const,
   labelGlow: false,
   tikzExportMode: "reconstructible" as const,
+  figureTreatment: "veryCloseup" as const,
   scaleboxScale: "0.75",
   trueGlobalScale: "1.25",
   globalScale: "1.5",
@@ -85,6 +86,7 @@ memoryStorage.setItem(
       emitTkzSetup: "bogus",
       labelGlow: true,
       tikzExportMode: "reconstructible",
+      figureTreatment: "not-a-treatment",
       scaleboxScale: "1.8",
       trueGlobalScale: "2",
       globalScale: "999",
@@ -103,6 +105,7 @@ assert(partial.compactCode === false, "valid compactCode should be preserved");
 assert(partial.emitTkzSetup === "auto", "invalid emitTkzSetup should fall back to auto");
 assert(partial.labelGlow === true, "valid labelGlow should be preserved");
 assert(partial.tikzExportMode === "reconstructible", "valid tikzExportMode should be preserved");
+assert(partial.figureTreatment === "canvas", "invalid figure treatment should fall back to Canvas");
 assert(partial.scaleboxScale === "1.8", "valid scaleboxScale should be preserved");
 assert(partial.trueGlobalScale === "2", "valid trueGlobalScale should be preserved");
 assert(partial.globalScale === DEFAULT_EXPORT_PREFERENCES.globalScale, "out-of-range globalScale should fall back to default");
@@ -112,6 +115,15 @@ assert(partial.labelScale === "1", "valid labelScale should be preserved");
 assert(partial.labelHaloScale === "0.75", "valid labelHaloScale should be preserved");
 assert(partial.roundNumbersToTwoDecimals === true, "valid numeric precision preference should be preserved");
 assert(partial.preferDvipsNames === true, "valid dvipsnames preference should be preserved");
+
+// Legacy envelopes predate named treatments. Their numeric baselines must be
+// preserved while the missing mode adopts the existing Canvas behavior.
+const { figureTreatment: _omittedTreatment, ...legacyCustom } = custom;
+memoryStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, value: legacyCustom }));
+const legacy = loadStoredExportPreferences();
+assert(legacy.figureTreatment === "canvas", "legacy preferences should migrate to Canvas treatment");
+assert(legacy.scaleboxScale === custom.scaleboxScale, "legacy outer scale should remain intact");
+assert(legacy.globalScale === custom.globalScale, "legacy TikZ scale should remain intact");
 
 // Missing key entirely
 memoryStorage.removeItem(STORAGE_KEY);

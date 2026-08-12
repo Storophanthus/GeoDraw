@@ -7,7 +7,7 @@ import type { ScalarDistanceArg } from "./scalarDistance";
 
 type SceneNumberLike = { id: string; name: string };
 type ScenePointLike = { id: string; name: string };
-type SceneLineLikeMeta = { id: string; labelText?: string };
+type SceneLineLikeMeta = { id: string; kind?: "twoPoint" | "ray"; labelText?: string };
 type SceneSegmentLikeMeta = { id: string; aId: string; bId: string; labelText?: string };
 type SceneCircleLikeMeta = { id: string; labelText?: string };
 type ScenePolygonLikeMeta = { id: string; pointIds: string[]; labelText?: string };
@@ -82,7 +82,7 @@ function resolveSceneDistanceArg(
   if (line) {
     const anchors = deps.resolveLineAnchors(line.id);
     if (!anchors) return { ok: false, error: `Unknown line geometry: ${token}` };
-    return { ok: true, value: { kind: "lineLike", a: anchors.a, b: anchors.b, finite: false } };
+    return { ok: true, value: { kind: "lineLike", a: anchors.a, b: anchors.b, finite: false, ray: line.kind === "ray" } };
   }
 
   const seg =

@@ -42,7 +42,7 @@ export function asLineLikeWithCtx(
   _scene: SceneModel,
   _ctx: SceneEvalContext,
   resolveOps: ReturnType<typeof buildGeometryResolveOpsWithCtx>
-): { a: Vec2; b: Vec2; finite: boolean } | null {
+): { a: Vec2; b: Vec2; finite: boolean; ray?: boolean } | null {
   return asLineLikeInScene(ref, resolveOps);
 }
 

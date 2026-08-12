@@ -30,6 +30,7 @@ export type FunctionSpec = {
 export const ASSIGNMENT_INTRO: readonly string[] = [
   "Name a result to reuse it later — e.g. M = Midpoint(A,B) creates point M.",
   "Assign a number to store it — e.g. r = Distance(A,B) saves the distance as r.",
+  "Define a reusable map — e.g. f = Homothety(O,2), then create its image with Q = f(P).",
 ];
 
 export const COMMAND_SPECS: readonly CommandSpec[] = [
@@ -122,6 +123,13 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     signature: "Segment(A,B)",
     description: "The line segment connecting A and B.",
     example: "Segment(A,B)",
+    category: "Lines",
+  },
+  {
+    name: "Ray",
+    signature: "Ray(A,B)",
+    description: "The ray starting at A and passing through B.",
+    example: "Ray(A,B)",
     category: "Lines",
   },
   {
@@ -218,7 +226,24 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     description: "Scales P from center O by factor k (a homothety).",
     example: "Dilate(P,O,2)",
     category: "Transformations",
-    variants: ["Homothety(P,O,2)"],
+  },
+  {
+    name: "Homothety",
+    signature: "Homothety(P,O,k)",
+    description: "Maps P from center O by factor k.",
+    example: "Homothety(P,O,2)",
+    category: "Transformations",
+    variants: ["f = Homothety(O,k)"],
+    note: "The two-argument form defines a reusable named map; the three-argument form constructs a point image.",
+  },
+  {
+    name: "Inversion",
+    signature: "Inversion(P,c)",
+    description: "Inverts P in the named circle c.",
+    example: "Inversion(P,c)",
+    category: "Transformations",
+    variants: ["Invert(P,c)", "g = Inversion(c)"],
+    note: "The one-argument form defines a reusable named map. Circle inversion is its own inverse away from the center.",
   },
   {
     name: "Reflect",
@@ -236,6 +261,31 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     example: "Orthoproject(X,A,B)",
     category: "Transformations",
     variants: ["OrthoProject(X,A,B)", "OrthogonalProjection(X,A,B)"],
+  },
+  {
+    name: "Compose",
+    signature: "h = Compose(f,g)",
+    description: "Defines h as the composition f ∘ g.",
+    example: "h = Compose(f,g)",
+    category: "Transformations",
+    note: "Composition follows mathematical order: g is applied first, then f.",
+  },
+  {
+    name: "Inverse",
+    signature: "fi = Inverse(f)",
+    description: "Defines the inverse of a named transformation map.",
+    example: "fi = Inverse(f)",
+    category: "Transformations",
+    note: "A zero-factor homothety has no inverse.",
+  },
+  {
+    name: "Apply",
+    signature: "Apply(f,P)",
+    description: "Applies a named transformation map to point P.",
+    example: "Apply(f,P)",
+    category: "Transformations",
+    variants: ["f(P)"],
+    note: "Assign the result to name it, e.g. Q = f(P).",
   },
   {
     name: "Distance",

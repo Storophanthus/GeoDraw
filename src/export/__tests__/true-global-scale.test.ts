@@ -254,6 +254,18 @@ const formattingScene: SceneModel = {
     ...segment,
     style: { ...segment.style, strokeColor: "#123456" },
   })),
+  textLabels: [{
+    id: "formatting-label",
+    name: "Formatting label",
+    text: "T",
+    visible: true,
+    positionWorld: { x: 1.94885711464119, y: 0.333868141730265 },
+    style: {
+      textColor: "#111827",
+      textSize: 12,
+      useTex: true,
+    },
+  }],
 };
 const formattingParams: TikzExportParams = {
   ...baseParams,
@@ -288,6 +300,15 @@ assert(
 assert(
   roundedConstructionFormatting.includes("0.123456789/0.987654321/A"),
   `Two-decimal formatting must not round defining coordinates in Geometric Construction mode.\n\n${roundedConstructionFormatting}`
+);
+assert(
+  fullPrecisionFormatting.includes("at (1.94885711464119,0.333868141730265)"),
+  "Default export formatting must retain full label-position precision."
+);
+assert(
+  roundedFormatting.includes("at (1.95,0.33)") &&
+    roundedConstructionFormatting.includes("at (1.95,0.33)"),
+  "Two-decimal formatting must shorten cosmetic label coordinates in both export modes."
 );
 
 const exactColorFormatting = buildTikzExportText(formattingParams);

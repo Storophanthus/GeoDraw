@@ -48,6 +48,12 @@ export function planAliasRedefine(
       if (!hasPoint(scene, cmd.aId) || !hasPoint(scene, cmd.bId)) return { ok: false, error: `Cannot redefine line ${label} with this command` };
       return { ok: true, objectType: "line" };
     }
+    if (cmd.type === "CreateRayByPoints") {
+      if (!hasPoint(scene, cmd.originId) || !hasPoint(scene, cmd.throughId) || cmd.originId === cmd.throughId) {
+        return { ok: false, error: `Cannot redefine line ${label} with this command` };
+      }
+      return { ok: true, objectType: "line" };
+    }
     if (cmd.type === "CreatePerpendicularLine" || cmd.type === "CreateParallelLine") {
       if (!hasPoint(scene, cmd.throughId) || !hasLineLike(scene, cmd.base)) return { ok: false, error: `Cannot redefine line ${label} with this command` };
       return { ok: true, objectType: "line" };

@@ -23,7 +23,7 @@ export type SceneCreationStateLike = {
   pointDefaults: ScenePoint["style"];
 };
 
-type LineLikeGeom = { a: Vec2; b: Vec2; finite: boolean };
+type LineLikeGeom = { a: Vec2; b: Vec2; finite: boolean; ray?: boolean };
 type CircleGeom = { center: Vec2; radius: number };
 type SectorArcGeom = { center: Vec2; radius: number; start: number; sweep: number };
 
@@ -71,7 +71,8 @@ export function createStableLineCircleIntersectionPoint(
   if (!a || !b || !geom) return null;
   const center = geom.center;
   const radius = geom.radius;
-  const branches = lineCircleIntersectionBranches(a, b, center, radius);
+  const branches = lineCircleIntersectionBranches(a, b, center, radius)
+    .filter((branch) => line.kind !== "ray" || branch.t >= -1e-6);
   if (branches.length === 0) return null;
 
   let branchIndex: 0 | 1 = 0;
@@ -260,7 +261,8 @@ function resolveLineCircleTarget(
   if (!a || !b || !geom) return null;
   const center = geom.center;
   const radius = geom.radius;
-  const branches = lineCircleIntersectionBranches(a, b, center, radius);
+  const branches = lineCircleIntersectionBranches(a, b, center, radius)
+    .filter((branch) => line.kind !== "ray" || branch.t >= -1e-6);
   if (branches.length === 0) return null;
 
   if (branches.length === 1) return { world: branches[0].point };
@@ -378,7 +380,7 @@ function asLineLike(scene: SceneModel, ref: GeometryObjectRef): LineLikeGeom | n
     if (!line) return null;
     const anchors = getLineWorldAnchors(line, scene);
     if (!anchors) return null;
-    return { a: anchors.a, b: anchors.b, finite: false };
+    return { a: anchors.a, b: anchors.b, finite: false, ray: line.kind === "ray" };
   }
   if (ref.type === "segment") {
     const seg = scene.segments.find((item) => item.id === ref.id);
@@ -426,6 +428,13 @@ function asSectorArc(scene: SceneModel, ref: GeometryObjectRef): SectorArcGeom |
 }
 
 function lineLikeContainsPoint(lineLike: LineLikeGeom, p: Vec2): boolean {
+  if (lineLike.ray) {
+    const dx = lineLike.b.x - lineLike.a.x;
+    const dy = lineLike.b.y - lineLike.a.y;
+    const dd = dx * dx + dy * dy;
+    if (dd <= 1e-12) return distance(p, lineLike.a) <= 1e-6;
+    return ((p.x - lineLike.a.x) * dx + (p.y - lineLike.a.y) * dy) / dd >= -1e-6;
+  }
   if (!lineLike.finite) return true;
   return pointWithinSegmentDomain(p, lineLike.a, lineLike.b);
 }

@@ -585,7 +585,7 @@ export type SceneSegment = {
 
 export type SceneLineTwoPoint = {
   id: string;
-  kind?: "twoPoint";
+  kind?: "twoPoint" | "ray";
   aId: string;
   bId: string;
   visible: boolean;

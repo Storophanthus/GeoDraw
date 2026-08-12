@@ -1,14 +1,92 @@
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+const MAX_TIKZ_PREVIEW_SESSIONS: usize = 16;
+const MAX_TIKZ_PREVIEW_SESSION_AGE_MS: u64 = 24 * 60 * 60 * 1000;
+
+#[derive(Default)]
+struct TikzPreviewSessionStore {
+    sessions: Mutex<HashMap<String, StoredTikzPreviewSession>>,
+}
+
+struct StoredTikzPreviewSession {
+    serialized: String,
+    created_at_ms: u64,
+}
+
+#[tauri::command]
+fn store_tikz_preview_session(
+    token: String,
+    session: String,
+    store: tauri::State<'_, TikzPreviewSessionStore>,
+) -> Result<(), String> {
+    if token.trim().is_empty() || session.trim().is_empty() {
+        return Err("Cannot store an empty TikZ preview session.".to_string());
+    }
+    let now = unix_time_ms();
+    let mut sessions = store
+        .sessions
+        .lock()
+        .map_err(|_| "TikZ preview session store is unavailable.".to_string())?;
+    prune_tikz_preview_sessions(&mut sessions, now);
+    if !sessions.contains_key(&token) && sessions.len() >= MAX_TIKZ_PREVIEW_SESSIONS {
+        if let Some(oldest) = sessions
+            .iter()
+            .min_by_key(|(_, value)| value.created_at_ms)
+            .map(|(key, _)| key.clone())
+        {
+            sessions.remove(&oldest);
+        }
+    }
+    sessions.insert(
+        token,
+        StoredTikzPreviewSession {
+            serialized: session,
+            created_at_ms: now,
+        },
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn load_tikz_preview_session(
+    token: String,
+    store: tauri::State<'_, TikzPreviewSessionStore>,
+) -> Result<Option<String>, String> {
+    let now = unix_time_ms();
+    let mut sessions = store
+        .sessions
+        .lock()
+        .map_err(|_| "TikZ preview session store is unavailable.".to_string())?;
+    prune_tikz_preview_sessions(&mut sessions, now);
+    Ok(sessions.get(&token).map(|value| value.serialized.clone()))
+}
+
+fn prune_tikz_preview_sessions(
+    sessions: &mut HashMap<String, StoredTikzPreviewSession>,
+    now: u64,
+) {
+    sessions.retain(|_, value| {
+        now.saturating_sub(value.created_at_ms) <= MAX_TIKZ_PREVIEW_SESSION_AGE_MS
+    });
+}
+
+fn unix_time_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 #[derive(Serialize)]
@@ -327,10 +405,16 @@ fn forward_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, event: tauri
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .manage(TikzPreviewSessionStore::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, compile_tikz_preview]);
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            compile_tikz_preview,
+            store_tikz_preview_session,
+            load_tikz_preview_session
+        ]);
 
     #[cfg(desktop)]
     let builder = builder

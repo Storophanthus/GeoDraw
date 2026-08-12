@@ -3,6 +3,8 @@ import {
   COLOR_PROFILE_OPTIONS,
   applyProfileColorsToDefaults,
   buildDefaultStylesForProfile,
+  normalizeLabelColorForProfile,
+  normalizeSceneLabelColors,
   recolorSceneForProfile,
 } from "../../state/colorProfiles";
 import {
@@ -66,6 +68,14 @@ assert(thinDefaults.lineDefaults.strokeWidth < imageDefaults.lineDefaults.stroke
 assert(thinDefaults.circleDefaults.strokeWidth < imageDefaults.circleDefaults.strokeWidth, "thin vanilla profile should reduce circle stroke");
 assert(thinDefaults.angleDefaults.strokeWidth < imageDefaults.angleDefaults.strokeWidth, "thin vanilla profile should reduce angle stroke");
 assert(thinDefaults.angleDefaults.markSize < imageDefaults.angleDefaults.markSize, "thin vanilla profile should reduce angle mark size");
+assert(
+  normalizeLabelColorForProfile("#ffffff", "image_palette_vanilla_thin") === thinDefaults.pointDefaults.labelColor,
+  "Vanilla Standard should replace white labels with its readable profile color"
+);
+assert(
+  normalizeLabelColorForProfile("#ffffff", "dark_mode") === "#ffffff",
+  "dark profiles should keep white labels"
+);
 
 const classicDefaults = buildDefaultStylesForProfile("classic");
 const scene: SceneModel = {
@@ -145,6 +155,14 @@ const scene: SceneModel = {
   ],
   numbers: [],
 };
+
+const whiteLabelScene = structuredClone(scene);
+whiteLabelScene.points[0].style.labelColor = "#ffffff";
+const normalizedVanillaScene = normalizeSceneLabelColors(whiteLabelScene, "image_palette_vanilla_thin");
+assert(
+  normalizedVanillaScene.points[0].style.labelColor === thinDefaults.pointDefaults.labelColor,
+  "restoring a Vanilla Standard scene should keep point labels visible on the light canvas"
+);
 
 const recolored = recolorSceneForProfile(scene, "classic", "grayscale_white_dot");
 

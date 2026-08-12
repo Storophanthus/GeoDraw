@@ -1,4 +1,4 @@
-import { sub } from "../../geo/geometry";
+import { clipRayToRect, sub } from "../../geo/geometry";
 import { getLineWorldAnchors, type SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import { applyStrokeDash } from "../strokeStyle";
@@ -46,9 +46,11 @@ export function drawLineObject(
 
   const sa = camMath.worldToScreen(a, camera, vp);
   const sb = camMath.worldToScreen(b, camera, vp);
-  const clipped = clipInfiniteLineToViewport(sa, sb, vp.widthPx, vp.heightPx);
+  const clipped = line.kind === "ray"
+    ? clipRayToRect(sa, sb, { xmin: 0, xmax: vp.widthPx, ymin: 0, ymax: vp.heightPx })
+    : clipInfiniteLineToViewport(sa, sb, vp.widthPx, vp.heightPx);
   if (!clipped) return;
-  const [p1, p2] = clipped;
+  const [p1, p2] = Array.isArray(clipped) ? clipped : [clipped.a, clipped.b];
 
   applyStrokeDash(ctx, line.style.dash, line.style.strokeWidth);
   ctx.strokeStyle = line.style.strokeColor;

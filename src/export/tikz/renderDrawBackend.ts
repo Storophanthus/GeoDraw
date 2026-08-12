@@ -130,7 +130,10 @@ function createTkzDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayerBa
     },
     emitLabelAt: (cmd) => {
       const opts = cmd.options ? `[${cmd.options}]` : "";
-      return [`\\node${opts} at (${caps.fmtGeometry(cmd.x)},${caps.fmtGeometry(cmd.y)}){${renderLabelText(ctx, cmd.text, cmd.useGlow, cmd.textMode)}};`];
+      // Absolute label positions are presentation choices, not inputs to any
+      // construction. Respect compact-number mode here while keeping defining
+      // point, radius, and intersection geometry on fmtGeometry.
+      return [`\\node${opts} at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${renderLabelText(ctx, cmd.text, cmd.useGlow, cmd.textMode)}};`];
     },
   };
 }
@@ -170,7 +173,7 @@ function createPlainDrawLayerBackendEmitter(ctx: TikzRendererContext): DrawLayer
     },
     emitLabelAt: (cmd) => {
       const opts = cmd.options ? `[${cmd.options}]` : "";
-      return [`\\node${opts} at (${caps.fmtGeometry(cmd.x)},${caps.fmtGeometry(cmd.y)}){${renderPlainLabelText(ctx, cmd)}};`];
+      return [`\\node${opts} at (${caps.fmt(cmd.x)},${caps.fmt(cmd.y)}){${renderPlainLabelText(ctx, cmd)}};`];
     },
   };
 }

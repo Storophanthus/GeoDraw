@@ -52,6 +52,8 @@ Notes:
 - `Translate(P,A,B)`
 - `Rotate(P,O,expr[,CW|CCW])`
 - `Dilate(P,O,k)`
+- `Homothety(P,O,k)` (same point construction as `Dilate`)
+- `Inversion(P,c)` or `Invert(P,c)` inverts point `P` in named circle `c`
 - `Reflect(P,l|s|O)` where `l/s` are named line/segment aliases, `O` is a point
 - `Reflect(P,A,B)`, `Reflect(P,Line(A,B))`, or `Reflect(P,Segment(A,B))` reflects across the line through `A` and `B`
 - `Orthoproject(X,A,B)` projects point `X` onto the line through `A` and `B`
@@ -78,6 +80,25 @@ Notes:
 - `Distance(...)` (returns number, creates nothing)
   - common forms: `Distance(A,B)`, `Distance(A,l)`, `Distance(l,A)`, `Distance(A,s)`, `Distance(s,A)`
 
+## Named transformation maps
+
+Transformation nouns define reusable point maps:
+
+- `f = Translation(A,B)`
+- `f = Rotation(O,expr[,CW|CCW])`
+- `f = Homothety(O,k)` (also `Dilation(O,k)`)
+- `f = Reflection(l|s|O)`, `Reflection(A,B)`, or `Reflection(Line(A,B))`
+- `f = Inversion(c)`
+
+Apply a map with either `Q = f(P)` or `Q = Apply(f,P)`.
+
+- `h = Compose(f,g)` defines `h = f ∘ g`: `g` is applied first, then `f`.
+- `fi = Inverse(f)` defines the inverse map.
+- `Compose(f,g,k)` supports more than two maps, using the same mathematical order.
+- Reflection and circle inversion are self-inverse. Translation reverses its vector, rotation reverses direction, and homothety replaces `k` by `1/k`.
+- A homothety with factor `0` can be defined but cannot be inverted.
+- Composed intermediate image points are kept as hidden live dependencies, so the final point continues to follow changes to source points, centers, circles, and scalar expressions.
+
 ## Assignments
 - Scalar:
   - `n_1 = 2.5`
@@ -93,6 +114,8 @@ Notes:
   - `T = Translate(A,B,C)`
   - `R = Rotate(A,O,30,CW)`
   - `D = Dilate(A,O,2)`
+  - `D2 = Homothety(A,O,2)`
+  - `J = Inversion(A,c)`
   - `Q = Reflect(A,l)`
   - `Q2 = Reflect(A,Segment(B,C))`
   - `H = Orthoproject(X,A,B)`

@@ -69,6 +69,13 @@ export const DEFAULT_UI_COLOR_PROFILE_ID: UiColorProfileId = "beige";
 const DEFAULT_PATH_ARROW_UI = 1.0;
 const DEFAULT_PATH_ARROW_LINE_WIDTH_PT = DEFAULT_PATH_ARROW_UI * 8;
 const VANILLA_THIN_PROFILE_ID = "image_palette_vanilla_thin";
+const LIGHT_CANVAS_LABEL_COLORS = new Set([
+  "#fff",
+  "#ffffff",
+  "#fefefe",
+  "rgb(255,255,255)",
+  "white",
+]);
 const THIN_PROFILE_STROKE_WIDTHS = {
   pointStrokeWidth: 1.4,
   segmentStrokeWidth: 1.5,
@@ -652,6 +659,18 @@ export function getColorProfile(profileId: ColorProfileId): ColorProfile {
   return found ?? COLOR_PROFILES[0];
 }
 
+/**
+ * Vanilla Standard uses an almost-white canvas, so a white label is never a
+ * useful retained customization. Older documents and saved defaults can still
+ * contain one; migrate it back to the profile's readable label color.
+ */
+export function normalizeLabelColorForProfile(color: string, profileId: ColorProfileId): string {
+  if (profileId !== VANILLA_THIN_PROFILE_ID) return color;
+  const normalized = color.trim().toLowerCase().replace(/\s+/g, "");
+  if (!LIGHT_CANVAS_LABEL_COLORS.has(normalized)) return color;
+  return getColorProfile(profileId).palette.pointLabel;
+}
+
 export function getCanvasColorTheme(profileId: ColorProfileId, overrides?: Partial<CanvasColorTheme>): CanvasColorTheme {
   const palette = getColorProfile(profileId).palette;
   const base: CanvasColorTheme = {
@@ -958,12 +977,12 @@ export function applyProfileColorsToDefaults(defaults: SceneStyleDefaults, profi
 }
 
 export function recolorSceneForProfile(scene: SceneModel, fromProfileId: ColorProfileId, toProfileId: ColorProfileId): SceneModel {
-  if (fromProfileId === toProfileId) return scene;
+  if (fromProfileId === toProfileId) return normalizeSceneLabelColors(scene, toProfileId);
   const fromPalette = getColorProfile(fromProfileId).palette;
   const toPalette = getColorProfile(toProfileId).palette;
   const colorMap = buildColorRemap(fromPalette, toPalette);
 
-  return {
+  const recolored: SceneModel = {
     ...scene,
     points: scene.points.map((point) => ({
       ...point,
@@ -1061,6 +1080,44 @@ export function recolorSceneForProfile(scene: SceneModel, fromProfileId: ColorPr
     })),
     numbers: [...scene.numbers],
     vectors: scene.vectors ? [...scene.vectors] : undefined,
+  };
+  return normalizeSceneLabelColors(recolored, toProfileId);
+}
+
+export function normalizeSceneLabelColors(scene: SceneModel, profileId: ColorProfileId): SceneModel {
+  if (profileId !== VANILLA_THIN_PROFILE_ID) return scene;
+  return {
+    ...scene,
+    points: scene.points.map((point) => ({
+      ...point,
+      style: {
+        ...point.style,
+        labelColor: normalizeLabelColorForProfile(point.style.labelColor, profileId),
+        labelOffsetPx: { ...point.style.labelOffsetPx },
+      },
+    })),
+    angles: scene.angles.map((angle) => ({
+      ...angle,
+      style: {
+        ...angle.style,
+        textColor: normalizeLabelColorForProfile(angle.style.textColor, profileId),
+        labelPosWorld: { ...angle.style.labelPosWorld },
+      },
+    })),
+    textLabels: (scene.textLabels ?? []).map((label) => ({
+      ...label,
+      style: {
+        ...label.style,
+        textColor: normalizeLabelColorForProfile(label.style.textColor, profileId),
+      },
+    })),
+    richTextNodes: (scene.richTextNodes ?? []).map((node) => ({
+      ...node,
+      style: {
+        ...node.style,
+        textColor: normalizeLabelColorForProfile(node.style.textColor, profileId),
+      },
+    })),
   };
 }
 

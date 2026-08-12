@@ -1,4 +1,4 @@
-import { add, mul, sub } from "../../geo/geometry";
+import { add, clipRayToRect, mul, sub } from "../../geo/geometry";
 import type { Vec2 } from "../../geo/vec2";
 import { hitTestLineId, hitTestSegmentId } from "../../engine";
 import {
@@ -348,6 +348,19 @@ export function drawPendingPreview(
     ctx.moveTo(q1.x, q1.y);
     ctx.lineTo(q2.x, q2.y);
     ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  if (p1 && pendingSelection.tool === "ray" && cursorWorld && firstWorld) {
+    const through = camMath.worldToScreen(cursorWorld, camera, vp);
+    const clipped = clipRayToRect(p1, through, { xmin: 0, xmax: vp.widthPx, ymin: 0, ymax: vp.heightPx });
+    if (clipped) {
+      ctx.beginPath();
+      ctx.moveTo(clipped.a.x, clipped.a.y);
+      ctx.lineTo(clipped.b.x, clipped.b.y);
+      ctx.stroke();
+    }
     ctx.restore();
     return;
   }

@@ -29,6 +29,15 @@ function mustAssignObject(input: string, ctx: ParseContext, name: string, type: 
   return out.cmd;
 }
 
+function mustAssignMap(input: string, ctx: ParseContext, name: string) {
+  const out = parseCommandInput(input, ctx);
+  if (out.kind !== "assignTransformationMap") {
+    throw new Error(`Expected assignTransformationMap for '${input}', got ${JSON.stringify(out)}`);
+  }
+  if (out.name !== name) throw new Error(`Expected map name '${name}', got '${out.name}'`);
+  return out.definition;
+}
+
 function mustError(input: string, ctx: ParseContext, contains?: string) {
   const out = parseCommandInput(input, ctx);
   if (out.kind !== "error") throw new Error(`Expected error for '${input}', got ${JSON.stringify(out)}`);
@@ -42,16 +51,19 @@ const baseCtx: ParseContext = {
   symbolsByLabel: new Map([
     ["A", [{ kind: "point", id: "pA", label: "A" }]],
     ["B", [{ kind: "point", id: "pB", label: "B" }]],
+    ["R", [{ kind: "point", id: "pR", label: "R" }]],
     ["O", [{ kind: "point", id: "pO", label: "O" }]],
   ]),
   pointWorldById: new Map([
     ["pA", { x: 0, y: 0 }],
     ["pB", { x: 3, y: 4 }],
+    ["pR", { x: -1, y: 0 }],
     ["pC", { x: 3, y: 0 }],
     ["pO", { x: 1, y: 1 }],
   ]),
   lineWorldAnchorsById: new Map([
     ["lAB", { a: { x: 0, y: 0 }, b: { x: 3, y: 4 } }],
+    ["rayAB", { a: { x: 0, y: 0 }, b: { x: 1, y: 0 }, ray: true }],
   ]),
   segmentWorldAnchorsById: new Map([
     ["sAB", { a: { x: 0, y: 0 }, b: { x: 3, y: 4 } }],
@@ -66,6 +78,7 @@ const baseCtx: ParseContext = {
   objectAliases: new Map([
     ["sAB", { type: "segment", id: "sAB" }],
     ["lAB", { type: "line", id: "lAB" }],
+    ["rayAB", { type: "line", id: "rayAB" }],
     ["c1", { type: "circle", id: "c1" }],
     ["pg1", { type: "polygon", id: "pg1" }],
   ]),
@@ -102,6 +115,12 @@ const lineAB = mustCmd("Line(A,B)", baseCtx, "CreateLineByPoints");
 if (lineAB.type !== "CreateLineByPoints" || lineAB.aId !== "pA" || lineAB.bId !== "pB") {
   throw new Error("Line(A,B) IDs mismatch");
 }
+
+const rayAB = mustCmd("Ray(A,B)", baseCtx, "CreateRayByPoints");
+if (rayAB.type !== "CreateRayByPoints" || rayAB.originId !== "pA" || rayAB.throughId !== "pB") {
+  throw new Error("Ray(A,B) IDs mismatch");
+}
+mustError("Ray(A,A)", baseCtx, "must be distinct");
 
 const segAB = mustCmd("Segment(A,B)", baseCtx, "CreateSegmentByPoints");
 if (segAB.type !== "CreateSegmentByPoints" || segAB.aId !== "pA" || segAB.bId !== "pB") {
@@ -159,6 +178,57 @@ const dilated = mustCmd("Dilate(B,O,2)", baseCtx, "CreatePointByDilation");
 if (dilated.type !== "CreatePointByDilation" || dilated.pointId !== "pB" || dilated.centerId !== "pO" || dilated.factorExpr !== "2") {
   throw new Error("Dilate(B,O,2) mismatch");
 }
+
+const homothetic = mustCmd("Homothety(B,O,2)", baseCtx, "CreatePointByDilation");
+if (homothetic.type !== "CreatePointByDilation" || homothetic.pointId !== "pB" || homothetic.centerId !== "pO") {
+  throw new Error("Homothety(B,O,2) mismatch");
+}
+
+const inverted = mustCmd("Inversion(B,c1)", baseCtx, "CreatePointByInversion");
+if (inverted.type !== "CreatePointByInversion" || inverted.pointId !== "pB" || inverted.circleId !== "c1") {
+  throw new Error("Inversion(B,c1) mismatch");
+}
+
+const mapCtx: ParseContext = { ...baseCtx, transformationMaps: new Map() };
+const fMap = mustAssignMap("f = Homothety(O,2)", mapCtx, "f");
+mapCtx.transformationMaps!.set("f", fMap);
+const gMap = mustAssignMap("g = Inversion(c1)", mapCtx, "g");
+mapCtx.transformationMaps!.set("g", gMap);
+const translationMap = mustAssignMap("trMap = Translation(A,B)", mapCtx, "trMap");
+if (translationMap.steps[0]?.kind !== "translation") throw new Error("Translation(A,B) map mismatch");
+const rotationMap = mustAssignMap("rotMap = Rotation(O,30,CW)", mapCtx, "rotMap");
+if (rotationMap.steps[0]?.kind !== "rotation" || rotationMap.steps[0].direction !== "CW") {
+  throw new Error("Rotation(O,30,CW) map mismatch");
+}
+const dilationMap = mustAssignMap("dilMap = Dilation(O,3)", mapCtx, "dilMap");
+if (dilationMap.steps[0]?.kind !== "homothety") throw new Error("Dilation(O,3) map mismatch");
+const reflectionMap = mustAssignMap("refMap = Reflection(lAB)", mapCtx, "refMap");
+if (reflectionMap.steps[0]?.kind !== "reflection" || reflectionMap.steps[0].axis.type !== "line") {
+  throw new Error("Reflection(lAB) map mismatch");
+}
+const hMap = mustAssignMap("h = Compose(f,g)", mapCtx, "h");
+if (hMap.steps.length !== 2 || hMap.steps[0].kind !== "inversion" || hMap.steps[1].kind !== "homothety") {
+  throw new Error("Compose(f,g) must apply g first and f second");
+}
+mapCtx.transformationMaps!.set("h", hMap);
+const hInverse = mustAssignMap("hInv = Inverse(h)", mapCtx, "hInv");
+if (hInverse.steps.length !== 2 || hInverse.steps[0].kind !== "homothety" || hInverse.steps[1].kind !== "inversion") {
+  throw new Error("Inverse(h) must reverse the composed step order");
+}
+if (hInverse.steps[0].kind !== "homothety" || hInverse.steps[0].factorExpr !== "1/(2)") {
+  throw new Error("Inverse(h) must reciprocate the homothety factor");
+}
+const mapApplied = mustAssignObject("Q = f(B)", mapCtx, "Q", "ApplyPointTransformationMap");
+if (mapApplied.type !== "ApplyPointTransformationMap" || mapApplied.pointId !== "pB") {
+  throw new Error("f(B) map application mismatch");
+}
+mustAssignObject("Q2 = Apply(Inverse(f),B)", mapCtx, "Q2", "ApplyPointTransformationMap");
+
+const zeroMapCtx: ParseContext = {
+  ...baseCtx,
+  transformationMaps: new Map([["z", { steps: [{ kind: "homothety", centerId: "pO", factorExpr: "0" }] }]]),
+};
+mustError("zInv = Inverse(z)", zeroMapCtx, "zero factor");
 
 const reflected = mustCmd("Reflect(B,lAB)", baseCtx, "CreatePointByReflection");
 if (reflected.type !== "CreatePointByReflection" || reflected.pointId !== "pB" || reflected.axis.type !== "line" || reflected.axis.id !== "lAB") {
@@ -295,6 +365,7 @@ if (sector.type !== "CreateSector" || sector.centerId !== "pO" || sector.startId
 mustExpr("Distance(A,B)", baseCtx, "5");
 mustExpr("Distance(O,lAB)", baseCtx, "0.2");
 mustExpr("Distance(lAB,O)", baseCtx, "0.2");
+mustExpr("Distance(R,rayAB)", baseCtx, "1");
 mustExpr("Distance(O,sAB)", baseCtx, "0.2");
 mustExpr("Distance(sAB,O)", baseCtx, "0.2");
 mustAssignScalar("ac = Area(c1)", baseCtx, "ac", Math.PI * 25);
@@ -476,6 +547,10 @@ if (assignPointTrigDeg.type !== "CreatePointXY" || Math.abs(assignPointTrigDeg.x
 const assignLine = mustAssignObject("l = Line(A,B)", baseCtx, "l", "CreateLineByPoints");
 if (assignLine.type !== "CreateLineByPoints" || assignLine.aId !== "pA" || assignLine.bId !== "pB") {
   throw new Error("l = Line(A,B) mismatch");
+}
+const assignRay = mustAssignObject("r = Ray(A,B)", baseCtx, "r", "CreateRayByPoints");
+if (assignRay.type !== "CreateRayByPoints" || assignRay.originId !== "pA" || assignRay.throughId !== "pB") {
+  throw new Error("r = Ray(A,B) mismatch");
 }
 mustAssignScalar("t = Angle(A,B,C)", baseCtx, "t", 36.86989764584402);
 const assignMarkedAngle = mustAssignObject("ang = MarkedAngle(A,B,C)", baseCtx, "ang", "CreateAngle");

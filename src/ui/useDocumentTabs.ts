@@ -8,6 +8,7 @@ import {
 import { loadStoredConstructionPreferences } from "../state/appPreferences";
 import { createInitialGeoState } from "../state/slices";
 import { takeHistorySnapshot, type HistorySnapshot } from "../state/slices/historySlice";
+import { isTransformationMapDefinition } from "../domain/transformationMaps";
 
 export type DocumentFileState = {
   savedName: string | null;
@@ -148,6 +149,14 @@ function sanitizeRuntime(raw: unknown): GeoDocumentRuntimeState | null {
     commandAliases: Array.isArray(raw.commandAliases)
       ? (structuredClone(raw.commandAliases) as GeoDocumentRuntimeState["commandAliases"])
       : [],
+    transformationMaps: Array.isArray(raw.transformationMaps)
+      ? raw.transformationMaps.flatMap((entry): GeoDocumentRuntimeState["transformationMaps"] => {
+          if (!Array.isArray(entry) || entry.length !== 2) return [];
+          const [name, definition] = entry;
+          if (typeof name !== "string" || !name.trim() || !isTransformationMapDefinition(definition)) return [];
+          return [[name, structuredClone(definition)]];
+        })
+      : [],
   };
 }
 
@@ -268,6 +277,7 @@ function createBlankRuntimeState(): GeoDocumentRuntimeState {
     redoStack: [],
     lastHistoryActionKey: null,
     commandAliases: [],
+    transformationMaps: [],
   };
 }
 
@@ -281,6 +291,7 @@ function createRuntimeStateFromSnapshot(snapshot: HistorySnapshot): GeoDocumentR
     redoStack: [],
     lastHistoryActionKey: null,
     commandAliases: [],
+    transformationMaps: [],
   };
 }
 

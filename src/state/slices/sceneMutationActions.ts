@@ -2296,7 +2296,7 @@ function movePointToWorldInScene(
     const anchors = getLineWorldAnchors(line, scene);
     if (!anchors) return point;
     const pr = projectPointToLine(world, anchors.a, anchors.b);
-    return { ...point, s: pr.s };
+    return { ...point, s: line.kind === "ray" ? Math.max(0, pr.s) : pr.s };
   }
 
   if (point.kind === "pointOnSegment") {

@@ -80,8 +80,9 @@ export function evalPointOnLinePoint(
 ): Vec2 | null {
   const anchors = ops.resolveLineAnchors(point.lineId, scene, ctx);
   if (!anchors) return null;
+  const line = ctx.lineById.get(point.lineId);
   ctx.stats.allocationsEstimate += 1;
-  return evalPointOnLine(anchors, point.s);
+  return evalPointOnLine(anchors, line?.kind === "ray" ? Math.max(0, point.s) : point.s);
 }
 
 export function evalPointOnSegmentPoint(

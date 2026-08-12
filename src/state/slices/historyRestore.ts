@@ -4,6 +4,8 @@ import type { GeoState } from "./storeTypes";
 import type { HistorySnapshot } from "./historySlice";
 import {
   DEFAULT_COLOR_PROFILE_ID,
+  normalizeLabelColorForProfile,
+  normalizeSceneLabelColors,
 } from "../colorProfiles";
 import { createSceneSliceState } from "./sceneSlice";
 import { createUiSliceState } from "./uiSlice";
@@ -12,7 +14,8 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
   const fallbackSceneState = createSceneSliceState();
   const fallbackUiState = createUiSliceState();
   const normalizedScene = normalizeSceneIntegrity(snapshot.scene);
-  const sceneWithBranches = {
+  const colorProfileId = snapshot.colorProfileId ?? DEFAULT_COLOR_PROFILE_ID;
+  const sceneWithBranches = normalizeSceneLabelColors({
     ...normalizedScene,
     points: normalizedScene.points.map((point) => {
       if (
@@ -84,7 +87,7 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
         },
       };
     }),
-  };
+  }, colorProfileId);
   let inferredNextTextLabelId = 1;
   for (const label of sceneWithBranches.textLabels ?? []) {
     const match = /^txt_(\d+)$/.exec(label.id);
@@ -108,7 +111,7 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
   }
   return {
     ...prev,
-    colorProfileId: snapshot.colorProfileId ?? DEFAULT_COLOR_PROFILE_ID,
+    colorProfileId,
     canvasThemeOverrides: snapshot.canvasThemeOverrides ?? fallbackUiState.canvasThemeOverrides,
     // UI preferences are app-level and intentionally not restored from scene snapshots/files.
     uiColorProfileId: prev.uiColorProfileId,
@@ -137,22 +140,43 @@ export function restoreGeoStateFromSnapshot(prev: GeoState, snapshot: HistorySna
     nextVectorId: snapshot.nextVectorId ?? fallbackSceneState.nextVectorId,
     nextTextLabelId: snapshot.nextTextLabelId ?? Math.max(fallbackSceneState.nextTextLabelId, inferredNextTextLabelId),
     nextRichTextId: snapshot.nextRichTextId ?? Math.max(fallbackSceneState.nextRichTextId, inferredNextRichTextId),
-    pointDefaults: snapshot.pointDefaults ?? fallbackSceneState.pointDefaults,
+    pointDefaults: normalizePointDefaults(snapshot.pointDefaults ?? fallbackSceneState.pointDefaults, colorProfileId),
     segmentDefaults: snapshot.segmentDefaults ?? fallbackSceneState.segmentDefaults,
     lineDefaults: snapshot.lineDefaults ?? fallbackSceneState.lineDefaults,
     circleDefaults: snapshot.circleDefaults ?? fallbackSceneState.circleDefaults,
     ellipseDefaults: snapshot.ellipseDefaults ?? fallbackSceneState.ellipseDefaults,
     polygonDefaults: snapshot.polygonDefaults ?? fallbackSceneState.polygonDefaults,
-    angleDefaults: snapshot.angleDefaults ?? fallbackSceneState.angleDefaults,
+    angleDefaults: normalizeAngleDefaults(snapshot.angleDefaults ?? fallbackSceneState.angleDefaults, colorProfileId),
     objectLabelDefaults: snapshot.objectLabelDefaults ?? fallbackSceneState.objectLabelDefaults,
-    labelToolDefaults: snapshot.labelToolDefaults ?? fallbackSceneState.labelToolDefaults,
-    textboxToolDefaults: snapshot.textboxToolDefaults ?? fallbackSceneState.textboxToolDefaults,
-    richTextToolDefaults: snapshot.richTextToolDefaults ?? fallbackSceneState.richTextToolDefaults,
+    labelToolDefaults: normalizeTextDefaults(snapshot.labelToolDefaults ?? fallbackSceneState.labelToolDefaults, colorProfileId),
+    textboxToolDefaults: normalizeTextDefaults(snapshot.textboxToolDefaults ?? fallbackSceneState.textboxToolDefaults, colorProfileId),
+    richTextToolDefaults: normalizeTextDefaults(snapshot.richTextToolDefaults ?? fallbackSceneState.richTextToolDefaults, colorProfileId),
     angleFixedTool: snapshot.angleFixedTool ?? fallbackUiState.angleFixedTool,
     circleFixedTool: snapshot.circleFixedTool ?? fallbackUiState.circleFixedTool,
     transformTool: snapshot.transformTool ?? fallbackUiState.transformTool,
     exportClipWorld: snapshot.exportClipWorld ?? null,
     copyStyle: snapshot.copyStyle ?? fallbackUiState.copyStyle,
+  };
+}
+
+function normalizePointDefaults<T extends { labelColor: string }>(defaults: T, profileId: GeoState["colorProfileId"]): T {
+  return {
+    ...defaults,
+    labelColor: normalizeLabelColorForProfile(defaults.labelColor, profileId),
+  };
+}
+
+function normalizeAngleDefaults<T extends { textColor: string }>(defaults: T, profileId: GeoState["colorProfileId"]): T {
+  return {
+    ...defaults,
+    textColor: normalizeLabelColorForProfile(defaults.textColor, profileId),
+  };
+}
+
+function normalizeTextDefaults<T extends { textColor: string }>(defaults: T, profileId: GeoState["colorProfileId"]): T {
+  return {
+    ...defaults,
+    textColor: normalizeLabelColorForProfile(defaults.textColor, profileId),
   };
 }
 

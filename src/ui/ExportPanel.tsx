@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from "../export/constructionSnapshot";
 import { buildTikzExportText, type TikzExportParams } from "../export/buildTikzExportText";
+import {
+  applyFigureTreatment,
+  getFigureTreatmentFactor,
+  type FigureTreatmentMode,
+} from "../export/figureTreatment";
 import { buildStandaloneSource, deriveDefaultOptionalPreamble } from "../export/tikz/standaloneDocument";
 import { getCanvasColorTheme, getUiCssVariables } from "../state/colorProfiles";
 import {
@@ -12,7 +17,10 @@ import {
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
 import { getCameraTrueZoom, type Camera } from "../view/camera";
-import { createTikzPreviewSession } from "./tikzPreviewSession";
+import {
+  createTikzPreviewSession,
+  type TikzPreviewTreatmentState,
+} from "./tikzPreviewSession";
 import { Crop, Scissors } from "lucide-react";
 import "./ExportPanel.css";
 
@@ -54,6 +62,9 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   });
   const [exportLabelGlow, setExportLabelGlow] = useState(() => loadStoredExportPreferences().labelGlow);
   const [tikzExportMode, setTikzExportMode] = useState<TikzExportMode>(() => loadStoredExportPreferences().tikzExportMode);
+  const [exportFigureTreatment, setExportFigureTreatment] = useState<FigureTreatmentMode>(
+    () => loadStoredExportPreferences().figureTreatment
+  );
   const [exportScaleboxScale, setExportScaleboxScale] = useState(
     () => loadStoredExportPreferences().scaleboxScale
   );
@@ -77,6 +88,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const [lastTikzOptionSig, setLastTikzOptionSig] = useState("");
   const [lastTikzGeneratedAt, setLastTikzGeneratedAt] = useState<number | null>(null);
   const lastBuiltParamsRef = useRef<TikzExportParams | null>(null);
+  const lastBuiltTreatmentRef = useRef<TikzPreviewTreatmentState | null>(null);
   const [canvasViewportSize, setCanvasViewportSize] = useState<CanvasViewportSize | null>(
     () => readDrawingCanvasSize()
   );
@@ -110,6 +122,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       emitTkzSetup: exportEmitTkzSetupManual === null ? "auto" : exportEmitTkzSetupManual ? "on" : "off",
       labelGlow: exportLabelGlow,
       tikzExportMode,
+      figureTreatment: exportFigureTreatment,
       scaleboxScale: exportScaleboxScale,
       trueGlobalScale: exportTrueGlobalScale,
       globalScale: exportGlobalScale,
@@ -126,6 +139,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     exportEmitTkzSetupManual,
     exportLabelGlow,
     tikzExportMode,
+    exportFigureTreatment,
     exportScaleboxScale,
     exportTrueGlobalScale,
     exportGlobalScale,
@@ -141,6 +155,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     const syncPreviewDefaults = (event: StorageEvent) => {
       if (event.key !== EXPORT_PREFERENCES_KEY) return;
       const stored = loadStoredExportPreferences();
+      setExportFigureTreatment(stored.figureTreatment);
       setExportScaleboxScale(stored.scaleboxScale);
       setExportTrueGlobalScale(stored.trueGlobalScale);
       setExportGlobalScale(stored.globalScale);
@@ -200,7 +215,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       : "canvas-unavailable"
     : "reconstructible-legacy-viewport";
   const tikzOptionSigForCanvas = (canvasSig: string) =>
-    `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${tikzExportMode}|${exportScaleboxScale}|${exportTrueGlobalScale}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${exportLabelHaloScale}|${exportRoundNumbersToTwoDecimals}|${exportPreferDvipsNames}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${getCameraTrueZoom(camera)}|${canvasSig}|${exportBakeCoordinates ? canvasTheme.backgroundColor : "reconstructible-label-halo"}|${clipSig}`;
+    `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${tikzExportMode}|${exportFigureTreatment}|${exportScaleboxScale}|${exportTrueGlobalScale}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${exportLabelHaloScale}|${exportRoundNumbersToTwoDecimals}|${exportPreferDvipsNames}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${getCameraTrueZoom(camera)}|${canvasSig}|${exportBakeCoordinates ? canvasTheme.backgroundColor : "reconstructible-label-halo"}|${clipSig}`;
   const currentTikzOptionSig = tikzOptionSigForCanvas(canvasViewportSig);
   const tikzOutdated = Boolean(tikzText) && (lastTikzSceneRef !== scene || lastTikzOptionSig !== currentTikzOptionSig);
   const tikzStatusText = useMemo(
@@ -218,11 +233,25 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     const lineScale = Number(exportLineScale);
     const labelScale = Number(exportLabelScale);
     const labelHaloScale = Number(exportLabelHaloScale);
-    const manualScaleboxScale = Number(exportScaleboxScale);
+    const baseScaleboxScale = Number(exportScaleboxScale);
+    const baseGlobalScale = Number(exportGlobalScale);
     const trueGlobalScale = Number(exportTrueGlobalScale);
-    const canvasTrueZoom = exportUseCurrentView ? getCameraTrueZoom(camera) : 1;
-    const scaleboxScale = manualScaleboxScale * canvasTrueZoom;
-    const globalScale = Number(exportGlobalScale) / canvasTrueZoom;
+    // True Zoom is a publication treatment even when the user exports the
+    // complete scene. "Export what I see now" controls framing only; it must
+    // not silently erase the captured treatment.
+    const canvasTrueZoom = getCameraTrueZoom(camera);
+    const figureTreatmentFactor = getFigureTreatmentFactor(
+      exportFigureTreatment,
+      canvasTrueZoom
+    );
+    const treatmentScales = applyFigureTreatment(
+      baseScaleboxScale,
+      baseGlobalScale,
+      exportFigureTreatment,
+      canvasTrueZoom
+    );
+    const scaleboxScale = treatmentScales.scaleboxScale;
+    const globalScale = treatmentScales.globalScale;
     const exportCanvasViewportSize = exportBakeCoordinates
       ? readDrawingCanvasSize() ?? canvasViewportSize
       : null;
@@ -260,6 +289,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       clipPolygonWorld: clipPolygon,
       screenPxPerWorld: camera.zoom / canvasTrueZoom,
       canvasTrueZoom,
+      figureTreatmentFactor,
       emitTkzSetup: exportEmitTkzSetup,
       drawLayerBackend: exportDrawLayerBackend,
       bakeCoordinates: exportBakeCoordinates,
@@ -281,6 +311,11 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     // params to the preview window for live figure sizing, even when the panel
     // reuses cached text.
     lastBuiltParamsRef.current = params;
+    lastBuiltTreatmentRef.current = {
+      mode: exportFigureTreatment,
+      baseScaleboxScale: Number.isFinite(baseScaleboxScale) ? baseScaleboxScale : 1,
+      baseGlobalScale: Number.isFinite(baseGlobalScale) ? baseGlobalScale : 1,
+    };
     return { text, optionSig, params };
   };
 
@@ -336,12 +371,17 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     }
   };
 
-  const openPreviewWindow = () => {
+  const openPreviewWindow = async () => {
     try {
       const text = ensureTikzText();
       if (!text) return;
 
-      const token = createTikzPreviewSession(text, uiCssVariables, lastBuiltParamsRef.current ?? undefined);
+      const token = await createTikzPreviewSession(
+        text,
+        uiCssVariables,
+        lastBuiltParamsRef.current ?? undefined,
+        lastBuiltTreatmentRef.current ?? undefined
+      );
       if (typeof window === "undefined") return;
       const url = new URL(window.location.href);
       url.searchParams.set("tikzPreview", token);
@@ -406,7 +446,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             <button
               type="button"
               className="exportHeaderButton"
-              onClick={openPreviewWindow}
+              onClick={() => void openPreviewWindow()}
               title="Open the PDF preview and adjust figure sizing"
             >
               Open PDF

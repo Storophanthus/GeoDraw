@@ -325,7 +325,7 @@ function isPointOnLineLike(scene: SceneModel, pointId: string, ref: LineLikeObje
 export function rebuildRightAngleProvenance(scene: SceneModel): void {
   clearRightAngleProvenance();
   for (const line of scene.lines) {
-    if (line.kind === "twoPoint") {
+    if (line.kind === "twoPoint" || line.kind === "ray") {
       registerLinePair(line.id, line.aId, line.bId);
     }
   }
@@ -375,7 +375,7 @@ function lineLikePointPair(scene: SceneModel, ref: LineLikeObjectRef): { aId: st
     return { aId: seg.aId, bId: seg.bId };
   }
   const line = scene.lines.find((item) => item.id === ref.id);
-  if (!line || line.kind !== "twoPoint") return null;
+  if (!line || (line.kind !== "twoPoint" && line.kind !== "ray")) return null;
   return { aId: line.aId, bId: line.bId };
 }
 

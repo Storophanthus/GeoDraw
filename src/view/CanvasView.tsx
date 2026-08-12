@@ -145,6 +145,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
   const createRichTextNode = useGeoStore((store) => store.createRichTextNode);
   const migrateTextLabelToRichTextNode = useGeoStore((store) => store.migrateTextLabelToRichTextNode);
   const createSegment = useGeoStore((store) => store.createSegment);
+  const createRay = useGeoStore((store) => store.createRay);
   const createLine = useGeoStore((store) => store.createLine);
   const createPolygon = useGeoStore((store) => store.createPolygon);
   const createRegularPolygon = useGeoStore((store) => store.createRegularPolygon);
@@ -271,6 +272,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
         createRichTextNode,
         migrateTextLabelToRichTextNode,
         createSegment,
+        createRay,
         createLine,
         createPolygon,
         createRegularPolygon,
@@ -308,6 +310,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
             createPointOnCircle,
             createSegment,
             createLine,
+            createRay,
             createAngleBisectorLine,
             createCircle,
             createCircleThreePoint,
@@ -330,6 +333,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
             createPointOnCircle,
             createSegment,
             createLine,
+            createRay,
             createAngleBisectorLine,
             createCircle,
             createCircleThreePoint,
@@ -352,6 +356,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
             createPointOnCircle,
             createSegment,
             createLine,
+            createRay,
             createAngleBisectorLine,
             createCircle,
             createCircleThreePoint,
@@ -374,6 +379,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
             createPointOnCircle,
             createSegment,
             createLine,
+            createRay,
             createAngleBisectorLine,
             createCircle,
             createCircleThreePoint,
@@ -429,6 +435,7 @@ export function CanvasView({ openSnapshotAsDocument }: CanvasViewProps = {}) {
       createTextLabel,
       createRichTextNode,
       createSegment,
+      createRay,
       createLine,
       createPolygon,
       createRegularPolygon,

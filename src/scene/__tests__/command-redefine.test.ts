@@ -130,6 +130,17 @@ assert(aliasId("rl") === lineId, "line alias id changed on redefine");
   assert(line.aId === b && line.bId === c, "line endpoints not updated");
 }
 
+// ray: create then update direction in-place
+mustOk(commandBarApi.applyObjectAssignment("rr", { type: "CreateRayByPoints", originId: a, throughId: b }), "create ray");
+const rayId = aliasId("rr");
+mustOk(commandBarApi.applyObjectAssignment("rr", { type: "CreateRayByPoints", originId: c, throughId: d }), "update ray");
+assert(aliasId("rr") === rayId, "ray alias id changed on redefine");
+{
+  const ray = getGeoStore().scene.lines.find((it) => it.id === rayId);
+  assert(ray?.kind === "ray", "ray kind mismatch after redefine");
+  assert(ray.aId === c && ray.bId === d, "ray origin/direction points not updated");
+}
+
 // segment: create then update in-place
 mustOk(commandBarApi.applyObjectAssignment("rs", { type: "CreateSegmentByPoints", aId: a, bId: c }), "create segment");
 const segId = aliasId("rs");

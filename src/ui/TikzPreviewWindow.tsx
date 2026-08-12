@@ -22,9 +22,21 @@ import {
 } from "react";
 import { buildStandaloneSource, deriveDefaultOptionalPreamble } from "../export/tikz/standaloneDocument";
 import { buildTikzExportText } from "../export/buildTikzExportText";
+import {
+  applyFigureTreatment,
+  getFigureTreatmentFactor,
+  removeFigureTreatment,
+  resolveSavedFigureTreatment,
+  type FigureTreatmentMode,
+  type FigureTreatmentSelection,
+} from "../export/figureTreatment";
 import type { SceneModel } from "../scene/points";
 import { loadStoredExportPreferences, saveStoredExportPreferences } from "../state/appPreferences";
-import { loadTikzPreviewSession } from "./tikzPreviewSession";
+import {
+  loadTikzPreviewSession,
+  loadTikzPreviewSessionWithDesktopFallback,
+  type TikzPreviewSession,
+} from "./tikzPreviewSession";
 import {
   listPreviewLabelTargets,
   nudgePreviewLabel,
@@ -41,7 +53,6 @@ type TikzPreviewWindowProps = {
 };
 
 type CodeToolTab = "sizing" | "labels" | "find" | "preamble";
-
 type CompileTikzPreviewResult = {
   pdf_base64: string;
   log: string;
@@ -173,7 +184,50 @@ function PrecisionLabelTile({
 }
 
 export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
-  const session = useMemo(() => loadTikzPreviewSession(token), [token]);
+  const immediateSession = useMemo(() => loadTikzPreviewSession(token), [token]);
+  const [session, setSession] = useState<TikzPreviewSession | null | undefined>(
+    immediateSession ?? undefined
+  );
+
+  useEffect(() => {
+    const localSession = loadTikzPreviewSession(token);
+    if (localSession) {
+      setSession(localSession);
+      return;
+    }
+    let cancelled = false;
+    setSession(undefined);
+    void loadTikzPreviewSessionWithDesktopFallback(token).then((loaded) => {
+      if (!cancelled) setSession(loaded);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  if (session === undefined) {
+    return <TikzPreviewSessionStatus message="Opening preview…" />;
+  }
+  if (session === null) {
+    return (
+      <TikzPreviewSessionStatus message="Preview session not found. Open this window from the main Export panel again." />
+    );
+  }
+  return <TikzPreviewWorkspace session={session} />;
+}
+
+function TikzPreviewSessionStatus({ message }: { message: string }) {
+  return (
+    <div className="previewWindowRoot">
+      <header className="previewWindowHeader">
+        <h1 className="previewWindowTitle">TikZ Preview</h1>
+      </header>
+      <div className="previewWindowMissing">{message}</div>
+    </div>
+  );
+}
+
+function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
   const isTauriRuntime = useMemo(
     () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as object),
     []
@@ -198,6 +252,22 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   // Live figure sizing: only available when the launcher captured the scene
   // (desktop app). Web popups fall back to a static, non-resizable preview.
   const regen = session?.regen ?? null;
+  const canvasTrueZoom =
+    typeof regen?.canvasTrueZoom === "number" && Number.isFinite(regen.canvasTrueZoom)
+      ? Math.max(0.05, regen.canvasTrueZoom)
+      : 1;
+  const initialFigureTreatment: FigureTreatmentMode = session?.treatment?.mode ?? "canvas";
+  const legacyBaseTreatmentScales = removeFigureTreatment(
+    regen?.scaleboxScale ?? 1,
+    regen?.globalScale ?? 1,
+    initialFigureTreatment,
+    canvasTrueZoom
+  );
+  const treatmentBaseRef = useRef({
+    scaleboxScale:
+      session?.treatment?.baseScaleboxScale ?? legacyBaseTreatmentScales.scaleboxScale,
+    globalScale: session?.treatment?.baseGlobalScale ?? legacyBaseTreatmentScales.globalScale,
+  });
   const previewSceneRef = useRef<SceneModel | null>(regen?.scene ?? null);
   const [codeToolTab, setCodeToolTab] = useState<CodeToolTab>(() =>
     regen ? "sizing" : "find"
@@ -227,6 +297,13 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
   const [roundNumbersToTwoDecimals, setRoundNumbersToTwoDecimals] = useState(initialTwoDecimalPrecision);
   const [preferDvipsNames, setPreferDvipsNames] = useState(regen?.preferDvipsNames === true);
   const [figureSizingDefaultSaved, setFigureSizingDefaultSaved] = useState(false);
+  const [figureTreatment, setFigureTreatment] = useState<FigureTreatmentSelection>(
+    initialFigureTreatment
+  );
+  const [figureTreatmentFactor, setFigureTreatmentFactor] = useState(() =>
+    regen?.figureTreatmentFactor ??
+    getFigureTreatmentFactor(initialFigureTreatment, canvasTrueZoom)
+  );
   const recompileTimerRef = useRef<number | null>(null);
   const automaticPreambleRef = useRef("");
 
@@ -388,6 +465,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       labelHalo: string;
       twoDecimals: boolean;
       dvipsNames: boolean;
+      figureTreatmentFactor: number;
     }>) => {
       if (!regen) return;
       setFigureSizingDefaultSaved(false);
@@ -401,6 +479,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
         labelHalo: next.labelHalo ?? labelHaloScale,
         twoDecimals: next.twoDecimals ?? roundNumbersToTwoDecimals,
         dvipsNames: next.dvipsNames ?? preferDvipsNames,
+        figureTreatmentFactor: next.figureTreatmentFactor ?? figureTreatmentFactor,
       };
       let nextTikz: string;
       try {
@@ -416,6 +495,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
           labelHaloScale: Number(resolved.labelHalo),
           roundNumbersToTwoDecimals: resolved.twoDecimals,
           preferDvipsNames: resolved.dvipsNames,
+          figureTreatmentFactor: resolved.figureTreatmentFactor,
         });
       } catch {
         return; // leave the current code untouched if regeneration fails
@@ -453,6 +533,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       labelHaloScale,
       roundNumbersToTwoDecimals,
       preferDvipsNames,
+      figureTreatmentFactor,
       session?.uiCssVariables,
       updateTikzCode,
       compilePdf,
@@ -477,6 +558,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
           labelHaloScale: Number(labelHaloScale),
           roundNumbersToTwoDecimals,
           preferDvipsNames,
+          figureTreatmentFactor,
         });
       } catch {
         return;
@@ -501,6 +583,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       labelHaloScale,
       roundNumbersToTwoDecimals,
       preferDvipsNames,
+      figureTreatmentFactor,
       updateTikzCode,
       compilePdf,
       optionalPreamble,
@@ -535,27 +618,68 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     [regen, regenerateWithScene]
   );
 
+  const selectFigureTreatment = (mode: FigureTreatmentMode) => {
+    if (!regen) return;
+    const next = applyFigureTreatment(
+      treatmentBaseRef.current.scaleboxScale,
+      treatmentBaseRef.current.globalScale,
+      mode,
+      canvasTrueZoom
+    );
+    const nextScalebox = formatPreviewScale(
+      String(next.scaleboxScale),
+      roundNumbersToTwoDecimals
+    );
+    const nextGlobal = formatPreviewScale(
+      String(next.globalScale),
+      roundNumbersToTwoDecimals
+    );
+    const nextTreatmentFactor = getFigureTreatmentFactor(mode, canvasTrueZoom);
+    setFigureTreatment(mode);
+    setFigureTreatmentFactor(nextTreatmentFactor);
+    setScaleboxScale(nextScalebox);
+    setGlobalScale(nextGlobal);
+    applyScales({
+      scalebox: nextScalebox,
+      global: nextGlobal,
+      figureTreatmentFactor: nextTreatmentFactor,
+    });
+  };
+
   const saveFigureSizingAsDefault = () => {
     if (!regen) return;
     const stored = loadStoredExportPreferences();
-    const canvasTrueZoom =
-      typeof regen.canvasTrueZoom === "number" && Number.isFinite(regen.canvasTrueZoom)
-        ? Math.max(0.05, regen.canvasTrueZoom)
-        : 1;
-    const normalized = (raw: string, fallback: string, multiplier = 1): string => {
-      const value = Number(raw) * multiplier;
+    const normalized = (raw: string, fallback: string): string => {
+      const value = Number(raw);
       if (!Number.isFinite(value)) return fallback;
       return roundNumbersToTwoDecimals
         ? String(Number(value.toFixed(2)))
         : String(Number(value.toPrecision(15)));
     };
+    const resolvedDefault = resolveSavedFigureTreatment(
+      figureTreatment,
+      Number(scaleboxScale),
+      Number(globalScale),
+      treatmentBaseRef.current.scaleboxScale,
+      treatmentBaseRef.current.globalScale,
+      canvasTrueZoom
+    );
+    const savedBaseScalebox = normalized(
+      String(resolvedDefault.scaleboxScale),
+      stored.scaleboxScale
+    );
+    const savedBaseGlobal = normalized(
+      String(resolvedDefault.globalScale),
+      stored.globalScale
+    );
     const saved = saveStoredExportPreferences({
       ...stored,
-      // The preview displays scales after Canvas True Zoom compensation. Save
-      // the underlying manual values so a future export does not apply it twice.
-      scaleboxScale: normalized(scaleboxScale, stored.scaleboxScale, 1 / canvasTrueZoom),
+      // Named treatments persist independently from their uncompensated manual
+      // pair. Custom values keep the legacy Canvas normalization behavior.
+      figureTreatment: resolvedDefault.mode,
+      scaleboxScale: savedBaseScalebox,
       trueGlobalScale: normalized(trueGlobalScale, stored.trueGlobalScale),
-      globalScale: normalized(globalScale, stored.globalScale, canvasTrueZoom),
+      globalScale: savedBaseGlobal,
       pointScale: normalized(pointScale, stored.pointScale),
       lineScale: normalized(lineScale, stored.lineScale),
       labelScale: normalized(labelScale, stored.labelScale),
@@ -563,6 +687,12 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
       roundNumbersToTwoDecimals,
       preferDvipsNames,
     });
+    if (saved && figureTreatment === "custom") {
+      treatmentBaseRef.current = {
+        scaleboxScale: Number(savedBaseScalebox),
+        globalScale: Number(savedBaseGlobal),
+      };
+    }
     setFigureSizingDefaultSaved(saved);
   };
 
@@ -570,6 +700,9 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     if (!regen) return;
     const captured = getCanvasCaptureFigureSizing(regen.canvasTrueZoom, roundNumbersToTwoDecimals);
 
+    treatmentBaseRef.current = { scaleboxScale: 1, globalScale: 1 };
+    setFigureTreatment("canvas");
+    setFigureTreatmentFactor(canvasTrueZoom);
     setScaleboxScale(captured.scalebox);
     setTrueGlobalScale(captured.trueGlobal);
     setGlobalScale(captured.global);
@@ -580,6 +713,7 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     setFigureSizingDefaultSaved(false);
     applyScales({
       ...captured,
+      figureTreatmentFactor: canvasTrueZoom,
     });
   };
 
@@ -1199,19 +1333,6 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
     setFindStatus(`Replaced ${matches.length} occurrence${matches.length === 1 ? "" : "s"}.`);
   };
 
-  if (!session) {
-    return (
-      <div className="previewWindowRoot">
-        <header className="previewWindowHeader">
-          <h1 className="previewWindowTitle">TikZ Preview</h1>
-        </header>
-        <div className="previewWindowMissing">
-          Preview session not found. Open this window from the main Export panel again.
-        </div>
-      </div>
-    );
-  }
-
   const expandCompilerLog = Boolean(error) && !pdfData;
 
   return (
@@ -1465,13 +1586,33 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
                   Scale the complete figure or tune points, lines, and labels independently.
                 </div>
                 <div className="previewFigureSizingActions">
+                  <label className="previewTreatmentControl">
+                    <span>Treatment</span>
+                    <select
+                      className="previewTreatmentSelect"
+                      value={figureTreatment}
+                      onChange={(event) => {
+                        const mode = event.target.value;
+                        if (mode === "canvas" || mode === "general" || mode === "veryCloseup") {
+                          selectFigureTreatment(mode);
+                        }
+                      }}
+                      title="Choose how strongly points, strokes, labels, halos, and marks are scaled relative to the geometry"
+                    >
+                      <option value="canvas">Canvas true zoom ({Math.round(canvasTrueZoom * 100)}%)</option>
+                      <option value="general">General close-up</option>
+                      <option value="veryCloseup">Very close-up</option>
+                      {figureTreatment === "custom" ? <option value="custom">Custom</option> : null}
+                    </select>
+                  </label>
                   <button
                     type="button"
-                    className="previewSizingDefaultButton"
+                    className="previewSizingResetButton"
                     onClick={useCanvasCaptureSizing}
-                    title="Match the captured canvas zoom and reset manual sizing multipliers"
+                    title="Reset all figure sizing to the captured canvas"
+                    aria-label="Reset all figure sizing to the captured canvas"
                   >
-                    Canvas capture
+                    ↺
                   </button>
                   <button
                     type="button"
@@ -1503,8 +1644,10 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
                       value={scaleboxScale}
                       onChange={(e) => {
                         const v = e.target.value;
+                        setFigureTreatment("custom");
+                        setFigureTreatmentFactor(1);
                         setScaleboxScale(v);
-                        applyScales({ scalebox: v, trueGlobal: trueGlobalScale, global: globalScale, point: pointScale, line: lineScale, label: labelScale });
+                        applyScales({ scalebox: v, trueGlobal: trueGlobalScale, global: globalScale, point: pointScale, line: lineScale, label: labelScale, figureTreatmentFactor: 1 });
                       }}
                       title="Scales the complete figure with a simple LaTeX scalebox"
                     />
@@ -1521,8 +1664,10 @@ export function TikzPreviewWindow({ token }: TikzPreviewWindowProps) {
                       value={globalScale}
                       onChange={(e) => {
                         const v = e.target.value;
+                        setFigureTreatment("custom");
+                        setFigureTreatmentFactor(1);
                         setGlobalScale(v);
-                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: v, point: pointScale, line: lineScale, label: labelScale });
+                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: v, point: pointScale, line: lineScale, label: labelScale, figureTreatmentFactor: 1 });
                       }}
                       aria-describedby="preview-tikz-scale-help"
                     />

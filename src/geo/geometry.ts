@@ -23,6 +23,54 @@ export function projectPointToSegment(
   return { point, u, distance: length(sub(p, point)) };
 }
 
+export function projectPointToRay(
+  p: Vec2,
+  origin: Vec2,
+  through: Vec2
+): { point: Vec2; s: number; distance: number } {
+  const d = sub(through, origin);
+  const dd = dot(d, d);
+  const sRaw = dd <= EPS ? 0 : dot(sub(p, origin), d) / dd;
+  const s = Math.max(0, sRaw);
+  const point = add(origin, mul(d, s));
+  return { point, s, distance: length(sub(p, point)) };
+}
+
+export function pointWithinRayDomain(p: Vec2, origin: Vec2, through: Vec2, epsilon = 1e-6): boolean {
+  const d = sub(through, origin);
+  const dd = dot(d, d);
+  if (dd <= epsilon * epsilon) return distance(p, origin) <= epsilon;
+  return dot(sub(p, origin), d) / dd >= -epsilon;
+}
+
+export function clipRayToRect(
+  origin: Vec2,
+  through: Vec2,
+  rect: { xmin: number; xmax: number; ymin: number; ymax: number }
+): { a: Vec2; b: Vec2 } | null {
+  const d = sub(through, origin);
+  if (dot(d, d) <= EPS * EPS) return null;
+  let tMin = 0;
+  let tMax = Number.POSITIVE_INFINITY;
+  const clipAxis = (start: number, delta: number, min: number, max: number): boolean => {
+    if (Math.abs(delta) <= EPS) return start >= min - EPS && start <= max + EPS;
+    const t1 = (min - start) / delta;
+    const t2 = (max - start) / delta;
+    tMin = Math.max(tMin, Math.min(t1, t2));
+    tMax = Math.min(tMax, Math.max(t1, t2));
+    return tMin <= tMax + EPS;
+  };
+  if (!clipAxis(origin.x, d.x, rect.xmin, rect.xmax)) return null;
+  if (!clipAxis(origin.y, d.y, rect.ymin, rect.ymax)) return null;
+  if (!Number.isFinite(tMax) || tMax < -EPS) return null;
+  const startT = Math.max(0, tMin);
+  if (startT > tMax + EPS) return null;
+  return {
+    a: add(origin, mul(d, startT)),
+    b: add(origin, mul(d, tMax)),
+  };
+}
+
 export function projectPointToCircle(
   p: Vec2,
   center: Vec2,

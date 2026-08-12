@@ -1220,8 +1220,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
     if (!tikz.includes("\\tkzInit[")) {
       throw new Error("Regression: expected tkz viewport init.");
     }
-    if (!tikz.includes("\\tkzClip[")) {
-      throw new Error("Regression: expected tkz clip.");
+    if (tikz.includes("\\tkzClip[")) {
+      throw new Error("Regression: automatic complete-scene export must not emit a tkz clip.");
     }
     if (!tikz.includes("\\tkzSetUpLine[add=5 and 5]")) {
       throw new Error("Regression: expected global line setup with add=5 and 5.");
@@ -1235,8 +1235,8 @@ function assertFixtureSpecificExpectations(fileName: string, tikz: string, scene
   }
 
   if (fileName === "regression-lines-whitespace.json") {
-    if (!tikz.includes("\\tkzClip[")) {
-      throw new Error("Regression: expected tkz clip in whitespace fixture.");
+    if (tikz.includes("\\tkzClip[")) {
+      throw new Error("Regression: automatic whitespace fitting must not become a tkz clip.");
     }
   }
 
@@ -1991,8 +1991,11 @@ function assertTkzSetupToggleRegression(): void {
   };
 
   const withSetup = exportTikzWithOptions(scene, { emitTkzSetup: true });
-  if (!withSetup.includes("\\tkzInit[") || !withSetup.includes("\\tkzClip[space=") || !withSetup.includes("\\tkzSetUpLine[")) {
-    throw new Error("Regression: emitTkzSetup=true must include tkz setup lines.");
+  if (!withSetup.includes("\\tkzInit[") || !withSetup.includes("\\tkzSetUpLine[")) {
+    throw new Error("Regression: emitTkzSetup=true must include non-clipping tkz setup lines.");
+  }
+  if (withSetup.includes("\\tkzClip[space=")) {
+    throw new Error("Regression: emitTkzSetup=true must not turn automatic fitting into a crop.");
   }
   const withoutSetup = exportTikzWithOptions(scene, { emitTkzSetup: false });
   if (withoutSetup.includes("\\tkzInit[") || withoutSetup.includes("\\tkzClip[space=") || withoutSetup.includes("\\tkzSetUpLine[")) {

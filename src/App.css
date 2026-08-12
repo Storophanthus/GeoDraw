@@ -4143,6 +4143,60 @@ body.preview-split-dragging * {
   gap: 6px;
 }
 
+.previewTreatmentControl {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--gd-ui-text-subtle, #64748b);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.previewTreatmentSelect {
+  width: 168px;
+  min-width: 0;
+  height: 26px;
+  border: 1px solid var(--gd-ui-border, #cbd5e1);
+  border-radius: 8px;
+  padding: 2px 24px 2px 8px;
+  background: var(--gd-ui-surface, #ffffff);
+  color: var(--gd-ui-text-muted, #475569);
+  font-size: 9px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.previewTreatmentSelect:hover,
+.previewTreatmentSelect:focus {
+  border-color: var(--gd-ui-accent, #2563eb);
+  outline: none;
+}
+
+.previewSizingResetButton {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--gd-ui-border, #cbd5e1);
+  border-radius: 8px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gd-ui-surface, #ffffff);
+  color: var(--gd-ui-text-muted, #475569);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.previewSizingResetButton:hover,
+.previewSizingResetButton:focus-visible {
+  border-color: var(--gd-ui-accent, #2563eb);
+  color: var(--gd-ui-accent-text, #1e3a8a);
+  outline: none;
+}
+
 .previewSizingDefaultButton {
   flex: 0 0 auto;
   min-height: 26px;

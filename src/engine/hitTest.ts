@@ -1,4 +1,4 @@
-import { projectPointToLine, projectPointToSegment } from "../geo/geometry";
+import { projectPointToLine, projectPointToRay, projectPointToSegment } from "../geo/geometry";
 import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import { getGeometryLayerOrder } from "../scene/geometryLayerOrder";
 import {
@@ -183,7 +183,9 @@ export function hitTestLineId(
     if (!aWorld || !bWorld) continue;
     const a = camMath.worldToScreen(aWorld, camera, vp);
     const b = camMath.worldToScreen(bWorld, camera, vp);
-    const pr = projectPointToLine(screenPoint, a, b);
+    const pr = line.kind === "ray"
+      ? projectPointToRay(screenPoint, a, b)
+      : projectPointToLine(screenPoint, a, b);
     if (pr.distance < best || (bestId === null && pr.distance <= best)) {
       best = pr.distance;
       bestId = line.id;

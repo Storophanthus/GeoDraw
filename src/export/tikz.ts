@@ -1,4 +1,4 @@
-import { circleCircleIntersections, distance, lineCircleIntersectionBranches } from "../geo/geometry";
+import { circleCircleIntersections, clipRayToRect, distance, lineCircleIntersectionBranches } from "../geo/geometry";
 import { resolveAngleRightStatus, type AngleRightStatus } from "../domain/rightAngleProvenance";
 import { normalizeSceneIntegrity } from "../domain/sceneIntegrity";
 import {
@@ -72,6 +72,8 @@ export type TikzExportOptions = {
   trueGlobalScale?: number;
   /** Canvas True Zoom already represented by the outer scalebox wrapper. */
   canvasTrueZoom?: number;
+  /** Visual treatment applied outside the tikzpicture (Canvas/close-up). */
+  visualTreatmentFactor?: number;
   worldToTikzScale?: number;
   screenPxPerWorld?: number;
   labelGlow?: boolean;
@@ -90,9 +92,12 @@ export type TikzExportOptions = {
   pointInnerSepFixedPt?: number;
   pointInnerSepScale?: number;
   segmentMarkSizeScale?: number;
+  segmentMarkTreatmentScale?: number;
   segmentMarkRoundSizeScale?: number;
   segmentMarkNonRoundSizeScale?: number;
   segmentMarkLineWidthScale?: number;
+  segmentMarkTreatmentStrokeScale?: number;
+  pointLabelOffsetScale?: number;
   pathDotMarkSizeScale?: number;
   angleLabelFontScale?: number;
   angleArcStrokeScale?: number;
@@ -110,9 +115,6 @@ export type TikzExportOptions = {
 };
 
 type ResolvedTikzExportOptions = TikzExportOptions & {
-  // Derived after viewport auto-fit. This is intentionally internal: callers
-  // provide canvas density, while the exporter resolves the final PDF metric.
-  resolvedCanvasPxToTikzPt?: number;
   // Canvas-style sizes (labels in particular) must be calibrated against the
   // auto-fit scale before the user-facing coordinate-only Global multiplier.
   // This keeps Global from silently changing a label's physical font size.
@@ -122,7 +124,16 @@ type ResolvedTikzExportOptions = TikzExportOptions & {
 export type TikzCommand =
   | { kind: "SetupUnits"; scale: number; trueGlobalScale?: number; labelHaloScale?: number }
   | { kind: "SetupLabelScale"; scale: number }
-  | { kind: "SetupViewport"; xmin: number; xmax: number; ymin: number; ymax: number; space: number }
+  | {
+      kind: "SetupViewport";
+      xmin: number;
+      xmax: number;
+      ymin: number;
+      ymax: number;
+      space: number;
+      /** True only when the user explicitly requested canvas-view framing. */
+      clip: boolean;
+    }
   | { kind: "ClipRect"; xmin: number; xmax: number; ymin: number; ymax: number }
   | { kind: "ClipPolygon"; points: { x: number; y: number }[] }
   | { kind: "SetupLine"; addLeft: number; addRight: number }
@@ -316,9 +327,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
 
   const exportPxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
   const canvasTrueZoom = clampPositive(options.canvasTrueZoom ?? 1, 0.05, 20);
+  const visualTreatmentFactor = clampPositive(options.visualTreatmentFactor ?? 1, 0.05, 20);
   const freeItems: Array<{ name: string; x: number; y: number }> = [];
   const hasExplicitCanvasViewport = options.viewport !== undefined;
-  const viewport = options.viewport ?? computeExportViewport(scene, exportPxPerWorld);
+  const viewport = options.viewport ?? computeExportViewport(
+    scene,
+    exportPxPerWorld,
+    visualTreatmentFactor
+  );
   let coordScale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
   const trueGlobalScale = clampPositive(options.trueGlobalScale ?? 1, 0.05, 10);
   const labelHaloScale = clampPositive(options.labelHaloScale ?? 1, 0.05, 10);
@@ -342,10 +358,17 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
   const canvasPxToTikzPt = (coordScale * TIKZ_PT_PER_CM) / exportPxPerWorld;
   options = {
     ...options,
-    resolvedCanvasPxToTikzPt: canvasPxToTikzPt,
-    resolvedCanvasStylePxToTikzPt: hasExplicitCanvasViewport
-      ? (fitScale * TIKZ_PT_PER_CM) / (exportPxPerWorld * canvasTrueZoom)
-      : undefined,
+    // Fixed-size visual styling must be calibrated before the coordinate-only
+    // TikZ scale. Otherwise reciprocal TikZ/scalebox treatment cancels itself
+    // and a close-up looks identical to General. A captured viewport already
+    // became tighter by True Zoom, so remove that one framing contribution.
+    resolvedCanvasStylePxToTikzPt:
+      hasExplicitCanvasViewport ||
+      options.drawLayerBackend === "plain" ||
+      (options.drawLayerBackend === "tkz" && visualTreatmentFactor > 1 + 1e-9)
+        ? (fitScale * TIKZ_PT_PER_CM) /
+          (exportPxPerWorld * (hasExplicitCanvasViewport ? canvasTrueZoom : 1))
+        : undefined,
   } as ResolvedTikzExportOptions;
   defs.push({ kind: "SetupUnits", scale: coordScale, trueGlobalScale, labelHaloScale });
   defs.push({ kind: "SetupLabelScale", scale: labelScale });
@@ -356,6 +379,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     ymin: viewport.ymin,
     ymax: viewport.ymax,
     space: options.clipSpace ?? 0,
+    clip: hasExplicitCanvasViewport,
   });
   const globalAdd = options.globalLineAdd ?? 5;
   const lineDrawClipBounds = lineDrawClipBoundsForOptions(viewport, options);
@@ -1394,8 +1418,22 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const geom = circleGeomById(circle.id);
       const center = geom.center;
       if (!lineWorld) throw new Error(`Undefined line/circle geometry for ${point.name}`);
-      const roots = lineCircleIntersectionBranches(lineWorld.a, lineWorld.b, center, geom.radius);
+      const supportRoots = lineCircleIntersectionBranches(lineWorld.a, lineWorld.b, center, geom.radius);
+      const roots = filterLineCircleBranchesToDomain(supportRoots, false, line.kind === "ray");
       if (roots.length === 0) {
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
+      if (line.kind === "ray" && roots.length === 1 && supportRoots.length > 1) {
+        constructions.push({
+          kind: "DefPointByDilation",
+          name,
+          center: lineAnchors.a,
+          point: lineAnchors.b,
+          factor: roots[0].t,
+        });
+        definedPointIds.add(point.id);
         visiting.delete(pointId);
         visited.add(pointId);
         return;
@@ -1516,7 +1554,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const geom = circleGeomById(circle.id);
       const center = geom.center;
       const supportRoots = lineCircleIntersectionBranches(wa, wb, center, geom.radius);
-      const roots = filterLineCircleBranchesToFiniteDomain(supportRoots, true);
+      const roots = filterLineCircleBranchesToDomain(supportRoots, true);
       if (roots.length === 0) {
         visiting.delete(pointId);
         visited.add(pointId);
@@ -1735,6 +1773,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         definedPointIds.add(point.id);
       }
     } else if (point.kind === "lineLikeIntersectionPoint") {
+      if (!getPointWorldPos(point, scene)) {
+        visiting.delete(pointId);
+        visited.add(pointId);
+        return;
+      }
       const llA = lineLikeNamesFromRef(point.objA, resolveLineAnchorsById, scene, lineById, segById, pointName, resolvePoint);
       const llB = lineLikeNamesFromRef(point.objB, resolveLineAnchorsById, scene, lineById, segById, pointName, resolvePoint);
       if (!llA || !llB) {
@@ -1777,6 +1820,11 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       const cB = circleFromRef(point.objB, circleById);
 
       if (llA && llB) {
+        if (!getPointWorldPos(point, scene)) {
+          visiting.delete(pointId);
+          visited.add(pointId);
+          return;
+        }
         constructions.push({
           kind: "InterLL",
           name,
@@ -1886,7 +1934,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           const center = geom.center;
           const through = { x: center.x + geom.radius, y: center.y };
           const supportRoots = lineCircleIntersectionBranches(mixed.ll.worldA, mixed.ll.worldB, center, geom.radius);
-          const roots = filterLineCircleBranchesToFiniteDomain(supportRoots, mixed.ll.finite);
+          const roots = filterLineCircleBranchesToDomain(supportRoots, mixed.ll.finite, mixed.ll.ray);
           if (roots.length === 0) {
             visiting.delete(pointId);
             visited.add(pointId);
@@ -2057,7 +2105,10 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     resolvePoint(seg.aId);
     resolvePoint(seg.bId);
     if (!definedPointIds.has(seg.aId) || !definedPointIds.has(seg.bId)) {
-      throw new Error(`Cannot export undefined segment geometry: ${seg.id}`);
+      // Dynamic intersections can legitimately disappear while their parent
+      // objects move. The canvas omits every segment that depends on such a
+      // point; export must do the same instead of aborting the whole figure.
+      continue;
     }
     const aName = mustName(pointName, seg.aId);
     const bName = mustName(pointName, seg.bId);
@@ -2155,13 +2206,24 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const drawAWorld = resolveLineDrawReferenceWorld(scene, line, ext.drawAId, lineWorldAnchors);
     const drawBWorld = resolveLineDrawReferenceWorld(scene, line, ext.drawBId, lineWorldAnchors);
     const drawSpanWorld = drawAWorld && drawBWorld ? distance(drawAWorld, drawBWorld) : distance(lineWorldAnchors.a, lineWorldAnchors.b);
+    const rayFallback = line.kind === "ray"
+      ? clipRayToRect(
+          lineWorldAnchors.a,
+          lineWorldAnchors.b,
+          options.drawLayerBackend === "plain" ? plainLineDrawClipBounds : lineDrawClipBounds
+        )
+      : null;
     const finiteFallback =
-      options.drawLayerBackend === "plain"
+      line.kind === "ray"
+        ? rayFallback
+          ? { ax: rayFallback.a.x, ay: rayFallback.a.y, bx: rayFallback.b.x, by: rayFallback.b.y }
+          : null
+      : options.drawLayerBackend === "plain"
         ? lineSegmentThroughRect(lineWorldAnchors.a, lineWorldAnchors.b, plainLineDrawClipBounds)
         : shouldUseFiniteLineDrawFallback(drawSpanWorld, globalAdd)
           ? lineSegmentThroughRect(lineWorldAnchors.a, lineWorldAnchors.b, lineDrawClipBounds)
           : null;
-    if (options.drawLayerBackend === "plain" && !finiteFallback) continue;
+    if ((options.drawLayerBackend === "plain" || line.kind === "ray") && !finiteFallback) continue;
     pushGeometryCommands({ type: "line", id: line.id }, [{
       kind: "DrawLine",
       a: drawAName,
@@ -2463,11 +2525,13 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const bWorld = getPointWorldPosCached(scene, angle.bId);
     const cWorld = getPointWorldPosCached(scene, angle.cId);
     if (!aWorld || !bWorld || !cWorld) {
-      throw new Error(`Cannot export undefined angle geometry: ${angle.id}`);
+      // Match canvas semantics for temporarily undefined intersection-based
+      // angles: omit this dependent object and keep exporting valid geometry.
+      continue;
     }
     const theta = computeOrientedAngleRad(aWorld, bWorld, cWorld);
     if (theta === null) {
-      throw new Error(`Cannot export undefined angle geometry: ${angle.id}`);
+      continue;
     }
     const aName = mustName(pointName, angle.aId);
     const bName = mustName(pointName, angle.bId);
@@ -3771,6 +3835,7 @@ function lineLikeNamesFromRef(
   endpointAId?: string;
   endpointBId?: string;
   finite: boolean;
+  ray: boolean;
 } | null {
   if (ref.type === "line") {
     const line = lineById.get(ref.id);
@@ -3779,18 +3844,27 @@ function lineLikeNamesFromRef(
     const anchors = getLineWorldAnchors(line, scene);
     if (!anchors) return null;
     if (line.kind === "perpendicular" || line.kind === "parallel") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId, finite: false };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId, finite: false, ray: false };
     }
     if (line.kind === "tangent") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId, finite: false };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.throughId, finite: false, ray: false };
     }
     if (line.kind === "circleCircleTangent") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, finite: false };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, finite: false, ray: false };
     }
     if (line.kind === "angleBisector") {
-      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.bId, finite: false };
+      return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.bId, finite: false, ray: false };
     }
-    return { a: names.a, b: names.b, worldA: anchors.a, worldB: anchors.b, endpointAId: line.aId, endpointBId: line.bId, finite: false };
+    return {
+      a: names.a,
+      b: names.b,
+      worldA: anchors.a,
+      worldB: anchors.b,
+      endpointAId: line.aId,
+      endpointBId: line.bId,
+      finite: false,
+      ray: line.kind === "ray",
+    };
   }
   if (ref.type === "segment") {
     const seg = segById.get(ref.id);
@@ -3808,6 +3882,7 @@ function lineLikeNamesFromRef(
       endpointAId: seg.aId,
       endpointBId: seg.bId,
       finite: true,
+      ray: false,
     };
   }
   return null;
@@ -3888,10 +3963,12 @@ function sameObjectRef(a: GeometryObjectRef, b: GeometryObjectRef): boolean {
   return a.type === b.type && a.id === b.id;
 }
 
-function filterLineCircleBranchesToFiniteDomain(
+function filterLineCircleBranchesToDomain(
   branches: Array<{ point: { x: number; y: number }; t: number }>,
-  finite: boolean
+  finite: boolean,
+  ray = false
 ): Array<{ point: { x: number; y: number }; t: number }> {
+  if (ray) return branches.filter((branch) => branch.t >= -FINITE_DOMAIN_EPS);
   if (!finite) return branches;
   return branches.filter((branch) => branch.t >= -FINITE_DOMAIN_EPS && branch.t <= 1 + FINITE_DOMAIN_EPS);
 }
@@ -4032,7 +4109,11 @@ function inferLineCircleCommonFromEndpointsWorld(
   return undefined;
 }
 
-function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: number; xmax: number; ymin: number; ymax: number } {
+function computeExportViewport(
+  scene: SceneModel,
+  pxPerWorld = 80,
+  visualTreatmentFactor = 1
+): { xmin: number; xmax: number; ymin: number; ymax: number } {
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -4046,13 +4127,51 @@ function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: numb
     if (y > maxY) maxY = y;
   };
 
+  const addPointById = (pointId: string): void => {
+    const point = scene.points.find((candidate) => candidate.id === pointId);
+    if (!point) return;
+    const world = getPointWorldPos(point, scene);
+    if (world) add(world.x, world.y);
+  };
+
+  const addObjectLabel = (object: {
+    showLabel?: boolean;
+    labelPosWorld?: { x: number; y: number };
+  }): void => {
+    if (!object.showLabel || !object.labelPosWorld) return;
+    add(object.labelPosWorld.x, object.labelPosWorld.y);
+  };
+
   for (const point of scene.points) {
+    if (!point.visible) continue;
     const world = getPointWorldPos(point, scene);
     if (!world) continue;
     add(world.x, world.y);
   }
 
+  // Hidden construction points must not enlarge a complete-scene export, but
+  // hidden endpoints of visible objects still contribute through those
+  // objects. This mirrors what is actually drawn rather than what happens to
+  // exist in the dependency graph.
+  for (const segment of scene.segments) {
+    if (!segment.visible) continue;
+    addPointById(segment.aId);
+    addPointById(segment.bId);
+    addObjectLabel(segment);
+  }
+
+  for (const line of scene.lines) {
+    if (!line.visible) continue;
+    const anchors = getLineWorldAnchors(line, scene);
+    if (anchors) {
+      add(anchors.a.x, anchors.a.y);
+      add(anchors.b.x, anchors.b.y);
+    }
+    addObjectLabel(line);
+  }
+
   for (const circle of scene.circles) {
+    if (!circle.visible) continue;
     const geom = getCircleWorldGeometry(circle, scene);
     if (!geom) continue;
     const center = geom.center;
@@ -4060,9 +4179,11 @@ function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: numb
     if (!Number.isFinite(r)) continue;
     add(center.x - r, center.y - r);
     add(center.x + r, center.y + r);
+    addObjectLabel(circle);
   }
 
   for (const ellipse of scene.ellipses ?? []) {
+    if (!ellipse.visible) continue;
     const geom = getEllipseWorldGeometry(ellipse, scene);
     if (!geom) continue;
     const cos = Math.cos(geom.rotationRad);
@@ -4071,6 +4192,13 @@ function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: numb
     const ry = Math.sqrt(geom.semiMajor * geom.semiMajor * sin * sin + geom.semiMinor * geom.semiMinor * cos * cos);
     add(geom.center.x - rx, geom.center.y - ry);
     add(geom.center.x + rx, geom.center.y + ry);
+    addObjectLabel(ellipse);
+  }
+
+  for (const polygon of scene.polygons) {
+    if (!polygon.visible) continue;
+    for (const pointId of polygon.pointIds) addPointById(pointId);
+    addObjectLabel(polygon);
   }
 
   for (const angle of scene.angles) {
@@ -4096,6 +4224,22 @@ function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: numb
     add(node.positionWorld.x + widthWorld, node.positionWorld.y - heightWorld);
   }
 
+  for (const label of scene.textLabels ?? []) {
+    if (!label.visible) continue;
+    add(label.positionWorld.x, label.positionWorld.y);
+    const widthWorld = Math.max(
+      0.25,
+      (label.style.boxWidthPx ?? Math.max(24, label.text.length * label.style.textSize * 0.6)) /
+        pxPerWorld
+    );
+    const heightWorld = Math.max(
+      0.2,
+      (label.style.boxHeightPx ?? Math.max(16, label.style.textSize * 1.4)) / pxPerWorld
+    );
+    add(label.positionWorld.x + widthWorld / 2, label.positionWorld.y + heightWorld / 2);
+    add(label.positionWorld.x - widthWorld / 2, label.positionWorld.y - heightWorld / 2);
+  }
+
   if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
     return { xmin: -10, xmax: 10, ymin: -10, ymax: 10 };
   }
@@ -4104,7 +4248,14 @@ function computeExportViewport(scene: SceneModel, pxPerWorld = 80): { xmin: numb
   let height = maxY - minY;
   if (width < 1e-6) width = 1;
   if (height < 1e-6) height = 1;
-  const pad = Math.max(0.25, 0.1 * Math.max(width, height));
+  const basePad = Math.max(0.25, 0.1 * Math.max(width, height));
+  // Close-up treatments make labels, points, halos, and marks larger relative
+  // to geometry. Give the automatic whole-scene box matching breathing room so
+  // labels at an extreme point are not shaved by the PDF crop.
+  const treatmentPad =
+    (28 * Math.max(0, visualTreatmentFactor - 1)) /
+    clampPositive(pxPerWorld, 1, 20000);
+  const pad = basePad + treatmentPad;
 
   return {
     xmin: minX - pad,
@@ -4574,16 +4725,18 @@ function pointStyleToTikz(point: ScenePoint, options: TikzExportOptions): string
   const fill = rgbColorExpr(s.fillColor);
   const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
   const trueGlobalScale = clampPositive(options.trueGlobalScale ?? 1, 0.05, 10);
-  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
-  if (plainPxToPt !== null) {
+  const canvasStylePxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    resolvedReconstructibleCanvasStylePxToTikzPt(options);
+  if (canvasStylePxToPt !== null) {
     const radiusPx = Math.max(1.5, s.sizePx * pointScale);
     const strokeWidthPt = Math.max(
       0.1,
-      s.strokeWidth * pointScale * plainPxToPt * trueGlobalScale
+      s.strokeWidth * pointScale * canvasStylePxToPt * trueGlobalScale
     );
-    const radiusPt = radiusPx * plainPxToPt;
+    const radiusPt = radiusPx * canvasStylePxToPt;
     if (shape.kind === "dot") {
-      const diameterPt = Math.max(1.2, radiusPx * 0.4) * 2 * plainPxToPt;
+      const diameterPt = Math.max(1.2, radiusPx * 0.4) * 2 * canvasStylePxToPt;
       const opts = [
         "shape=circle",
         "draw=none",
@@ -4706,12 +4859,16 @@ function segmentMarkStyleBaseToTikz(
   if (!Number.isFinite(mark.sizePt) || mark.sizePt <= 0) {
     throw new Error("Unsupported SegmentMark: sizePt");
   }
-  const sizeScale = clampPositive(options.segmentMarkSizeScale ?? 1, 0.01, 100);
+  const sizeScale =
+    clampPositive(options.segmentMarkSizeScale ?? 1, 0.01, 100) *
+    clampPositive(options.segmentMarkTreatmentScale ?? 1, 0.01, 100);
   const roundSizeScale = clampPositive(options.segmentMarkRoundSizeScale ?? 1, 0.01, 100);
   const nonRoundSizeScale = clampPositive(options.segmentMarkNonRoundSizeScale ?? 1, 0.01, 100);
   const symbolScale = isRoundSegmentMarkSymbol(mark.mark) ? roundSizeScale : nonRoundSizeScale;
   const symbolSpecificScale = segmentMarkSymbolExportScale(mark.mark);
-  const widthScale = clampPositive(options.segmentMarkLineWidthScale ?? 1, 0.01, 100);
+  const widthScale =
+    clampPositive(options.segmentMarkLineWidthScale ?? 1, 0.01, 100) *
+    clampPositive(options.segmentMarkTreatmentStrokeScale ?? 1, 0.01, 100);
   const opts: string[] = [`mark=${tikzMark}`, `size=${fmt(mark.sizePt * sizeScale * symbolScale * symbolSpecificScale)}pt`];
   opts.push(`color=${rgbColorExpr(mark.color ?? segmentStrokeColor)}`);
   const opacity = clamp01(segmentOpacity);
@@ -4897,14 +5054,27 @@ function precomputedTkzSegmentMarkToTikz(
 ): string | null {
   if (!mark.enabled || mark.mark === "none") return null;
   const pos = clamp01(Number.isFinite(posRaw) ? posRaw : 0.5);
-  const sizePx = Math.max(1, mark.sizePt);
+  const markTreatmentScale = clampPositive(
+    options.segmentMarkTreatmentScale ?? 1,
+    0.01,
+    100
+  );
+  const sizePx = Math.max(1, mark.sizePt) * markTreatmentScale;
   const sizePt = sizePx * stylePxToPt;
   const tickHalfPt = sizePx * 2.2 * stylePxToPt;
   const gapPt = Math.max(2, sizePx * 0.85) * stylePxToPt;
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const markLineWidthScale = clampPositive(
+    options.segmentMarkTreatmentStrokeScale ?? 1,
+    0.01,
+    100
+  );
   const lineWidthPt = Math.max(
     0.1,
-    Math.max(0.5, mark.lineWidthPt ?? segmentStrokeWidth) * lineScale * stylePxToPt
+    Math.max(0.5, mark.lineWidthPt ?? segmentStrokeWidth) *
+      lineScale *
+      markLineWidthScale *
+      stylePxToPt
   );
   const color = rgbColorExpr(mark.color ?? segmentStrokeColor);
   const opacity = normalizedOpacity(segmentOpacity);
@@ -5012,7 +5182,19 @@ function plainSegmentMarkToTikz(
   const ny = -ux;
   const pos = clamp01(Number.isFinite(posRaw) ? posRaw : 0.5);
   const center = { x: a.x + dx * pos, y: a.y + dy * pos };
-  const sizePx = Math.max(1, mark.sizePt);
+  // With an explicit canvas viewport the tighter framing already carries True
+  // Zoom into coordinate-space marks. A whole-scene export does not, so apply
+  // the resolved treatment factor here. The independent mark-size compensation
+  // lets close-up treatments moderate mark growth without changing its stroke.
+  const coordinateMarkScale = options.viewport
+    ? 1
+    : clampPositive(options.visualTreatmentFactor ?? 1, 0.05, 20);
+  const markTreatmentScale = clampPositive(
+    options.segmentMarkTreatmentScale ?? 1,
+    0.01,
+    100
+  );
+  const sizePx = Math.max(1, mark.sizePt) * coordinateMarkScale * markTreatmentScale;
   const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
   const sizeWorld = sizePx / pxPerWorld;
   const tickHalfWorld = (sizePx * 2.2) / pxPerWorld;
@@ -5021,6 +5203,7 @@ function plainSegmentMarkToTikz(
   const lineWidthPt =
     lineWidthPx *
     clampPositive(options.lineScale ?? 1, 0.05, 10) *
+    clampPositive(options.segmentMarkTreatmentStrokeScale ?? 1, 0.01, 100) *
     (resolvedPlainCanvasPxToTikzPt(options) ?? FALLBACK_CANVAS_PX_TO_TIKZ_PT);
   const color = rgbColorExpr(mark.color ?? segmentStrokeColor);
   const opacity = normalizedOpacity(segmentOpacity);
@@ -5125,15 +5308,26 @@ function multiSegmentMarkToTikz(
     explicitStylePxToPt ??
     resolvedPlainCanvasPxToTikzPt(options) ??
     FALLBACK_CANVAS_PX_TO_TIKZ_PT;
-  const sizePx = Math.max(1, mark.sizePt);
+  const markTreatmentScale = clampPositive(
+    options.segmentMarkTreatmentScale ?? 1,
+    0.01,
+    100
+  );
+  const sizePx = Math.max(1, mark.sizePt) * markTreatmentScale;
   const sizePt = sizePx * stylePxToPt;
   const tickHalfPt = sizePx * 2.2 * stylePxToPt;
   const gapPt = Math.max(2, sizePx * 0.85) * stylePxToPt;
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
+  const markLineWidthScale = clampPositive(
+    options.segmentMarkTreatmentStrokeScale ?? 1,
+    0.01,
+    100
+  );
   const lineWidthPt = Math.max(
     0.1,
     Math.max(0.5, mark.lineWidthPt ?? segmentStrokeWidth) *
       lineScale *
+      markLineWidthScale *
       stylePxToPt
   );
   const color = rgbColorExpr(mark.color ?? segmentStrokeColor);
@@ -5785,9 +5979,11 @@ function sectorMarksToTikz(
 ): string | null {
   const marks = resolveAngleMarks(style);
   if (marks.length === 0) return null;
-  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  const canvasStylePxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    resolvedReconstructibleCanvasStylePxToTikzPt(options);
   const lineWidthPt =
-    plainPxToPt === null
+    canvasStylePxToPt === null
       ? strokeWidthToTikzPt(base.strokeWidth, options)
       : strokeWidthToTikzPt(
           base.strokeWidth * ANGLE_CANVAS_STROKE_SCALE,
@@ -5801,13 +5997,13 @@ function sectorMarksToTikz(
       clampPositive(options.angleMarkSizeScale ?? 1, 0.01, 100);
     const markCommand = sectorMarkSymbolCommandToTikz(
       mark.markSymbol,
-      plainPxToPt === null
+      canvasStylePxToPt === null
         ? Math.max(0.2, markSize * FALLBACK_CANVAS_PX_TO_TIKZ_PT)
         : markSize,
       rgbColorExpr(mark.markColor ?? style.markColor ?? base.strokeColor),
       lineWidthPt,
       normalizedOpacity(base.opacity),
-      plainPxToPt ?? undefined
+      canvasStylePxToPt ?? undefined
     );
     if (!markCommand) continue;
     const positions = collectAngleMarkPositions(mark, style.markPos ?? 0.5);
@@ -6826,33 +7022,35 @@ function lineLikeStyleToTikz(
   options: TikzExportOptions
 ): string {
   const widthPt = strokeWidthToTikzPt(strokeWidth, options);
-  const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  const canvasStylePxToPt =
+    resolvedPlainCanvasPxToTikzPt(options) ??
+    resolvedReconstructibleCanvasStylePxToTikzPt(options);
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
   const opts: string[] = [
     `color=${rgbColorExpr(strokeColor)}`,
     `line width=${fmt(widthPt)}pt`,
   ];
-  if (plainPxToPt !== null && dash !== "dotted") {
+  if (canvasStylePxToPt !== null && dash !== "dotted") {
     // Canvas applyStrokeDash uses butt caps for solid and dashed geometry.
     opts.push("line cap=butt");
   }
   if (dash === "dashed") {
     const onPt =
-      plainPxToPt === null
+      canvasStylePxToPt === null
         ? Math.max(1.5, Math.min(12, 3 * widthPt))
-        : 8 * lineScale * plainPxToPt;
+        : 8 * lineScale * canvasStylePxToPt;
     const offPt =
-      plainPxToPt === null
+      canvasStylePxToPt === null
         ? Math.max(2, Math.min(16, 4 * widthPt))
-        : 6 * lineScale * plainPxToPt;
+        : 6 * lineScale * canvasStylePxToPt;
     opts.push(`dash pattern=on ${fmt(onPt)}pt off ${fmt(offPt)}pt`);
   }
   if (dash === "dotted") {
     // Use explicit round-cap dots so thick dotted strokes stay dotted (not tiny dashes).
     const offPt =
-      plainPxToPt === null
+      canvasStylePxToPt === null
         ? Math.max(1.8, Math.min(20, 3.2 * widthPt))
-        : Math.max(4, strokeWidth * 2.4) * lineScale * plainPxToPt;
+        : Math.max(4, strokeWidth * 2.4) * lineScale * canvasStylePxToPt;
     opts.push("line cap=round");
     opts.push(`dash pattern=on 0pt off ${fmt(offPt)}pt`);
   }
@@ -6864,13 +7062,14 @@ function strokeWidthToTikzPt(strokeWidth: number, options: TikzExportOptions): n
   const lineScale = clampPositive(options.lineScale ?? 1, 0.05, 10);
   const pxToPt =
     resolvedPlainCanvasPxToTikzPt(options) ??
+    resolvedReconstructibleCanvasStylePxToTikzPt(options) ??
     TIKZ_EXPORT_CALIBRATION.pointConversion.matchCanvasPxToPt;
   return Math.max(0.1, strokeWidth * lineScale * pxToPt);
 }
 
 function resolvedPlainCanvasPxToTikzPt(options: TikzExportOptions): number | null {
   if (options.drawLayerBackend !== "plain") return null;
-  const value = (options as ResolvedTikzExportOptions).resolvedCanvasPxToTikzPt;
+  const value = (options as ResolvedTikzExportOptions).resolvedCanvasStylePxToTikzPt;
   return Number.isFinite(value) && (value as number) > 0 ? (value as number) : null;
 }
 
@@ -6932,12 +7131,17 @@ function pointLabelOptionsToTikz(point: ScenePoint, placement: LabelPlacement | 
   const rawYShiftPt = placement?.rawYShiftPt ?? yShiftPt;
   const canvasStylePxToPt = resolvedReconstructibleCanvasStylePxToTikzPt(exportOptions);
   if (canvasStylePxToPt !== null) {
+    const labelOffsetScale = clampPositive(
+      exportOptions.pointLabelOffsetScale ?? 1,
+      0.05,
+      10
+    );
     const offsetXPx = placement?.offsetXPx ?? point.style.labelOffsetPx.x;
     const offsetYPx = placement?.offsetYPx ?? point.style.labelOffsetPx.y;
     opts.push(point.showLabel === "caption" ? "anchor=north west" : "anchor=base west");
     opts.push("inner sep=0pt");
-    opts.push(`xshift=${fmt(offsetXPx * canvasStylePxToPt)}pt`);
-    opts.push(`yshift=${fmt(-offsetYPx * canvasStylePxToPt)}pt`);
+    opts.push(`xshift=${fmt(offsetXPx * canvasStylePxToPt * labelOffsetScale)}pt`);
+    opts.push(`yshift=${fmt(-offsetYPx * canvasStylePxToPt * labelOffsetScale)}pt`);
     const canvasKatexScale = point.showLabel === "caption" ? 0.95 : 1;
     const fontPt = Math.max(
       0.5,

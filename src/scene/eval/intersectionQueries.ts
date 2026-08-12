@@ -3,7 +3,7 @@ import type { Vec2 } from "../../geo/vec2";
 import type { GeometryObjectRef } from "../points";
 import { lineLikeContainsPoint } from "./intersectionUtils";
 
-type LineLike = { a: Vec2; b: Vec2; finite: boolean };
+type LineLike = { a: Vec2; b: Vec2; finite: boolean; ray?: boolean };
 type CircleGeom = { center: Vec2; radius: number };
 type SectorArcGeom = { center: Vec2; radius: number; start: number; sweep: number };
 

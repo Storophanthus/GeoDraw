@@ -247,13 +247,13 @@ export function getCircleWorldGeometryWithOps(
 export function asLineLikeWithOps(
   ref: GeometryObjectRef,
   ops: GeometryResolveOps
-): { a: Vec2; b: Vec2; finite: boolean } | null {
+): { a: Vec2; b: Vec2; finite: boolean; ray?: boolean } | null {
   if (ref.type === "line") {
     const line = ops.getLineById(ref.id);
     if (!line) return null;
     const anchors = resolveLineAnchorsWithOps(line, ops);
     if (!anchors) return null;
-    return { a: anchors.a, b: anchors.b, finite: false };
+    return { a: anchors.a, b: anchors.b, finite: false, ray: line.kind === "ray" };
   }
 
   if (ref.type === "segment") {

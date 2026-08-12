@@ -46,7 +46,7 @@ export function defaultSegmentLabelText(segment: SceneSegment, scene: SceneModel
 }
 
 export function defaultLineLabelText(line: SceneLine, scene: SceneModel): string {
-  if (line.kind === "twoPoint" || line.kind === undefined) {
+  if (line.kind === "twoPoint" || line.kind === "ray" || line.kind === undefined) {
     return `${pointName(scene, line.aId)}${pointName(scene, line.bId)}`;
   }
   return line.id;

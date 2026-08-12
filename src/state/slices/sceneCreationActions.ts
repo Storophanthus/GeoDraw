@@ -365,7 +365,7 @@ export function createSceneCreationActions(
                 locked: false,
                 auxiliary: false,
                 lineId,
-                s,
+                s: line.kind === "ray" ? Math.max(0, s) : s,
                 style: {
                   ...prev.pointDefaults,
                   labelOffsetPx: { ...prev.pointDefaults.labelOffsetPx },

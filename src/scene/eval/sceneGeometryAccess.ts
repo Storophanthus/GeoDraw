@@ -23,7 +23,7 @@ type SceneGeometryRuntime = {
 export function asLineLikeInScene(
   ref: GeometryObjectRef,
   runtime: SceneGeometryRuntime
-): { a: Vec2; b: Vec2; finite: boolean } | null {
+): { a: Vec2; b: Vec2; finite: boolean; ray?: boolean } | null {
   return asLineLikeWithOps(ref, runtime);
 }
 

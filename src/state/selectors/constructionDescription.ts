@@ -90,6 +90,9 @@ function describeSelectedConstruction(
         pointNameById
       )}${pointLabel(line.cId, pointNameById)}.`;
     }
+    if (line.kind === "ray") {
+      return `Ray from ${pointLabel(line.aId, pointNameById)} through ${pointLabel(line.bId, pointNameById)}.`;
+    }
     const aTransform = getPointTransformMeta(line.aId, pointById);
     const bTransform = getPointTransformMeta(line.bId, pointById);
     if (aTransform && bTransform && sameTransformEnvelope(aTransform, bTransform)) {
@@ -341,7 +344,9 @@ function describePointConstruction(
         const circleBText = circleB ? describeCircleRef(circleB, pointNameById) : `circle ${line.circleBId}`;
         return `Point on common tangent line of ${circleAText} and ${circleBText}.`;
       }
-      return `Point on line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
+      return line.kind === "ray"
+        ? `Point on ray from ${pointLabel(line.aId, pointNameById)} through ${pointLabel(line.bId, pointNameById)}.`
+        : `Point on line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}.`;
     }
   if (point.kind === "pointOnSegment") {
     const seg = segmentById.get(point.segId);
@@ -441,7 +446,9 @@ function describePointConstruction(
             line.bId,
             pointNameById
           )}${pointLabel(line.cId, pointNameById)}`
-          : `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
+          : line.kind === "ray"
+            ? `ray from ${pointLabel(line.aId, pointNameById)} through ${pointLabel(line.bId, pointNameById)}`
+            : `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
       : `line ${point.lineId}`;
     return `Intersection of ${lineText} with ${circleText}.`;
   }
@@ -538,6 +545,9 @@ function describeObjectRef(
         line.bId,
         pointNameById
       )}${pointLabel(line.cId, pointNameById)}`;
+    }
+    if (line?.kind === "ray") {
+      return `ray from ${pointLabel(line.aId, pointNameById)} through ${pointLabel(line.bId, pointNameById)}`;
     }
     return line
       ? `line through ${pointLabel(line.aId, pointNameById)} and ${pointLabel(line.bId, pointNameById)}`
@@ -659,7 +669,10 @@ function describeLineLikeCompact(
     return seg ? `segment ${pointLabel(seg.aId, pointNameById)}${pointLabel(seg.bId, pointNameById)}` : `segment ${ref.id}`;
   }
   const line = lineById.get(ref.id);
-  if (line && (line.kind === undefined || line.kind === "twoPoint")) {
+  if (line && (line.kind === undefined || line.kind === "twoPoint" || line.kind === "ray")) {
+    if (line.kind === "ray") {
+      return `ray ${pointLabel(line.aId, pointNameById)}${pointLabel(line.bId, pointNameById)}`;
+    }
     return `line ${pointLabel(line.aId, pointNameById)}${pointLabel(line.bId, pointNameById)}`;
   }
   return describeObjectRef(ref, pointNameById, lineById, segmentById, circleById);

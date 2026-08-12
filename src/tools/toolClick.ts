@@ -24,6 +24,7 @@ export type ToolClickIO = {
   createRichTextNode?: (world: Vec2) => string;
   migrateTextLabelToRichTextNode?: (id: string) => string | null;
   createSegment: (aId: string, bId: string) => string | null;
+  createRay?: (originId: string, throughId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
   createPolygon: (pointIds: string[]) => string | null;
   createRegularPolygon: (aId: string, bId: string, sides: number, direction: "CCW" | "CW") => string | null;
@@ -513,6 +514,17 @@ export function handleToolClick(
     }
     const bId = resolveOrCreatePointAtCursor();
     io.createLine(pendingSelection.first.id, bId);
+    io.clearPendingSelection();
+    return;
+  }
+
+  if (activeTool === "ray") {
+    if (!pendingSelection || pendingSelection.tool !== "ray") {
+      io.setPendingSelection({ tool: "ray", step: 2, first: { type: "point", id: resolveOrCreatePointAtCursor() } });
+      return;
+    }
+    const throughId = resolveOrCreatePointAtCursor();
+    io.createRay?.(pendingSelection.first.id, throughId);
     io.clearPendingSelection();
     return;
   }

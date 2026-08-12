@@ -21,6 +21,7 @@ type TransformCreateOps = {
   createPointOnCircle: (circleId: string, t: number) => string | null;
   createSegment: (aId: string, bId: string) => string | null;
   createLine: (aId: string, bId: string) => string | null;
+  createRay?: (originId: string, throughId: string) => string | null;
   createAngleBisectorLine: (aId: string, bId: string, cId: string) => string | null;
   createCircle: (centerId: string, throughId: string) => string | null;
   createCircleThreePoint: (aId: string, bId: string, cId: string) => string | null;
@@ -38,6 +39,11 @@ type TransformCreateOps = {
     target: { type: "point" | "segment" | "line" | "circle" | "polygon" | "angle"; id: string }
   ) => void;
 };
+
+export type InversionPointCreateOps = Pick<
+  TransformCreateOps,
+  "scene" | "createPointByDilation" | "createCircleCenterPoint" | "setObjectVisibility"
+>;
 
 type PointTransform = (pointId: string) => string | null;
 
@@ -112,7 +118,7 @@ function transformSourceObject(
     let sourceAId: string | null = null;
     let sourceBId: string | null = null;
 
-    if (!sourceLine.kind || sourceLine.kind === "twoPoint") {
+    if (!sourceLine.kind || sourceLine.kind === "twoPoint" || sourceLine.kind === "ray") {
       sourceAId = sourceLine.aId;
       sourceBId = sourceLine.bId;
     } else if (sourceLine.kind === "perpendicular" || sourceLine.kind === "parallel" || sourceLine.kind === "tangent") {
@@ -141,7 +147,9 @@ function transformSourceObject(
     if (!aId || !bId) return null;
     if (helperPointIds.includes(sourceAId)) ops.setObjectVisibility?.({ type: "point", id: aId }, false);
     if (helperPointIds.includes(sourceBId)) ops.setObjectVisibility?.({ type: "point", id: bId }, false);
-    const id = ops.createLine(aId, bId);
+    const id = sourceLine.kind === "ray" && ops.createRay
+      ? ops.createRay(aId, bId)
+      : ops.createLine(aId, bId);
     if (!id) return null;
     cloneStyle(ops, source, { type: "line", id });
     return id;
@@ -295,7 +303,7 @@ export function applyReflectionToObject(
 
 function resolveInversionSpec(
   inversionCircleId: string,
-  ops: TransformCreateOps
+  ops: InversionPointCreateOps
 ): { centerId: string; radiusExpr: string; hideCenterId?: string } | null {
   const inversionCircle = ops.scene.circles.find((item) => item.id === inversionCircleId);
   if (!inversionCircle) return null;
@@ -327,6 +335,19 @@ function resolveInversionSpec(
 
 function inversionFactorExpr(spec: { centerId: string; radiusExpr: string }, pointId: string): string {
   return `((abs(${spec.radiusExpr}))^2)/(Distance(${spec.centerId},${pointId})^2)`;
+}
+
+export function applyInversionToPoint(
+  pointId: string,
+  inversionCircleId: string,
+  ops: InversionPointCreateOps
+): string | null {
+  const spec = resolveInversionSpec(inversionCircleId, ops);
+  if (!spec) return null;
+  if (spec.hideCenterId) {
+    ops.setObjectVisibility?.({ type: "point", id: spec.hideCenterId }, false);
+  }
+  return ops.createPointByDilation(pointId, spec.centerId, inversionFactorExpr(spec, pointId));
 }
 
 function invertLineToObject(
@@ -436,16 +457,16 @@ export function applyInversionToObject(
   ops: TransformCreateOps
 ): string | null {
   if (source.type !== "point" && source.type !== "line" && source.type !== "circle") return null;
+  if (source.type === "point") {
+    const invertedId = applyInversionToPoint(source.id, inversionCircleId, ops);
+    if (!invertedId) return null;
+    cloneStyle(ops, source, { type: "point", id: invertedId });
+    return invertedId;
+  }
   const spec = resolveInversionSpec(inversionCircleId, ops);
   if (!spec) return null;
   if (spec.hideCenterId) {
     ops.setObjectVisibility?.({ type: "point", id: spec.hideCenterId }, false);
-  }
-  if (source.type === "point") {
-    const invertedId = ops.createPointByDilation(source.id, spec.centerId, inversionFactorExpr(spec, source.id));
-    if (!invertedId) return null;
-    cloneStyle(ops, source, { type: "point", id: invertedId });
-    return invertedId;
   }
   const mapPoint = mapPointWithCache(
     (pointId) => ops.createPointByDilation(pointId, spec.centerId, inversionFactorExpr(spec, pointId)),

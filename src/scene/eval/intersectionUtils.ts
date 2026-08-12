@@ -1,4 +1,4 @@
-import { distance } from "../../geo/geometry";
+import { distance, pointWithinRayDomain } from "../../geo/geometry";
 import type { Vec2 } from "../../geo/vec2";
 import type { GeometryObjectRef } from "../points";
 
@@ -54,7 +54,8 @@ export function sameObjectPair(
   return (sameObjectRef(a1, a2) && sameObjectRef(b1, b2)) || (sameObjectRef(a1, b2) && sameObjectRef(b1, a2));
 }
 
-export function lineLikeContainsPoint(lineLike: { a: Vec2; b: Vec2; finite: boolean }, p: Vec2): boolean {
+export function lineLikeContainsPoint(lineLike: { a: Vec2; b: Vec2; finite: boolean; ray?: boolean }, p: Vec2): boolean {
+  if (lineLike.ray) return pointWithinRayDomain(p, lineLike.a, lineLike.b);
   if (!lineLike.finite) return true;
   return pointWithinSegmentDomain(p, lineLike.a, lineLike.b);
 }

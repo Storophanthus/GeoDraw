@@ -198,7 +198,7 @@ export function appendRenderedSetupAndPoints({
         .join(" -- ");
       out.push(`\\path[use as bounding box] ${boundsPath};`);
       out.push(`\\clip ${polygonPath} -- cycle;`);
-    } else if (setupViewport) {
+    } else if (setupViewport?.clip) {
       const xmin = setupViewport.xmin - setupViewport.space;
       const xmax = setupViewport.xmax + setupViewport.space;
       const ymin = setupViewport.ymin - setupViewport.space;
@@ -212,13 +212,15 @@ export function appendRenderedSetupAndPoints({
   // prevent extra outer whitespace from a larger bounding box.
   if (drawLayerBackend === "tkz" && emitTkzSetup && setupViewport && !clipRect && !clipPolygon) {
     caps.assertTkzMacro("tkzInit");
-    caps.assertTkzMacro("tkzClip");
     out.push(
       `\\tkzInit[xmin=${caps.fmt(setupViewport.xmin)},xmax=${caps.fmt(setupViewport.xmax)},ymin=${caps.fmt(
         setupViewport.ymin
       )},ymax=${caps.fmt(setupViewport.ymax)}]`
     );
-    out.push(`\\tkzClip[space=${caps.fmt(setupViewport.space)}]`);
+    if (setupViewport.clip) {
+      caps.assertTkzMacro("tkzClip");
+      out.push(`\\tkzClip[space=${caps.fmt(setupViewport.space)}]`);
+    }
   }
   if (drawLayerBackend === "tkz" && emitTkzSetup && setupLine) {
     caps.assertTkzMacro("tkzSetUpLine");

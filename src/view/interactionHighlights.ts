@@ -1,5 +1,5 @@
 import type { Vec2 } from "../geo/vec2";
-import { add, mul, sub } from "../geo/geometry";
+import { add, clipRayToRect, mul, sub } from "../geo/geometry";
 import { resolveAngleRightStatus } from "../domain/rightAngleProvenance";
 import {
   computeOrientedAngleRad,
@@ -231,16 +231,19 @@ function drawHitHighlight(
     if (len < 1e-9) return;
     const dir = { x: d.x / len, y: d.y / len };
     const span = (Math.max(vp.widthPx, vp.heightPx) / camera.zoom) * 2;
-    const p1 = camMath.worldToScreen(add(a, mul(dir, -span)), camera, vp);
+    const p1 = camMath.worldToScreen(add(a, mul(dir, line.kind === "ray" ? 0 : -span)), camera, vp);
     const p2 = camMath.worldToScreen(add(a, mul(dir, span)), camera, vp);
+    const clippedRay = line.kind === "ray"
+      ? clipRayToRect(p1, p2, { xmin: 0, xmax: vp.widthPx, ymin: 0, ymax: vp.heightPx })
+      : null;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.setLineDash([]);
     ctx.strokeStyle = color;
     ctx.lineWidth = line.style.strokeWidth + 2.5;
     ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
+    ctx.moveTo(clippedRay?.a.x ?? p1.x, clippedRay?.a.y ?? p1.y);
+    ctx.lineTo(clippedRay?.b.x ?? p2.x, clippedRay?.b.y ?? p2.y);
     ctx.stroke();
     ctx.restore();
     return;

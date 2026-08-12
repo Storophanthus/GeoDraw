@@ -83,7 +83,7 @@ export type SnapshotVector =
 
 export type SnapshotLine = {
   id: string;
-  kind?: "twoPoint" | "perpendicular" | "parallel" | "tangent" | "circleCircleTangent" | "angleBisector";
+  kind?: "twoPoint" | "ray" | "perpendicular" | "parallel" | "tangent" | "circleCircleTangent" | "angleBisector";
   aId?: string;
   bId?: string;
   cId?: string;
@@ -222,7 +222,7 @@ export function buildConstructionSnapshot(scene: SceneModel): ConstructionSnapsh
             }
         : {
             id: line.id,
-            kind: "twoPoint" as const,
+            kind: line.kind === "ray" ? "ray" as const : "twoPoint" as const,
             aId: line.aId,
             bId: line.bId,
             visible: line.visible,

@@ -5,6 +5,7 @@ import { getCircleWorldGeometry, getLineWorldAnchors, getPointWorldPos } from ".
 import type { SceneModel } from "./scene/points";
 import { commandBarApi, useGeoStore } from "./state/geoStore";
 import { CommandReferenceDialog } from "./ui/commandReference/CommandReferenceDialog";
+import type { TransformationMapDefinition } from "./domain/transformationMaps";
 
 type StatusKind = "idle" | "ok" | "error";
 
@@ -19,7 +20,8 @@ function buildParseContext(
   scene: SceneModel,
   ans: number | null,
   scalarVars: Record<string, number>,
-  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }>
+  objectAliases: Record<string, { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }>,
+  transformationMaps: Record<string, TransformationMapDefinition>
 ): ParseContext {
   const symbolsByLabel = new Map<string, Symbol[]>();
   const add = (symbol: Symbol) => {
@@ -52,11 +54,11 @@ function buildParseContext(
     if (a && b) segmentWorldAnchorsById.set(seg.id, { a, b });
   }
 
-  const lineWorldAnchorsById = new Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>();
+  const lineWorldAnchorsById = new Map<string, { a: { x: number; y: number }; b: { x: number; y: number }; ray?: boolean }>();
   for (let i = 0; i < scene.lines.length; i += 1) {
     const line = scene.lines[i];
     const anchors = getLineWorldAnchors(line, scene);
-    if (anchors) lineWorldAnchorsById.set(line.id, anchors);
+    if (anchors) lineWorldAnchorsById.set(line.id, { ...anchors, ray: line.kind === "ray" });
   }
 
   const circleWorldGeometryById = new Map<string, { center: { x: number; y: number }; radius: number }>();
@@ -82,6 +84,7 @@ function buildParseContext(
     scalarsByName: new Map(Object.entries(scalarVars)),
     objectAliases: new Map(Object.entries(objectAliases)),
     objectNames: new Set(Object.keys(objectAliases)),
+    transformationMaps: new Map(Object.entries(transformationMaps)),
     ans: ans ?? undefined,
   };
 }
@@ -90,6 +93,7 @@ export function CommandBar() {
   const scene = useGeoStore((store) => store.scene);
   const createFreePoint = useGeoStore((store) => store.createFreePoint);
   const createLine = useGeoStore((store) => store.createLine);
+  const createRay = useGeoStore((store) => store.createRay);
   const createSegment = useGeoStore((store) => store.createSegment);
   const createPolygon = useGeoStore((store) => store.createPolygon);
   const createRegularPolygon = useGeoStore((store) => store.createRegularPolygon);
@@ -144,7 +148,13 @@ export function CommandBar() {
       return;
     }
 
-    const parseCtx = buildParseContext(scene, ans, commandBarApi.getScalarVars(), commandBarApi.getCommandObjectAliases());
+    const parseCtx = buildParseContext(
+      scene,
+      ans,
+      commandBarApi.getScalarVars(),
+      commandBarApi.getCommandObjectAliases(),
+      commandBarApi.getTransformationMaps()
+    );
     const parsed = parseCommandInput(raw, parseCtx);
     if (parsed.kind === "error") {
       setStatus({ kind: "error", text: parsed.message });
@@ -168,6 +178,19 @@ export function CommandBar() {
         return;
       }
       setStatus({ kind: "ok", text: `${parsed.name} = ${parsed.value}${out.mode === "updated" ? " (updated)" : ""}` });
+      return;
+    }
+
+    if (parsed.kind === "assignTransformationMap") {
+      const out = commandBarApi.setTransformationMap(parsed.name, parsed.definition);
+      if (!out.ok) {
+        setStatus({ kind: "error", text: out.error });
+        return;
+      }
+      setStatus({
+        kind: "ok",
+        text: `${parsed.name}: Map ${out.mode === "updated" ? "updated" : "defined"} (${parsed.definition.steps.length} step${parsed.definition.steps.length === 1 ? "" : "s"})`,
+      });
       return;
     }
 
@@ -220,6 +243,16 @@ export function CommandBar() {
         return;
       }
       setStatus({ kind: "ok", text: `Created line ${lineId}` });
+      return;
+    }
+
+    if (cmd.type === "CreateRayByPoints") {
+      const rayId = createRay(cmd.originId, cmd.throughId);
+      if (!rayId) {
+        setStatus({ kind: "error", text: "Cannot construct ray" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created ray ${rayId}` });
       return;
     }
 
@@ -317,6 +350,26 @@ export function CommandBar() {
       const pointId = createPointByReflection(cmd.pointId, cmd.axis);
       if (!pointId) {
         setStatus({ kind: "error", text: "Cannot construct reflected point" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "CreatePointByInversion") {
+      const pointId = commandBarApi.createPointByInversion(cmd.pointId, cmd.circleId);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot construct inverted point" });
+        return;
+      }
+      setStatus({ kind: "ok", text: `Created point ${pointId}` });
+      return;
+    }
+
+    if (cmd.type === "ApplyPointTransformationMap") {
+      const pointId = commandBarApi.createPointByTransformationMap(cmd.pointId, cmd.definition);
+      if (!pointId) {
+        setStatus({ kind: "error", text: "Cannot apply transformation map" });
         return;
       }
       setStatus({ kind: "ok", text: `Created point ${pointId}` });

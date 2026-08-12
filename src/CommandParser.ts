@@ -10,11 +10,29 @@ import {
 import { evaluateScalarObjectMeasureArg } from "./scene/eval/scalarObjectMeasure";
 import { evaluateScalarExpressionWithRuntime } from "./scene/eval/scalarExpressionRuntime";
 import type { ReflectionObjectRef } from "./scene/points";
+import {
+  MAX_TRANSFORMATION_MAP_STEPS,
+  cloneTransformationMap,
+  composeTransformationMaps,
+  invertTransformationMap,
+  type TransformationMapDefinition,
+} from "./domain/transformationMaps";
 
 const math = create(all, { number: "number", matrix: "Array", predictable: true });
 const MAX_INPUT_LENGTH = 300;
 const DISALLOWED_TOKEN_RE = /\b(import|createUnit|unit|range|ones|zeros|matrix)\b/i;
 const IDENT_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
+const TRANSFORMATION_MAP_CONSTRUCTOR_NAMES = new Set([
+  "Translation",
+  "Rotation",
+  "Homothety",
+  "Dilation",
+  "Reflection",
+  "Inversion",
+  "Invert",
+  "Compose",
+  "Inverse",
+]);
 
 export type Symbol =
   | { kind: "point"; id: string; label: string }
@@ -23,13 +41,14 @@ export type Symbol =
 export type ParseContext = {
   symbolsByLabel: Map<string, Symbol[]>;
   pointWorldById?: Map<string, { x: number; y: number }>;
-  lineWorldAnchorsById?: Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
+  lineWorldAnchorsById?: Map<string, { a: { x: number; y: number }; b: { x: number; y: number }; ray?: boolean }>;
   segmentWorldAnchorsById?: Map<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
   circleWorldGeometryById?: Map<string, { center: { x: number; y: number }; radius: number }>;
   polygonPointIdsById?: Map<string, string[]>;
   scalarsByName: Map<string, number>;
   objectAliases: Map<string, { type: "point" | "segment" | "line" | "circle" | "ellipse" | "polygon" | "angle"; id: string }>;
   objectNames: Set<string>;
+  transformationMaps?: Map<string, TransformationMapDefinition>;
   ans?: number;
 };
 
@@ -44,9 +63,12 @@ export type Command =
   | { type: "CreatePointByRotation"; pointId: string; centerId: string; angleDeg: number; angleExpr: string; direction: "CCW" | "CW" }
   | { type: "CreatePointByDilation"; pointId: string; centerId: string; factorExpr: string }
   | { type: "CreatePointByReflection"; pointId: string; axis: ReflectionObjectRef }
+  | { type: "CreatePointByInversion"; pointId: string; circleId: string }
+  | { type: "ApplyPointTransformationMap"; pointId: string; definition: TransformationMapDefinition }
   | { type: "CreatePointByProjection"; pointId: string; axisAId: string; axisBId: string }
   | { type: "CreateLineXY"; x1: number; y1: number; x2: number; y2: number }
   | { type: "CreateLineByPoints"; aId: string; bId: string }
+  | { type: "CreateRayByPoints"; originId: string; throughId: string }
   | { type: "CreatePerpendicularLine"; throughId: string; base: { type: "line" | "segment"; id: string } }
   | { type: "CreateParallelLine"; throughId: string; base: { type: "line" | "segment"; id: string } }
   | { type: "CreateTangentLines"; throughId: string; circleId: string }
@@ -68,6 +90,7 @@ export type ParseResult =
   | { kind: "cmd"; cmd: Command }
   | { kind: "assignScalar"; name: string; value: number; expr?: string }
   | { kind: "assignObject"; name: string; cmd: Command }
+  | { kind: "assignTransformationMap"; name: string; definition: TransformationMapDefinition }
   | { kind: "error"; message: string };
 
 type ExprValue =
@@ -385,6 +408,160 @@ function parseInlinePointPairAxis(
   return resolvePointPairAxis(args[0], args[1], ctx, name);
 }
 
+type TransformationMapParse =
+  | { ok: true; definition: TransformationMapDefinition }
+  | { ok: false; message: string };
+
+function evaluateFiniteScalarArgument(raw: string, ctx: ParseContext): EvalResult {
+  const out = evaluatePointOrScalarExpression(raw, ctx);
+  if (!out.ok) return { ok: false, error: out.error };
+  if (out.value.kind !== "scalar" || !Number.isFinite(out.value.value)) {
+    return { ok: false, error: "Expression must evaluate to a finite number" };
+  }
+  return { ok: true, value: out.value.value };
+}
+
+function resolveReflectionMapAxis(
+  args: string[],
+  ctx: ParseContext
+): { ok: true; axis: ReflectionObjectRef } | { ok: false; message: string } {
+  if (args.length === 2) return resolvePointPairAxis(args[0], args[1], ctx, "Reflection");
+  if (args.length !== 1) return { ok: false, message: "Reflection(l|O|A,B) expects 1 or 2 arguments" };
+
+  const inlineAxis = parseInlinePointPairAxis(args[0], ctx);
+  if (inlineAxis) return inlineAxis;
+
+  const axisLabel = asIdentifier(args[0]);
+  if (!axisLabel) {
+    return { ok: false, message: "Reflection(l|O|A,B) expects a point, line/segment alias, or Line(A,B)/Segment(A,B)" };
+  }
+  const axisPoint = resolvePointIdentifier(axisLabel, ctx);
+  if (axisPoint.ok) return { ok: true, axis: { type: "point", id: axisPoint.id } };
+  const axisAlias = ctx.objectAliases.get(axisLabel);
+  if (!axisAlias) return { ok: false, message: `Unknown reflection target: ${axisLabel}` };
+  if (axisAlias.type !== "line" && axisAlias.type !== "segment") {
+    return { ok: false, message: `Not a line/segment: ${axisLabel}` };
+  }
+  return { ok: true, axis: { type: axisAlias.type, id: axisAlias.id } };
+}
+
+function resolveNamedTransformationMap(
+  raw: string,
+  ctx: ParseContext
+): TransformationMapParse | null {
+  const identifier = asIdentifier(raw.trim());
+  if (identifier) {
+    const named = ctx.transformationMaps?.get(identifier);
+    return named
+      ? { ok: true, definition: cloneTransformationMap(named) }
+      : null;
+  }
+
+  const match = raw.trim().match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
+  if (!match) return null;
+  const name = match[1];
+  if (!TRANSFORMATION_MAP_CONSTRUCTOR_NAMES.has(name)) return null;
+  const args = splitArgs(match[2]);
+  if (!args) return { ok: false, message: `Invalid ${name} map arguments` };
+
+  if (name === "Translation") {
+    if (args.length !== 2) return { ok: false, message: "Translation(A,B) expects 2 point labels" };
+    const fromLabel = asIdentifier(args[0]);
+    const toLabel = asIdentifier(args[1]);
+    if (!fromLabel || !toLabel) return { ok: false, message: "Translation(A,B) expects point labels" };
+    const from = resolvePointIdentifier(fromLabel, ctx);
+    if (!from.ok) return { ok: false, message: from.message };
+    const to = resolvePointIdentifier(toLabel, ctx);
+    if (!to.ok) return { ok: false, message: to.message };
+    return { ok: true, definition: { steps: [{ kind: "translation", fromId: from.id, toId: to.id }] } };
+  }
+
+  if (name === "Rotation") {
+    if (args.length !== 2 && args.length !== 3) {
+      return { ok: false, message: "Rotation(O,expr[,CW|CCW]) expects 2 or 3 arguments" };
+    }
+    const centerLabel = asIdentifier(args[0]);
+    if (!centerLabel) return { ok: false, message: "Rotation(O,expr[,CW|CCW]) expects a center point" };
+    const center = resolvePointIdentifier(centerLabel, ctx);
+    if (!center.ok) return { ok: false, message: center.message };
+    const angle = evaluateFiniteScalarArgument(args[1], ctx);
+    if (!angle.ok) return { ok: false, message: "Rotation angle must evaluate to a finite number" };
+    const directionRaw = args.length === 3 ? args[2].trim() : "CCW";
+    const direction = directionRaw === "CW" ? "CW" : directionRaw === "CCW" ? "CCW" : null;
+    if (!direction) return { ok: false, message: "Rotation direction must be CW or CCW" };
+    return {
+      ok: true,
+      definition: { steps: [{ kind: "rotation", centerId: center.id, angleExpr: args[1].trim(), direction }] },
+    };
+  }
+
+  if (name === "Homothety" || name === "Dilation") {
+    // Homothety(P,O,k) remains the direct point constructor.
+    if (name === "Homothety" && args.length === 3) return null;
+    if (args.length !== 2) return { ok: false, message: `${name}(O,k) expects 2 arguments` };
+    const centerLabel = asIdentifier(args[0]);
+    if (!centerLabel) return { ok: false, message: `${name}(O,k) expects a center point` };
+    const center = resolvePointIdentifier(centerLabel, ctx);
+    if (!center.ok) return { ok: false, message: center.message };
+    const factor = evaluateFiniteScalarArgument(args[1], ctx);
+    if (!factor.ok) return { ok: false, message: `${name} factor must evaluate to a finite number` };
+    return {
+      ok: true,
+      definition: { steps: [{ kind: "homothety", centerId: center.id, factorExpr: args[1].trim() }] },
+    };
+  }
+
+  if (name === "Reflection") {
+    const axis = resolveReflectionMapAxis(args, ctx);
+    if (!axis.ok) return axis;
+    return { ok: true, definition: { steps: [{ kind: "reflection", axis: axis.axis }] } };
+  }
+
+  if (name === "Inversion" || name === "Invert") {
+    // Inversion(P,c) and Invert(P,c) remain direct point constructors.
+    if (args.length === 2) return null;
+    if (args.length !== 1) return { ok: false, message: `${name}(c) expects a circle alias` };
+    const circleLabel = asIdentifier(args[0]);
+    if (!circleLabel) return { ok: false, message: `${name}(c) expects a circle alias` };
+    const circle = resolveObjectAlias(circleLabel, ctx, "circle");
+    if (!circle.ok) return { ok: false, message: circle.message };
+    return { ok: true, definition: { steps: [{ kind: "inversion", circleId: circle.id }] } };
+  }
+
+  if (name === "Compose") {
+    if (args.length < 2) return { ok: false, message: "Compose(f,g,...) expects at least 2 maps" };
+    const definitions: TransformationMapDefinition[] = [];
+    for (const arg of args) {
+      const parsed = resolveNamedTransformationMap(arg, ctx);
+      if (!parsed) return { ok: false, message: `Unknown transformation map: ${arg.trim()}` };
+      if (!parsed.ok) return parsed;
+      definitions.push(parsed.definition);
+    }
+    const definition = composeTransformationMaps(definitions);
+    if (definition.steps.length > MAX_TRANSFORMATION_MAP_STEPS) {
+      return { ok: false, message: `A transformation map may contain at most ${MAX_TRANSFORMATION_MAP_STEPS} steps` };
+    }
+    return { ok: true, definition };
+  }
+
+  if (name === "Inverse") {
+    if (args.length !== 1) return { ok: false, message: "Inverse(f) expects 1 map" };
+    const parsed = resolveNamedTransformationMap(args[0], ctx);
+    if (!parsed) return { ok: false, message: `Unknown transformation map: ${args[0].trim()}` };
+    if (!parsed.ok) return parsed;
+    for (const step of parsed.definition.steps) {
+      if (step.kind !== "homothety") continue;
+      const factor = evaluateFiniteScalarArgument(step.factorExpr, ctx);
+      if (!factor.ok || Math.abs(factor.value) <= 1e-12) {
+        return { ok: false, message: "Cannot invert a homothety with zero factor" };
+      }
+    }
+    return { ok: true, definition: invertTransformationMap(parsed.definition) };
+  }
+
+  return null;
+}
+
 function resolveDistanceArg(node: MathNode, ctx: ParseContext): { ok: true; value: DistanceArg } | { ok: false; error: string } {
   const unwrapped = unwrapParenthesisNode(node);
   const anyNode = unwrapped as unknown as { type?: string; name?: string };
@@ -393,7 +570,7 @@ function resolveDistanceArg(node: MathNode, ctx: ParseContext): { ok: true; valu
     if (alias?.type === "line") {
       const anchors = ctx.lineWorldAnchorsById?.get(alias.id);
       if (!anchors) return { ok: false, error: `Distance requires line geometry in context: ${anyNode.name}` };
-      return { ok: true, value: { kind: "lineLike", finite: false, a: anchors.a, b: anchors.b } };
+      return { ok: true, value: { kind: "lineLike", finite: false, ray: anchors.ray, a: anchors.a, b: anchors.b } };
     }
     if (alias?.type === "segment") {
       const anchors = ctx.segmentWorldAnchorsById?.get(alias.id);
@@ -481,17 +658,26 @@ function evaluateMeasureArg(fnName: "Area" | "Perimeter", raw: string, ctx: Pars
 }
 
 function parseCommand(name: string, args: string[], ctx: ParseContext): ParseResult {
-  const evalScalarArg = (raw: string): EvalResult => {
-    const out = evaluatePointOrScalarExpression(raw, ctx);
-    if (!out.ok) return { ok: false, error: out.error };
-    if (out.value.kind !== "scalar") return { ok: false, error: "Expression must evaluate to a finite number" };
-    if (!Number.isFinite(out.value.value)) return { ok: false, error: "Expression must evaluate to a finite number" };
-    return { ok: true, value: out.value.value };
-  };
+  const evalScalarArg = (raw: string): EvalResult => evaluateFiniteScalarArgument(raw, ctx);
   const evalArg = (raw: string): number | null => {
     const out = evalScalarArg(raw);
     return out.ok ? out.value : null;
   };
+
+  if (name === "Apply") {
+    if (args.length !== 2) return err("Apply(f,P) expects a map and a point");
+    const map = resolveNamedTransformationMap(args[0], ctx);
+    if (!map) return err(`Unknown transformation map: ${args[0].trim()}`);
+    if (!map.ok) return err(map.message);
+    const pointLabel = asIdentifier(args[1]);
+    if (!pointLabel) return err("Apply(f,P) expects a point as its second argument");
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    return {
+      kind: "cmd",
+      cmd: { type: "ApplyPointTransformationMap", pointId: point.id, definition: map.definition },
+    };
+  }
 
   if (name === "Point") {
     if (args.length !== 2) return err("Point(x, y) expects 2 arguments");
@@ -625,6 +811,18 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     };
   }
 
+  if (name === "Invert" || name === "Inversion") {
+    if (args.length !== 2) return err(`${name}(P,c) expects a point and a circle alias`);
+    const pointLabel = asIdentifier(args[0]);
+    const circleLabel = asIdentifier(args[1]);
+    if (!pointLabel || !circleLabel) return err(`${name}(P,c) expects a point and a circle alias`);
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    const circle = resolveObjectAlias(circleLabel, ctx, "circle");
+    if (!circle.ok) return err(circle.message);
+    return { kind: "cmd", cmd: { type: "CreatePointByInversion", pointId: point.id, circleId: circle.id } };
+  }
+
   if (name === "Reflect") {
     if (args.length !== 2 && args.length !== 3) return err("Reflect(P, l|O|A,B) expects 2 or 3 arguments");
     const pointLabel = asIdentifier(args[0]);
@@ -692,6 +890,19 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
       return { kind: "cmd", cmd: { type: "CreateLineXY", x1, y1, x2, y2 } };
     }
     return err("Line expects either Line(A,B) or Line(x1,y1,x2,y2)");
+  }
+
+  if (name === "Ray") {
+    if (args.length !== 2) return err("Ray(A,B) expects an origin and a through-point");
+    const originLabel = asIdentifier(args[0]);
+    const throughLabel = asIdentifier(args[1]);
+    if (!originLabel || !throughLabel) return err("Ray(A,B) expects point labels");
+    const origin = resolvePointIdentifier(originLabel, ctx);
+    if (!origin.ok) return err(origin.message);
+    const through = resolvePointIdentifier(throughLabel, ctx);
+    if (!through.ok) return err(through.message);
+    if (origin.id === through.id) return err("Ray origin and through-point must be distinct");
+    return { kind: "cmd", cmd: { type: "CreateRayByPoints", originId: origin.id, throughId: through.id } };
   }
 
   if (name === "Perpendicular") {
@@ -943,6 +1154,19 @@ function parseCommand(name: string, args: string[], ctx: ParseContext): ParseRes
     return parseDistanceResult(args, ctx);
   }
 
+  const namedMap = ctx.transformationMaps?.get(name);
+  if (namedMap) {
+    if (args.length !== 1) return err(`${name}(P) expects 1 point argument`);
+    const pointLabel = asIdentifier(args[0]);
+    if (!pointLabel) return err(`${name}(P) expects a point label`);
+    const point = resolvePointIdentifier(pointLabel, ctx);
+    if (!point.ok) return err(point.message);
+    return {
+      kind: "cmd",
+      cmd: { type: "ApplyPointTransformationMap", pointId: point.id, definition: cloneTransformationMap(namedMap) },
+    };
+  }
+
   return err(`Unknown command: ${name}`);
 }
 
@@ -992,6 +1216,11 @@ export function parseCommandInput(rawInput: string, ctx: ParseContext): ParseRes
 
     const commandMatch = assignment.right.match(/^([A-Za-z][A-Za-z0-9_]*)\s*\((.*)\)\s*$/);
     if (commandMatch) {
+      const rhsMap = resolveNamedTransformationMap(assignment.right, ctx);
+      if (rhsMap) {
+        if (!rhsMap.ok) return err(rhsMap.message);
+        return { kind: "assignTransformationMap", name: left, definition: rhsMap.definition };
+      }
       if (commandMatch[1] === "Angle") {
         const rhsAngleExpr = evaluatePointOrScalarExpression(assignment.right, ctx);
         if (rhsAngleExpr.ok) {

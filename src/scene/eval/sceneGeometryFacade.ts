@@ -27,7 +27,7 @@ export function createSceneGeometryFacadeWithCtx(
 ) {
   const resolveOps = buildGeometryResolveOpsWithCtx(scene, ctx, deps);
   return {
-    asLineLike(ref: GeometryObjectRef): { a: Vec2; b: Vec2; finite: boolean } | null {
+    asLineLike(ref: GeometryObjectRef): { a: Vec2; b: Vec2; finite: boolean; ray?: boolean } | null {
       return asLineLikeWithCtx(ref, scene, ctx, resolveOps);
     },
     resolveLineAnchors(line: SceneLine): { a: Vec2; b: Vec2 } | null {

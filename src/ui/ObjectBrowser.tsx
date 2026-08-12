@@ -268,6 +268,7 @@ export function ObjectBrowser({
         const l = lineById.get(ref.id);
         if (!l) return `Line(${ref.id})`;
         if (l.kind === "twoPoint") return `Line(${pointLabel(l.aId)},${pointLabel(l.bId)})`;
+        if (l.kind === "ray") return `Ray(${pointLabel(l.aId)},${pointLabel(l.bId)})`;
         if (l.kind === "angleBisector") return `AngleBisector(${pointLabel(l.aId)},${pointLabel(l.bId)},${pointLabel(l.cId)})`;
         if (l.kind === "tangent") return `Tangent(${pointLabel(l.throughId)},${circleRefText(l.circleId)})`;
         if (l.kind === "circleCircleTangent") return `Tangent(${circleRefText(l.circleAId)},${circleRefText(l.circleBId)})`;
@@ -607,7 +608,11 @@ export function ObjectBrowser({
         const buildLineRow = (line: SceneModel["lines"][number]): ObjectRowDescriptor => ({
             key: `line:${line.id}`,
             object: { type: "line", id: line.id },
-            title: line.kind === "twoPoint" ? `Line ${pointLabel(line.aId)}${pointLabel(line.bId)}` : `Line ${line.id}`,
+            title: line.kind === "ray"
+                ? `Ray ${pointLabel(line.aId)}${pointLabel(line.bId)}`
+                : line.kind === "twoPoint"
+                    ? `Line ${pointLabel(line.aId)}${pointLabel(line.bId)}`
+                    : `Line ${line.id}`,
             commandText: withAliasPrefix("line", line.id, lineLikeText({ type: "line", id: line.id })),
             visible: line.visible,
             reorderable: activeTab === "lines",

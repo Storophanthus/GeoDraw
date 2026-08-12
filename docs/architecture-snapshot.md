@@ -61,9 +61,10 @@ Responsibility:
 - `src/domain/sceneIntegrity.ts`
 - `src/domain/intersectionReuse.ts`
 - `src/domain/numberDefinitions.ts`
+- `src/domain/transformationMaps.ts`
 
 Responsibility:
-- Dependency graph, cascade deletion planning/application, scene integrity normalization, reusable construction helpers.
+- Dependency graph, cascade deletion planning/application, scene integrity normalization, reusable construction helpers, and named transformation-map algebra.
 
 ### Geometry Scene + Evaluation
 - `src/scene/points.ts` (public facade + model types)

@@ -72,6 +72,7 @@ export function createSceneCoreActions(
   | "createMidpointFromPoints"
   | "createMidpointFromSegment"
   | "createSegment"
+  | "createRay"
   | "createLine"
   | "createPolygon"
   | "createRegularPolygon"
@@ -598,6 +599,43 @@ export function createSceneCoreActions(
         };
       });
       if (id) registerLinePair(id, aId, bId);
+      return id;
+    },
+
+    createRay(originId, throughId) {
+      if (originId === throughId) return null;
+      let id: string | null = null;
+      ctx.setState((prev) => {
+        const origin = prev.scene.points.find((p) => p.id === originId);
+        const through = prev.scene.points.find((p) => p.id === throughId);
+        if (!origin || !through) return prev;
+        id = `l_${prev.nextLineId}`;
+        const showLabel = prev.objectLabelDefaults.line;
+        const rayForLabel = {
+          id,
+          kind: "ray" as const,
+          aId: originId,
+          bId: throughId,
+          visible: true,
+          showLabel,
+          style: prev.lineDefaults,
+        };
+        const newRay = {
+          ...rayForLabel,
+          labelGlow: prev.objectLabelDefaults.lineGlow ?? true,
+          labelText: defaultLineLabelText(rayForLabel, prev.scene),
+          labelPosWorld: defaultLineLabelPosWorld(rayForLabel, prev.scene) ?? undefined,
+          style: { ...prev.lineDefaults },
+        };
+        return {
+          ...prev,
+          scene: { ...prev.scene, lines: [...prev.scene.lines, newRay] },
+          selectedObject: { type: "line", id },
+          recentCreatedObject: { type: "line", id },
+          nextLineId: prev.nextLineId + 1,
+        };
+      });
+      if (id) registerLinePair(id, originId, throughId);
       return id;
     },
 

@@ -47,7 +47,9 @@ export function evalCircleLineIntersectionPoint(
   const r = geom.radius;
   const stabilitySignature = circleLineStabilitySignature(point.circleId, point.lineId, la, lb, center, r);
   ctx.stats.circleLineCalls += 1;
-  const branches = lineCircleIntersectionBranches(la, lb, center, r);
+  const line = ctx.lineById.get(point.lineId);
+  const branches = lineCircleIntersectionBranches(la, lb, center, r)
+    .filter((branch) => line?.kind !== "ray" || branch.t >= -1e-6);
   if (branches.length === 0) return null;
 
   const pairResolved = ops.resolveCircleLinePairAssignments(
