@@ -83,9 +83,17 @@ assert(migratedLegacyDefaults.lineDefaults.strokeColor === "#000000", "legacy Va
 const customLegacyDefaults = normalizeStyleDefaultsForProfile(
   {
     ...imageDefaults,
+    pointDefaults: {
+      ...imageDefaults.pointDefaults,
+      strokeColor: imageDefaults.segmentDefaults.strokeColor,
+    },
     lineDefaults: { ...imageDefaults.lineDefaults, strokeColor: "#123456" },
   },
   "image_palette_vanilla_thin"
+);
+assert(
+  customLegacyDefaults.pointDefaults.strokeColor === imageDefaults.segmentDefaults.strokeColor,
+  "Vanilla migration should not reinterpret a custom point color as another palette role"
 );
 assert(customLegacyDefaults.lineDefaults.strokeColor === "#123456", "Vanilla migration should preserve custom line colors");
 assert(
@@ -176,6 +184,28 @@ const scene: SceneModel = {
   numbers: [],
 };
 
+function sceneWithProfileDefaults(
+  profileDefaults: ReturnType<typeof buildDefaultStylesForProfile>
+): SceneModel {
+  const profileScene = structuredClone(scene);
+  profileScene.points[0].style = {
+    ...profileDefaults.pointDefaults,
+    labelOffsetPx: { ...profileDefaults.pointDefaults.labelOffsetPx },
+  };
+  profileScene.segments[0].style = { ...profileDefaults.segmentDefaults };
+  profileScene.lines[0].style = { ...profileDefaults.lineDefaults };
+  profileScene.circles[0].style = {
+    ...profileDefaults.circleDefaults,
+    fillColor: profileDefaults.polygonDefaults.fillColor,
+  };
+  profileScene.polygons[0].style = { ...profileDefaults.polygonDefaults };
+  profileScene.angles[0].style = {
+    ...profileDefaults.angleDefaults,
+    labelPosWorld: { ...profileDefaults.angleDefaults.labelPosWorld },
+  };
+  return profileScene;
+}
+
 const whiteLabelScene = structuredClone(scene);
 whiteLabelScene.points[0].style.labelColor = "#ffffff";
 const normalizedVanillaScene = normalizeSceneLabelColors(whiteLabelScene, "image_palette_vanilla_thin");
@@ -212,5 +242,57 @@ assert(recolored.lines[0].style.strokeColor === "#000000", "line color should be
 assert(recolored.polygons[0].style.fillColor === "#bfbfbf", "polygon fill should be recolored");
 assert(recolored.angles[0].style.markColor === "#000000", "angle mark should be recolored");
 assert(recolored.segments[0].style.strokeColor === "#123456", "custom segment color should remain unchanged");
+
+for (const sourceProfile of COLOR_PROFILE_OPTIONS) {
+  const sourceScene = sceneWithProfileDefaults(buildDefaultStylesForProfile(sourceProfile.id));
+  for (const targetProfile of COLOR_PROFILE_OPTIONS) {
+    if (targetProfile.id === sourceProfile.id) continue;
+    const targetDefaults = buildDefaultStylesForProfile(targetProfile.id);
+    const recoloredScene = recolorSceneForProfile(sourceScene, sourceProfile.id, targetProfile.id);
+    const transition = `${sourceProfile.id} -> ${targetProfile.id}`;
+
+    assert(
+      recoloredScene.points[0].style.strokeColor === targetDefaults.pointDefaults.strokeColor,
+      `point outline should map by role for ${transition}`
+    );
+    assert(
+      recoloredScene.points[0].style.fillColor === targetDefaults.pointDefaults.fillColor,
+      `point fill should map by role for ${transition}`
+    );
+    assert(
+      recoloredScene.segments[0].style.strokeColor === targetDefaults.segmentDefaults.strokeColor,
+      `segment should map by role for ${transition}`
+    );
+    assert(
+      recoloredScene.lines[0].style.strokeColor === targetDefaults.lineDefaults.strokeColor,
+      `line should map by role for ${transition}`
+    );
+    assert(
+      recoloredScene.circles[0].style.strokeColor === targetDefaults.circleDefaults.strokeColor,
+      `circle should map by role for ${transition}`
+    );
+    assert(
+      recoloredScene.polygons[0].style.strokeColor === targetDefaults.polygonDefaults.strokeColor,
+      `polygon should map by role for ${transition}`
+    );
+    assert(
+      recoloredScene.angles[0].style.strokeColor === targetDefaults.angleDefaults.strokeColor,
+      `angle should map by role for ${transition}`
+    );
+  }
+}
+
+const vanillaScene = sceneWithProfileDefaults(thinDefaults);
+const customVanillaScene = structuredClone(vanillaScene);
+customVanillaScene.segments[0].style.strokeColor = "#123456";
+const customFromVanilla = recolorSceneForProfile(
+  customVanillaScene,
+  "image_palette_vanilla_thin",
+  "classic"
+);
+assert(
+  customFromVanilla.segments[0].style.strokeColor === "#123456",
+  "role-aware profile switching should preserve a custom Vanilla segment color"
+);
 
 console.log("color-profile-regression tests: OK");

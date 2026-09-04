@@ -25,6 +25,33 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-08-30 Canvas/TikZ visual-weight parity is explicit:
+  - The Canvas treatment now selects canvas-calibrated point, stroke, and label
+    metrics even at exactly 100% True Zoom; it no longer falls through to the
+    compact Geometric Construction calibration merely because both numeric
+    treatment factors equal `1`.
+  - The Export panel detects non-neutral TikZ/point/line/label/halo multipliers,
+    warns that the preview will not be WYSIWYG, and offers a one-click
+    `Match canvas` reset.
+  - `figure-treatment.test.ts` pins 100% Canvas parity between the plain and
+    reconstructible backends and the custom-sizing detector.
+- 2026-08-17 "Export what I see now" follows deep True Zoom:
+  - Past 150% True Zoom the user is framing a detail rather than scaling the
+    whole figure, so the Export panel checks "Export what I see now" itself.
+  - `src/ui/exportViewFraming.ts` (new) holds the threshold as a pure policy:
+    `shouldAutoUseCurrentView` compares the rounded percentage the canvas True
+    Zoom badge displays, so the box flips exactly when the badge reads past 150%
+    (1.504 → still 150%, unchecked; 1.51 → 151%, checked).
+  - `ExportPanel.tsx` applies it in an effect keyed on the threshold boolean, so
+    only *crossing* 150% flips the box: unchecking it while still zoomed in
+    sticks, and zooming back out never forces the box off (the checkbox stays a
+    saved preference). The panel unmounts when hidden, so reopening it while
+    above 150% re-applies the rule.
+  - A hint under the checkbox names the rule and the current reading whenever it
+    is what is holding the box on, so the state never changes silently.
+  - Coverage: `src/ui/__tests__/export-view-framing.test.ts` (wired into
+    `npm run test:command`) pins the threshold, badge rounding, and the
+    non-finite/zoomed-out cases.
 - 2026-08-12 Vanilla Standard monochrome construction palette:
   - Geometry strokes, axes, grid lines, angle marks, arrows, and segment markings now use black.
   - Points use a black fill with a white circular outline; the point outline is the intentional exception to the black-stroke rule.

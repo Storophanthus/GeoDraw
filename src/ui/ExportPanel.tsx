@@ -5,6 +5,7 @@ import { buildTikzExportText, type TikzExportParams } from "../export/buildTikzE
 import {
   applyFigureTreatment,
   getFigureTreatmentFactor,
+  isCanvasMatchedFigureSizing,
   type FigureTreatmentMode,
 } from "../export/figureTreatment";
 import { buildStandaloneSource, deriveDefaultOptionalPreamble } from "../export/tikz/standaloneDocument";
@@ -17,6 +18,11 @@ import {
 import type { SceneModel } from "../scene/points";
 import { useGeoStore } from "../state/geoStore";
 import { getCameraTrueZoom, type Camera } from "../view/camera";
+import {
+  AUTO_CURRENT_VIEW_TRUE_ZOOM_PERCENT,
+  getTrueZoomPercent,
+  shouldAutoUseCurrentView,
+} from "./exportViewFraming";
 import {
   createTikzPreviewSession,
   type TikzPreviewTreatmentState,
@@ -114,6 +120,32 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   const exportBakeCoordinates = tikzExportMode === "visualExact";
   const exportEmitTkzSetup = exportBakeCoordinates ? false : (exportEmitTkzSetupManual ?? hasVisibleLineObject);
   const exportDrawLayerBackend = exportBakeCoordinates ? "plain" : "tkz";
+  const exportSizingMatchesCanvas = isCanvasMatchedFigureSizing(
+    exportFigureTreatment,
+    {
+      trueGlobalScale: exportTrueGlobalScale,
+      globalScale: exportGlobalScale,
+      pointScale: exportPointScale,
+      lineScale: exportLineScale,
+      labelScale: exportLabelScale,
+      labelHaloScale: exportLabelHaloScale,
+    }
+  );
+  const effectiveFigureTreatmentMode =
+    exportFigureTreatment === "canvas" && !exportSizingMatchesCanvas
+      ? undefined
+      : exportFigureTreatment;
+
+  const matchCanvasSizing = () => {
+    setExportFigureTreatment("canvas");
+    setExportScaleboxScale("1");
+    setExportTrueGlobalScale("1");
+    setExportGlobalScale("1");
+    setExportPointScale("1");
+    setExportLineScale("1");
+    setExportLabelScale("1");
+    setExportLabelHaloScale("1");
+  };
 
   useEffect(() => {
     saveStoredExportPreferences({
@@ -175,6 +207,16 @@ export function ExportPanel({ visible }: ExportPanelProps) {
   useEffect(() => {
     setExportUseClipSelection(Boolean(exportClipWorld));
   }, [exportClipWorld]);
+
+  // Zooming this far in with True Zoom is a framing decision as much as a
+  // scaling one, so default the export to the visible view. Only crossing the
+  // threshold flips the box: unchecking it while still zoomed in sticks.
+  const canvasTrueZoomPercent = getTrueZoomPercent(getCameraTrueZoom(camera));
+  const autoUseCurrentView = shouldAutoUseCurrentView(getCameraTrueZoom(camera));
+  useEffect(() => {
+    if (!autoUseCurrentView) return;
+    setExportUseCurrentView(true);
+  }, [autoUseCurrentView]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -290,6 +332,7 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       screenPxPerWorld: camera.zoom / canvasTrueZoom,
       canvasTrueZoom,
       figureTreatmentFactor,
+      figureTreatmentMode: effectiveFigureTreatmentMode,
       emitTkzSetup: exportEmitTkzSetup,
       drawLayerBackend: exportDrawLayerBackend,
       bakeCoordinates: exportBakeCoordinates,
@@ -455,7 +498,10 @@ export function ExportPanel({ visible }: ExportPanelProps) {
         </div>
 
         <div className="optionsBlock">
-          <label className="checkboxRow" title="Crop to the current canvas view. Turn off to include every object.">
+          <label
+            className="checkboxRow"
+            title={`Crop to the current canvas view. Turn off to include every object. Turns on automatically above ${AUTO_CURRENT_VIEW_TRUE_ZOOM_PERCENT}% True Zoom.`}
+          >
             <input
               type="checkbox"
               checked={exportUseCurrentView}
@@ -463,6 +509,20 @@ export function ExportPanel({ visible }: ExportPanelProps) {
             />
             Export what I see now
           </label>
+          {autoUseCurrentView && exportUseCurrentView && (
+            <p className="exportOptionHint">
+              On automatically above {AUTO_CURRENT_VIEW_TRUE_ZOOM_PERCENT}% True Zoom (now{" "}
+              {canvasTrueZoomPercent}%).
+            </p>
+          )}
+          {!exportSizingMatchesCanvas && (
+            <div className="exportSizingNotice" role="status">
+              <span>Custom PDF sizing is active, so visual weights can differ from the canvas.</span>
+              <button type="button" onClick={matchCanvasSizing}>
+                Match canvas
+              </button>
+            </div>
+          )}
           <label
             className="checkboxRow"
             title="Adds a background-colored outline so labels stay readable where they cross lines."

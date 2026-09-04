@@ -7,6 +7,7 @@ import {
   getFigureTreatmentLabelCompensation,
   getFigureTreatmentMarkCompensation,
   getFigureTreatmentPointCompensation,
+  type FigureTreatmentMode,
 } from "./figureTreatment";
 
 export type TikzViewportRect = { xmin: number; xmax: number; ymin: number; ymax: number };
@@ -31,6 +32,8 @@ export type TikzExportParams = {
   canvasTrueZoom?: number;
   /** Resolved Canvas/General/Very-close-up visual treatment factor. */
   figureTreatmentFactor?: number;
+  /** Named treatment, retained because Canvas at 100% also means canvas metrics. */
+  figureTreatmentMode?: FigureTreatmentMode;
   emitTkzSetup: boolean;
   drawLayerBackend: "plain" | "tkz";
   bakeCoordinates: boolean;
@@ -102,7 +105,9 @@ export function buildTikzExportText(params: TikzExportParams): string {
   // but a named close-up must match the canvas-calibrated visual treatment.
   // This affects only styling; tkz-euclide still owns all construction math.
   const useTreatmentMatchedMetrics =
-    useCanvasExactMetrics || figureTreatmentFactor > 1 + 1e-9;
+    useCanvasExactMetrics ||
+    params.figureTreatmentMode === "canvas" ||
+    figureTreatmentFactor > 1 + 1e-9;
   const useConstructionCloseupCalibration =
     params.drawLayerBackend === "tkz" && figureTreatmentFactor > 1 + 1e-9;
   const constructionCloseup = TIKZ_EXPORT_CALIBRATION.constructionCloseup;

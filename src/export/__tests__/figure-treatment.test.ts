@@ -5,6 +5,7 @@ import {
   getFigureTreatmentLabelCompensation,
   getFigureTreatmentMarkCompensation,
   getFigureTreatmentPointCompensation,
+  isCanvasMatchedFigureSizing,
   removeFigureTreatment,
   resolveSavedFigureTreatment,
 } from "../figureTreatment.ts";
@@ -83,6 +84,29 @@ assertClose(
   veryCloseup.scaleboxScale * veryCloseup.globalScale,
   baseScalebox * baseGlobal,
   "Very-close-up product"
+);
+
+assert(
+  isCanvasMatchedFigureSizing("canvas", {
+    trueGlobalScale: "1",
+    globalScale: "1",
+    pointScale: "1",
+    lineScale: "1",
+    labelScale: "1",
+    labelHaloScale: "1",
+  }),
+  "Neutral Canvas sizing must be recognized as WYSIWYG."
+);
+assert(
+  !isCanvasMatchedFigureSizing("canvas", {
+    trueGlobalScale: "1",
+    globalScale: "0.8",
+    pointScale: "1.5",
+    lineScale: "2",
+    labelScale: "1.5",
+    labelHaloScale: "1",
+  }),
+  "Independent PDF multipliers must be reported as non-canvas sizing."
 );
 
 const restored = removeFigureTreatment(
@@ -254,6 +278,37 @@ for (const backend of ["plain", "tkz"] as const) {
   await compileTikzSnippet(`figure-treatment-general-${backend}`, generalText);
   await compileTikzSnippet(`figure-treatment-very-closeup-${backend}`, closeupText);
 }
+
+// Canvas at exactly 100% used to fall through to the compact legacy
+// reconstructible calibration because its numeric factor equals General (1).
+// The named mode must keep editable construction output visually aligned with
+// the plain/canvas backend even at that neutral factor.
+const canvasAt100Plain = buildTikzExportText({
+  ...params("plain", 1, 1),
+  figureTreatmentMode: "canvas",
+  figureTreatmentFactor: 1,
+});
+const canvasAt100Tkz = buildTikzExportText({
+  ...params("tkz", 1, 1),
+  figureTreatmentMode: "canvas",
+  figureTreatmentFactor: 1,
+});
+assertClose(
+  pointSizeMetric(canvasAt100Tkz),
+  pointSizeMetric(canvasAt100Plain),
+  "Canvas 100% point metric parity"
+);
+assertClose(
+  sharedDrawLineWidth(canvasAt100Tkz),
+  sharedDrawLineWidth(canvasAt100Plain),
+  "Canvas 100% line metric parity"
+);
+assertClose(
+  labelFontSize(canvasAt100Tkz),
+  labelFontSize(canvasAt100Plain),
+  "Canvas 100% label metric parity"
+);
+await compileTikzSnippet("figure-treatment-canvas-100-tkz", canvasAt100Tkz);
 
 // A whole-scene Canvas treatment previously cancelled itself in Visual Exact:
 // the inner TikZ scale made fixed-size styling smaller by exactly the amount

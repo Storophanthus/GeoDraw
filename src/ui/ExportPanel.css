@@ -89,6 +89,41 @@
     max-height: none !important;
 }
 
+.exportOptionHint {
+    /* Aligns under the label text, past the checkbox and its gap. */
+    margin: 3px 0 0 26px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--gd-ui-text-subtle, #64748b);
+}
+
+.exportSizingNotice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 8px 0 2px;
+    padding: 8px 9px;
+    border: 1px solid color-mix(in srgb, var(--gd-ui-accent, #2563eb) 30%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--gd-ui-accent, #2563eb) 7%, transparent);
+    color: var(--gd-ui-text-muted, #475569);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.exportSizingNotice button {
+    flex: 0 0 auto;
+    border: 1px solid color-mix(in srgb, var(--gd-ui-accent, #2563eb) 38%, transparent);
+    border-radius: 7px;
+    padding: 4px 7px;
+    background: var(--gd-ui-panel, #ffffff);
+    color: var(--gd-ui-accent, #2563eb);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
 .clipBlock {
     margin-top: 12px;
     padding: 10px 12px;

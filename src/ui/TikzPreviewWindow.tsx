@@ -466,6 +466,8 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
       twoDecimals: boolean;
       dvipsNames: boolean;
       figureTreatmentFactor: number;
+      /** null means a manually customized treatment with no named baseline. */
+      figureTreatmentMode: FigureTreatmentMode | null;
     }>) => {
       if (!regen) return;
       setFigureSizingDefaultSaved(false);
@@ -480,6 +482,11 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
         twoDecimals: next.twoDecimals ?? roundNumbersToTwoDecimals,
         dvipsNames: next.dvipsNames ?? preferDvipsNames,
         figureTreatmentFactor: next.figureTreatmentFactor ?? figureTreatmentFactor,
+        figureTreatmentMode:
+          next.figureTreatmentMode === null
+            ? undefined
+            : next.figureTreatmentMode ??
+              (figureTreatment === "custom" ? undefined : figureTreatment),
       };
       let nextTikz: string;
       try {
@@ -496,6 +503,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
           roundNumbersToTwoDecimals: resolved.twoDecimals,
           preferDvipsNames: resolved.dvipsNames,
           figureTreatmentFactor: resolved.figureTreatmentFactor,
+          figureTreatmentMode: resolved.figureTreatmentMode,
         });
       } catch {
         return; // leave the current code untouched if regeneration fails
@@ -534,6 +542,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
       roundNumbersToTwoDecimals,
       preferDvipsNames,
       figureTreatmentFactor,
+      figureTreatment,
       session?.uiCssVariables,
       updateTikzCode,
       compilePdf,
@@ -559,6 +568,8 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
           roundNumbersToTwoDecimals,
           preferDvipsNames,
           figureTreatmentFactor,
+          figureTreatmentMode:
+            figureTreatment === "custom" ? undefined : figureTreatment,
         });
       } catch {
         return;
@@ -584,6 +595,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
       roundNumbersToTwoDecimals,
       preferDvipsNames,
       figureTreatmentFactor,
+      figureTreatment,
       updateTikzCode,
       compilePdf,
       optionalPreamble,
@@ -643,6 +655,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
       scalebox: nextScalebox,
       global: nextGlobal,
       figureTreatmentFactor: nextTreatmentFactor,
+      figureTreatmentMode: mode,
     });
   };
 
@@ -714,6 +727,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
     applyScales({
       ...captured,
       figureTreatmentFactor: canvasTrueZoom,
+      figureTreatmentMode: "canvas",
     });
   };
 
@@ -1647,7 +1661,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                         setFigureTreatment("custom");
                         setFigureTreatmentFactor(1);
                         setScaleboxScale(v);
-                        applyScales({ scalebox: v, trueGlobal: trueGlobalScale, global: globalScale, point: pointScale, line: lineScale, label: labelScale, figureTreatmentFactor: 1 });
+                        applyScales({ scalebox: v, trueGlobal: trueGlobalScale, global: globalScale, point: pointScale, line: lineScale, label: labelScale, figureTreatmentFactor: 1, figureTreatmentMode: null });
                       }}
                       title="Scales the complete figure with a simple LaTeX scalebox"
                     />
@@ -1667,7 +1681,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                         setFigureTreatment("custom");
                         setFigureTreatmentFactor(1);
                         setGlobalScale(v);
-                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: v, point: pointScale, line: lineScale, label: labelScale, figureTreatmentFactor: 1 });
+                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: v, point: pointScale, line: lineScale, label: labelScale, figureTreatmentFactor: 1, figureTreatmentMode: null });
                       }}
                       aria-describedby="preview-tikz-scale-help"
                     />

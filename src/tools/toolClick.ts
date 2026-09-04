@@ -923,6 +923,7 @@ export function toolAllowsEmptyPointCreation(activeTool: ActiveTool, pendingSele
   return (
     activeTool === "point" ||
     activeTool === "segment" ||
+    activeTool === "ray" ||
     activeTool === "line2p" ||
     activeTool === "circle_cp" ||
     activeTool === "circle_3p" ||
@@ -952,6 +953,7 @@ export function isValidTarget(
   }
 
   if (activeTool === "segment") return hoveredHit.type === "point";
+  if (activeTool === "ray") return hoveredHit.type === "point";
   if (activeTool === "line2p") return hoveredHit.type === "point";
   if (activeTool === "circle_cp") return hoveredHit.type === "point";
   if (activeTool === "circle_3p") return hoveredHit.type === "point";

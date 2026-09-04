@@ -986,100 +986,155 @@ export function normalizeStyleDefaultsForProfile(
   profileId: ColorProfileId
 ): SceneStyleDefaults {
   if (profileId !== VANILLA_THIN_PROFILE_ID) return defaults;
-  const colorMap = getLegacyVanillaColorMap();
+  const fromPalette = getColorProfile("image_palette").palette;
+  const toPalette = getColorProfile(VANILLA_THIN_PROFILE_ID).palette;
   return {
     pointDefaults: {
       ...defaults.pointDefaults,
-      strokeColor: remapColor(defaults.pointDefaults.strokeColor, colorMap),
-      fillColor: remapColor(defaults.pointDefaults.fillColor, colorMap),
+      strokeColor: remapRoleColor(defaults.pointDefaults.strokeColor, fromPalette.pointStroke, toPalette.pointStroke),
+      fillColor: remapRoleColor(defaults.pointDefaults.fillColor, fromPalette.pointFill, toPalette.pointFill),
       labelColor: normalizeLabelColorForProfile(
-        remapColor(defaults.pointDefaults.labelColor, colorMap),
+        remapRoleColor(defaults.pointDefaults.labelColor, fromPalette.pointLabel, toPalette.pointLabel),
         profileId
       ),
-      labelHaloColor: remapColor(defaults.pointDefaults.labelHaloColor, colorMap),
+      labelHaloColor: remapRoleColor(
+        defaults.pointDefaults.labelHaloColor,
+        fromPalette.pointLabelHalo,
+        toPalette.pointLabelHalo
+      ),
       labelOffsetPx: { ...defaults.pointDefaults.labelOffsetPx },
     },
     segmentDefaults: {
       ...defaults.segmentDefaults,
-      strokeColor: remapColor(defaults.segmentDefaults.strokeColor, colorMap),
+      strokeColor: remapRoleColor(
+        defaults.segmentDefaults.strokeColor,
+        fromPalette.segmentStroke,
+        toPalette.segmentStroke
+      ),
       segmentMark: defaults.segmentDefaults.segmentMark
         ? {
             ...defaults.segmentDefaults.segmentMark,
-            color: remapOptionalColor(defaults.segmentDefaults.segmentMark.color, colorMap),
+            color: remapOptionalRoleColor(
+              defaults.segmentDefaults.segmentMark.color,
+              fromPalette.marking,
+              toPalette.marking
+            ),
           }
         : defaults.segmentDefaults.segmentMark,
       segmentMarks: defaults.segmentDefaults.segmentMarks?.map((mark) => ({
         ...mark,
-        color: remapOptionalColor(mark.color, colorMap),
+        color: remapOptionalRoleColor(mark.color, fromPalette.marking, toPalette.marking),
       })),
-      segmentArrowMark: remapArrowMark(defaults.segmentDefaults.segmentArrowMark, colorMap),
+      segmentArrowMark: remapArrowMarkForRole(
+        defaults.segmentDefaults.segmentArrowMark,
+        fromPalette.arrow,
+        toPalette.arrow
+      ),
       segmentArrowMarks: defaults.segmentDefaults.segmentArrowMarks?.map((arrow) =>
-        remapArrowMark(arrow, colorMap)
+        remapArrowMarkForRole(arrow, fromPalette.arrow, toPalette.arrow)
       ),
     },
     lineDefaults: {
       ...defaults.lineDefaults,
-      strokeColor: remapColor(defaults.lineDefaults.strokeColor, colorMap),
+      strokeColor: remapRoleColor(defaults.lineDefaults.strokeColor, fromPalette.lineStroke, toPalette.lineStroke),
     },
     circleDefaults: {
       ...defaults.circleDefaults,
-      strokeColor: remapColor(defaults.circleDefaults.strokeColor, colorMap),
-      fillColor: remapOptionalColor(defaults.circleDefaults.fillColor, colorMap),
-      patternColor: remapOptionalColor(defaults.circleDefaults.patternColor, colorMap),
-      arrowMark: remapArrowMark(defaults.circleDefaults.arrowMark, colorMap),
-      arrowMarks: defaults.circleDefaults.arrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+      strokeColor: remapRoleColor(defaults.circleDefaults.strokeColor, fromPalette.circleStroke, toPalette.circleStroke),
+      fillColor: remapOptionalRoleColor(
+        defaults.circleDefaults.fillColor,
+        fromPalette.polygonFill,
+        toPalette.polygonFill
+      ),
+      patternColor: remapOptionalRoleColor(
+        defaults.circleDefaults.patternColor,
+        fromPalette.polygonFill,
+        toPalette.polygonFill
+      ),
+      arrowMark: remapArrowMarkForRole(defaults.circleDefaults.arrowMark, fromPalette.arrow, toPalette.arrow),
+      arrowMarks: defaults.circleDefaults.arrowMarks?.map((arrow) =>
+        remapArrowMarkForRole(arrow, fromPalette.arrow, toPalette.arrow)
+      ),
     },
     ellipseDefaults: {
       ...defaults.ellipseDefaults,
-      strokeColor: remapColor(defaults.ellipseDefaults.strokeColor, colorMap),
-      fillColor: remapOptionalColor(defaults.ellipseDefaults.fillColor, colorMap),
-      patternColor: remapOptionalColor(defaults.ellipseDefaults.patternColor, colorMap),
-      arrowMark: remapArrowMark(defaults.ellipseDefaults.arrowMark, colorMap),
-      arrowMarks: defaults.ellipseDefaults.arrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+      strokeColor: remapRoleColor(defaults.ellipseDefaults.strokeColor, fromPalette.circleStroke, toPalette.circleStroke),
+      fillColor: remapOptionalRoleColor(
+        defaults.ellipseDefaults.fillColor,
+        fromPalette.polygonFill,
+        toPalette.polygonFill
+      ),
+      patternColor: remapOptionalRoleColor(
+        defaults.ellipseDefaults.patternColor,
+        fromPalette.polygonFill,
+        toPalette.polygonFill
+      ),
+      arrowMark: remapArrowMarkForRole(defaults.ellipseDefaults.arrowMark, fromPalette.arrow, toPalette.arrow),
+      arrowMarks: defaults.ellipseDefaults.arrowMarks?.map((arrow) =>
+        remapArrowMarkForRole(arrow, fromPalette.arrow, toPalette.arrow)
+      ),
     },
     polygonDefaults: {
       ...defaults.polygonDefaults,
-      strokeColor: remapColor(defaults.polygonDefaults.strokeColor, colorMap),
-      fillColor: remapOptionalColor(defaults.polygonDefaults.fillColor, colorMap),
-      patternColor: remapOptionalColor(defaults.polygonDefaults.patternColor, colorMap),
-      arrowMark: remapArrowMark(defaults.polygonDefaults.arrowMark, colorMap),
+      strokeColor: remapRoleColor(
+        defaults.polygonDefaults.strokeColor,
+        fromPalette.polygonStroke,
+        toPalette.polygonStroke
+      ),
+      fillColor: remapOptionalRoleColor(
+        defaults.polygonDefaults.fillColor,
+        fromPalette.polygonFill,
+        toPalette.polygonFill
+      ),
+      patternColor: remapOptionalRoleColor(
+        defaults.polygonDefaults.patternColor,
+        fromPalette.polygonFill,
+        toPalette.polygonFill
+      ),
+      arrowMark: remapArrowMarkForRole(defaults.polygonDefaults.arrowMark, fromPalette.arrow, toPalette.arrow),
     },
     angleDefaults: {
       ...defaults.angleDefaults,
-      strokeColor: remapColor(defaults.angleDefaults.strokeColor, colorMap),
+      strokeColor: remapRoleColor(defaults.angleDefaults.strokeColor, fromPalette.angleStroke, toPalette.angleStroke),
       textColor: normalizeLabelColorForProfile(
-        remapColor(defaults.angleDefaults.textColor, colorMap),
+        remapRoleColor(defaults.angleDefaults.textColor, fromPalette.angleText, toPalette.angleText),
         profileId
       ),
-      fillColor: remapColor(defaults.angleDefaults.fillColor, colorMap),
-      patternColor: remapOptionalColor(defaults.angleDefaults.patternColor, colorMap),
-      markColor: remapColor(defaults.angleDefaults.markColor, colorMap),
+      fillColor: remapRoleColor(defaults.angleDefaults.fillColor, fromPalette.angleFill, toPalette.angleFill),
+      patternColor: remapOptionalRoleColor(
+        defaults.angleDefaults.patternColor,
+        fromPalette.angleFill,
+        toPalette.angleFill
+      ),
+      markColor: remapRoleColor(defaults.angleDefaults.markColor, fromPalette.angleMark, toPalette.angleMark),
       angleMarks: defaults.angleDefaults.angleMarks?.map((mark) => ({
         ...mark,
-        markColor: remapOptionalColor(mark.markColor, colorMap),
+        markColor: remapOptionalRoleColor(mark.markColor, fromPalette.angleMark, toPalette.angleMark),
       })),
       labelPosWorld: { ...defaults.angleDefaults.labelPosWorld },
-      arcArrowMark: remapArrowMark(defaults.angleDefaults.arcArrowMark, colorMap),
-      arcArrowMarks: defaults.angleDefaults.arcArrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+      arcArrowMark: remapArrowMarkForRole(defaults.angleDefaults.arcArrowMark, fromPalette.arrow, toPalette.arrow),
+      arcArrowMarks: defaults.angleDefaults.arcArrowMarks?.map((arrow) =>
+        remapArrowMarkForRole(arrow, fromPalette.arrow, toPalette.arrow)
+      ),
     },
     labelToolDefaults: {
       ...defaults.labelToolDefaults,
       textColor: normalizeLabelColorForProfile(
-        remapColor(defaults.labelToolDefaults.textColor, colorMap),
+        remapRoleColor(defaults.labelToolDefaults.textColor, fromPalette.pointLabel, toPalette.pointLabel),
         profileId
       ),
     },
     textboxToolDefaults: {
       ...defaults.textboxToolDefaults,
       textColor: normalizeLabelColorForProfile(
-        remapColor(defaults.textboxToolDefaults.textColor, colorMap),
+        remapRoleColor(defaults.textboxToolDefaults.textColor, fromPalette.pointLabel, toPalette.pointLabel),
         profileId
       ),
     },
     richTextToolDefaults: {
       ...defaults.richTextToolDefaults,
       textColor: normalizeLabelColorForProfile(
-        remapColor(defaults.richTextToolDefaults.textColor, colorMap),
+        remapRoleColor(defaults.richTextToolDefaults.textColor, fromPalette.pointLabel, toPalette.pointLabel),
         profileId
       ),
     },
@@ -1090,22 +1145,29 @@ export function recolorSceneForProfile(scene: SceneModel, fromProfileId: ColorPr
   if (fromProfileId === toProfileId) return normalizeSceneLabelColors(scene, toProfileId);
   const fromPalette = getColorProfile(fromProfileId).palette;
   const toPalette = getColorProfile(toProfileId).palette;
-  const colorMap = buildColorRemap(fromPalette, toPalette);
 
-  return normalizeSceneLabelColors(remapSceneColors(scene, colorMap), toProfileId);
+  return normalizeSceneLabelColors(remapSceneColors(scene, fromPalette, toPalette), toProfileId);
 }
 
-function remapSceneColors(scene: SceneModel, colorMap: Map<string, string>): SceneModel {
+function remapSceneColors(
+  scene: SceneModel,
+  fromPalette: ColorProfilePalette,
+  toPalette: ColorProfilePalette
+): SceneModel {
   const recolored: SceneModel = {
     ...scene,
     points: scene.points.map((point) => ({
       ...point,
       style: {
         ...point.style,
-        strokeColor: remapColor(point.style.strokeColor, colorMap),
-        fillColor: remapColor(point.style.fillColor, colorMap),
-        labelColor: remapColor(point.style.labelColor, colorMap),
-        labelHaloColor: remapColor(point.style.labelHaloColor, colorMap),
+        strokeColor: remapRoleColor(point.style.strokeColor, fromPalette.pointStroke, toPalette.pointStroke),
+        fillColor: remapRoleColor(point.style.fillColor, fromPalette.pointFill, toPalette.pointFill),
+        labelColor: remapRoleColor(point.style.labelColor, fromPalette.pointLabel, toPalette.pointLabel),
+        labelHaloColor: remapRoleColor(
+          point.style.labelHaloColor,
+          fromPalette.pointLabelHalo,
+          toPalette.pointLabelHalo
+        ),
         labelOffsetPx: { ...point.style.labelOffsetPx },
       },
     })),
@@ -1113,83 +1175,122 @@ function remapSceneColors(scene: SceneModel, colorMap: Map<string, string>): Sce
       ...segment,
       style: {
         ...segment.style,
-        strokeColor: remapColor(segment.style.strokeColor, colorMap),
+        strokeColor: remapRoleColor(segment.style.strokeColor, fromPalette.segmentStroke, toPalette.segmentStroke),
         segmentMark: segment.style.segmentMark
           ? {
             ...segment.style.segmentMark,
-            color: remapOptionalColor(segment.style.segmentMark.color, colorMap),
+            color: remapOptionalRoleColor(
+              segment.style.segmentMark.color,
+              fromPalette.marking,
+              toPalette.marking
+            ),
           }
           : segment.style.segmentMark,
         segmentMarks: segment.style.segmentMarks?.map((mark) => ({
           ...mark,
-          color: remapOptionalColor(mark.color, colorMap),
+          color: remapOptionalRoleColor(mark.color, fromPalette.marking, toPalette.marking),
         })),
-        segmentArrowMark: remapArrowMark(segment.style.segmentArrowMark, colorMap),
-        segmentArrowMarks: segment.style.segmentArrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+        segmentArrowMark: remapArrowMarkForRole(
+          segment.style.segmentArrowMark,
+          fromPalette.arrow,
+          toPalette.arrow
+        ),
+        segmentArrowMarks: segment.style.segmentArrowMarks?.map((arrow) =>
+          remapArrowMarkForRole(arrow, fromPalette.arrow, toPalette.arrow)
+        ),
       },
     })),
     lines: scene.lines.map((line) => ({
       ...line,
       style: {
         ...line.style,
-        strokeColor: remapColor(line.style.strokeColor, colorMap),
+        strokeColor: remapRoleColor(line.style.strokeColor, fromPalette.lineStroke, toPalette.lineStroke),
       },
     })),
     circles: scene.circles.map((circle) => ({
       ...circle,
       style: {
         ...circle.style,
-        strokeColor: remapColor(circle.style.strokeColor, colorMap),
-        fillColor: remapOptionalColor(circle.style.fillColor, colorMap),
-        patternColor: remapOptionalColor(circle.style.patternColor, colorMap),
-        arrowMark: remapArrowMark(circle.style.arrowMark, colorMap),
-        arrowMarks: circle.style.arrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+        strokeColor: remapRoleColor(circle.style.strokeColor, fromPalette.circleStroke, toPalette.circleStroke),
+        fillColor: remapOptionalRoleColor(circle.style.fillColor, fromPalette.polygonFill, toPalette.polygonFill),
+        patternColor: remapOptionalRoleColor(
+          circle.style.patternColor,
+          fromPalette.polygonFill,
+          toPalette.polygonFill
+        ),
+        arrowMark: remapArrowMarkForRole(circle.style.arrowMark, fromPalette.arrow, toPalette.arrow),
+        arrowMarks: circle.style.arrowMarks?.map((arrow) =>
+          remapArrowMarkForRole(arrow, fromPalette.arrow, toPalette.arrow)
+        ),
       },
     })),
     ellipses: (scene.ellipses ?? []).map((ellipse) => ({
       ...ellipse,
       style: {
         ...ellipse.style,
-        strokeColor: remapColor(ellipse.style.strokeColor, colorMap),
-        fillColor: remapOptionalColor(ellipse.style.fillColor, colorMap),
-        patternColor: remapOptionalColor(ellipse.style.patternColor, colorMap),
-        arrowMark: remapArrowMark(ellipse.style.arrowMark, colorMap),
-        arrowMarks: ellipse.style.arrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+        strokeColor: remapRoleColor(ellipse.style.strokeColor, fromPalette.circleStroke, toPalette.circleStroke),
+        fillColor: remapOptionalRoleColor(ellipse.style.fillColor, fromPalette.polygonFill, toPalette.polygonFill),
+        patternColor: remapOptionalRoleColor(
+          ellipse.style.patternColor,
+          fromPalette.polygonFill,
+          toPalette.polygonFill
+        ),
+        arrowMark: remapArrowMarkForRole(ellipse.style.arrowMark, fromPalette.arrow, toPalette.arrow),
+        arrowMarks: ellipse.style.arrowMarks?.map((arrow) =>
+          remapArrowMarkForRole(arrow, fromPalette.arrow, toPalette.arrow)
+        ),
       },
     })),
     polygons: scene.polygons.map((polygon) => ({
       ...polygon,
       style: {
         ...polygon.style,
-        strokeColor: remapColor(polygon.style.strokeColor, colorMap),
-        fillColor: remapOptionalColor(polygon.style.fillColor, colorMap),
-        patternColor: remapOptionalColor(polygon.style.patternColor, colorMap),
-        arrowMark: remapArrowMark(polygon.style.arrowMark, colorMap),
+        strokeColor: remapRoleColor(polygon.style.strokeColor, fromPalette.polygonStroke, toPalette.polygonStroke),
+        fillColor: remapOptionalRoleColor(polygon.style.fillColor, fromPalette.polygonFill, toPalette.polygonFill),
+        patternColor: remapOptionalRoleColor(
+          polygon.style.patternColor,
+          fromPalette.polygonFill,
+          toPalette.polygonFill
+        ),
+        arrowMark: remapArrowMarkForRole(polygon.style.arrowMark, fromPalette.arrow, toPalette.arrow),
       },
     })),
     angles: scene.angles.map((angle) => ({
       ...angle,
       style: {
         ...angle.style,
-        strokeColor: remapColor(angle.style.strokeColor, colorMap),
-        textColor: remapColor(angle.style.textColor, colorMap),
-        fillColor: remapColor(angle.style.fillColor, colorMap),
-        patternColor: remapOptionalColor(angle.style.patternColor, colorMap),
-        markColor: remapColor(angle.style.markColor, colorMap),
+        strokeColor: remapRoleColor(angle.style.strokeColor, fromPalette.angleStroke, toPalette.angleStroke),
+        textColor: remapRoleColor(angle.style.textColor, fromPalette.angleText, toPalette.angleText),
+        fillColor: remapRoleColor(angle.style.fillColor, fromPalette.angleFill, toPalette.angleFill),
+        patternColor: remapOptionalRoleColor(
+          angle.style.patternColor,
+          fromPalette.angleFill,
+          toPalette.angleFill
+        ),
+        markColor: remapRoleColor(angle.style.markColor, fromPalette.angleMark, toPalette.angleMark),
         angleMarks: angle.style.angleMarks?.map((mark) => ({
           ...mark,
-          markColor: remapOptionalColor(mark.markColor, colorMap),
+          markColor: remapOptionalRoleColor(mark.markColor, fromPalette.angleMark, toPalette.angleMark),
         })),
         labelPosWorld: { ...angle.style.labelPosWorld },
-        arcArrowMark: remapArrowMark(angle.style.arcArrowMark, colorMap),
-        arcArrowMarks: angle.style.arcArrowMarks?.map((arrow) => remapArrowMark(arrow, colorMap)),
+        arcArrowMark: remapArrowMarkForRole(angle.style.arcArrowMark, fromPalette.arrow, toPalette.arrow),
+        arcArrowMarks: angle.style.arcArrowMarks?.map((arrow) =>
+          remapArrowMarkForRole(arrow, fromPalette.arrow, toPalette.arrow)
+        ),
       },
     })),
     textLabels: (scene.textLabels ?? []).map((label) => ({
       ...label,
       style: {
         ...label.style,
-        textColor: remapColor(label.style.textColor, colorMap),
+        textColor: remapRoleColor(label.style.textColor, fromPalette.pointLabel, toPalette.pointLabel),
+      },
+    })),
+    richTextNodes: (scene.richTextNodes ?? []).map((node) => ({
+      ...node,
+      style: {
+        ...node.style,
+        textColor: remapRoleColor(node.style.textColor, fromPalette.pointLabel, toPalette.pointLabel),
       },
     })),
     numbers: [...scene.numbers],
@@ -1200,7 +1301,11 @@ function remapSceneColors(scene: SceneModel, colorMap: Map<string, string>): Sce
 
 export function normalizeSceneLabelColors(scene: SceneModel, profileId: ColorProfileId): SceneModel {
   if (profileId !== VANILLA_THIN_PROFILE_ID) return scene;
-  const recolored = remapSceneColors(scene, getLegacyVanillaColorMap());
+  const recolored = remapSceneColors(
+    scene,
+    getColorProfile("image_palette").palette,
+    getColorProfile(VANILLA_THIN_PROFILE_ID).palette
+  );
   return {
     ...recolored,
     points: recolored.points.map((point) => ({
@@ -1236,61 +1341,30 @@ export function normalizeSceneLabelColors(scene: SceneModel, profileId: ColorPro
   };
 }
 
-function getLegacyVanillaColorMap(): Map<string, string> {
-  return buildColorRemap(
-    getColorProfile("image_palette").palette,
-    getColorProfile(VANILLA_THIN_PROFILE_ID).palette
-  );
-}
-
-function remapArrowMark<T extends PathArrowMark | undefined>(arrow: T, colorMap: Map<string, string>): T {
+function remapArrowMarkForRole<T extends PathArrowMark | undefined>(
+  arrow: T,
+  fromColor: string,
+  toColor: string
+): T {
   if (!arrow) return arrow;
   return {
     ...arrow,
-    color: remapOptionalColor(arrow.color, colorMap),
+    color: remapOptionalRoleColor(arrow.color, fromColor, toColor),
   };
 }
 
-function buildColorRemap(fromPalette: ColorProfilePalette, toPalette: ColorProfilePalette): Map<string, string> {
-  const pairs: Array<[string, string]> = [
-    [fromPalette.pointStroke, toPalette.pointStroke],
-    [fromPalette.pointFill, toPalette.pointFill],
-    [fromPalette.pointLabel, toPalette.pointLabel],
-    [fromPalette.pointLabelHalo, toPalette.pointLabelHalo],
-    [fromPalette.segmentStroke, toPalette.segmentStroke],
-    [fromPalette.lineStroke, toPalette.lineStroke],
-    [fromPalette.circleStroke, toPalette.circleStroke],
-    [fromPalette.polygonStroke, toPalette.polygonStroke],
-    [fromPalette.polygonFill, toPalette.polygonFill],
-    [fromPalette.angleStroke, toPalette.angleStroke],
-    [fromPalette.angleText, toPalette.angleText],
-    [fromPalette.angleFill, toPalette.angleFill],
-    [fromPalette.angleMark, toPalette.angleMark],
-    [fromPalette.arrow, toPalette.arrow],
-    [fromPalette.marking, toPalette.marking],
-  ];
-  const colorMap = new Map<string, string>();
-  for (const [from, to] of pairs) {
-    const fromKey = normalizeColorToken(from);
-    const toValue = to.trim();
-    if (!fromKey || !toValue) continue;
-    if (!colorMap.has(fromKey)) {
-      colorMap.set(fromKey, toValue);
-      continue;
-    }
-    if (normalizeColorToken(colorMap.get(fromKey) ?? "") === normalizeColorToken(toValue)) continue;
-  }
-  return colorMap;
+function remapRoleColor(color: string, fromColor: string, toColor: string): string {
+  if (normalizeColorToken(color) !== normalizeColorToken(fromColor)) return color;
+  return toColor.trim();
 }
 
-function remapColor(color: string, colorMap: Map<string, string>): string {
-  const mapped = colorMap.get(normalizeColorToken(color));
-  return mapped ?? color;
-}
-
-function remapOptionalColor(color: string | undefined, colorMap: Map<string, string>): string | undefined {
+function remapOptionalRoleColor(
+  color: string | undefined,
+  fromColor: string,
+  toColor: string
+): string | undefined {
   if (!color) return color;
-  return remapColor(color, colorMap);
+  return remapRoleColor(color, fromColor, toColor);
 }
 
 function normalizeColorToken(value: string): string {
