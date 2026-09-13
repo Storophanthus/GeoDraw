@@ -1,4 +1,5 @@
 import type { Vec2 } from "../geo/vec2";
+import type { TikzExportParams } from "../export/buildTikzExportText";
 import {
   getPointWorldPos,
   resolveTextLabelDisplayText,
@@ -25,6 +26,26 @@ export type PreviewLabelTarget = {
   text: string;
   kindLabel: string;
 };
+
+export type PreviewLabelEdits = {
+  scene: SceneModel;
+  /** Screen-space translations applied after automatic point-label placement. */
+  pointLabelNudgesPx?: Record<string, Vec2>;
+};
+
+/** Keep the last exported sizing/calibration exactly as it was for label-only edits. */
+export function applyPreviewLabelEdits(
+  params: TikzExportParams,
+  edits: PreviewLabelEdits
+): TikzExportParams {
+  return {
+    ...params,
+    // Edits may have originated from the full captured params. Copy only label
+    // fields so stale sizing metadata cannot overwrite later sizing changes.
+    scene: edits.scene,
+    pointLabelNudgesPx: edits.pointLabelNudgesPx,
+  };
+}
 
 export type PreviewLabelArea = {
   viewport?: { xmin: number; xmax: number; ymin: number; ymax: number };
@@ -142,32 +163,34 @@ export function listPreviewLabelTargets(
 }
 
 export function nudgePreviewLabel(
+  edits: PreviewLabelEdits,
+  target: PreviewLabelTarget,
+  deltaScreenPx: Vec2,
+  screenPxPerWorld: number
+): PreviewLabelEdits {
+  if (!Number.isFinite(deltaScreenPx.x) || !Number.isFinite(deltaScreenPx.y)) return edits;
+  if (target.type === "point") {
+    const current = edits.pointLabelNudgesPx?.[target.id] ?? { x: 0, y: 0 };
+    return {
+      ...edits,
+      pointLabelNudgesPx: {
+        ...edits.pointLabelNudgesPx,
+        [target.id]: addWorldDelta(current, deltaScreenPx),
+      },
+    };
+  }
+  return {
+    ...edits,
+    scene: nudgeSceneLabel(edits.scene, target, deltaScreenPx, screenPxPerWorld),
+  };
+}
+
+function nudgeSceneLabel(
   scene: SceneModel,
   target: PreviewLabelTarget,
   deltaScreenPx: Vec2,
   screenPxPerWorld: number
 ): SceneModel {
-  if (!Number.isFinite(deltaScreenPx.x) || !Number.isFinite(deltaScreenPx.y)) return scene;
-  if (target.type === "point") {
-    return {
-      ...scene,
-      points: scene.points.map((point) =>
-        point.id === target.id
-          ? {
-              ...point,
-              style: {
-                ...point.style,
-                labelOffsetPx: {
-                  x: point.style.labelOffsetPx.x + deltaScreenPx.x,
-                  y: point.style.labelOffsetPx.y + deltaScreenPx.y,
-                },
-              },
-            }
-          : point
-      ),
-    };
-  }
-
   const density = Math.max(1e-6, Math.abs(screenPxPerWorld));
   const deltaWorld = {
     x: deltaScreenPx.x / density,
@@ -213,6 +236,7 @@ export function nudgePreviewLabel(
     };
   }
 
+  if (target.type === "point") return scene;
   const fallback = defaultObjectLabelPosWorld({ type: target.type, id: target.id }, scene);
   return updateObjectLabelPosition(scene, target.type, target.id, (current) => {
     const position = current ?? fallback;
@@ -221,26 +245,25 @@ export function nudgePreviewLabel(
 }
 
 export function resetPreviewLabel(
+  edits: PreviewLabelEdits,
+  original: PreviewLabelEdits,
+  target: PreviewLabelTarget
+): PreviewLabelEdits {
+  if (target.type === "point") {
+    const pointLabelNudgesPx = { ...edits.pointLabelNudgesPx };
+    const initial = original.pointLabelNudgesPx?.[target.id];
+    if (initial) pointLabelNudgesPx[target.id] = { ...initial };
+    else delete pointLabelNudgesPx[target.id];
+    return { ...edits, pointLabelNudgesPx };
+  }
+  return { ...edits, scene: resetSceneLabel(edits.scene, original.scene, target) };
+}
+
+function resetSceneLabel(
   scene: SceneModel,
   originalScene: SceneModel,
   target: PreviewLabelTarget
 ): SceneModel {
-  if (target.type === "point") {
-    const original = originalScene.points.find((point) => point.id === target.id);
-    if (!original) return scene;
-    return {
-      ...scene,
-      points: scene.points.map((point) =>
-        point.id === target.id
-          ? {
-              ...point,
-              style: { ...point.style, labelOffsetPx: { ...original.style.labelOffsetPx } },
-            }
-          : point
-      ),
-    };
-  }
-
   if (target.type === "angle") {
     const original = originalScene.angles.find((angle) => angle.id === target.id);
     if (!original) return scene;
@@ -283,6 +306,7 @@ export function resetPreviewLabel(
     };
   }
 
+  if (target.type === "point") return scene;
   const original = objectWithLabel(originalScene, target.type, target.id);
   if (!original) return scene;
   return updateObjectLabelPosition(scene, target.type, target.id, () =>

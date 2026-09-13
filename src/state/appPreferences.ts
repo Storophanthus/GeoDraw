@@ -105,6 +105,7 @@ function normalizeUiProfileId(raw: UiPreferencesState["uiColorProfileId"]): UiPr
 function isColorProfileId(value: unknown): value is ConstructionPreferencesState["colorProfileId"] {
   return (
     value === "classic" ||
+    value === "isl_shortlist" ||
     value === "grayscale_white_dot" ||
     value === "beige_light" ||
     value === "dark_mode" ||

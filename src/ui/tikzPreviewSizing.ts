@@ -1,3 +1,6 @@
+import type { TikzExportParams } from "../export/buildTikzExportText";
+import type { FigureTreatmentMode, FigureTreatmentSelection } from "../export/figureTreatment";
+
 export type PreviewFigureSizingValues = {
   scalebox: string;
   trueGlobal: string;
@@ -7,6 +10,41 @@ export type PreviewFigureSizingValues = {
   label: string;
   labelHalo: string;
 };
+
+export type PreviewSizingEdits = Partial<PreviewFigureSizingValues & {
+  twoDecimals: boolean;
+  dvipsNames: boolean;
+  figureTreatmentFactor: number;
+  figureTreatmentMode: FigureTreatmentMode;
+}>;
+
+/** A scale edit changes only that scale, never the captured style calibration.
+ * Keep unedited values at full precision instead of reading rounded UI fields.
+ */
+export function applyPreviewSizingEdits(params: TikzExportParams, edits: PreviewSizingEdits): TikzExportParams {
+  const next = { ...params };
+  const scales = {
+    scalebox: "scaleboxScale", trueGlobal: "trueGlobalScale", global: "globalScale",
+    point: "pointScale", line: "lineScale", label: "labelScale", labelHalo: "labelHaloScale",
+  } as const;
+  for (const key of Object.keys(scales) as Array<keyof typeof scales>) {
+    if (edits[key] !== undefined) next[scales[key]] = Number(edits[key]);
+  }
+  if (edits.twoDecimals !== undefined) next.roundNumbersToTwoDecimals = edits.twoDecimals;
+  if (edits.dvipsNames !== undefined) next.preferDvipsNames = edits.dvipsNames;
+  if (edits.figureTreatmentFactor !== undefined) next.figureTreatmentFactor = edits.figureTreatmentFactor;
+  if (edits.figureTreatmentMode !== undefined) {
+    next.figureTreatmentMode = edits.figureTreatmentMode;
+    next.figureTreatmentCustomized = false;
+  } else if (next.scaleboxScale !== params.scaleboxScale || next.globalScale !== params.globalScale) {
+    next.figureTreatmentCustomized = true;
+  }
+  return next;
+}
+
+export function getPreviewTreatmentSelection(params: TikzExportParams): FigureTreatmentSelection {
+  return params.figureTreatmentCustomized ? "custom" : params.figureTreatmentMode ?? "custom";
+}
 
 function formatScale(value: number, twoDecimals: boolean): string {
   const normalized = Number(value.toPrecision(15));

@@ -384,22 +384,13 @@ assert(
     Math.abs(pointLabelFontPt - expectedPointLabelFontPt) <= 1e-12,
   `Point label font must use the final canvas-pixel-to-TikZ-point metric: ${pointLabelLine}`
 );
-const semanticPointPlacement = pointLabelLine.match(
-  /above right=\{([-+\d.eE]+)em and ([-+\d.eE]+)em\}/u
-);
-const pointLabelYShiftEm = Number(semanticPointPlacement?.[1] ?? Number.NaN);
-const pointLabelXShiftEm = Number(semanticPointPlacement?.[2] ?? Number.NaN);
-const expectedPointLabelDescentPx = pointStyle.labelFontPx * 0.14;
+const pointLabelYShiftPt = Number(pointLabelLine.match(/yshift=([-+\d.eE]+)pt/u)?.[1]);
+const pointLabelXShiftPt = Number(pointLabelLine.match(/xshift=([-+\d.eE]+)pt/u)?.[1]);
 assert(
-  Number.isFinite(pointLabelXShiftEm) &&
-    Number.isFinite(pointLabelYShiftEm) &&
-    Math.abs(pointLabelXShiftEm - (pointStyle.labelOffsetPx.x * expectedCanvasPxToTikzPt) / expectedPointLabelFontPt) <= 1e-12 &&
-    Math.abs(
-      pointLabelYShiftEm -
-        Math.max(0, -pointStyle.labelOffsetPx.y - expectedPointLabelDescentPx) /
-          pointStyle.labelFontPx
-    ) <= 1e-12,
-  `Visual Exact point-label displacement must convert the canvas baseline origin into editable semantic edge gaps.\n\n${pointLabelLine}`
+  pointLabelLine.includes("anchor=west") &&
+    Math.abs(pointLabelXShiftPt - pointStyle.labelOffsetPx.x * expectedCanvasPxToTikzPt) <= 1e-12 &&
+    Math.abs(pointLabelYShiftPt + pointStyle.labelOffsetPx.y * expectedCanvasPxToTikzPt) <= 1e-12,
+  `Headless Visual Exact labels must retain both saved canvas offsets without estimated edge gaps.\n\n${pointLabelLine}`
 );
 for (const [label, output] of [
   ["Visual Exact", visualExact],
@@ -469,26 +460,14 @@ const semanticEdgeGapExport = exportTikzWithOptions(
   visualExactOptions
 );
 const semanticEdgeGapLines = semanticEdgeGapExport.split("\n");
-const leftEdgeGapLine = semanticEdgeGapLines.find((line) => line.includes("{$A$}"));
-const belowEdgeGapLine = semanticEdgeGapLines.find((line) => line.includes("{$I$}"));
-const captionEdgeGapLine = semanticEdgeGapLines.find((line) =>
-  line.includes("{$P^{\\prime}$}")
-);
-assertIncludes(
-  leftEdgeGapLine ?? "",
-  "left=0.697274305555556em",
-  "A left-positioned label must subtract its own estimated width from the canvas baseline-origin offset."
-);
-assertIncludes(
-  belowEdgeGapLine ?? "",
-  "below=0.468697916666667em",
-  "A below-positioned label must subtract its ascent from the canvas baseline-origin offset."
-);
-assertIncludes(
-  captionEdgeGapLine ?? "",
-  "above=0.864306992684181em",
-  "An above-positioned KaTeX caption must subtract its rendered height from the canvas top-left offset."
-);
+for (const point of semanticEdgeGapScene.points) {
+  const line = semanticEdgeGapLines.find(line => line.includes(`at (${point.name}){`)) ?? "";
+  const x = Number(line.match(/xshift=([-+\d.eE]+)pt/u)?.[1]);
+  const y = Number(line.match(/yshift=([-+\d.eE]+)pt/u)?.[1]);
+  assert(Math.abs(x - point.style.labelOffsetPx.x * expectedCanvasPxToTikzPt) < 1e-12 &&
+    Math.abs(y + point.style.labelOffsetPx.y * expectedCanvasPxToTikzPt) < 1e-12,
+    "Left, below, and caption offsets must preserve both components without guessed text dimensions.");
+}
 
 const infiniteLineCommentIndex = visualLines.findIndex((line) =>
   line.includes("DrawLine exported as finite viewport segment (A,B)")

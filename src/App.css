@@ -3869,10 +3869,38 @@ body.object-browser-dragging * {
   white-space: nowrap;
 }
 
+.previewCodePane {
+  overflow-y: auto;
+}
+
 .previewCodePane .previewEditorArea {
   flex: 1 1 auto;
   min-height: 280px;
   margin-top: 8px;
+}
+
+.previewCodeHeading {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 6px;
+}
+
+.previewCodeHeading .sectionTitle {
+  margin: 0;
+}
+
+.previewExportMode {
+  padding: 3px 8px;
+  border: 1px solid var(--gd-ui-border-soft, #dbe4ef);
+  border-radius: 6px;
+  background: var(--gd-ui-surface-muted, #f1f5f9);
+  color: var(--gd-ui-text-muted, #475569);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .previewFindReplace {
@@ -3914,6 +3942,7 @@ body.preview-split-dragging * {
 /* Editor tools share one compact tabbed area so the code editor does not get
    pushed down by several independent panels. */
 .previewCodeTools {
+  flex-shrink: 0;
   margin-top: 2px;
   margin-bottom: 8px;
   border: 1px solid var(--gd-ui-border-soft, #dbe4ef);
@@ -4324,6 +4353,14 @@ body.preview-split-dragging * {
 .previewSizingCheckbox input[type="checkbox"] {
   width: 14px;
   height: 14px;
+}
+
+.previewPrecisionHint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--gd-ui-text-muted, #475569);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .previewAdvancedScale {

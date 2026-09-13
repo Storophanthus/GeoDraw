@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { exportConstructionSnapshot, exportConstructionSnapshotWithWorld } from "../export/constructionSnapshot";
 import { buildTikzExportText, type TikzExportParams } from "../export/buildTikzExportText";
+import { capturePointLabelCanvasMetrics } from "./exportPointLabelMetrics";
 import {
   applyFigureTreatment,
   getFigureTreatmentFactor,
@@ -131,10 +132,6 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       labelHaloScale: exportLabelHaloScale,
     }
   );
-  const effectiveFigureTreatmentMode =
-    exportFigureTreatment === "canvas" && !exportSizingMatchesCanvas
-      ? undefined
-      : exportFigureTreatment;
 
   const matchCanvasSizing = () => {
     setExportFigureTreatment("canvas");
@@ -251,11 +248,9 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       ? `rect:${exportClipWorld.xmin},${exportClipWorld.xmax},${exportClipWorld.ymin},${exportClipWorld.ymax}`
       : `poly:${exportClipWorld.points.map((p) => `${p.x},${p.y}`).join(";")}`
     : "none";
-  const canvasViewportSig = exportBakeCoordinates
-    ? canvasViewportSize
-      ? `${canvasViewportSize.widthPx}x${canvasViewportSize.heightPx}`
-      : "canvas-unavailable"
-    : "reconstructible-legacy-viewport";
+  const canvasViewportSig = canvasViewportSize
+    ? `${canvasViewportSize.widthPx}x${canvasViewportSize.heightPx}`
+    : "canvas-unavailable";
   const tikzOptionSigForCanvas = (canvasSig: string) =>
     `${exportUseCurrentView}|${exportUseClipSelection}|${exportEfficient}|${exportEmitTkzSetup}|${exportLabelGlow}|${tikzExportMode}|${exportFigureTreatment}|${exportScaleboxScale}|${exportTrueGlobalScale}|${exportGlobalScale}|${exportPointScale}|${exportLineScale}|${exportLabelScale}|${exportLabelHaloScale}|${exportRoundNumbersToTwoDecimals}|${exportPreferDvipsNames}|${camera.pos.x}|${camera.pos.y}|${camera.zoom}|${getCameraTrueZoom(camera)}|${canvasSig}|${exportBakeCoordinates ? canvasTheme.backgroundColor : "reconstructible-label-halo"}|${clipSig}`;
   const currentTikzOptionSig = tikzOptionSigForCanvas(canvasViewportSig);
@@ -294,9 +289,10 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     );
     const scaleboxScale = treatmentScales.scaleboxScale;
     const globalScale = treatmentScales.globalScale;
-    const exportCanvasViewportSize = exportBakeCoordinates
-      ? readDrawingCanvasSize() ?? canvasViewportSize
-      : null;
+    // Both export backends must capture the drawing canvas itself. The parent
+    // pane also contains the tab strip and command bar, so using its dimensions
+    // makes "Export what I see now" taller than the actual visible canvas.
+    const exportCanvasViewportSize = readDrawingCanvasSize() ?? canvasViewportSize;
     if (
       exportCanvasViewportSize &&
       (
@@ -306,18 +302,14 @@ export function ExportPanel({ visible }: ExportPanelProps) {
     ) {
       setCanvasViewportSize(exportCanvasViewportSize);
     }
-    const optionSig = exportBakeCoordinates
-      ? tikzOptionSigForCanvas(
-          exportCanvasViewportSize
-            ? `${exportCanvasViewportSize.widthPx}x${exportCanvasViewportSize.heightPx}`
-            : "canvas-unavailable"
-        )
-      : currentTikzOptionSig;
+    const optionSig = tikzOptionSigForCanvas(
+      exportCanvasViewportSize
+        ? `${exportCanvasViewportSize.widthPx}x${exportCanvasViewportSize.heightPx}`
+        : "canvas-unavailable"
+    );
     const viewport = exportUseCurrentView
-      ? exportBakeCoordinates
-        ? exportCanvasViewportSize
-          ? getViewportFromCanvas(camera, exportCanvasViewportSize)
-          : undefined
+      ? exportCanvasViewportSize
+        ? getViewportFromCanvas(camera, exportCanvasViewportSize)
         : getLegacyViewportFromCanvasPane(camera)
       : undefined;
     const clipRect =
@@ -326,13 +318,16 @@ export function ExportPanel({ visible }: ExportPanelProps) {
       exportUseClipSelection && exportClipWorld?.kind === "polygon" ? exportClipWorld.points : undefined;
     const params: TikzExportParams = {
       scene,
+      pointLabelCanvasMetrics: capturePointLabelCanvasMetrics(scene, canvasTrueZoom),
       viewport,
       clipRectWorld: clipRect,
       clipPolygonWorld: clipPolygon,
       screenPxPerWorld: camera.zoom / canvasTrueZoom,
       canvasTrueZoom,
       figureTreatmentFactor,
-      figureTreatmentMode: effectiveFigureTreatmentMode,
+      // Independent sizing may stop matching the canvas, but it must retain
+      // the selected treatment's stroke/mark calibration.
+      figureTreatmentMode: exportFigureTreatment,
       emitTkzSetup: exportEmitTkzSetup,
       drawLayerBackend: exportDrawLayerBackend,
       bakeCoordinates: exportBakeCoordinates,

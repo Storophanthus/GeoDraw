@@ -1,3 +1,7 @@
+import fixtureJson from "../__fixtures__/point-label-nudge-through-zero.json";
+import { buildTikzIR, type TikzCommand, type TikzExportOptions } from "../tikz.ts";
+import { buildTikzExportText, type TikzExportParams } from "../buildTikzExportText.ts";
+import { compileTikzSnippet } from "../../../scripts/compile-tex.mjs";
 import type {
   AngleStyle,
   LineStyle,
@@ -8,6 +12,7 @@ import {
   listPreviewLabelTargets,
   nudgePreviewLabel,
   resetPreviewLabel,
+  type PreviewLabelEdits,
 } from "../../ui/tikzPreviewLabels.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -160,28 +165,106 @@ assert(!targets.some((target) => target.id === "outside"), "Labels outside the e
 
 const pointTarget = targets.find((target) => target.key === "point:a");
 assert(pointTarget, "Missing point label precision target.");
-const nudgedPointScene = nudgePreviewLabel(scene, pointTarget, { x: 1, y: -1 }, 100);
-const nudgedPoint = nudgedPointScene.points.find((point) => point.id === "a");
+const originalEdits: PreviewLabelEdits = { scene };
+const nudgedPointEdits = nudgePreviewLabel(originalEdits, pointTarget, { x: 1, y: -1 }, 100);
 assert(
-  nudgedPoint?.style.labelOffsetPx.x === 9 && nudgedPoint.style.labelOffsetPx.y === -9,
-  "Point-label joystick movement must operate in canvas pixels."
+  nudgedPointEdits.pointLabelNudgesPx?.a.x === 1 && nudgedPointEdits.pointLabelNudgesPx.a.y === -1 &&
+    nudgedPointEdits.scene === scene,
+  "Point-label nudges must be separate translations, preserving automatic placement inputs."
 );
 
 const segmentTarget = targets.find((target) => target.key === "segment:ab");
 assert(segmentTarget, "Missing object-label precision target.");
-const nudgedSegmentScene = nudgePreviewLabel(scene, segmentTarget, { x: 1, y: -1 }, 100);
-const nudgedSegment = nudgedSegmentScene.segments.find((segment) => segment.id === "ab");
+const nudgedSegmentEdits = nudgePreviewLabel(nudgedPointEdits, segmentTarget, { x: 1, y: -1 }, 100);
+const nudgedSegment = nudgedSegmentEdits.scene.segments.find((segment) => segment.id === "ab");
 assert(
   Math.abs((nudgedSegment?.labelPosWorld?.x ?? 0) - 0.51) <= 1e-12 &&
     Math.abs((nudgedSegment?.labelPosWorld?.y ?? 0) - 0.21) <= 1e-12,
   "World-positioned labels must convert one joystick pixel through the captured canvas density."
 );
 
-const resetPointScene = resetPreviewLabel(nudgedPointScene, scene, pointTarget);
-const resetPoint = resetPointScene.points.find((point) => point.id === "a");
+const resetPointEdits = resetPreviewLabel(nudgedSegmentEdits, originalEdits, pointTarget);
 assert(
-  resetPoint?.style.labelOffsetPx.x === 8 && resetPoint.style.labelOffsetPx.y === -8,
-  "The center joystick button must restore the original point-label position."
+  !resetPointEdits.pointLabelNudgesPx?.a && resetPointEdits.scene === nudgedSegmentEdits.scene,
+  "Reset must clear only the selected point's translation and preserve other edits."
 );
+
+const fixture = fixtureJson as {
+  scene: SceneModel;
+  exportOptions: TikzExportOptions;
+};
+const fixtureOptions = { ...fixture.exportOptions, pointLabelNudgesPx: undefined };
+const eTarget = listPreviewLabelTargets(fixture.scene).find((target) => target.id === "e");
+assert(eTarget, "Missing E precision target.");
+
+function exportedLabel(edits: PreviewLabelEdits, options: TikzExportOptions) {
+  const ir = buildTikzIR(edits.scene, { ...options, pointLabelNudgesPx: edits.pointLabelNudgesPx });
+  const label = ir.find((command): command is Extract<TikzCommand, { kind: "LabelPoint" }> =>
+    command.kind === "LabelPoint" && command.name === "E"
+  );
+  assert(label, "Expected exported label E.");
+  return label;
+}
+
+function shift(label: Extract<TikzCommand, { kind: "LabelPoint" }>, axis: "x" | "y"): number {
+  return Number(label.options?.match(new RegExp(`${axis}shift=([-+\\d.eE]+)pt`))?.[1] ?? 0);
+}
+
+const initial: PreviewLabelEdits = { scene: fixture.scene };
+for (const options of [
+  fixtureOptions,
+  { ...fixtureOptions, drawLayerBackend: "plain" as const },
+  { ...fixtureOptions, viewport: undefined },
+  { ...fixtureOptions, visualTreatmentFactor: 3, pointLabelOffsetScale: 0.947, worldToTikzScale: 0.5, labelScale: 2 },
+]) {
+  const originalLabel = exportedLabel(initial, options);
+  const ir = buildTikzIR(initial.scene, options);
+  const setup = ir.find((command) => command.kind === "SetupUnits");
+  assert(setup?.kind === "SetupUnits", "Expected coordinate scale.");
+  const expectedStepPt = setup.scale * (72.27 / 2.54) / 100;
+  let edits = initial;
+  let previous = originalLabel;
+  // Cross both the raw-offset zero and the actual rendered label's zero.
+  for (let click = 1; click <= 40; click += 1) {
+    edits = nudgePreviewLabel(edits, eTarget, { x: -1, y: 0 }, 100);
+    const current = exportedLabel(edits, options);
+    assert(Math.abs(shift(current, "x") - shift(previous, "x") + expectedStepPt) < 1e-9,
+      `Left click ${click} must translate E by exactly one canvas pixel (${options.drawLayerBackend}).`);
+    assert(shift(current, "y") === shift(originalLabel, "y"), "Horizontal clicks must not move E vertically.");
+    const placement = (label: typeof current) => label.options?.replace(/,?\s*[xy]shift=[^,]+/gu, "");
+    assert(placement(current) === placement(originalLabel), "Nudging must preserve the original anchor and styling.");
+    previous = current;
+  }
+  for (const delta of [{ x: 5, y: 0 }, { x: 0, y: -1 }, { x: 0, y: 5 }]) {
+    edits = nudgePreviewLabel(edits, eTarget, delta, 100);
+    const current = exportedLabel(edits, options);
+    assert(Math.abs(shift(current, "x") - shift(previous, "x") - delta.x * expectedStepPt) < 1e-9,
+      "Right and coarse clicks must preserve their exact horizontal distance.");
+    assert(Math.abs(shift(current, "y") - shift(previous, "y") + delta.y * expectedStepPt) < 1e-9,
+      "Up must increase TikZ y; down must decrease it.");
+    previous = current;
+  }
+  const restored = resetPreviewLabel(edits, initial, eTarget);
+  assert(JSON.stringify(exportedLabel(restored, options)) === JSON.stringify(originalLabel), "Reset must restore the exact exported label.");
+}
+
+const twiceLeft = nudgePreviewLabel(nudgePreviewLabel(initial, eTarget, { x: -1, y: 0 }, 100), eTarget, { x: -1, y: 0 }, 100);
+const baseParams: TikzExportParams = {
+  ...initial, viewport: fixtureOptions.viewport, clipRectWorld: undefined, clipPolygonWorld: undefined,
+  screenPxPerWorld: 100, emitTkzSetup: true, drawLayerBackend: "tkz", bakeCoordinates: false,
+  labelGlow: true, backgroundColor: undefined, efficient: false,
+  scaleboxScale: 1, trueGlobalScale: 1, globalScale: 1, pointScale: 1, lineScale: 1, labelScale: 1,
+};
+for (const drawLayerBackend of ["tkz", "plain"] as const) {
+  for (const efficient of [false, true]) {
+    const params = { ...baseParams, drawLayerBackend, efficient };
+    const before = buildTikzExportText(params);
+    const after = buildTikzExportText({ ...params, ...twiceLeft });
+    assert(before !== after, "Both shared export-builder paths must retain preview nudges.");
+    assert(before === buildTikzExportText({ ...params, ...resetPreviewLabel(twiceLeft, initial, eTarget) }),
+      "Reset must restore byte-identical TikZ.");
+    await compileTikzSnippet(`point-label-nudge-${drawLayerBackend}-${efficient}`, after);
+  }
+}
 
 console.log("✓ TikZ preview label-precision grid test passed");

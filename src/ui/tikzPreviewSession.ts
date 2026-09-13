@@ -292,7 +292,7 @@ function pruneOldSessions(): void {
   }
 }
 
-function extractTikzPicture(source: string): string {
+export function extractTikzPicture(source: string): string {
   const trimmed = source.trim();
   if (!trimmed) return "\\begin{tikzpicture}\n\\end{tikzpicture}";
 

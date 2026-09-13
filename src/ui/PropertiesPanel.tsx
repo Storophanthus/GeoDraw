@@ -20,6 +20,7 @@ import { RichTextStyleSection } from "./object-styles/RichTextStyleSection";
 import { TextLabelStyleSection } from "./object-styles/TextLabelStyleSection";
 import { ObjectStyleSections } from "./ObjectStyleSections";
 import { PointPropertiesSection } from "./PointPropertiesSection";
+import { CircleRadiusEditor } from "./CircleRadiusEditor";
 import { ToolInfoSection } from "./ToolInfoSection";
 import { ToolDefaultStyleSections } from "./ToolDefaultStyleSections";
 import {
@@ -55,6 +56,7 @@ export function PropertiesPanel({
   setMultiSelectedObjects,
 }: PropertiesPanelProps) {
   const activeTool = useGeoStore((store) => store.activeTool);
+  const updateCircleRadius = useGeoStore((store) => store.updateCircleRadius);
   const toolActivationVersion = useGeoStore((store) => store.toolActivationVersion);
   const propertiesPanelIntent = useGeoStore((store) => store.propertiesPanelIntent);
   const scene = useGeoStore((store) => store.scene);
@@ -806,13 +808,18 @@ export function PropertiesPanel({
         </div>
       )}
       {!showToolPreconfigurePanel && selectedCircle && (
-        <div className="toolInfo toolInfoStat">
-          <div className="subSectionTitle">Circle</div>
-          <div className="detailRow">
-            <span className="detailLabel">Equation</span>
-            <span>{selectedCircleEquation ?? "undefined"}</span>
+        <>
+          <div className="toolInfo toolInfoStat">
+            <div className="subSectionTitle">Circle</div>
+            <div className="detailRow">
+              <span className="detailLabel">Equation</span>
+              <span>{selectedCircleEquation ?? "undefined"}</span>
+            </div>
           </div>
-        </div>
+          {selectedCircle.kind === "fixedRadius" && (
+            <CircleRadiusEditor circle={selectedCircle} updateCircleRadius={updateCircleRadius} />
+          )}
+        </>
       )}
       {!showToolPreconfigurePanel && selectedEllipse && (
         <div className="toolInfo toolInfoStat">

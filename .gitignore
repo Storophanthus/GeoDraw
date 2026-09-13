@@ -26,3 +26,7 @@ dist-ssr
 # Local backup snapshots
 src_backup_*/
 src-tauri_backup_*/
+
+# Local verification artifacts
+/output/
+/tmp/

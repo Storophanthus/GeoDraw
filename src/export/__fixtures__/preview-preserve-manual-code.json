@@ -1,0 +1,222 @@
+{
+  "scene": {
+    "points": [
+      {
+        "id": "p_1",
+        "kind": "free",
+        "name": "A",
+        "captionTex": "A",
+        "visible": true,
+        "showLabel": "name",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": -5,
+          "y": 0
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.4,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "p_2",
+        "kind": "free",
+        "name": "B",
+        "captionTex": "B",
+        "visible": true,
+        "showLabel": "name",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": 5,
+          "y": 0
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.4,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "p_3",
+        "kind": "free",
+        "name": "C",
+        "captionTex": "C",
+        "visible": true,
+        "showLabel": "name",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": 1.4455566406250004,
+          "y": 5.714160156250002
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.4,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "p_8",
+        "kind": "triangleCenter",
+        "name": "I",
+        "captionTex": "I",
+        "visible": true,
+        "showLabel": "name",
+        "locked": true,
+        "auxiliary": true,
+        "centerKind": "incenter",
+        "aId": "p_1",
+        "bId": "p_2",
+        "cId": "p_3",
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.4,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      }
+    ],
+    "vectors": [],
+    "segments": [
+      {
+        "id": "s_1",
+        "aId": "p_1",
+        "bId": "p_2",
+        "visible": true,
+        "showLabel": false,
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.5,
+          "dash": "solid",
+          "opacity": 1
+        }
+      }
+    ],
+    "lines": [
+      {
+        "id": "l_3",
+        "kind": "twoPoint",
+        "aId": "p_1",
+        "bId": "p_8",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "AI",
+        "labelPosWorld": {
+          "x": -1.451897816726646,
+          "y": 1.5648566237964379
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.25,
+          "dash": "solid",
+          "opacity": 1
+        }
+      }
+    ],
+    "circles": [],
+    "ellipses": [],
+    "polygons": [],
+    "angles": [],
+    "numbers": [],
+    "textLabels": [],
+    "richTextNodes": [],
+    "geometryLayerOrder": [
+      {
+        "type": "line",
+        "id": "l_3"
+      },
+      {
+        "type": "segment",
+        "id": "s_1"
+      }
+    ]
+  },
+  "previewParams": {
+    "viewport": {
+      "xmin": -6.2,
+      "xmax": 6.2,
+      "ymin": -1.83,
+      "ymax": 7.55
+    },
+    "screenPxPerWorld": 35.82,
+    "canvasTrueZoom": 1,
+    "figureTreatmentFactor": 1,
+    "emitTkzSetup": true,
+    "drawLayerBackend": "plain",
+    "bakeCoordinates": true,
+    "labelGlow": true,
+    "backgroundColor": "#f5f1e6",
+    "efficient": false,
+    "scaleboxScale": 1,
+    "trueGlobalScale": 1,
+    "globalScale": 1,
+    "pointScale": 1,
+    "lineScale": 1.4,
+    "labelScale": 1,
+    "labelHaloScale": 1,
+    "roundNumbersToTwoDecimals": false,
+    "preferDvipsNames": false
+  },
+  "exportOptions": {
+    "drawLayerBackend": "plain",
+    "viewport": {
+      "xmin": -6.2,
+      "xmax": 6.2,
+      "ymin": -1.83,
+      "ymax": 7.55
+    },
+    "bakePointCoordinates": true,
+    "screenPxPerWorld": 35.82
+  }
+}

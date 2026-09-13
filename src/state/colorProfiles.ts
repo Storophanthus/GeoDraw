@@ -9,9 +9,11 @@ import type {
   SceneTextLabelStyle,
 } from "../scene/points";
 import type { RichTextStyle } from "../text-editor/richTextModel";
+import { withIslStyle } from "./islStyle";
 
 export type ColorProfileId =
   | "classic"
+  | "isl_shortlist"
   | "grayscale_white_dot"
   | "beige_light"
   | "dark_mode"
@@ -430,6 +432,7 @@ export const UI_COLOR_PROFILE_OPTIONS: ReadonlyArray<{ id: UiColorProfileId; lab
 
 const RECOMMENDED_UI_PROFILE_BY_COLOR_PROFILE: Record<ColorProfileId, UiColorProfileId> = {
   classic: "vanilla",
+  isl_shortlist: "vanilla",
   grayscale_white_dot: "grayscale",
   beige_light: "beige",
   dark_mode: "dark",
@@ -518,6 +521,31 @@ const COLOR_PROFILES: readonly ColorProfile[] = [
       angleMark: "#334155",
       arrow: "#334155",
       marking: "#334155",
+    },
+  },
+  {
+    id: "isl_shortlist",
+    label: "ISL Shortlist",
+    palette: {
+      backgroundColor: "#ffffff",
+      gridMinorColor: "#000000",
+      gridMajorColor: "#000000",
+      axisColor: "#000000",
+      pointStroke: "#000000",
+      pointFill: "#000000",
+      pointLabel: "#000000",
+      pointLabelHalo: "#ffffff",
+      segmentStroke: "#000000",
+      lineStroke: "#000000",
+      circleStroke: "#000000",
+      polygonStroke: "#000000",
+      polygonFill: "#bfbfbf",
+      angleStroke: "#000000",
+      angleText: "#000000",
+      angleFill: "#bfbfbf",
+      angleMark: "#000000",
+      arrow: "#000000",
+      marking: "#000000",
     },
   },
   {
@@ -875,6 +903,7 @@ export function buildDefaultStylesForProfile(profileId: ColorProfileId): SceneSt
   if (profileId === VANILLA_THIN_PROFILE_ID) {
     return withVanillaThinStyle(defaults);
   }
+  if (profileId === "isl_shortlist") return withIslStyle(defaults);
 
   return defaults;
 }
@@ -972,6 +1001,7 @@ export function applyProfileColorsToDefaults(defaults: SceneStyleDefaults, profi
   if (profileId === VANILLA_THIN_PROFILE_ID) {
     return withVanillaThinStyle(recolored);
   }
+  if (profileId === "isl_shortlist") return withIslStyle(recolored);
 
   return recolored;
 }

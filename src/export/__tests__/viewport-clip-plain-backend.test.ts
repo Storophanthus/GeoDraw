@@ -174,6 +174,23 @@ if (tkz.includes("(C,D)") || tkz.includes("gdMultiArrow")) {
   throw new Error("Reconstructible export must also omit the wholly clipped-out segment draw and its unused arrow style.");
 }
 
+// Current-view framing must not depend on tkz setup helpers being enabled.
+// A segment/circle-only construction can legitimately disable them.
+const tkzWithoutSetup = exportTikzWithOptions(scene, {
+  viewport,
+  drawLayerBackend: "tkz",
+  emitTkzSetup: false,
+});
+if (tkzWithoutSetup.includes("\\tkzInit[") || tkzWithoutSetup.includes("\\tkzClip[")) {
+  throw new Error("Disabled tkz setup must stay disabled for a current-view export.");
+}
+if (!tkzWithoutSetup.includes("\\path[use as bounding box] (-5,-4) rectangle (5,4);")) {
+  throw new Error("Reconstructible current-view export must preserve the canvas page bounds without tkz setup.");
+}
+if (!tkzWithoutSetup.includes("\\clip (-5,-4) rectangle (5,4);")) {
+  throw new Error("Reconstructible current-view export must still clip to the canvas without tkz setup.");
+}
+
 // A visible circle may use an invisible constrained point as its radius
 // anchor. Visual Exact draws the already-evaluated radius and must not fail or
 // emit that hidden dependency as an orphan coordinate. Geometric Construction

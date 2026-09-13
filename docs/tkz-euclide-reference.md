@@ -28,7 +28,7 @@ If exporter logic needs a macro, it must exist in the generated whitelist.
 % Right-angle marker at B
 \tkzMarkRightAngles[size=0.35](A,B,C)
 
-% Right-angle arc + inner dot
+% Right-angle arc + inner dot (center at size/2 along the internal bisector)
 \tkzMarkRightAngles[german,size=0.35](A,B,C)
 
 % Note: GeoDraw emits right-angle macros only for construction-proven exact right angles.

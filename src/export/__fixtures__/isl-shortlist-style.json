@@ -1,0 +1,406 @@
+{
+  "colorProfileId": "beige_light",
+  "scene": {
+    "points": [
+      {
+        "id": "p_1",
+        "kind": "free",
+        "name": "A",
+        "captionTex": "A",
+        "visible": true,
+        "showLabel": "name",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": 0.1,
+          "y": 2.8
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": -5,
+            "y": -24
+          }
+        }
+      },
+      {
+        "id": "p_2",
+        "kind": "free",
+        "name": "B",
+        "captionTex": "B",
+        "visible": true,
+        "showLabel": "name",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": -2.7,
+          "y": -1.2
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": -20,
+            "y": 6
+          }
+        }
+      },
+      {
+        "id": "p_3",
+        "kind": "free",
+        "name": "C",
+        "captionTex": "C",
+        "visible": true,
+        "showLabel": "name",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": 2.5,
+          "y": -1.2
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": 6
+          }
+        }
+      },
+      {
+        "id": "p_4",
+        "kind": "midpointPoints",
+        "name": "D",
+        "captionTex": "M",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": true,
+        "auxiliary": true,
+        "aId": "p_2",
+        "bId": "p_3",
+        "style": {
+          "shape": "circle",
+          "sizePx": 6,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.7,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": -5,
+            "y": 8
+          }
+        }
+      }
+    ],
+    "vectors": [],
+    "segments": [
+      {
+        "id": "s_1",
+        "aId": "p_1",
+        "bId": "p_2",
+        "ownedByPolygonIds": [
+          "pg_1"
+        ],
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "AB",
+        "labelPosWorld": {
+          "x": -0.98,
+          "y": 0.5759999999999998
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2,
+          "dash": "solid",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      },
+      {
+        "id": "s_2",
+        "aId": "p_2",
+        "bId": "p_3",
+        "ownedByPolygonIds": [
+          "pg_1"
+        ],
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "BC",
+        "labelPosWorld": {
+          "x": -0.10000000000000009,
+          "y": -0.7839999999999999
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2,
+          "dash": "solid",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      },
+      {
+        "id": "s_3",
+        "aId": "p_3",
+        "bId": "p_1",
+        "ownedByPolygonIds": [
+          "pg_1"
+        ],
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "CA",
+        "labelPosWorld": {
+          "x": 0.98,
+          "y": 0.6079999999999999
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2,
+          "dash": "solid",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      },
+      {
+        "id": "s_4",
+        "aId": "p_1",
+        "bId": "p_4",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "AD",
+        "labelPosWorld": {
+          "x": 0.31999999999999995,
+          "y": 0.7839999999999999
+        },
+        "style": {
+          "strokeColor": "#0000ff",
+          "strokeWidth": 2,
+          "dash": "dashed",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      }
+    ],
+    "lines": [],
+    "circles": [
+      {
+        "id": "c_1",
+        "kind": "threePoint",
+        "aId": "p_1",
+        "bId": "p_2",
+        "cId": "p_3",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "(ABC)",
+        "labelPosWorld": {
+          "x": 2.114472397660445,
+          "y": 2.174472397660445
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "strokeDash": "solid",
+          "strokeOpacity": 1,
+          "fillOpacity": 0,
+          "pattern": "",
+          "arrowMark": {
+            "enabled": false,
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "color": "#000000"
+          }
+        }
+      }
+    ],
+    "ellipses": [],
+    "polygons": [
+      {
+        "id": "pg_1",
+        "pointIds": [
+          "p_1",
+          "p_2",
+          "p_3"
+        ],
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "ABC",
+        "labelPosWorld": {
+          "x": -0.03333333333333336,
+          "y": 0.1333333333333333
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "strokeDash": "solid",
+          "strokeOpacity": 1,
+          "fillColor": "#e7dcc8",
+          "fillOpacity": 0.22,
+          "pattern": ""
+        }
+      }
+    ],
+    "angles": [],
+    "numbers": [],
+    "textLabels": [],
+    "richTextNodes": [],
+    "geometryLayerOrder": [
+      {
+        "type": "segment",
+        "id": "s_4"
+      },
+      {
+        "type": "segment",
+        "id": "s_3"
+      },
+      {
+        "type": "segment",
+        "id": "s_2"
+      },
+      {
+        "type": "segment",
+        "id": "s_1"
+      },
+      {
+        "type": "polygon",
+        "id": "pg_1"
+      },
+      {
+        "type": "circle",
+        "id": "c_1"
+      }
+    ]
+  },
+  "exportOptions": {
+    "drawLayerBackend": "tkz",
+    "emitTkzSetup": true
+  }
+}

@@ -21,7 +21,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import { buildStandaloneSource, deriveDefaultOptionalPreamble } from "../export/tikz/standaloneDocument";
-import { buildTikzExportText } from "../export/buildTikzExportText";
+import { buildTikzExportText, type TikzExportParams } from "../export/buildTikzExportText";
 import {
   applyFigureTreatment,
   getFigureTreatmentFactor,
@@ -30,20 +30,23 @@ import {
   type FigureTreatmentMode,
   type FigureTreatmentSelection,
 } from "../export/figureTreatment";
-import type { SceneModel } from "../scene/points";
 import { loadStoredExportPreferences, saveStoredExportPreferences } from "../state/appPreferences";
 import {
+  extractTikzPicture,
   loadTikzPreviewSession,
   loadTikzPreviewSessionWithDesktopFallback,
   type TikzPreviewSession,
 } from "./tikzPreviewSession";
 import {
+  applyPreviewLabelEdits,
   listPreviewLabelTargets,
   nudgePreviewLabel,
   resetPreviewLabel,
+  type PreviewLabelEdits,
   type PreviewLabelTarget,
 } from "./tikzPreviewLabels";
-import { getCanvasCaptureFigureSizing } from "./tikzPreviewSizing";
+import { applyPreviewSizingEdits, getCanvasCaptureFigureSizing, getPreviewTreatmentSelection, type PreviewSizingEdits } from "./tikzPreviewSizing";
+import { mergePreviewTikzCode } from "./tikzPreviewCodeEdits";
 import { IconGlobe, IconPoint, IconLine, IconType } from "./icons";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -53,6 +56,12 @@ type TikzPreviewWindowProps = {
 };
 
 type CodeToolTab = "sizing" | "labels" | "find" | "preamble";
+type PreviewEditorState = {
+  code: string;
+  generatedCode: string;
+  params: TikzExportParams | null;
+  labels: PreviewLabelEdits | null;
+};
 type CompileTikzPreviewResult = {
   pdf_base64: string;
   log: string;
@@ -233,6 +242,9 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
     []
   );
   const [tikzCode, setTikzCode] = useState(session?.tikzPicture ?? "\\begin{tikzpicture}\n\\end{tikzpicture}");
+  const tikzCodeRef = useRef(tikzCode);
+  const generatedTikzRef = useRef(tikzCode);
+  const [codeEditError, setCodeEditError] = useState("");
   const [optionalPreamble, setOptionalPreamble] = useState("");
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
   const [pdfZoom, setPdfZoom] = useState(1);
@@ -268,7 +280,8 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
       session?.treatment?.baseScaleboxScale ?? legacyBaseTreatmentScales.scaleboxScale,
     globalScale: session?.treatment?.baseGlobalScale ?? legacyBaseTreatmentScales.globalScale,
   });
-  const previewSceneRef = useRef<SceneModel | null>(regen?.scene ?? null);
+  const previewLabelEditsRef = useRef<PreviewLabelEdits | null>(regen ?? null);
+  const currentExportParamsRef = useRef<TikzExportParams | null>(regen);
   const [codeToolTab, setCodeToolTab] = useState<CodeToolTab>(() =>
     regen ? "sizing" : "find"
   );
@@ -298,11 +311,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
   const [preferDvipsNames, setPreferDvipsNames] = useState(regen?.preferDvipsNames === true);
   const [figureSizingDefaultSaved, setFigureSizingDefaultSaved] = useState(false);
   const [figureTreatment, setFigureTreatment] = useState<FigureTreatmentSelection>(
-    initialFigureTreatment
-  );
-  const [figureTreatmentFactor, setFigureTreatmentFactor] = useState(() =>
-    regen?.figureTreatmentFactor ??
-    getFigureTreatmentFactor(initialFigureTreatment, canvasTrueZoom)
+    regen ? getPreviewTreatmentSelection(regen) : initialFigureTreatment
   );
   const recompileTimerRef = useRef<number | null>(null);
   const automaticPreambleRef = useRef("");
@@ -348,8 +357,46 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
   const pdfSkipNextZoomRenderRef = useRef(false);
   const pdfZoomRef = useRef(pdfZoom);
   const gestureStartZoomRef = useRef(1);
-  const tikzUndoStackRef = useRef<string[]>([]);
-  const tikzRedoStackRef = useRef<string[]>([]);
+  const tikzUndoStackRef = useRef<PreviewEditorState[]>([]);
+  const tikzRedoStackRef = useRef<PreviewEditorState[]>([]);
+
+  const syncSizingControls = useCallback((params: TikzExportParams | null) => {
+    if (!params) return;
+    const format = (value: number | undefined) =>
+      formatPreviewScale(String(value ?? 1), params.roundNumbersToTwoDecimals === true);
+    setScaleboxScale(format(params.scaleboxScale));
+    setTrueGlobalScale(format(params.trueGlobalScale));
+    setGlobalScale(format(params.globalScale));
+    setPointScale(format(params.pointScale));
+    setLineScale(format(params.lineScale));
+    setLabelScale(format(params.labelScale));
+    setLabelHaloScale(format(params.labelHaloScale));
+    setRoundNumbersToTwoDecimals(params.roundNumbersToTwoDecimals === true);
+    setPreferDvipsNames(params.preferDvipsNames === true);
+    setFigureTreatment(getPreviewTreatmentSelection(params));
+    setFigureSizingDefaultSaved(false);
+  }, []);
+
+  const captureEditorState = useCallback((): PreviewEditorState => ({
+    code: tikzCodeRef.current,
+    generatedCode: generatedTikzRef.current,
+    params: currentExportParamsRef.current,
+    labels: previewLabelEditsRef.current,
+  }), []);
+
+  const restoreEditorState = useCallback((state: PreviewEditorState) => {
+    tikzCodeRef.current = state.code;
+    generatedTikzRef.current = state.generatedCode;
+    currentExportParamsRef.current = state.params;
+    previewLabelEditsRef.current = state.labels;
+    setTikzCode(state.code);
+    syncSizingControls(state.params);
+    setCodeEditError("");
+    if (recompileTimerRef.current !== null) {
+      window.clearTimeout(recompileTimerRef.current);
+      recompileTimerRef.current = null;
+    }
+  }, [syncSizingControls]);
 
   const updateTikzCode = useCallback(
     (
@@ -357,24 +404,31 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
       options?: {
         trackHistory?: boolean;
         resetHistory?: boolean;
+        generated?: Omit<PreviewEditorState, "code">;
       }
     ) => {
-      setTikzCode((prev) => {
-        if (next === prev) return prev;
-        if (options?.resetHistory) {
-          tikzUndoStackRef.current = [];
-          tikzRedoStackRef.current = [];
-        } else if (options?.trackHistory !== false) {
-          tikzUndoStackRef.current.push(prev);
-          if (tikzUndoStackRef.current.length > MAX_TIKZ_EDITOR_HISTORY) {
-            tikzUndoStackRef.current.shift();
-          }
-          tikzRedoStackRef.current = [];
-        }
-        return next;
-      });
+      if (options?.resetHistory) {
+        tikzUndoStackRef.current = [];
+        tikzRedoStackRef.current = [];
+      } else if (options?.trackHistory !== false && (next !== tikzCodeRef.current || options?.generated)) {
+        tikzUndoStackRef.current.push(captureEditorState());
+        if (tikzUndoStackRef.current.length > MAX_TIKZ_EDITOR_HISTORY) tikzUndoStackRef.current.shift();
+        tikzRedoStackRef.current = [];
+      }
+      if (options?.generated) {
+        generatedTikzRef.current = options.generated.generatedCode;
+        currentExportParamsRef.current = options.generated.params;
+        previewLabelEditsRef.current = options.generated.labels;
+      }
+      tikzCodeRef.current = next;
+      setTikzCode(next);
+      setCodeEditError("");
+      if (recompileTimerRef.current !== null) {
+        window.clearTimeout(recompileTimerRef.current);
+        recompileTimerRef.current = null;
+      }
     },
-    []
+    [captureEditorState]
   );
 
   const undoTikzCode = useCallback(() => {
@@ -382,40 +436,32 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
     if (undoStack.length === 0) return;
     const previous = undoStack.pop();
     if (previous === undefined) return;
-    setTikzCode((current) => {
-      tikzRedoStackRef.current.push(current);
-      if (tikzRedoStackRef.current.length > MAX_TIKZ_EDITOR_HISTORY) {
-        tikzRedoStackRef.current.shift();
-      }
-      return previous;
-    });
+    tikzRedoStackRef.current.push(captureEditorState());
+    if (tikzRedoStackRef.current.length > MAX_TIKZ_EDITOR_HISTORY) tikzRedoStackRef.current.shift();
+    restoreEditorState(previous);
     requestAnimationFrame(() => {
       const editor = editorRef.current;
       if (!editor) return;
       const pos = editor.value.length;
       editor.setSelectionRange(pos, pos);
     });
-  }, []);
+  }, [captureEditorState, restoreEditorState]);
 
   const redoTikzCode = useCallback(() => {
     const redoStack = tikzRedoStackRef.current;
     if (redoStack.length === 0) return;
     const next = redoStack.pop();
     if (next === undefined) return;
-    setTikzCode((current) => {
-      tikzUndoStackRef.current.push(current);
-      if (tikzUndoStackRef.current.length > MAX_TIKZ_EDITOR_HISTORY) {
-        tikzUndoStackRef.current.shift();
-      }
-      return next;
-    });
+    tikzUndoStackRef.current.push(captureEditorState());
+    if (tikzUndoStackRef.current.length > MAX_TIKZ_EDITOR_HISTORY) tikzUndoStackRef.current.shift();
+    restoreEditorState(next);
     requestAnimationFrame(() => {
       const editor = editorRef.current;
       if (!editor) return;
       const pos = editor.value.length;
       editor.setSelectionRange(pos, pos);
     });
-  }, []);
+  }, [captureEditorState, restoreEditorState]);
 
   const compilePdf = useCallback(
     async (sourceTikz: string, preambleText: string) => {
@@ -451,69 +497,43 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
     [isTauriRuntime]
   );
 
-  // Rebuild the TikZ from the captured scene with new sizing scales, then
-  // recompile. The code update is instant; the PDF recompile is debounced since
+  const mergeRegeneratedCode = useCallback((params: TikzExportParams) => {
+    try {
+      const generatedCode = extractTikzPicture(buildTikzExportText(params));
+      const merged = mergePreviewTikzCode(generatedTikzRef.current, tikzCodeRef.current, generatedCode);
+      if (merged.ok) return { code: merged.code, generatedCode };
+      setCodeEditError(merged.message);
+    } catch (err) {
+      setCodeEditError(`Could not update the figure. Your code and settings were kept. ${extractErrorMessage(err)}`);
+    }
+    syncSizingControls(currentExportParamsRef.current);
+    return null;
+  }, [syncSizingControls]);
+
+  // Merge sizing changes into the edited code, then recompile. The code update
+  // is instant; the PDF recompile is debounced since
   // it shells out to LaTeX and the number spinners can fire rapidly.
   const applyScales = useCallback(
-    (next: Partial<{
-      scalebox: string;
-      trueGlobal: string;
-      global: string;
-      point: string;
-      line: string;
-      label: string;
-      labelHalo: string;
-      twoDecimals: boolean;
-      dvipsNames: boolean;
-      figureTreatmentFactor: number;
-      /** null means a manually customized treatment with no named baseline. */
-      figureTreatmentMode: FigureTreatmentMode | null;
-    }>) => {
+    (next: PreviewSizingEdits) => {
       if (!regen) return;
       setFigureSizingDefaultSaved(false);
-      const resolved = {
-        scalebox: next.scalebox ?? scaleboxScale,
-        trueGlobal: next.trueGlobal ?? trueGlobalScale,
-        global: next.global ?? globalScale,
-        point: next.point ?? pointScale,
-        line: next.line ?? lineScale,
-        label: next.label ?? labelScale,
-        labelHalo: next.labelHalo ?? labelHaloScale,
-        twoDecimals: next.twoDecimals ?? roundNumbersToTwoDecimals,
-        dvipsNames: next.dvipsNames ?? preferDvipsNames,
-        figureTreatmentFactor: next.figureTreatmentFactor ?? figureTreatmentFactor,
-        figureTreatmentMode:
-          next.figureTreatmentMode === null
-            ? undefined
-            : next.figureTreatmentMode ??
-              (figureTreatment === "custom" ? undefined : figureTreatment),
-      };
-      let nextTikz: string;
-      try {
-        nextTikz = buildTikzExportText({
-          ...regen,
-          scene: previewSceneRef.current ?? regen.scene,
-          scaleboxScale: Number(resolved.scalebox),
-          trueGlobalScale: Number(resolved.trueGlobal),
-          globalScale: Number(resolved.global),
-          pointScale: Number(resolved.point),
-          lineScale: Number(resolved.line),
-          labelScale: Number(resolved.label),
-          labelHaloScale: Number(resolved.labelHalo),
-          roundNumbersToTwoDecimals: resolved.twoDecimals,
-          preferDvipsNames: resolved.dvipsNames,
-          figureTreatmentFactor: resolved.figureTreatmentFactor,
-          figureTreatmentMode: resolved.figureTreatmentMode,
-        });
-      } catch {
-        return; // leave the current code untouched if regeneration fails
-      }
+      const nextParams = applyPreviewSizingEdits(
+        applyPreviewLabelEdits(
+          currentExportParamsRef.current ?? regen,
+          previewLabelEditsRef.current ?? regen
+        ),
+        next
+      );
+      const result = mergeRegeneratedCode(nextParams);
+      if (!result) return;
+      setFigureTreatment(getPreviewTreatmentSelection(nextParams));
+      const nextTikz = result.code;
       let nextPreamble = optionalPreamble;
       if (next.dvipsNames !== undefined) {
         const automaticPreamble = deriveDefaultOptionalPreamble(
           nextTikz,
           session?.uiCssVariables,
-          { preferDvipsNames: resolved.dvipsNames }
+          { preferDvipsNames: nextParams.preferDvipsNames }
         );
         if (optionalPreamble === automaticPreambleRef.current) {
           nextPreamble = automaticPreamble;
@@ -521,7 +541,13 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
         }
         automaticPreambleRef.current = automaticPreamble;
       }
-      updateTikzCode(nextTikz, { trackHistory: true });
+      updateTikzCode(nextTikz, {
+        generated: {
+          generatedCode: result.generatedCode,
+          params: nextParams,
+          labels: { scene: nextParams.scene, pointLabelNudgesPx: nextParams.pointLabelNudgesPx },
+        },
+      });
       if (recompileTimerRef.current !== null) {
         window.clearTimeout(recompileTimerRef.current);
       }
@@ -532,49 +558,24 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
     },
     [
       regen,
-      scaleboxScale,
-      trueGlobalScale,
-      globalScale,
-      pointScale,
-      lineScale,
-      labelScale,
-      labelHaloScale,
-      roundNumbersToTwoDecimals,
-      preferDvipsNames,
-      figureTreatmentFactor,
-      figureTreatment,
       session?.uiCssVariables,
+      mergeRegeneratedCode,
       updateTikzCode,
       compilePdf,
       optionalPreamble,
     ]
   );
 
-  const regenerateWithScene = useCallback(
-    (nextScene: SceneModel) => {
+  const regenerateWithLabelEdits = useCallback(
+    (edits: PreviewLabelEdits) => {
       if (!regen) return;
-      let nextTikz: string;
-      try {
-        nextTikz = buildTikzExportText({
-          ...regen,
-          scene: nextScene,
-          scaleboxScale: Number(scaleboxScale),
-          trueGlobalScale: Number(trueGlobalScale),
-          globalScale: Number(globalScale),
-          pointScale: Number(pointScale),
-          lineScale: Number(lineScale),
-          labelScale: Number(labelScale),
-          labelHaloScale: Number(labelHaloScale),
-          roundNumbersToTwoDecimals,
-          preferDvipsNames,
-          figureTreatmentFactor,
-          figureTreatmentMode:
-            figureTreatment === "custom" ? undefined : figureTreatment,
-        });
-      } catch {
-        return;
-      }
-      updateTikzCode(nextTikz, { trackHistory: true });
+      const nextParams = applyPreviewLabelEdits(currentExportParamsRef.current ?? regen, edits);
+      const result = mergeRegeneratedCode(nextParams);
+      if (!result) return;
+      const nextTikz = result.code;
+      updateTikzCode(nextTikz, {
+        generated: { generatedCode: result.generatedCode, params: nextParams, labels: edits },
+      });
       if (recompileTimerRef.current !== null) {
         window.clearTimeout(recompileTimerRef.current);
       }
@@ -585,17 +586,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
     },
     [
       regen,
-      scaleboxScale,
-      trueGlobalScale,
-      globalScale,
-      pointScale,
-      lineScale,
-      labelScale,
-      labelHaloScale,
-      roundNumbersToTwoDecimals,
-      preferDvipsNames,
-      figureTreatmentFactor,
-      figureTreatment,
+      mergeRegeneratedCode,
       updateTikzCode,
       compilePdf,
       optionalPreamble,
@@ -605,29 +596,27 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
   const nudgePrecisionLabel = useCallback(
     (target: PreviewLabelTarget, deltaX: number, deltaY: number, coarse: boolean) => {
       if (!regen) return;
-      const currentScene = previewSceneRef.current ?? regen.scene;
+      const currentEdits = previewLabelEditsRef.current ?? regen;
       const amount = coarse ? 5 : 1;
-      const nextScene = nudgePreviewLabel(
-        currentScene,
+      const nextEdits = nudgePreviewLabel(
+        currentEdits,
         target,
         { x: deltaX * amount, y: deltaY * amount },
         regen.screenPxPerWorld
       );
-      previewSceneRef.current = nextScene;
-      regenerateWithScene(nextScene);
+      regenerateWithLabelEdits(nextEdits);
     },
-    [regen, regenerateWithScene]
+    [regen, regenerateWithLabelEdits]
   );
 
   const resetPrecisionLabel = useCallback(
     (target: PreviewLabelTarget) => {
       if (!regen) return;
-      const currentScene = previewSceneRef.current ?? regen.scene;
-      const nextScene = resetPreviewLabel(currentScene, regen.scene, target);
-      previewSceneRef.current = nextScene;
-      regenerateWithScene(nextScene);
+      const currentEdits = previewLabelEditsRef.current ?? regen;
+      const nextEdits = resetPreviewLabel(currentEdits, regen, target);
+      regenerateWithLabelEdits(nextEdits);
     },
-    [regen, regenerateWithScene]
+    [regen, regenerateWithLabelEdits]
   );
 
   const selectFigureTreatment = (mode: FigureTreatmentMode) => {
@@ -648,7 +637,6 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
     );
     const nextTreatmentFactor = getFigureTreatmentFactor(mode, canvasTrueZoom);
     setFigureTreatment(mode);
-    setFigureTreatmentFactor(nextTreatmentFactor);
     setScaleboxScale(nextScalebox);
     setGlobalScale(nextGlobal);
     applyScales({
@@ -675,7 +663,8 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
       Number(globalScale),
       treatmentBaseRef.current.scaleboxScale,
       treatmentBaseRef.current.globalScale,
-      canvasTrueZoom
+      canvasTrueZoom,
+      currentExportParamsRef.current?.figureTreatmentMode ?? "canvas"
     );
     const savedBaseScalebox = normalized(
       String(resolvedDefault.scaleboxScale),
@@ -687,8 +676,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
     );
     const saved = saveStoredExportPreferences({
       ...stored,
-      // Named treatments persist independently from their uncompensated manual
-      // pair. Custom values keep the legacy Canvas normalization behavior.
+      // Custom scales retain the treatment they were based on.
       figureTreatment: resolvedDefault.mode,
       scaleboxScale: savedBaseScalebox,
       trueGlobalScale: normalized(trueGlobalScale, stored.trueGlobalScale),
@@ -715,7 +703,6 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
 
     treatmentBaseRef.current = { scaleboxScale: 1, globalScale: 1 };
     setFigureTreatment("canvas");
-    setFigureTreatmentFactor(canvasTrueZoom);
     setScaleboxScale(captured.scalebox);
     setTrueGlobalScale(captured.trueGlobal);
     setGlobalScale(captured.global);
@@ -741,10 +728,10 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
 
   useEffect(() => {
     const nextTikz = session?.tikzPicture ?? "\\begin{tikzpicture}\n\\end{tikzpicture}";
-    previewSceneRef.current = regen?.scene ?? null;
     updateTikzCode(nextTikz, {
       trackHistory: false,
       resetHistory: true,
+      generated: { generatedCode: nextTikz, params: regen, labels: regen },
     });
     const defaultPreamble = deriveDefaultOptionalPreamble(nextTikz, session?.uiCssVariables, {
       preferDvipsNames: regen?.preferDvipsNames === true,
@@ -1444,7 +1431,15 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
         />
 
         <section className="previewPane previewCodePane" style={{ width: `${codePaneRatio * 100}%` }}>
-          <div className="sectionTitle">TikZ Code</div>
+          <div className="previewCodeHeading">
+            <div className="sectionTitle">TikZ Code</div>
+            {regen ? (
+              <span className="previewExportMode">
+                Mode: {regen.drawLayerBackend === "plain" ? "Exact Coordinates" : "Geometric Construction"}
+              </span>
+            ) : null}
+          </div>
+          {codeEditError ? <div className="errorText" role="alert">{codeEditError}</div> : null}
           <div className="previewCodeTools">
             <div className="previewCodeToolTabs" role="tablist" aria-label="TikZ code tools">
               {regen ? (
@@ -1658,10 +1653,8 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                       value={scaleboxScale}
                       onChange={(e) => {
                         const v = e.target.value;
-                        setFigureTreatment("custom");
-                        setFigureTreatmentFactor(1);
                         setScaleboxScale(v);
-                        applyScales({ scalebox: v, trueGlobal: trueGlobalScale, global: globalScale, point: pointScale, line: lineScale, label: labelScale, figureTreatmentFactor: 1, figureTreatmentMode: null });
+                        applyScales({ scalebox: v });
                       }}
                       title="Scales the complete figure with a simple LaTeX scalebox"
                     />
@@ -1678,10 +1671,8 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                       value={globalScale}
                       onChange={(e) => {
                         const v = e.target.value;
-                        setFigureTreatment("custom");
-                        setFigureTreatmentFactor(1);
                         setGlobalScale(v);
-                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: v, point: pointScale, line: lineScale, label: labelScale, figureTreatmentFactor: 1, figureTreatmentMode: null });
+                        applyScales({ global: v });
                       }}
                       aria-describedby="preview-tikz-scale-help"
                     />
@@ -1702,7 +1693,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                       onChange={(e) => {
                         const v = e.target.value;
                         setPointScale(v);
-                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: globalScale, point: v, line: lineScale, label: labelScale });
+                        applyScales({ point: v });
                       }}
                     />
                   </label>
@@ -1719,7 +1710,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                       onChange={(e) => {
                         const v = e.target.value;
                         setLineScale(v);
-                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: globalScale, point: pointScale, line: v, label: labelScale });
+                        applyScales({ line: v });
                       }}
                     />
                   </label>
@@ -1736,13 +1727,13 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                       onChange={(e) => {
                         const v = e.target.value;
                         setLabelScale(v);
-                        applyScales({ scalebox: scaleboxScale, trueGlobal: trueGlobalScale, global: globalScale, point: pointScale, line: lineScale, label: v });
+                        applyScales({ label: v });
                       }}
                     />
                   </label>
                   <label className="previewScaleItem">
                     <IconType size={14} />
-                    <span className="previewScaleLabel">Halo spread</span>
+                    <span className="previewScaleLabel">Label halo</span>
                     <input
                       className="previewScaleInput"
                       type="number"
@@ -1755,7 +1746,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                         setLabelHaloScale(v);
                         applyScales({ labelHalo: v });
                       }}
-                      title="Multiplies the contour spread behind every label"
+                      title="Adjusts the halo behind labels: 1 uses the default width; smaller values make it thinner"
                     />
                   </label>
                   <div className="previewSizingOptions">
@@ -1763,6 +1754,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                       <input
                         type="checkbox"
                         checked={roundNumbersToTwoDecimals}
+                        aria-describedby="preview-number-precision-help"
                         onChange={(e) => {
                           const enabled = e.target.checked;
                           const nextScalebox = formatPreviewScale(scaleboxScale, enabled);
@@ -1780,19 +1772,10 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                           setLineScale(nextLine);
                           setLabelScale(nextLabel);
                           setLabelHaloScale(nextHalo);
-                          applyScales({
-                            scalebox: nextScalebox,
-                            trueGlobal: nextTrueGlobal,
-                            global: nextGlobal,
-                            point: nextPoint,
-                            line: nextLine,
-                            label: nextLabel,
-                            labelHalo: nextHalo,
-                            twoDecimals: enabled,
-                          });
+                          applyScales({ twoDecimals: enabled });
                         }}
                       />
-                      Two decimal places
+                      Round appearance values to 2 decimals
                     </label>
                     <label className="checkboxRow previewSizingCheckbox">
                       <input
@@ -1807,6 +1790,12 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                       xcolor/dvipsnames only
                     </label>
                   </div>
+                  <p id="preview-number-precision-help" className="previewPrecisionHint">
+                    Rounds stroke widths, font sizes, and label offsets when enabled.{' '}
+                    {regen.drawLayerBackend === "plain"
+                      ? "Point coordinates keep full precision to preserve the geometry."
+                      : "Construction coordinates keep full precision to preserve tangencies and intersections."}
+                  </p>
                   <details className="previewAdvancedScale">
                     <summary>Advanced transform scale</summary>
                     <label className="previewScaleItem previewScaleItemWide">
@@ -1822,7 +1811,7 @@ function TikzPreviewWorkspace({ session }: { session: TikzPreviewSession }) {
                         onChange={(e) => {
                           const v = e.target.value;
                           setTrueGlobalScale(v);
-                          applyScales({ scalebox: scaleboxScale, trueGlobal: v, global: globalScale, point: pointScale, line: lineScale, label: labelScale });
+                          applyScales({ trueGlobal: v });
                         }}
                         title="Advanced TikZ scale with transform shape and explicit stroke and mark corrections"
                       />

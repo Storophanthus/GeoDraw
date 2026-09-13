@@ -310,6 +310,69 @@ assertClose(
 );
 await compileTikzSnippet("figure-treatment-canvas-100-tkz", canvasAt100Tkz);
 
+// A Canvas treatment is a literal capture, not a publication close-up. With a
+// proportionally tighter viewport, auto-fit cancels the smaller world window;
+// raw style metrics therefore stay equal and the outer scalebox supplies the
+// full True Zoom factor. In particular, labels must not receive the moderated
+// `factor ** -0.65` scope that made them too small relative to the drawing.
+const capturedTrueZoom = 2.15;
+const capturedViewport = { xmin: -1, xmax: 4, ymin: -1, ymax: 2 };
+const capturedCenter = {
+  x: (capturedViewport.xmin + capturedViewport.xmax) / 2,
+  y: (capturedViewport.ymin + capturedViewport.ymax) / 2,
+};
+const capturedHalfWidth = (capturedViewport.xmax - capturedViewport.xmin) / (2 * capturedTrueZoom);
+const capturedHalfHeight = (capturedViewport.ymax - capturedViewport.ymin) / (2 * capturedTrueZoom);
+const canvasCaptureAt100 = buildTikzExportText({
+  ...params("plain", 1, 1),
+  viewport: capturedViewport,
+  canvasTrueZoom: 1,
+  figureTreatmentMode: "canvas",
+  figureTreatmentFactor: 1,
+});
+const canvasCaptureZoomed = buildTikzExportText({
+  ...params("plain", capturedTrueZoom, 1 / capturedTrueZoom),
+  viewport: {
+    xmin: capturedCenter.x - capturedHalfWidth,
+    xmax: capturedCenter.x + capturedHalfWidth,
+    ymin: capturedCenter.y - capturedHalfHeight,
+    ymax: capturedCenter.y + capturedHalfHeight,
+  },
+  canvasTrueZoom: capturedTrueZoom,
+  figureTreatmentMode: "canvas",
+  figureTreatmentFactor: capturedTrueZoom,
+});
+assertClose(
+  tikzScale(canvasCaptureZoomed),
+  tikzScale(canvasCaptureAt100),
+  "Canvas capture geometry scale before the outer True Zoom"
+);
+assertClose(
+  pointSizeMetric(canvasCaptureZoomed),
+  pointSizeMetric(canvasCaptureAt100),
+  "Canvas capture raw point metric"
+);
+assertClose(
+  sharedDrawLineWidth(canvasCaptureZoomed),
+  sharedDrawLineWidth(canvasCaptureAt100),
+  "Canvas capture raw line metric"
+);
+assertClose(
+  labelFontSize(canvasCaptureZoomed),
+  labelFontSize(canvasCaptureAt100),
+  "Canvas capture raw label metric"
+);
+assertClose(
+  haloWidth(canvasCaptureZoomed),
+  haloWidth(canvasCaptureAt100),
+  "Canvas capture raw label halo"
+);
+assert(
+  !canvasCaptureZoomed.includes("every node/.style={scale="),
+  "Canvas capture must not attenuate label scaling below the canvas True Zoom."
+);
+await compileTikzSnippet("figure-treatment-canvas-literal-zoom", canvasCaptureZoomed);
+
 // A whole-scene Canvas treatment previously cancelled itself in Visual Exact:
 // the inner TikZ scale made fixed-size styling smaller by exactly the amount
 // the outer scalebox enlarged it. Keep styling independent of coordinate scale,

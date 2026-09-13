@@ -567,6 +567,7 @@ export type GeoActions = {
     next: Partial<Pick<SceneModel["angles"][number], "visible">>
   ) => void;
   updateSelectedNumberDefinition: (next: SceneNumberDefinition) => void;
+  updateCircleRadius: (id: string, radiusExpr: string) => { ok: true } | { ok: false; error: string };
   updateNumberDefinitionById: (id: string, next: SceneNumberDefinition) => void;
   updateSelectedTextLabelFields: (
     next: Partial<

@@ -208,8 +208,31 @@ export function appendRenderedSetupAndPoints({
       out.push(`\\clip ${viewportPath};`);
     }
   }
-  // When explicit export clip rectangle is present, avoid tkz viewport clip to
-  // prevent extra outer whitespace from a larger bounding box.
+  if (drawLayerBackend === "tkz") {
+    // A clip constrains what survives, but TeX can still shrink the page to the
+    // surviving objects. Preserve the selected frame—including empty canvas
+    // space—so current-view and drawn-area exports keep their aspect ratio.
+    if (clipRect) {
+      out.push(
+        `\\path[use as bounding box] (${caps.fmt(clipRect.xmin)},${caps.fmt(clipRect.ymin)}) rectangle (${caps.fmt(clipRect.xmax)},${caps.fmt(clipRect.ymax)});`
+      );
+    } else if (clipPolygon && clipPolygon.points.length >= 3) {
+      const xs = clipPolygon.points.map((point) => point.x);
+      const ys = clipPolygon.points.map((point) => point.y);
+      out.push(
+        `\\path[use as bounding box] (${caps.fmt(Math.min(...xs))},${caps.fmt(Math.min(...ys))}) rectangle (${caps.fmt(Math.max(...xs))},${caps.fmt(Math.max(...ys))});`
+      );
+    } else if (setupViewport?.clip) {
+      const xmin = setupViewport.xmin - setupViewport.space;
+      const xmax = setupViewport.xmax + setupViewport.space;
+      const ymin = setupViewport.ymin - setupViewport.space;
+      const ymax = setupViewport.ymax + setupViewport.space;
+      out.push(
+        `\\path[use as bounding box] (${caps.fmt(xmin)},${caps.fmt(ymin)}) rectangle (${caps.fmt(xmax)},${caps.fmt(ymax)});`
+      );
+    }
+  }
+  // When an explicit drawn area is present, avoid the larger tkz viewport clip.
   if (drawLayerBackend === "tkz" && emitTkzSetup && setupViewport && !clipRect && !clipPolygon) {
     caps.assertTkzMacro("tkzInit");
     out.push(
@@ -232,6 +255,21 @@ export function appendRenderedSetupAndPoints({
   if (drawLayerBackend !== "plain" && clipPolygon && clipPolygon.points.length >= 3) {
     const path = clipPolygon.points.map((p) => `(${caps.fmt(p.x)},${caps.fmt(p.y)})`).join(" -- ");
     out.push(`\\clip ${path} -- cycle;`);
+  }
+  if (
+    drawLayerBackend === "tkz" &&
+    !emitTkzSetup &&
+    setupViewport?.clip &&
+    !clipRect &&
+    !clipPolygon
+  ) {
+    const xmin = setupViewport.xmin - setupViewport.space;
+    const xmax = setupViewport.xmax + setupViewport.space;
+    const ymin = setupViewport.ymin - setupViewport.space;
+    const ymax = setupViewport.ymax + setupViewport.space;
+    out.push(
+      `\\clip (${caps.fmt(xmin)},${caps.fmt(ymin)}) rectangle (${caps.fmt(xmax)},${caps.fmt(ymax)});`
+    );
   }
 
   // Emit predefined styles used by tkzDrawPoints[...] commands.

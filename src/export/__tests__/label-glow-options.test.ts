@@ -265,8 +265,16 @@ if (!reconstructibleRepeatedPointLabelsTikz.includes("gdLabel/.style={")) {
 if ((reconstructibleRepeatedPointLabelsTikz.match(/\\fontsize\{/gu) ?? []).length !== 1) {
   throw new Error("Expected the shared Geometric Construction point font size to be defined only once.");
 }
-if (!reconstructibleRepeatedPointLabelsTikz.includes("\\node[gdLabel, anchor=base west,")) {
-  throw new Error("Expected Geometric Construction labels to retain their individual named-point offsets.");
+for (const point of reconstructibleRepeatedPointLabelsScene.points) {
+  const line = reconstructibleRepeatedPointLabelsTikz.split("\n").find(line => line.includes(`at (${point.name}){`)) ?? "";
+  const pxToPt = (14.4 / 4) * (72.27 / 2.54) / 80;
+  const x = Number(line.match(/xshift=([-+\d.eE]+)pt/u)?.[1]);
+  const y = Number(line.match(/yshift=([-+\d.eE]+)pt/u)?.[1]);
+  if (!line.includes("gdLabel") || !Number.isFinite(x) || !Number.isFinite(y) ||
+      Math.abs(x - point.style.labelOffsetPx.x * pxToPt) > 1e-10 ||
+      Math.abs(y + point.style.labelOffsetPx.y * pxToPt) > 1e-10) {
+    throw new Error("Expected shared labels to retain each named point's exact canvas offsets.");
+  }
 }
 if (reconstructibleRepeatedPointLabelsTikz.includes("\\newcommand{\\gdLabelText}")) {
   throw new Error("Geometric Construction must retain its one-argument gdLabelGlow helper without a plain-backend wrapper.");

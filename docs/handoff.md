@@ -1,7 +1,7 @@
 # GeoDraw Handoff (Stability Contract)
 
 ## Branch / Baseline
-- Active branch: `feat/core-redefine-engine`
+- Active branch: `main`
 - Keep commits small and scoped.
 - Do not bundle unrelated files in feature commits.
 - Architecture map reference: `docs/architecture-snapshot.md`
@@ -25,6 +25,263 @@
     - regression tests for parser/behavior.
 
 ## Done (Current Truth)
+- 2026-09-13 GeoDraw v0.2.2 release candidate:
+  - Canvas export framing now uses the actual drawing viewport and preserves
+    deliberate blank space instead of tightening to object bounds.
+  - "Export what I see now" applies the captured True Zoom literally to the
+    complete figure, including point, label, halo, and angle-mark proportions.
+    General and Very close-up treatments retain their moderated calibration.
+  - Added regression coverage for viewport clipping, setup-disabled exports,
+    Canvas treatment ratios, preview sizing/manual-code preservation, label
+    bounds and hit testing, circle radius editing, center visibility, ISL
+    styling, and centered right-angle dots.
+  - Package, Tauri, and lockfile versions are synchronized at `0.2.2`.
+- 2026-09-10 PDF dialog identifies export mode and explains numeric precision:
+  - A persistent badge beside TikZ Code shows Geometric Construction or Exact
+    Coordinates from the captured backend, including while viewing other tabs.
+    Legacy previews without capture metadata omit the badge rather than guess.
+  - Renamed the preview checkbox to "Round appearance values to 2 decimals"
+    and added visible, screen-reader-linked explanatory text. Geometric
+    Construction explains that defining coordinates stay precise to preserve
+    tangencies/intersections; Exact Coordinates explains geometry preservation.
+  - Scope is preview JSX, CSS, and docs only. Exported TikZ and geometry are
+    unchanged. The code pane scrolls in shorter windows instead of shrinking
+    and clipping its tools. Browser UI checks pass for both modes, the visible
+    precision note, and mode visibility across tabs at 1280 x 720. TypeScript,
+    Vite, and Tauri app build pass; the release bundle contains the updated UI.
+- 2026-09-08 Preview scale edits preserve bold strokes:
+  - Reported TikZ scale 1 -> 0.95 changed line width 0.92 -> 0.38 pt. The
+    coordinate/global handlers cleared Canvas mode, activating the legacy
+    0.5/1.2 stroke calibration. They now retain the captured mode/factor and
+    store Custom as separate preview metadata. Only an explicit treatment
+    selection/reset changes calibration.
+  - Shared `applyPreviewSizingEdits` changes only supplied fields, preserving
+    the full precision of unedited multipliers. Formatting changes no longer
+    round the underlying sizing. Undo/redo retains the custom indicator and
+    original calibration. Saved Custom scales retain their base treatment;
+    ExportPanel no longer clears Canvas mode when manual sizing differs.
+  - Scope: preview sizing/window, export treatment/default wiring, parameter
+    metadata, fixture/regression, and these export docs. No geometry solvers,
+    identities, or intersection branch mapping changes.
+  - `preview-scale-preserve-line-weight.json` includes a dependent midpoint
+    and adjacent right-angle marks. Regression reproduces the old multiplier
+    and verifies both backends/output modes, named/legacy/close-up captures,
+    saved defaults, unchanged manual strokes, and eight compiled before/after
+    snippets. GUI verified the actual preview handler preserves 1.13 pt line
+    and 0.82 pt angle widths at TikZ scale 0.95, restores exact code on undo/
+    redo, and retains widths under outer Global scaling.
+  - GUI also verified the Lines control changes weight deliberately, reset
+    restores the exact original code, and saved 0.95 sizing reopens with the
+    same 1.25 pt line/0.91 pt angle widths as Match canvas at scale 1.
+  - Final validation: full `npm run test:export` passes (111 compiled fixtures,
+    34 export unit files, efficient-output suite), preview sizing/session
+    tests pass, TypeScript/Vite and the Tauri release app build pass. Handoff
+    guard and diff whitespace checks pass. The user's source at scale 0.95
+    compiles and renders with the original 0.92 pt strokes intact:
+    `output/pdf/geodraw-scale-095-fixed.pdf` (+ editable TeX).
+  - Next: none. Updated app is in the release bundle; `/Applications` has not
+    been replaced. No intersection or geometric behavior was changed.
+- 2026-09-08 Circle radius editing, point-label PDF bounds, and ISL dot refinements:
+  - Fixed-radius circles now expose Radius expression + Apply in Properties,
+    including unnamed circles. `updateCircleRadius` preserves the circle ID,
+    center, style, label fields, and dependent intersection metadata in one
+    undo step. Validation rejects invalid/nonpositive values and expressions
+    requiring the target circle (including indirect references through E).
+    Existing named-circle commands remain available; no solver/branch mapping
+    was changed. Circle-through-point constructors still follow their points.
+  - Confirmed the user's cropped E in the preview's generated TeX: 16.13 pt
+    type was assigned only 5.76 pt text height. Measured labels now use a
+    baseline anchor with baseline offset in yshift, retaining natural glyph
+    bounds and the previous physical baseline. Corrected the malformed kind
+    and missing segment label field in the related canvas-origin fixture so
+    its compiled baseline regression runs again.
+  - Reduced ISL radius from 5 to 3.5 px after user feedback; line weights and
+    label sizes stay unchanged. Reapply ISL to style an existing drawing.
+  - Right-angle arc dots previously used the smaller square-marker geometry,
+    placing them about 29% of the arc radius from the vertex. Shared
+    `angleMarkGeometry.rightAngleDotCenter` now positions them at half the arc
+    radius on the bisector in canvas and plain TikZ, matching the existing
+    tkz German macro. Dot radius and right-square rendering are unchanged.
+    `right-angle-dot-centered.json` includes two adjacent marks at a dependent
+    midpoint; its test reproduced the old error before the fix, covers actual
+    canvas draws under rotation/size/stroke changes, checks export scaling,
+    and compiles both backends/modes with probes of tkz's actual dot centers.
+    Manual reproduction: draw A=(3,0), D=(-3,0), C=(0,3), S=Midpoint(A,D),
+    segments AD/SC, and MarkedAngle(A,S,C)/MarkedAngle(C,S,D). Select RightArcDot
+    for both; each dot should sit centrally inside its quarter-circle. GUI
+    verified both marks; moving A out of perpendicular alignment removes the
+    right-only dots, and undo restores their centered placement.
+  - Regression: `circle-radius-edit.json`, scene radius-edit tests, compiled
+    point-label natural-bounds tests in plain/tkz and normal/efficient modes,
+    and the existing compiled canvas-origin checks. GUI verified an unnamed
+    circle's edit, error display, Enter, undo/redo, and sidebar layout. Rendered
+    the user's original TeX with corrected E bounds; full E remains visible.
+  - Scene suite and geometry manual checks pass: other circle/segment root
+    stays distinct as dependencies move, disappears outside finite segment
+    domain, and segment-tool-created circle points stay constrained.
+  - Final validation: `npm run test:export` passes (110 fixtures compile, all
+    33 export units, efficient-output suite); scene suite, canvas solid/approx
+    angle regression, and TikZ preview-session test pass. Tauri release build
+    runs the full TypeScript/Vite build and produces
+    `src-tauri/target/release/bundle/macos/GeoDraw.app`. Handoff guard and diff
+    whitespace check pass. Corrected user preview is
+    `output/pdf/geodraw-label-bounds-fixed.pdf` (+ editable TeX), rendered and
+    visually checked with smaller points, centered S dots, and a complete E.
+  - Next: none. Existing unrelated exporter edits remain in the worktree.
+    The rebuilt app is in the release bundle; `/Applications` was not replaced.
+- 2026-09-08 ISL 2018 G1 refinement and canvas palette repairs:
+  - User selected 2018 G1 as the reference. ISL now uses solid radius-3.5
+    points, 28 px math labels, and 2.2 px segment/circle strokes (logical
+    canvas pixels), retaining custom colors, captions, marks, and offsets.
+  - Palette selection preserves grid, axes, snapping, and glow. Removed the
+    initial ISL visibility overrides and its now-unneeded glow history field.
+    ISL grid ink is black before the renderer applies its low grid opacity.
+  - All explicit palette choices clear stale custom canvas colors, so the
+    selected paper/grid palette is rendered. Reapplying a palette clears them
+    too; undo restores previous overrides. Matching ISL Vanilla UI remains.
+  - Validation: reproduced a failing canvas-override assertion, then passed
+    the palette regression for every palette with grid toggled both ways.
+    Updated ISL regression compiles in all four export modes; scene suite,
+    isolated TypeScript check, and Vite build pass. GUI checks verified large
+    solid points and math labels with a visible grid, ISL-to-Dark recoloring,
+    and a Peach custom background changing to Classic white with undo back
+    to Peach. The unrelated full-gate failures below remain unchanged.
+  - Next: none for this patch. Risk: drawings saved with Grid off by the old
+    preset retain that setting; enable Grid once. No solver changes.
+- 2026-09-08 ISL palette also selects its matching UI theme:
+  - Corrected the ISL-only exception that retained the old app UI colors.
+    Selecting ISL from the left palette menu or reapplying it in Preferences
+    now pairs it with Vanilla, including previously mismatched saved states.
+    Switching away from ISL follows the existing palette-pairing behavior.
+  - Updated the ISL fixture regression and palette-linking regression to cover
+    selection, reapplication, and switching to another paired palette.
+    UI theme remains an app preference, independent of scene undo and loading.
+  - Validation: scene suite and ISL export regression pass; browser checks
+    confirm the actual left-bar selection renders Vanilla, persists across
+    reload, repairs reapplication, and switches to paired Dark Mode. Vite and
+    the isolated TypeScript check pass. The full build remains blocked by
+    the pre-existing `point-label-canvas-origin.test.ts` fixture cast below.
+- 2026-09-08 ISL Shortlist diagram preset:
+  - Added `isl_shortlist` to the construction palette and a reusable Apply ISL
+    Shortlist action under Preferences > Presets. Based on local geometry
+    figures, now refined to the user's ISL 2018 G1 choice: white paper, firm
+    black strokes, substantial solid dots, math captions, and unfilled shapes. Existing
+    custom colors, dashes, marks, captions, and label offsets survive.
+  - Explicit application styles current objects and new defaults and persists
+    preferred construction settings. Grid/axes/dependency rings retain their
+    current visibility. Undo/redo restores the complete diagram configuration.
+    Document reopening preserves later size/color customizations.
+  - Implementation is confined to color profiles, `islStyle.ts`, preference
+    persistence/UI. No geometry solver or
+    intersection export mapping changed. See `docs/isl-shortlist-style.md`.
+  - Validation: ISL regression and all scene tests pass; ISL output compiles in
+    plain/tkz and standard/efficient modes. Browser checks confirm application,
+    undo/redo, new-point defaults, and reload with no page errors. Vite builds,
+    and TypeScript passes excluding the already-untracked malformed
+    `point-label-canvas-origin.test.ts` fixture cast.
+  - Existing workspace gate failures remain: `npm run build` fails on that
+    cast; the full fixture runner rejects its unsupported `midpoint` kind.
+    Excluding that fixture, all 107 fixtures compile. Export units pass 28/31;
+    `label-glow-options`, `point-label-canvas-origin`, and
+    `visual-exact-contract` fail identically in a temporary copy with all ISL
+    changes removed. Those unrelated in-progress files were left untouched.
+- 2026-09-06 PDF-preview controls preserve manual code; thinner Visual Exact halo:
+  - The earlier stroke-sizing fix retained export params but still regenerated
+    the complete editor contents. Both joystick and sizing controls now merge
+    generated changes against the previous generated baseline, preserving
+    unrelated manual edits such as `gdLabelText` set to `1pt`, label colors,
+    comments, and same-line options.
+  - `tikzPreviewCodeEdits.ts` uses jsdiff line anchors and complete TeX/number
+    tokens. Overlapping edits reject the entire operation with a visible
+    message; controls, code, params and label state remain at the last accepted
+    values. This is conservative text merging, not arbitrary TeX interpretation.
+  - Undo/redo snapshots include code, baseline, params and label edits. Preview
+    generation consistently extracts the picture/wrapper just as session
+    loading does; it no longer inserts the stripped preamble on first nudge.
+  - Visual Exact contour widths are now 40% of the previous widths for all
+    label kinds (e.g. 2.78pt becomes about 1.11pt). The Figure Sizing control
+    was renamed from Halo spread to Label halo. Existing user multipliers,
+    canvas styling and reconstructible halo calibration remain unchanged.
+  - Regression: `preview-preserve-manual-code.json` and matching export test
+    cover manual halo/color/comment preservation through repeated/coarse nudges,
+    point/line/label/outer sizing, reset, conflict/recovery, same-line edits,
+    insertions/deletions and dimension conflicts, in both backends and both
+    standard/efficient output. All four edited outputs compile via the preview
+    standalone-document builder; the reduced default has a numeric assertion.
+  - Manual browser checks passed in the live development preview: retain a
+    1pt halo and blue label color through two I-left clicks, point scale 1.5,
+    line scaling, reset, undo/redo, and nudge-after-undo. A conflicting halo
+    change leaves code intact and rolls the control back; an unrelated change
+    still works afterward. Removing the manual halo override permits the UI
+    halo multiplier to change it while retaining the edited label color.
+  - Validation: build and preview-session test pass; all 106 export fixtures
+    compile, all 31 export test files and all 29 export unit test files pass.
+    No geometry solver or intersection branch mapping changed.
+- 2026-09-05 PDF-preview label nudges preserve stroke sizing:
+  - Reproduced a single joystick click changing tkz line/segment widths from
+    `0.46/0.55pt` to `1.10/1.32pt`. The launcher retained a Canvas dropdown
+    baseline while the effective export treatment was custom/undefined; the
+    preview rebuilt the figure with `figureTreatmentMode: "canvas"`, dropping
+    the legacy `0.5/1.2` stroke calibration and multiplying widths by 2.4.
+  - The preview now retains the exact params from its latest successful export.
+    Label nudges/reset replace only the label scene and pixel translations,
+    preserving absent treatment modes and full-precision numeric scales.
+    Intentional sizing changes update those retained params; stale metadata
+    carried by label-edit objects cannot overwrite them.
+  - The initial treatment selector reflects the effective exported mode, and
+    ordinary sizing controls retain it until an explicit treatment change.
+  - Regression: `preview-label-preserve-stroke-sizing.json` and matching export
+    test cover first/second clicks, reset, sizing-then-nudge, rounded display
+    values, tkz/plain backends, standard/efficient output, and named/custom
+    treatments, with before/after TeX compilation.
+  - Manual browser checks passed: one and two clicks move I with identical
+    drawing widths; reset restores I; changing Lines to 2.1 works and a later
+    nudge preserves that intentional change. The browser checks the live
+    preview's generated code; PDF compilation runs through the TeX harness.
+  - Validation: build, scene and preview-session tests pass; all 105 export
+    fixtures compile, with all 30 export test files and 28 export unit tests
+    passing. No geometry or intersection branch mapping changed.
+- 2026-09-05 Command-circle center and adjacent label selection fixes:
+  - Midpoint on a circle now reveals an existing hidden center, restoring the
+    default point label when the helper had none. It reuses the center's ID and
+    construction, supports undo/redo, and leaves visible centers' label choices
+    intact. This also covers previously hidden three-point circle centers.
+  - Point-name hit testing now only handles canvas-rendered names. TeX captions
+    use their measured DOM bounds; raw source such as `A^{\prime}` no longer
+    creates a wide invisible target that captures a nearby `I` label drag.
+  - Regression fixture: `incircle-hidden-center-label-hit.json`, reduced from
+    `bugsa.geodraw`. `circle-center-visibility.test.ts` and
+    `point-label-hit.test.ts` reproduce both failures before the fixes and run
+    in `npm run test:scene` (including 0.5x–4x label hit checks).
+  - Manual browser checks passed with the original drawing loaded into a local
+    test page: drag `I` independently of `Ap`, drag the `Ap` caption itself,
+    select Midpoint and click an unobstructed incircle arc to reveal `D`, then
+    move `C` and confirm the revealed center follows the circle.
+  - Geometry guardrail checks passed: moving a segment with an endpoint on its
+    circle keeps the other intersection distinct; shortening it removes the
+    out-of-domain intersection; a point created on a circle by the Segment
+    tool remains constrained when the center moves.
+  - Validation: build, scene, command, True Zoom, and full export suites pass.
+    No geometry solver or exporter branch mapping changed.
+- 2026-09-04 PDF-preview point-label joystick moves continuously:
+  - Point nudges now live in preview-only `pointLabelNudgesPx`, separate from
+    the scene offsets used for automatic marker clearance and label anchoring.
+    Export adds the accumulated translation after placement, so left clicks
+    cannot normalize a small positive offset into a full negative clearance.
+  - Both plain and reconstructible exports preserve the initial anchor and
+    use the captured canvas density for one-pixel movement. Shift-click is
+    five pixels; reset restores the original placement. Sizing regeneration
+    retains the adjustments.
+  - Regression: `point-label-nudge-through-zero.json` and
+    `tikz-preview-label-precision.test.ts` cover repeated left clicks through
+    zero, vertical/coarse moves, legacy and calibrated exports, and reset.
+  - Manual reproduction: open PDF preview for a point whose stored label offset
+    is `(1, 0)`, open Label Precision, and click left twice. Expect two equal
+    small leftward moves with no vertical drift or change of anchor; reset
+    should restore the initial label. Repeat with Shift-click and up/down.
+  - Validation: all 103 export fixtures compile and all 27 export unit tests
+    pass, including compiled plain/tkz and standard/efficient nudge output;
+    `npm run build` passes.
 - 2026-08-30 Canvas/TikZ visual-weight parity is explicit:
   - The Canvas treatment now selects canvas-calibrated point, stroke, and label
     metrics even at exactly 100% True Zoom; it no longer falls through to the

@@ -1,0 +1,286 @@
+{
+  "scene": {
+    "points": [
+      {
+        "id": "A",
+        "kind": "free",
+        "name": "A",
+        "captionTex": "A",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": 3,
+          "y": 0
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 3.5,
+          "strokeColor": "#000000",
+          "strokeWidth": 0.6,
+          "strokeOpacity": 1,
+          "fillColor": "#000000",
+          "fillOpacity": 1,
+          "labelFontPx": 28,
+          "labelHaloWidthPx": 1.5,
+          "labelHaloColor": "#ffffff",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "D",
+        "kind": "free",
+        "name": "D",
+        "captionTex": "D",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": -3,
+          "y": 0
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 3.5,
+          "strokeColor": "#000000",
+          "strokeWidth": 0.6,
+          "strokeOpacity": 1,
+          "fillColor": "#000000",
+          "fillOpacity": 1,
+          "labelFontPx": 28,
+          "labelHaloWidthPx": 1.5,
+          "labelHaloColor": "#ffffff",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "C",
+        "kind": "free",
+        "name": "C",
+        "captionTex": "C",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": 0,
+          "y": 3
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 3.5,
+          "strokeColor": "#000000",
+          "strokeWidth": 0.6,
+          "strokeOpacity": 1,
+          "fillColor": "#000000",
+          "fillOpacity": 1,
+          "labelFontPx": 28,
+          "labelHaloWidthPx": 1.5,
+          "labelHaloColor": "#ffffff",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "S",
+        "kind": "midpointPoints",
+        "name": "S",
+        "captionTex": "S",
+        "aId": "A",
+        "bId": "D",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": true,
+        "auxiliary": false,
+        "style": {
+          "shape": "circle",
+          "sizePx": 3.5,
+          "strokeColor": "#000000",
+          "strokeWidth": 0.6,
+          "strokeOpacity": 1,
+          "fillColor": "#000000",
+          "fillOpacity": 1,
+          "labelFontPx": 28,
+          "labelHaloWidthPx": 1.5,
+          "labelHaloColor": "#ffffff",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      }
+    ],
+    "segments": [
+      {
+        "id": "AD",
+        "aId": "A",
+        "bId": "D",
+        "visible": true,
+        "showLabel": false,
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "dash": "solid",
+          "opacity": 1
+        }
+      },
+      {
+        "id": "SC",
+        "aId": "S",
+        "bId": "C",
+        "visible": true,
+        "showLabel": false,
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "dash": "solid",
+          "opacity": 1
+        }
+      }
+    ],
+    "lines": [
+      {
+        "id": "perp",
+        "kind": "perpendicular",
+        "throughId": "S",
+        "base": {
+          "type": "segment",
+          "id": "AD"
+        },
+        "visible": false,
+        "showLabel": false,
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "dash": "solid",
+          "opacity": 1
+        }
+      }
+    ],
+    "circles": [],
+    "angles": [
+      {
+        "id": "angle_1",
+        "kind": "angle",
+        "aId": "A",
+        "bId": "S",
+        "cId": "C",
+        "isRightExact": true,
+        "visible": true,
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "strokeOpacity": 1,
+          "textColor": "#000000",
+          "textSize": 20,
+          "fillEnabled": false,
+          "fillColor": "#ffffff",
+          "fillOpacity": 0,
+          "markStyle": "rightArcDot",
+          "markSymbol": "none",
+          "arcMultiplicity": 1,
+          "markPos": 0.5,
+          "markSize": 6,
+          "arcRadius": 1.2,
+          "labelText": "",
+          "labelPosWorld": {
+            "x": 0,
+            "y": 0
+          },
+          "showLabel": false,
+          "showValue": false,
+          "markColor": "#000000"
+        }
+      },
+      {
+        "id": "angle_2",
+        "kind": "angle",
+        "aId": "C",
+        "bId": "S",
+        "cId": "D",
+        "isRightExact": true,
+        "visible": true,
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.6,
+          "strokeOpacity": 1,
+          "textColor": "#000000",
+          "textSize": 20,
+          "fillEnabled": false,
+          "fillColor": "#ffffff",
+          "fillOpacity": 0,
+          "markStyle": "rightArcDot",
+          "markSymbol": "none",
+          "arcMultiplicity": 1,
+          "markPos": 0.5,
+          "markSize": 6,
+          "arcRadius": 1.2,
+          "labelText": "",
+          "labelPosWorld": {
+            "x": 0,
+            "y": 0
+          },
+          "showLabel": false,
+          "showValue": false,
+          "markColor": "#000000"
+        }
+      }
+    ],
+    "numbers": [],
+    "polygons": [],
+    "vectors": [],
+    "ellipses": [],
+    "textLabels": [],
+    "richTextNodes": []
+  },
+  "exportOptions": {
+    "screenPxPerWorld": 80,
+    "worldToTikzScale": 1,
+    "bakePointCoordinates": true
+  },
+  "previewParams": {
+    "screenPxPerWorld": 80,
+    "canvasTrueZoom": 1,
+    "figureTreatmentFactor": 1,
+    "figureTreatmentMode": "canvas",
+    "viewport": {
+      "xmin": -6,
+      "xmax": 6,
+      "ymin": -5,
+      "ymax": 5
+    },
+    "emitTkzSetup": false,
+    "drawLayerBackend": "tkz",
+    "bakeCoordinates": false,
+    "labelGlow": true,
+    "efficient": true,
+    "scaleboxScale": 1,
+    "trueGlobalScale": 1,
+    "globalScale": 1,
+    "pointScale": 1,
+    "lineScale": 1,
+    "labelScale": 1,
+    "labelHaloScale": 1,
+    "roundNumbersToTwoDecimals": true,
+    "preferDvipsNames": true,
+    "backgroundColor": "#ffffff"
+  },
+  "reportedScaleChange": {
+    "from": 1,
+    "to": 0.95
+  }
+}

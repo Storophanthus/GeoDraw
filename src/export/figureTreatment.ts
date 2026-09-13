@@ -135,15 +135,16 @@ export function resolveSavedFigureTreatment(
   currentGlobalScale: number,
   baseScaleboxScale: number,
   baseGlobalScale: number,
-  canvasTrueZoom: number | undefined
+  canvasTrueZoom: number | undefined,
+  customBaseMode: FigureTreatmentMode = "canvas"
 ): SavedFigureTreatment {
   if (selection === "custom") {
     return {
-      mode: "canvas",
+      mode: customBaseMode,
       ...removeFigureTreatment(
         currentScaleboxScale,
         currentGlobalScale,
-        "canvas",
+        customBaseMode,
         canvasTrueZoom
       ),
     };

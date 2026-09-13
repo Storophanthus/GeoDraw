@@ -16,10 +16,13 @@ export function hitTestPointLabel(
   const trueZoom = getCameraTrueZoom(camera);
   for (let i = points.length - 1; i >= 0; i -= 1) {
     const { point, world } = points[i];
-    if (!point.visible || point.showLabel === "none") continue;
+    // Captions are DOM-rendered TeX and must use hitTestPointLabelFromDom.
+    // Estimating their width from TeX source creates oversized invisible hit
+    // targets (e.g. A^{\prime}) that steal nearby canvas-name label drags.
+    if (!point.visible || point.showLabel !== "name") continue;
     const p = camMath.worldToScreen(world, camera, vp);
     const labelOffset = point.style.labelOffsetPx ?? defaultOffset;
-    const labelText = point.showLabel === "name" ? point.name : point.captionTex;
+    const labelText = point.name;
     if (!labelText) continue;
     const fontPx = point.style.labelFontPx ?? 16;
     // Point-name labels are painted in the logical True Zoom render space and

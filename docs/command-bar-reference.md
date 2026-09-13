@@ -146,6 +146,14 @@ Redefine behavior (current):
 - Non-free points and non-constant numbers are fail-closed (error).
 - Existing object aliases can be redefined only with compatible constructor types (fail-closed otherwise).
 
+For a circle defined by a radius expression, select it and edit **Properties >
+Radius expression**, then press **Apply** or Enter. For example, replace
+`Distance(A,C)` with `Distance(A,D)`. This also works on unnamed circles such
+as `c_1`: the same circle and dependent points are retained. Undo/redo restores
+the definition. The radius must be positive and cannot depend on that circle
+or its dependent objects. This editor leaves the center unchanged; circles
+defined through points continue to follow those points.
+
 Notes:
 - `Tangent(P,c)` can create one or two tangent lines, so assignment is intentionally rejected.
 - Alias-based commands (`Midpoint(s)`, `Perpendicular`, `Parallel`, `Tangent`) require the referenced object to have a command alias from a prior assignment.

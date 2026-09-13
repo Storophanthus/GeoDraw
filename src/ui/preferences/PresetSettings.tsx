@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useGeoStore } from "../../state/geoStore";
+import { persistCurrentConstructionPreferences } from "../../state/constructionPreferencesSync";
 import {
     captureConstructionPreferences,
     saveStoredConstructionPreferences,
@@ -9,6 +10,7 @@ import {
 } from "../../state/appPreferences";
 
 export function PresetSettings() {
+    const setColorProfile = useGeoStore((state) => state.setColorProfile);
     const applyAppPreferences = useGeoStore((state) => state.applyAppPreferences);
     const colorProfileId = useGeoStore((state) => state.colorProfileId);
     const canvasThemeOverrides = useGeoStore((state) => state.canvasThemeOverrides);
@@ -123,6 +125,28 @@ export function PresetSettings() {
 
     return (
         <>
+            <div className="preferencesSectionTitle">ISL Shortlist</div>
+            <div className="preferencesHint">
+                Based on ISL 2018 G1: firm black lines, solid dots, clear math labels, and unfilled shapes.
+                Applies to this diagram and new objects. Grid, axes, snapping, and glow stay as you set them.
+                Custom colors, dashes, marks, and label positions are kept. Undo restores the diagram.
+            </div>
+            <div className="preferencesPresetActions">
+                <button
+                    type="button"
+                    className="preferencesResetButton"
+                    onClick={() => {
+                        setColorProfile("isl_shortlist");
+                        const saved = persistCurrentConstructionPreferences();
+                        setHasConstructionPreset(hasStoredConstructionPreferences());
+                        setConstructionPresetStatus(saved
+                            ? "Applied ISL Shortlist and saved it as the preferred construction preset."
+                            : "Applied ISL Shortlist. Could not save preferred settings (storage unavailable).");
+                    }}
+                >
+                    Apply ISL Shortlist
+                </button>
+            </div>
             <div className="preferencesSectionTitle">Construction Preset</div>
             <div className="preferencesPresetActions">
                 <button

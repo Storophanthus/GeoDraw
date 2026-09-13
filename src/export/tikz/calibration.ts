@@ -5,6 +5,8 @@ export const TIKZ_EXPORT_CALIBRATION = {
   uiLineScaleToExporter: 0.5 / 1.2,
   // Point stroke calibration used by ExportPanel options.
   pointStrokeScale: 32 / 35,
+  // A solid TeX contour needs less spread than the canvas's soft halo.
+  plainLabelHaloScale: 0.4,
   // Point inner-sep calibration (applied after point size conversion).
   pointInnerSepScale: 1 / 3,
   // Set to a number to force fixed point radius in TikZ (pt).

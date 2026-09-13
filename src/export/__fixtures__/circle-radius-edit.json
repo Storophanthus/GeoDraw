@@ -1,0 +1,570 @@
+{
+  "scene": {
+    "points": [
+      {
+        "id": "p_1",
+        "kind": "free",
+        "name": "A",
+        "captionTex": "A",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 5,
+          "strokeColor": "#000000",
+          "strokeWidth": 0.6,
+          "strokeOpacity": 1,
+          "fillColor": "#000000",
+          "fillOpacity": 1,
+          "labelFontPx": 28,
+          "labelHaloWidthPx": 1.5,
+          "labelHaloColor": "#ffffff",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "p_2",
+        "kind": "free",
+        "name": "B",
+        "captionTex": "B",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": 4,
+          "y": 0
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 5,
+          "strokeColor": "#000000",
+          "strokeWidth": 0.6,
+          "strokeOpacity": 1,
+          "fillColor": "#000000",
+          "fillOpacity": 1,
+          "labelFontPx": 28,
+          "labelHaloWidthPx": 1.5,
+          "labelHaloColor": "#ffffff",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "p_3",
+        "kind": "free",
+        "name": "C",
+        "captionTex": "C",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": 2,
+          "y": 5
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 5,
+          "strokeColor": "#000000",
+          "strokeWidth": 0.6,
+          "strokeOpacity": 1,
+          "fillColor": "#000000",
+          "fillOpacity": 1,
+          "labelFontPx": 28,
+          "labelHaloWidthPx": 1.5,
+          "labelHaloColor": "#ffffff",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "p_4",
+        "kind": "free",
+        "name": "D",
+        "captionTex": "D",
+        "visible": true,
+        "showLabel": "caption",
+        "locked": false,
+        "auxiliary": false,
+        "position": {
+          "x": -3,
+          "y": 0
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 5,
+          "strokeColor": "#000000",
+          "strokeWidth": 0.6,
+          "strokeOpacity": 1,
+          "fillColor": "#000000",
+          "fillOpacity": 1,
+          "labelFontPx": 28,
+          "labelHaloWidthPx": 1.5,
+          "labelHaloColor": "#ffffff",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      },
+      {
+        "id": "p_5",
+        "kind": "circleLineIntersectionPoint",
+        "name": "E",
+        "captionTex": "E",
+        "visible": true,
+        "showLabel": "name",
+        "locked": true,
+        "auxiliary": true,
+        "circleId": "c_1",
+        "lineId": "l_1",
+        "branchIndex": 1,
+        "style": {
+          "shape": "circle",
+          "sizePx": 5,
+          "strokeColor": "#000000",
+          "strokeWidth": 0.6,
+          "strokeOpacity": 1,
+          "fillColor": "#000000",
+          "fillOpacity": 1,
+          "labelFontPx": 28,
+          "labelHaloWidthPx": 1.5,
+          "labelHaloColor": "#ffffff",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 8,
+            "y": -8
+          }
+        }
+      }
+    ],
+    "vectors": [],
+    "segments": [
+      {
+        "id": "s_1",
+        "aId": "p_1",
+        "bId": "p_2",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "AB",
+        "labelPosWorld": {
+          "x": 2,
+          "y": 0.32
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "dash": "solid",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      },
+      {
+        "id": "s_2",
+        "aId": "p_1",
+        "bId": "p_3",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "AC",
+        "labelPosWorld": {
+          "x": 0.6,
+          "y": 2.66
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "dash": "solid",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      },
+      {
+        "id": "s_3",
+        "aId": "p_3",
+        "bId": "p_2",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "CB",
+        "labelPosWorld": {
+          "x": 3.4,
+          "y": 2.66
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "dash": "solid",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      },
+      {
+        "id": "s_4",
+        "aId": "p_4",
+        "bId": "p_1",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "DA",
+        "labelPosWorld": {
+          "x": -1.5,
+          "y": 0.24
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "dash": "solid",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      },
+      {
+        "id": "s_5",
+        "aId": "p_4",
+        "bId": "p_3",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "DC",
+        "labelPosWorld": {
+          "x": -0.8999999999999999,
+          "y": 2.9
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "dash": "solid",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      },
+      {
+        "id": "s_6",
+        "aId": "p_3",
+        "bId": "p_5",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "CE",
+        "labelPosWorld": {
+          "x": 3.5993123522314217,
+          "y": 7.208574200700535
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "dash": "solid",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      },
+      {
+        "id": "s_7",
+        "aId": "p_5",
+        "bId": "p_2",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "EB",
+        "labelPosWorld": {
+          "x": 5.608574200700534,
+          "y": 4.259312352231421
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "dash": "solid",
+          "opacity": 1,
+          "segmentMark": {
+            "enabled": false,
+            "mark": "none",
+            "pos": 0.5,
+            "sizePt": 8,
+            "color": "#000000"
+          },
+          "segmentArrowMark": {
+            "enabled": false,
+            "mode": "end",
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "arrowLength": 1,
+            "color": "#000000"
+          }
+        }
+      }
+    ],
+    "lines": [
+      {
+        "id": "l_1",
+        "kind": "twoPoint",
+        "aId": "p_4",
+        "bId": "p_3",
+        "visible": true,
+        "showLabel": false,
+        "labelGlow": true,
+        "labelText": "DC",
+        "labelPosWorld": {
+          "x": -0.8999999999999999,
+          "y": 2.9
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.8,
+          "dash": "solid",
+          "opacity": 1
+        }
+      }
+    ],
+    "circles": [
+      {
+        "id": "c_1",
+        "kind": "fixedRadius",
+        "centerId": "p_3",
+        "radius": 5.385164807134505,
+        "radiusExpr": "Distance(A,C)",
+        "visible": true,
+        "showLabel": true,
+        "labelGlow": false,
+        "labelText": "Gamma",
+        "labelPosWorld": {
+          "x": 1,
+          "y": 9
+        },
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 2.2,
+          "strokeDash": "solid",
+          "strokeOpacity": 1,
+          "fillOpacity": 0,
+          "pattern": "",
+          "arrowMark": {
+            "enabled": false,
+            "direction": "->",
+            "tip": "Stealth",
+            "distribution": "single",
+            "pos": 0.5,
+            "startPos": 0.45,
+            "endPos": 0.55,
+            "step": 0.05,
+            "sizeScale": 1,
+            "lineWidthPt": 8,
+            "color": "#000000"
+          }
+        }
+      }
+    ],
+    "ellipses": [],
+    "polygons": [],
+    "angles": [],
+    "numbers": [],
+    "textLabels": [],
+    "richTextNodes": [],
+    "geometryLayerOrder": [
+      {
+        "type": "segment",
+        "id": "s_7"
+      },
+      {
+        "type": "segment",
+        "id": "s_6"
+      },
+      {
+        "type": "segment",
+        "id": "s_5"
+      },
+      {
+        "type": "segment",
+        "id": "s_4"
+      },
+      {
+        "type": "segment",
+        "id": "s_3"
+      },
+      {
+        "type": "segment",
+        "id": "s_2"
+      },
+      {
+        "type": "segment",
+        "id": "s_1"
+      },
+      {
+        "type": "line",
+        "id": "l_1"
+      },
+      {
+        "type": "circle",
+        "id": "c_1"
+      }
+    ]
+  },
+  "circleId": "c_1",
+  "intersectionId": "p_5",
+  "exportOptions": {
+    "screenPxPerWorld": 50,
+    "worldToTikzScale": 1.25,
+    "bakePointCoordinates": true,
+    "drawLayerBackend": "plain",
+    "pointLabelCanvasMetrics": {
+      "p_5": {
+        "mode": "name",
+        "text": "E",
+        "fontPx": 28,
+        "baselineOffsetPx": 10
+      }
+    }
+  }
+}

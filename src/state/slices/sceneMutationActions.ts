@@ -1,4 +1,5 @@
 import type { Vec2 } from "../../geo/vec2";
+import { evaluateNumberExpression } from "../../scene/points";
 import { projectPointToCircle, projectPointToLine, projectPointToSegment } from "../../geo/geometry";
 import { projectPointToEllipse } from "../../geo/ellipse";
 import { getCircleWorldGeometry, getEllipseWorldGeometry, getLineWorldAnchors, getPointWorldPos, type AngleStyle, type CircleStyle, type LineStyle, type PathArrowMark, type PointStyle, type PolygonStyle, type SceneModel, type SegmentArrowMark } from "../../scene/points";
@@ -71,6 +72,7 @@ export function createSceneMutationActions({
   | "updateSelectedAngleFields"
   | "updateAngleFieldsByIds"
   | "updateSelectedNumberDefinition"
+  | "updateCircleRadius"
   | "updateNumberDefinitionById"
   | "updateSelectedTextLabelFields"
   | "updateTextLabelFieldsByIds"
@@ -1341,6 +1343,44 @@ export function createSceneMutationActions({
           },
         };
       });
+    },
+
+    updateCircleRadius(id, radiusExpr) {
+      let result: { ok: true } | { ok: false; error: string } = { ok: false, error: "Select a circle defined by a radius expression." };
+      setState((prev) => {
+        const circle = prev.scene.circles.find(c => c.id === id);
+        if (!circle || circle.kind !== "fixedRadius") return prev;
+        const expr = radiusExpr.trim();
+        const evaluated = evaluateNumberExpression(prev.scene, expr);
+        if (!evaluated.ok) {
+          result = { ok: false, error: evaluated.error };
+          return prev;
+        }
+        if (!Number.isFinite(evaluated.value) || evaluated.value <= 0) {
+          result = { ok: false, error: "Radius must be a finite number greater than zero." };
+          return prev;
+        }
+        // Resolve against a scene without this circle. An expression requiring
+        // it (directly, via E, or via a stored measure) would create a cycle.
+        const independent = evaluateNumberExpression({
+          ...prev.scene, circles: prev.scene.circles.filter(c => c.id !== id),
+        }, expr);
+        if (!independent.ok) {
+          result = { ok: false, error: "Radius cannot depend on this circle or its dependent objects." };
+          return prev;
+        }
+        result = { ok: true };
+        if (expr === (circle.radiusExpr ?? String(circle.radius))) return prev;
+        return {
+          ...prev,
+          scene: {
+            ...prev.scene,
+            circles: prev.scene.circles.map(c => c.id === id
+              ? { ...circle, radiusExpr: expr, radius: independent.value } : c),
+          },
+        };
+      });
+      return result;
     },
 
     updateSelectedNumberDefinition(nextDefinition) {

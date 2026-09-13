@@ -1,4 +1,6 @@
 import { circleCircleIntersections, clipRayToRect, distance, lineCircleIntersectionBranches } from "../geo/geometry";
+import type { Vec2 } from "../geo/vec2";
+import { rightAngleDotCenter } from "../scene/angleMarkGeometry";
 import { resolveAngleRightStatus, type AngleRightStatus } from "../domain/rightAngleProvenance";
 import { normalizeSceneIntegrity } from "../domain/sceneIntegrity";
 import {
@@ -59,7 +61,15 @@ import { TIKZ_EXPORT_CALIBRATION } from "./tikz/calibration";
 export { makeEfficientTikz };
 
 export type TikzExportViewport = { xmin: number; xmax: number; ymin: number; ymax: number };
+export type PointLabelCanvasMetrics = {
+  text: string;
+  mode: "caption" | "name";
+  fontPx: number;
+  /** Browser baseline measured downwards from the saved label origin. */
+  baselineOffsetPx: number;
+};
 export type TikzExportOptions = {
+  pointLabelCanvasMetrics?: Record<string, PointLabelCanvasMetrics>;
   viewport?: TikzExportViewport;
   clipRectWorld?: TikzExportViewport;
   clipPolygonWorld?: { x: number; y: number }[];
@@ -98,6 +108,8 @@ export type TikzExportOptions = {
   segmentMarkLineWidthScale?: number;
   segmentMarkTreatmentStrokeScale?: number;
   pointLabelOffsetScale?: number;
+  /** Canvas-pixel translations applied after automatic point-label placement. */
+  pointLabelNudgesPx?: Record<string, Vec2>;
   pathDotMarkSizeScale?: number;
   angleLabelFontScale?: number;
   angleArcStrokeScale?: number;
@@ -2796,6 +2808,14 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
     const name = pointName.get(point.id);
     if (!name) continue;
     const placement = labelPlacementById.get(point.id) ?? null;
+    const nudge = options.pointLabelNudgesPx?.[point.id] ?? { x: 0, y: 0 };
+    if (!Number.isFinite(nudge.x) || !Number.isFinite(nudge.y)) {
+      throw new Error(`Invalid label nudge for point ${point.name}: expected finite pixel offsets.`);
+    }
+    // Translate the final label in the same units as world-positioned labels.
+    // Feeding this back into placement would re-run marker clearance/quadrant
+    // selection, causing tiny nudges to stall or jump across the point.
+    const nudgePt = { x: nudge.x * canvasPxToTikzPt, y: -nudge.y * canvasPxToTikzPt };
     const labelGlowEnabled = options.labelGlow ?? true;
     const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
     if (plainPxToPt !== null) {
@@ -2817,12 +2837,13 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         name,
         text: labelText,
         options: [
-          semanticPointLabelPositionOption(
-            labelText,
+          ...pointLabelCanvasPositionOptions(
+            point,
             offsetXPx,
             offsetYPx,
-            point.style.labelFontPx * canvasKatexScale,
-            point.showLabel === "caption" ? "top-left" : "baseline-left"
+            plainPxToPt,
+            nudgePt,
+            options.pointLabelCanvasMetrics?.[point.id]
           ),
           "inner sep=0pt",
           `text=${rgbColorExpr(point.style.labelColor)}`,
@@ -2833,6 +2854,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
           widthPt:
             point.style.labelHaloWidthPx *
             plainPxToPt *
+            TIKZ_EXPORT_CALIBRATION.plainLabelHaloScale *
             trueGlobalScale *
             labelHaloScale,
           // No export override deliberately means "use the page color". The
@@ -2845,7 +2867,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
       });
       continue;
     }
-    const labelOptions = pointLabelOptionsToTikz(point, placement, options);
+    const labelOptions = pointLabelOptionsToTikz(point, placement, options, nudgePt);
     const renderAsNode = resolvedReconstructibleCanvasStylePxToTikzPt(options) !== null;
     if (point.showLabel === "name") {
       labels.push({
@@ -3038,7 +3060,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         ? {}
         : {
             plainGlow: {
-              widthPt: 3.5 * plainPxToPt * trueGlobalScale * labelHaloScale,
+              widthPt: 3.5 * plainPxToPt * TIKZ_EXPORT_CALIBRATION.plainLabelHaloScale * trueGlobalScale * labelHaloScale,
               color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
             },
           }),
@@ -3085,7 +3107,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         ? {}
         : {
             plainGlow: {
-              widthPt: 3.5 * plainPxToPt * trueGlobalScale * labelHaloScale,
+              widthPt: 3.5 * plainPxToPt * TIKZ_EXPORT_CALIBRATION.plainLabelHaloScale * trueGlobalScale * labelHaloScale,
               color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
             },
           }),
@@ -3138,7 +3160,7 @@ export function buildTikzIR(scene: SceneModel, options: TikzExportOptions = {}):
         ? {}
         : {
             plainGlow: {
-              widthPt: 3.5 * plainPxToPt * trueGlobalScale * labelHaloScale,
+              widthPt: 3.5 * plainPxToPt * TIKZ_EXPORT_CALIBRATION.plainLabelHaloScale * trueGlobalScale * labelHaloScale,
               color: options.labelHaloColor ? rgbColorExpr(options.labelHaloColor) : undefined,
             },
           }),
@@ -6696,19 +6718,8 @@ function plainNonSectorAngleCommands(
       kind: "DrawRaw",
       tex: `\\draw[${strokeStyle}] ${arcPath};`,
     });
-    if (rightGeometry) {
-      const dotCenter = {
-        x:
-          bWorld.x +
-          (rightGeometry.u.x + rightGeometry.v.x) *
-            (rightSizePx / pxPerWorld) *
-            0.55,
-        y:
-          bWorld.y +
-          (rightGeometry.u.y + rightGeometry.v.y) *
-            (rightSizePx / pxPerWorld) *
-            0.55,
-      };
+    const dotCenter = rightAngleDotCenter(aWorld, bWorld, cWorld, radiusWorld);
+    if (dotCenter) {
       const dotRadiusWorld =
         Math.max(1.8, Math.min(4.5, rightSizePx * 0.18)) /
         pxPerWorld;
@@ -6835,6 +6846,7 @@ function plainAngleLabelCommand(
       widthPt:
         LABEL_GLOW_WIDTH_PX *
         plainPxToPt *
+        TIKZ_EXPORT_CALIBRATION.plainLabelHaloScale *
         clampPositive(options.trueGlobalScale ?? 1, 0.05, 10) *
         clampPositive(options.labelHaloScale ?? 1, 0.05, 10),
       color: options.labelHaloColor
@@ -7123,7 +7135,19 @@ function mapPointShape(shape: ScenePoint["style"]["shape"]):
   }
 }
 
-function pointLabelOptionsToTikz(point: ScenePoint, placement: LabelPlacement | null, exportOptions: TikzExportOptions): string {
+function pointLabelNudgeOptions(nudgePt: Vec2): string[] {
+  return [
+    ...(nudgePt.x !== 0 ? [`xshift=${fmt(nudgePt.x)}pt`] : []),
+    ...(nudgePt.y !== 0 ? [`yshift=${fmt(nudgePt.y)}pt`] : []),
+  ];
+}
+
+function pointLabelOptionsToTikz(
+  point: ScenePoint,
+  placement: LabelPlacement | null,
+  exportOptions: TikzExportOptions,
+  nudgePt: Vec2
+): string {
   const opts: string[] = [];
   const xShiftPt = placement?.xShiftPt ?? 12;
   const yShiftPt = placement?.yShiftPt ?? 12;
@@ -7138,10 +7162,11 @@ function pointLabelOptionsToTikz(point: ScenePoint, placement: LabelPlacement | 
     );
     const offsetXPx = placement?.offsetXPx ?? point.style.labelOffsetPx.x;
     const offsetYPx = placement?.offsetYPx ?? point.style.labelOffsetPx.y;
-    opts.push(point.showLabel === "caption" ? "anchor=north west" : "anchor=base west");
+    opts.push(...pointLabelCanvasPositionOptions(
+      point, offsetXPx, offsetYPx, canvasStylePxToPt * labelOffsetScale, nudgePt,
+      exportOptions.pointLabelCanvasMetrics?.[point.id], canvasStylePxToPt
+    ));
     opts.push("inner sep=0pt");
-    opts.push(`xshift=${fmt(offsetXPx * canvasStylePxToPt * labelOffsetScale)}pt`);
-    opts.push(`yshift=${fmt(-offsetYPx * canvasStylePxToPt * labelOffsetScale)}pt`);
     const canvasKatexScale = point.showLabel === "caption" ? 0.95 : 1;
     const fontPt = Math.max(
       0.5,
@@ -7155,6 +7180,7 @@ function pointLabelOptionsToTikz(point: ScenePoint, placement: LabelPlacement | 
     // Keep quadrant stable from user drag offset, so labels don't flip due to
     // collision-spread/min-clear post-processing.
     opts.push(directionOptionFromShift(rawXShiftPt, rawYShiftPt));
+    opts.push(...pointLabelNudgeOptions(nudgePt));
   }
   return opts.join(", ");
 }
@@ -7172,68 +7198,37 @@ function directionOptionFromShift(xShiftPt: number, yShiftPt: number): string {
   return "below left";
 }
 
-function semanticLabelPositionOptionForDirection(
-  direction: string,
-  horizontalEm: number,
-  verticalEm: number
-): string {
-  const horizontal = `${fmt(horizontalEm)}em`;
-  const vertical = `${fmt(verticalEm)}em`;
-  if (direction === "above" || direction === "below") {
-    return `${direction}=${vertical}`;
-  }
-  if (direction === "left" || direction === "right") {
-    return `${direction}=${horizontal}`;
-  }
-  // TikZ positioning treats an unbraced `distance and distance` value as a
-  // single PGF math expression, where `and` becomes an unknown operator.
-  return `${direction}={${vertical} and ${horizontal}}`;
-}
-
 /**
- * Canvas point names use a baseline-left text origin; KaTeX captions use a
- * top-left DOM origin. TikZ positioning distances instead measure the empty gap
- * from the point to the nearest edge of the node. Convert between those
- * meanings so the label's own width or height is not counted as whitespace.
+ * Retain both saved offset components, including zero/negative/overlapping
+ * positions. Compass directions discard the smaller component and depend on
+ * guessed label dimensions. Place the measured baseline directly, retaining
+ * TeX's natural glyph bounds (including glyphs taller than a canvas name's
+ * middle-baseline offset).
  */
-function semanticPointLabelPositionOption(
-  text: string,
+function pointLabelCanvasPositionOptions(
+  point: ScenePoint,
   offsetXPx: number,
   offsetYPx: number,
-  labelFontPx: number,
-  canvasOrigin: "baseline-left" | "top-left"
-): string {
-  const fontPx = Math.max(1, labelFontPx);
-  const direction = directionOptionFromShift(offsetXPx, -offsetYPx);
-  const metrics = estimateCanvasLabelTextBoxPx(text, fontPx);
-
-  let horizontalGapPx = Math.abs(offsetXPx);
-  let verticalGapPx = Math.abs(offsetYPx);
-
-  if (direction.includes("left")) {
-    horizontalGapPx = Math.max(0, -offsetXPx - metrics.widthPx);
-  } else if (direction.includes("right")) {
-    horizontalGapPx = Math.max(0, offsetXPx);
-  }
-
-  if (direction.includes("above")) {
-    verticalGapPx = Math.max(
-      0,
-      -offsetYPx -
-        (canvasOrigin === "baseline-left" ? metrics.descentPx : metrics.heightPx)
-    );
-  } else if (direction.includes("below")) {
-    verticalGapPx = Math.max(
-      0,
-      offsetYPx - (canvasOrigin === "baseline-left" ? metrics.ascentPx : 0)
-    );
-  }
-
-  return semanticLabelPositionOptionForDirection(
-    direction,
-    horizontalGapPx / fontPx,
-    verticalGapPx / fontPx
-  );
+  pxToPt: number,
+  nudgePt: Vec2,
+  metrics: PointLabelCanvasMetrics | undefined,
+  fontPxToPt = pxToPt
+): string[] {
+  const caption = point.showLabel === "caption";
+  const text = caption ? point.captionTex : point.name;
+  const fontPx = point.style.labelFontPx * (caption ? 0.95 : 1);
+  const measured = metrics && metrics.mode === point.showLabel && metrics.text === text &&
+    Number.isFinite(metrics.baselineOffsetPx) && Number.isFinite(metrics.fontPx) && metrics.fontPx > 0 &&
+    Math.abs(metrics.fontPx - fontPx) < 0.01;
+  return [
+    // Headless/older sessions still keep exact offsets using native text-box
+    // anchors; only a live capture can supply the browser's CSS/font baseline.
+    `anchor=${measured ? "base west" : caption ? "north west" : "west"}`,
+    "outer sep=0pt",
+    "minimum size=0pt",
+    `xshift=${fmt(offsetXPx * pxToPt + nudgePt.x)}pt`,
+    `yshift=${fmt(-offsetYPx * pxToPt - (measured ? metrics.baselineOffsetPx * fontPxToPt : 0) + nudgePt.y)}pt`,
+  ];
 }
 
 function normalize2(v: { x: number; y: number }): { x: number; y: number } {
@@ -7247,6 +7242,7 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
   const scale = clampPositive(options.worldToTikzScale ?? 1, 0.01, 100);
   const pxPerWorld = clampPositive(options.screenPxPerWorld ?? 80, 1, 20000);
   const plainPxToPt = resolvedPlainCanvasPxToTikzPt(options);
+  const usesCanvasPlacement = plainPxToPt !== null || resolvedReconstructibleCanvasStylePxToTikzPt(options) !== null;
   const ptPerPxForShift = plainPxToPt ?? 0.75 / scale;
   const pointScale = clampPositive(options.pointScale ?? 1, 0.05, 10);
   const labelStack = new Map<string, number>();
@@ -7257,7 +7253,7 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
     const p = { x: world.x * pxPerWorld, y: world.y * pxPerWorld };
     const stackKey = `${Math.round(p.x * 2) / 2}:${Math.round(p.y * 2) / 2}`;
     const stackIndex = labelStack.get(stackKey) ?? 0;
-    labelStack.set(stackKey, stackIndex + 1);
+    if (point.showLabel === "name") labelStack.set(stackKey, stackIndex + 1);
     const ring = Math.floor(stackIndex / 8) + 1;
     const angle = (stackIndex % 8) * (Math.PI / 4);
     const spread = stackIndex === 0 ? 0 : 10 * ring;
@@ -7270,7 +7266,7 @@ function computeLabelPlacementMap(scene: SceneModel, options: TikzExportOptions)
     // Keep label clear of marker even if user offset is tiny.
     const text = point.showLabel === "caption" ? point.captionTex || point.name : point.name;
     const labelRpx = computeLabelBubbleRadiusPx(text, point.style.labelFontPx, point.style.labelHaloWidthPx);
-    if (plainPxToPt === null) {
+    if (!usesCanvasPlacement) {
       const metrics = pointStyleMetricsPx(point, pointScale);
       const minClearPx = metrics.markerRadiusPx + labelRpx + Math.max(2, point.style.labelHaloWidthPx * 0.35);
       const dist = Math.hypot(dxPx, dyPx);

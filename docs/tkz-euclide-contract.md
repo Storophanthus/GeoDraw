@@ -9,6 +9,84 @@ Exporter contract:
 - No invented macro names.
 - No invented option keys.
 
+## Preview label translation
+
+Point-label precision adjustments are added after automatic placement. Keep the
+original anchor/compass direction and marker clearance fixed while accumulating
+`pointLabelNudgesPx`; changing scene offsets would re-run placement and can jump
+across the marker. Convert canvas pixels using the export coordinate scale and
+captured density, invert screen y, and emit ordinary TikZ `xshift`/`yshift`.
+These shifts also work for legacy `\tkzLabelPoint`: verified in TeX Live 2025
+`tkz-base/tkz-obj-points.tex`, where its option list is forwarded directly to
+`\node[label style,#1]`. No construction/intersection macro changes are involved.
+
+Label-only regeneration must preserve the latest exported sizing parameters,
+including an absent `figureTreatmentMode`. Legacy launch captures can have
+treatment dropdown metadata that differs from this mode; substituting `canvas` for an
+absent mode removes the legacy stroke calibration and increases widths by 2.4.
+Only explicit treatment selection may change the calibration; sizing edits
+change their individual multipliers. Copy label
+fields explicitly, since label-edit objects can carry stale capture metadata.
+
+## Preview sizing and stroke weight
+
+The PDF dialog identifies its captured export mode beside the TikZ Code title.
+"Round appearance values to 2 decimals" rounds visual settings and label
+offsets; defining coordinates remain precise in both modes. A visible note
+beside the control explains this distinction, including its importance for
+tangencies and intersections in Geometric Construction mode.
+
+Editing TikZ scale changes coordinate spacing; Global scale wraps the whole
+figure. Both retain the captured `figureTreatmentMode` and factor. Clearing
+Canvas at 100% previously enabled the legacy `0.5/1.2` line multiplier, so a
+single 1 -> 0.95 scale edit changed 0.92 pt strokes to 0.38 pt. The preview's
+`figureTreatmentCustomized` flag now carries the Custom indicator separately
+from its calibration. Undo/redo preserves both. Explicit treatment selection
+and canvas reset clear the flag and may intentionally change visual weight.
+
+`applyPreviewSizingEdits` updates only the requested field. Unedited scale
+values keep their full precision, including during formatting changes. Saved
+Custom defaults retain their base treatment and reciprocal scale pair; the
+Export panel keeps that treatment when manual multipliers differ from one.
+The canvas-match notice describes proportions, not a switch to legacy metrics.
+
+Regression: `preview-scale-preserve-line-weight.json` and its test reproduce
+the old multiplier, check both drawing backends and output modes, compile
+before/after at 0.95, cover close-up/legacy captures, and retain manually edited
+strokes. Manual check: open PDF, change TikZ scale from 1 to 0.95, then Global
+scale to 0.95; internal line-width declarations must stay unchanged. Undo/redo
+must restore code, fields, and treatment indication together. The Lines
+control must still change stroke width; resetting restores captured sizing.
+
+## Preview code edits and label halo
+
+Measured point labels use `anchor=base west` with their captured browser
+baseline included in `yshift`. Do not use the baseline offset as `text height`:
+a canvas name's middle-baseline offset can be shorter than the TeX glyph.
+That under-reports standalone bounds and crops labels at the top of a figure
+(the reported E case). Keep TeX's natural height/depth and all saved offsets.
+Headless labels without matching measurements retain native anchor fallback.
+Explicit user crop/view bounds still clip normally. Regression:
+`point-label-natural-bounds.test.ts` checks glyph bounds inside compiled TeX;
+`point-label-canvas-origin.test.ts` verifies unchanged physical baselines.
+
+Sizing controls and label nudges/reset must merge their generated changes with
+the code editor's manual changes. Compare with the last generated baseline,
+never replace the editor wholesale. Non-overlapping changes (e.g. a manual
+`gdLabelText` width and a point-scale change) combine; conflicting edits to a
+dimension or command keep the code, sizing and label state unchanged and show
+a message. Do not splice individual digits of competing dimension values.
+This is a conservative text merge, not a semantic TeX editor; substantial
+rewrites or insertions in the same location can require manual adjustment.
+Undo/redo must retain the matching generated baseline and parameters as well
+as the edited text, so the next nudge does not replay an undone movement.
+
+Visual Exact halo widths use `plainLabelHaloScale = 0.4` after canvas-pixel
+conversion and before user/treatment multipliers. Apply this to point, object,
+angle, free-text and rich-text labels; retain per-point width and global halo
+visibility choices. Canvas styling and the already-thin reconstructible
+`0.42pt` contour are unchanged. Repeated `gdLabelText` presets remain editable.
+
 ## User Cheat-Sheet (verbatim)
 
 ```tex
@@ -113,6 +191,10 @@ Notes:
 - Right-angle styles:
   - `RightSquare` -> `\tkzMarkRightAngles[...]`
   - `RightArcDot` -> `\tkzMarkRightAngles[german,...]`
+    - The inner dot sits halfway from the vertex to the arc on the internal
+      bisector (`size/2` in TeXLive's `tkz-draw-eu-angles.tex`). Canvas and
+      plain TikZ use the same arc-based placement; square-marker size and
+      stroke width do not determine the dot's center.
 - Right-angle marks are fail-closed gated by `angle.isRightExact === true` (construction provenance).
   - If a right-only mark style is requested on a non-right angle, exporter throws:
     `Unsupported construction: RightAngleMark on non-right angle`

@@ -905,26 +905,27 @@ export function createSceneCoreActions(
         const circle = prev.scene.circles.find((c) => c.id === circleId);
         if (!circle) return prev;
 
-        if (circle.kind !== "threePoint") {
-          const center = prev.scene.points.find((p) => p.id === circle.centerId);
-          if (!center) return prev;
-          createdId = center.id;
-          return {
-            ...prev,
-            selectedObject: { type: "point", id: center.id },
-          };
-        }
-
-        const existing = prev.scene.points.find(
-          (p) => p.kind === "circleCenter" && p.circleId === circleId
-        );
+        const existing = circle.kind === "threePoint"
+          ? prev.scene.points.find((p) => p.kind === "circleCenter" && p.circleId === circleId)
+          : prev.scene.points.find((p) => p.id === circle.centerId);
         if (existing) {
           createdId = existing.id;
           return {
             ...prev,
+            // Command-created circles can own a hidden helper center. Reuse its
+            // identity and dependencies, but make the requested point visible.
+            scene: existing.visible ? prev.scene : {
+              ...prev.scene,
+              points: prev.scene.points.map((p) => p.id === existing.id ? {
+                ...p,
+                visible: true,
+                showLabel: p.showLabel === "none" ? prev.objectLabelDefaults.point : p.showLabel,
+              } : p),
+            },
             selectedObject: { type: "point", id: existing.id },
           };
         }
+        if (circle.kind !== "threePoint") return prev;
 
         const name = nextUnusedPointName(prev);
         const id = `p_${prev.nextPointId}`;

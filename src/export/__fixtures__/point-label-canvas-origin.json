@@ -1,0 +1,147 @@
+{
+  "scene": {
+    "points": [
+      {
+        "id": "p_7",
+        "kind": "free",
+        "name": "C_1",
+        "captionTex": "C_1",
+        "visible": true,
+        "showLabel": "caption",
+        "position": {
+          "x": 1,
+          "y": 0
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 5,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.4,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": -4.683303916198589,
+            "y": 9.453630236166717
+          }
+        }
+      },
+      {
+        "id": "p_9",
+        "kind": "free",
+        "name": "C_2",
+        "captionTex": "C_2",
+        "visible": true,
+        "showLabel": "caption",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "style": {
+          "shape": "circle",
+          "sizePx": 5,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.4,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": -25.953125,
+            "y": 5.046875
+          }
+        }
+      },
+      {
+        "id": "m",
+        "kind": "midpointPoints",
+        "name": "M",
+        "captionTex": "M^{\\prime}",
+        "visible": true,
+        "showLabel": "caption",
+        "aId": "p_7",
+        "bId": "p_9",
+        "style": {
+          "shape": "circle",
+          "sizePx": 5,
+          "strokeColor": "#000000",
+          "strokeWidth": 1.4,
+          "strokeOpacity": 1,
+          "fillColor": "#ffffff",
+          "fillOpacity": 1,
+          "labelFontPx": 18,
+          "labelHaloWidthPx": 3.5,
+          "labelHaloColor": "#f5f1e6",
+          "labelColor": "#000000",
+          "labelOffsetPx": {
+            "x": 1.75,
+            "y": -27.25
+          }
+        }
+      }
+    ],
+    "segments": [
+      {
+        "id": "s",
+        "showLabel": false,
+        "aId": "p_7",
+        "bId": "p_9",
+        "visible": true,
+        "style": {
+          "strokeColor": "#000000",
+          "strokeWidth": 1.4,
+          "dash": "solid",
+          "opacity": 1
+        }
+      }
+    ],
+    "lines": [],
+    "circles": [],
+    "ellipses": [],
+    "vectors": [],
+    "polygons": [],
+    "angles": [],
+    "numbers": [],
+    "textLabels": [],
+    "richTextNodes": []
+  },
+  "exportOptions": {
+    "viewport": {
+      "xmin": -2,
+      "xmax": 4,
+      "ymin": -2,
+      "ymax": 2
+    },
+    "screenPxPerWorld": 80,
+    "drawLayerBackend": "plain",
+    "bakePointCoordinates": true,
+    "pointLabelCanvasMetrics": {
+      "p_7": {
+        "mode": "caption",
+        "text": "C_1",
+        "fontPx": 17.1,
+        "baselineOffsetPx": 15.4975
+      },
+      "p_9": {
+        "mode": "caption",
+        "text": "C_2",
+        "fontPx": 17.1,
+        "baselineOffsetPx": 15.4975
+      },
+      "m": {
+        "mode": "caption",
+        "text": "M^{\\prime}",
+        "fontPx": 17.1,
+        "baselineOffsetPx": 15.5
+      }
+    }
+  },
+  "canvasMeasurementNote": "C_1 and C_2 offsets/styles from bugsa.geodraw. Baselines measured on the live canvas at font 18px, KaTeX 17.1px, True Zoom 100%."
+}

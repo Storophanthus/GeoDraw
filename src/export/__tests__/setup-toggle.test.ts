@@ -103,6 +103,20 @@ const reconstructibleViewport = exportTikzWithOptions(scene, {
 if (!reconstructibleViewport.includes("\\tkzClip[space=")) {
   throw new Error("An explicit canvas viewport must retain reconstructible \\tkzClip output.");
 }
+if (!reconstructibleViewport.includes("\\path[use as bounding box] (-5,-3) rectangle (7,4);")) {
+  throw new Error(
+    "An explicit reconstructible canvas viewport must preserve its full page bounds, including empty canvas space."
+  );
+}
+if (
+  reconstructibleViewport.indexOf("\\path[use as bounding box]") >
+  reconstructibleViewport.indexOf("\\tkzClip[space=")
+) {
+  throw new Error("The reconstructible viewport bounding box must be established before clipping.");
+}
+if (withSetupExplicit.includes("use as bounding box")) {
+  throw new Error("Automatic complete-scene fitting must not emit a fixed canvas bounding box.");
+}
 
 const plainAuto = exportTikzWithOptions(scene, {
   drawLayerBackend: "plain",

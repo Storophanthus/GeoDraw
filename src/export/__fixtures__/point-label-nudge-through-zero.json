@@ -1,0 +1,48 @@
+{
+  "scene": {
+    "points": [
+      {
+        "id": "a", "kind": "free", "name": "A", "captionTex": "A",
+        "visible": true, "showLabel": "name", "position": { "x": -2, "y": 0 },
+        "style": {
+          "shape": "circle", "sizePx": 4, "strokeColor": "#000000",
+          "strokeWidth": 1, "strokeOpacity": 1, "fillColor": "#ffffff", "fillOpacity": 1,
+          "labelFontPx": 16, "labelHaloWidthPx": 2, "labelHaloColor": "#ffffff",
+          "labelColor": "#000000", "labelOffsetPx": { "x": 8, "y": -8 }
+        }
+      },
+      {
+        "id": "b", "kind": "free", "name": "B", "captionTex": "B",
+        "visible": true, "showLabel": "none", "position": { "x": 6, "y": 0 },
+        "style": {
+          "shape": "circle", "sizePx": 4, "strokeColor": "#000000",
+          "strokeWidth": 1, "strokeOpacity": 1, "fillColor": "#ffffff", "fillOpacity": 1,
+          "labelFontPx": 16, "labelHaloWidthPx": 2, "labelHaloColor": "#ffffff",
+          "labelColor": "#000000", "labelOffsetPx": { "x": 8, "y": -8 }
+        }
+      },
+      {
+        "id": "e", "kind": "midpointPoints", "aId": "a", "bId": "b",
+        "name": "E", "captionTex": "E", "visible": true, "showLabel": "name",
+        "style": {
+          "shape": "circle", "sizePx": 4, "strokeColor": "#000000",
+          "strokeWidth": 1, "strokeOpacity": 1, "fillColor": "#ffffff", "fillOpacity": 1,
+          "labelFontPx": 16, "labelHaloWidthPx": 2, "labelHaloColor": "#ffffff",
+          "labelColor": "#000000", "labelOffsetPx": { "x": 1, "y": 0 }
+        }
+      }
+    ],
+    "segments": [{
+      "id": "ae", "aId": "a", "bId": "e", "visible": true, "showLabel": false,
+      "style": { "strokeColor": "#000000", "strokeWidth": 1, "dash": "solid", "opacity": 1 }
+    }],
+    "lines": [], "circles": [], "ellipses": [], "polygons": [], "angles": [],
+    "vectors": [], "numbers": [], "textLabels": [], "richTextNodes": []
+  },
+  "exportOptions": {
+    "drawLayerBackend": "tkz",
+    "viewport": { "xmin": -3, "xmax": 7, "ymin": -3, "ymax": 3 },
+    "screenPxPerWorld": 100,
+    "pointLabelNudgesPx": { "e": { "x": -2, "y": 0 } }
+  }
+}

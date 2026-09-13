@@ -40,6 +40,8 @@ Responsibility:
 Responsibility:
 - Pointer event flow, drag/pan/hover behavior, draw pipeline orchestration.
 - Delegates hit-test and construction intent to engine/store actions.
+- `labelHit.ts`: canvas-name hit boxes apply only to `showLabel: "name"`;
+  TeX captions use measured DOM bounds, never source-length estimates.
 
 ### State Store (Composed)
 - `src/state/geoStore.ts`
@@ -97,6 +99,23 @@ Responsibility:
 
 Responsibility:
 - Fail-closed TikZ/tkz-euclide export.
+- PDF-preview label edits are tracked in `src/ui/tikzPreviewLabels.ts` and
+  forwarded through `buildTikzExportText.ts`. Point-label nudges are separate
+  pixel translations applied after automatic export placement; world-positioned
+  labels use edited scene positions. This keeps precision controls independent
+  of point-label clearance and anchor selection.
+- `TikzPreviewWindow.tsx` retains the params of its latest successful export.
+  Label-only regeneration applies `applyPreviewLabelEdits` to those exact params,
+  keeping effective treatment/calibration and full-precision sizing unchanged;
+  displayed controls or dropdown metadata must not redefine them on a nudge.
+- `tikzPreviewCodeEdits.ts` merges generated changes into the edited preview
+  using a separate generated baseline, line anchors and complete TeX tokens.
+  It preserves unrelated manual edits; overlaps reject the whole operation.
+  The workspace advances code, baseline, params and label state together, and
+  keeps all four in undo/redo snapshots. Failed changes restore the controls.
+- `TIKZ_EXPORT_CALIBRATION.plainLabelHaloScale` converts the soft canvas halo to
+  a thinner solid contour (0.4x) for every Visual Exact label category. The
+  Label halo control remains a multiplier, independent of this calibration.
 - No invented macro names/options.
 
 ## Boundary Rules (Non-Negotiable)

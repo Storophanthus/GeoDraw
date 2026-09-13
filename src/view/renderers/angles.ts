@@ -1,4 +1,5 @@
 import type { Vec2 } from "../../geo/vec2";
+import { rightAngleDotCenter } from "../../scene/angleMarkGeometry";
 import { collectAngleMarkPositions, resolveAngleMarks, type SceneModel } from "../../scene/points";
 import { camera as camMath, type Camera, type Viewport } from "../camera";
 import {
@@ -190,7 +191,7 @@ function drawResolvedAngleObject(
         }
       } else if (resolvedMarkStyle === "rightArcDot") {
         drawAngleArcPreview(ctx, as, bs, entry.theta, radiusPx);
-        drawRightInnerDot(ctx, as, bs, cs, rightMarkSizePx, Math.max(1.8, Math.min(4.5, rightMarkSizePx * 0.18)));
+        drawRightInnerDot(ctx, as, bs, cs, radiusPx, Math.max(1.8, Math.min(4.5, rightMarkSizePx * 0.18)));
       }
     }
   }
@@ -382,27 +383,13 @@ function drawRightInnerDot(
   a: Vec2,
   b: Vec2,
   c: Vec2,
-  size: number,
+  arcRadius: number,
   dotRadius: number
 ): void {
-  const ux = a.x - b.x;
-  const uy = a.y - b.y;
-  const vx = c.x - b.x;
-  const vy = c.y - b.y;
-  const uLen = Math.hypot(ux, uy);
-  const vLen = Math.hypot(vx, vy);
-  if (uLen <= 1e-9 || vLen <= 1e-9) return;
-  const unx = ux / uLen;
-  const uny = uy / uLen;
-  const vnx = vx / vLen;
-  const vny = vy / vLen;
-  // Anchor dot on the right-mark geometry, so it scales and stays centered
-  // consistently with the square counterpart.
-  const t = size * 0.55;
-  const cx = b.x + (unx + vnx) * t;
-  const cy = b.y + (uny + vny) * t;
+  const center = rightAngleDotCenter(a, b, c, arcRadius);
+  if (!center) return;
   ctx.beginPath();
-  ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+  ctx.arc(center.x, center.y, dotRadius, 0, Math.PI * 2);
   ctx.fillStyle = ctx.strokeStyle;
   ctx.fill();
 }

@@ -1,5 +1,6 @@
 import type { SetStateOptions } from "./historySlice";
 import type { GeoActions, GeoState } from "./storeTypes";
+import { applyIslStyleToScene } from "../islStyle";
 import {
   applyProfileColorsToDefaults,
   getRecommendedUiProfileForColorProfile,
@@ -219,12 +220,13 @@ export function createUiActions(
 
     setColorProfile(profileId) {
       ctx.setState((prev) => {
-        if (prev.colorProfileId === profileId) return prev;
+        const isIsl = profileId === "isl_shortlist";
+        if (prev.colorProfileId === profileId && !isIsl && Object.keys(prev.canvasThemeOverrides).length === 0) return prev;
         const prevRecommendedUi = getRecommendedUiProfileForColorProfile(prev.colorProfileId);
         const nextRecommendedUi = getRecommendedUiProfileForColorProfile(profileId);
         const keepProfilePairing = prev.uiColorProfileId === prevRecommendedUi;
         const shouldForceUiPairing =
-          nextRecommendedUi === "image" || nextRecommendedUi === "image_palette";
+          isIsl || nextRecommendedUi === "image" || nextRecommendedUi === "image_palette";
         const nextDefaults = applyProfileColorsToDefaults(
           {
             pointDefaults: prev.pointDefaults,
@@ -244,7 +246,12 @@ export function createUiActions(
           ...prev,
           colorProfileId: profileId,
           uiColorProfileId: shouldForceUiPairing || keepProfilePairing ? nextRecommendedUi : prev.uiColorProfileId,
-          scene: recolorSceneForProfile(prev.scene, prev.colorProfileId, profileId),
+          scene: isIsl
+            ? applyIslStyleToScene(recolorSceneForProfile(prev.scene, prev.colorProfileId, profileId))
+            : recolorSceneForProfile(prev.scene, prev.colorProfileId, profileId),
+          // An explicit palette choice replaces customized canvas colors too.
+          // Otherwise an old background/grid override masks the selected palette.
+          canvasThemeOverrides: {},
           pointDefaults: nextDefaults.pointDefaults,
           segmentDefaults: nextDefaults.segmentDefaults,
           lineDefaults: nextDefaults.lineDefaults,
@@ -252,7 +259,7 @@ export function createUiActions(
           ellipseDefaults: nextDefaults.ellipseDefaults,
           polygonDefaults: nextDefaults.polygonDefaults,
           angleDefaults: nextDefaults.angleDefaults,
-          objectLabelDefaults: prev.objectLabelDefaults,
+          objectLabelDefaults: isIsl ? { ...prev.objectLabelDefaults, point: "caption" } : prev.objectLabelDefaults,
           labelToolDefaults: nextDefaults.labelToolDefaults,
           textboxToolDefaults: nextDefaults.textboxToolDefaults,
           richTextToolDefaults: nextDefaults.richTextToolDefaults,

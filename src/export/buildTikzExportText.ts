@@ -1,6 +1,6 @@
 import type { SceneModel } from "../scene/points";
 import type { Vec2 } from "../geo/vec2";
-import { exportTikzEfficientWithOptions, exportTikzWithOptions } from "./tikz";
+import { exportTikzEfficientWithOptions, exportTikzWithOptions, type PointLabelCanvasMetrics } from "./tikz";
 import { getPointInnerSepFixedPt, TIKZ_EXPORT_CALIBRATION } from "./tikz/calibration";
 import {
   getFigureTreatmentHaloCompensation,
@@ -22,6 +22,10 @@ export type TikzClipRect = { kind: "rect"; xmin: number; xmax: number; ymin: num
  */
 export type TikzExportParams = {
   scene: SceneModel;
+  /** Preview adjustments in canvas pixels, added after automatic label placement. */
+  pointLabelNudgesPx?: Record<string, Vec2>;
+  /** Text origins captured from the live canvas, retained by the PDF preview. */
+  pointLabelCanvasMetrics?: Record<string, PointLabelCanvasMetrics>;
   /** Precomputed viewport rect, or undefined to export every object. */
   viewport: TikzViewportRect | undefined;
   clipRectWorld: TikzClipRect | undefined;
@@ -34,6 +38,8 @@ export type TikzExportParams = {
   figureTreatmentFactor?: number;
   /** Named treatment, retained because Canvas at 100% also means canvas metrics. */
   figureTreatmentMode?: FigureTreatmentMode;
+  /** Preview-only Custom indicator; retains the named treatment's calibration. */
+  figureTreatmentCustomized?: boolean;
   emitTkzSetup: boolean;
   drawLayerBackend: "plain" | "tkz";
   bakeCoordinates: boolean;
@@ -85,22 +91,37 @@ export function buildTikzExportText(params: TikzExportParams): string {
     0.05,
     Math.min(20, safeScale(params.figureTreatmentFactor))
   );
+  // Canvas treatment is literal WYSIWYG: True Zoom scales fixed-size canvas
+  // details by the full factor. The gentler publication curve belongs only to
+  // General/Very-close-up (and legacy unnamed) treatments.
+  const usesLiteralCanvasTreatment = params.figureTreatmentMode === "canvas";
+  const pointTreatmentCompensation = usesLiteralCanvasTreatment
+    ? 1
+    : getFigureTreatmentPointCompensation(figureTreatmentFactor);
+  const labelTreatmentCompensation = usesLiteralCanvasTreatment
+    ? 1
+    : getFigureTreatmentLabelCompensation(figureTreatmentFactor);
+  const haloTreatmentCompensation = usesLiteralCanvasTreatment
+    ? 1
+    : getFigureTreatmentHaloCompensation(figureTreatmentFactor);
+  const markTreatmentCompensation = usesLiteralCanvasTreatment
+    ? 1
+    : getFigureTreatmentMarkCompensation(figureTreatmentFactor);
   const pointScale =
     safeScale(params.pointScale) *
-    getFigureTreatmentPointCompensation(figureTreatmentFactor);
+    pointTreatmentCompensation;
   const labelScale =
     safeScale(params.labelScale) *
-    getFigureTreatmentLabelCompensation(figureTreatmentFactor);
+    labelTreatmentCompensation;
   const labelHaloScale = Math.max(
     0.05,
     Math.min(
       10,
       safeScale(params.labelHaloScale) *
-        getFigureTreatmentHaloCompensation(figureTreatmentFactor)
+        haloTreatmentCompensation
     )
   );
-  const segmentMarkTreatmentCompensation =
-    getFigureTreatmentMarkCompensation(figureTreatmentFactor);
+  const segmentMarkTreatmentCompensation = markTreatmentCompensation;
   // Construction exports retain their compact legacy defaults for General,
   // but a named close-up must match the canvas-calibrated visual treatment.
   // This affects only styling; tkz-euclide still owns all construction math.
@@ -119,6 +140,8 @@ export function buildTikzExportText(params: TikzExportParams): string {
     : 1;
 
   const tikzOptions = {
+    pointLabelCanvasMetrics: params.pointLabelCanvasMetrics,
+    pointLabelNudgesPx: params.pointLabelNudgesPx,
     viewport: params.viewport,
     clipRectWorld: params.clipRectWorld,
     clipPolygonWorld: params.clipPolygonWorld,
